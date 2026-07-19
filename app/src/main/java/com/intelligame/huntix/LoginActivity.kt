@@ -81,6 +81,15 @@ class LoginActivity : AppCompatActivity() {
         root.addView(UiKit.button(c, "▶️  Gioca come Ospite", UiKit.ACCENT) {
             loginAsGuest()
         })
+        root.addView(spacer())
+        root.addView(UiKit.button(c, "\uD83D\uDCF1  Gioca in locale (offline)", "#6A1B9A") {
+            val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
+            PlayerProfileManager.initLocalProfile(
+                context = c,
+                name = name,
+                onReady = { goToProfile() }
+            )
+        })
 
         setContentView(root)
     }

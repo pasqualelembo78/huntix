@@ -117,6 +117,30 @@ object PlayerProfileManager {
             .addOnFailureListener { e -> onError(e.message ?: "Errore creazione profilo") }
     }
 
+    /**
+     * Login 100% locale (offline, nessun Firebase).
+     * Salva il profilo solo in SharedPreferences. L'app funziona senza rete.
+     * Usa un ID locale stabile (generateId) così i dati persistono tra sessioni.
+     */
+    fun initLocalProfile(
+        context: Context,
+        name:    String,
+        onReady: (PlayerProfile) -> Unit
+    ) {
+        val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        val id    = prefs.getString(KEY_ID, null) ?: PlayerProfile.generateId(name)
+        val profile = PlayerProfile(
+            playerId     = id,
+            name         = name.ifBlank { "Cacciatore Locale" },
+            isGoogleUser = false,
+            firebaseUid  = ""  // nessun UID Firebase: profilo locale
+        )
+        _myProfile = profile
+        prefs.edit().putString(KEY_ID, id).putString(KEY_NAME, profile.name).apply()
+        Log.d(TAG, "Profilo locale creato: $id")
+        onReady(profile)
+    }
+
     private fun loadProfile(
         playerId:   String,
         onSuccess:  (PlayerProfile) -> Unit,
