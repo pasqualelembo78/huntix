@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 #
-# build_release.sh — Compila e firma l'APK release di Huntix
+# build_release.sh — Compila e firma l'APK/AAB release di Huntix
 #
-# Funziona in due modalità:
-#   1. Se non esiste keystore.properties, ne genera uno nuovo (keystore + file props)
-#   2. Se esiste, usa quello esistente per firmare l'APK
+# Logica di build/firma ripresa da build_app.sh (aria):
+#   - rilevamento ANDROID_HOME
+#   - creazione local.properties
+#   - generazione keystore se assente (idempotente)
+#   - assembleRelease + bundleRelease
+#   - firma APK con apksigner / zipalign
 #
 # Uso:
 #   ./build_release.sh            # interattivo (chiede password/alias)
@@ -69,10 +72,10 @@ keyPassword=$KEY_PASS
 
 sentryDsn=
 webClientId=
-admobAppId=
-admobBannerId=
+admobAppId=ca-app-pub-2572171530354182~3428923397
+admobBannerId=ca-app-pub-2572171530354182/7280538494
 admobInterstitialId=
-admobRewardedId=
+admobRewardedId=ca-app-pub-2572171530354182/4905656590
 arcoreApiKey=
 mapboxToken=
 mapboxDownloadsToken=
@@ -82,24 +85,55 @@ EOF
     echo ">> IMPORTANTE: $PROPS_FILE è in .gitignore — conservalo e non perderlo!"
 fi
 
-# ── Localizza gli strumenti Android ─────────────────────────
-ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-if [ -z "$ANDROID_HOME" ]; then
-    echo "!! ANDROID_HOME/ANDROID_SDK_ROOT non impostato." >&2
-    exit 1
+# ── Localizza gli strumenti Android (logica da build_app.sh) ──
+if [ -z "${ANDROID_HOME:-}" ]; then
+    for dir in "$HOME/Android/Sdk" /opt/android-sdk /usr/lib/android-sdk; do
+        if [ -d "$dir" ]; then
+            export ANDROID_HOME="$dir"
+            break
+        fi
+    done
+    if [ -z "${ANDROID_HOME:-}" ]; then
+        echo "!! ANDROID_HOME non impostato e SDK non trovato nei path standard." >&2
+        exit 1
+    fi
 fi
+
+if [ ! -f "local.properties" ]; then
+    echo "sdk.dir=$ANDROID_HOME" > local.properties
+    echo ">> Creato local.properties (sdk.dir=$ANDROID_HOME)"
+fi
+
+echo ">> ANDROID_HOME=$ANDROID_HOME"
+
 BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
 ZIPALIGN="$BUILD_TOOLS/zipalign"
 APKSIGNER="$BUILD_TOOLS/apksigner"
 
-# ── Trova l'APK da firmare ─────────────────────────────────
-APK_DIR="app/build/outputs/apk/release"
-UNSIGNED_APK=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1 || true)
+if [ ! -x "$APKSIGNER" ] || [ ! -x "$ZIPALIGN" ]; then
+    echo "!! zipalign/apksigner non trovati in $BUILD_TOOLS" >&2
+    exit 1
+fi
 
-if [ -z "$UNSIGNED_APK" ]; then
-    echo ">> Nessun APK trovato in $APK_DIR. Compilo e firmo con Gradle..."
-    ./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE"
-    UNSIGNED_APK=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)
+# ── Build APK + AAB (logica da build_app.sh) ───────────────
+chmod +x gradlew
+
+echo ">> Building APK (assembleRelease)..."
+./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
+APK_DIR="app/build/outputs/apk/release"
+UNSIGNED_APK=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)
+
+echo ">> Building AAB (bundleRelease)..."
+./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
+AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
+
+if [ -f "$AAB_FILE" ]; then
+    AAB_SIZE=$(stat -c%s "$AAB_FILE" 2>/dev/null || stat -f%z "$AAB_FILE" 2>/dev/null)
+    AAB_SIZE_MB=$(echo "scale=1; $AAB_SIZE/1048576" | bc)
+    echo ">> AAB: $AAB_FILE (${AAB_SIZE_MB}MB)"
+else
+    echo "!! AAB build failed!"
+    exit 1
 fi
 
 if [ -z "$UNSIGNED_APK" ]; then
@@ -113,7 +147,7 @@ if "$APKSIGNER" verify "$UNSIGNED_APK" >/dev/null 2>&1; then
     exit 0
 fi
 
-# ── Allinea e firma a parte (senza ricompilare) ────────────
+# ── Allinea e firma a parte (logica originale huntix) ──────
 ALIGNED_APK="${APK_DIR}/app-release-aligned.apk"
 SIGNED_APK="${APK_DIR}/app-release-signed.apk"
 
@@ -133,3 +167,4 @@ echo ">> Verifica firma..."
 "$APKSIGNER" verify "$SIGNED_APK"
 
 echo ">> APK firmato: $SIGNED_APK"
+echo ">> AAB:          $AAB_FILE"
