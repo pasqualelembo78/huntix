@@ -86,7 +86,11 @@ class LoginActivity : AppCompatActivity() {
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         auth.signInAnonymously()
             .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: ""
+                val uid = result.user?.uid
+                if (uid.isNullOrBlank()) {
+                    Toast.makeText(this, "Auth anonima senza UID", Toast.LENGTH_LONG).show()
+                    return@addOnSuccessListener
+                }
                 PlayerProfileManager.initMyProfile(
                     context = this,
                     name = name,
