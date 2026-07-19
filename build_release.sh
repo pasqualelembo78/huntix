@@ -35,6 +35,10 @@ cd "$(dirname "$0")"
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"
 
+# ── Configurazione feature (override via ENV, altrimenti questi default) ──
+# Web Client ID per Google Sign-In (Firebase Console → Authentication → Google)
+WEB_CLIENT_ID="${WEB_CLIENT_ID:-418980419674-mq5d7a5jmbpujj4gfpitngobjcg17km5.apps.googleusercontent.com}"
+
 # ── Assicura un keystore.properties di solo firma (idempotente) ──
 # Se non esiste, ne creo uno vuoto: le API key arrivano da ENV (vedi build.gradle).
 if [ ! -f "$PROPS_FILE" ]; then
