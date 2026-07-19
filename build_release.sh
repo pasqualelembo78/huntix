@@ -35,8 +35,11 @@ cd "$(dirname "$0")"
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"
 
-# ── Configurazione feature (override via ENV, altrimenti questi default) ──
-# Web Client ID per Google Sign-In (Firebase Console → Authentication → Google)
+# ── Configurazione feature (override via ENV, altrimenti da keystore.properties) ──
+# Web Client ID per Google Sign-In: priorità ENV > keystore.properties > default
+if [ -z "${WEB_CLIENT_ID:-}" ] && [ -f "$PROPS_FILE" ]; then
+    WEB_CLIENT_ID=$(grep '^webClientId=' "$PROPS_FILE" | cut -d= -f2-)
+fi
 WEB_CLIENT_ID="${WEB_CLIENT_ID:-418980419674-mq5d7a5jmbpujj4gfpitngobjcg17km5.apps.googleusercontent.com}"
 
 # ── Assicura un keystore.properties di solo firma (idempotente) ──
@@ -119,6 +122,52 @@ fi
 if [ ! -f "local.properties" ]; then
     echo "sdk.dir=$ANDROID_HOME" > local.properties
     echo ">> Creato local.properties (sdk.dir=$ANDROID_HOME)"
+fi
+
+# ── Genera app/google-services.json da ENV se mancante ──────
+# Evita di usare un google-services.json di un progetto sbagliato.
+# ENV richieste: FIREBASE_PROJECT_ID, FIREBASE_APP_ID, FIREBASE_API_KEY,
+#                FIREBASE_SENDER_ID (project number)
+if [ ! -f "app/google-services.json" ]; then
+    if [ -n "${FIREBASE_PROJECT_ID:-}" ] && [ -n "${FIREBASE_APP_ID:-}" ] \
+       && [ -n "${FIREBASE_API_KEY:-}" ] && [ -n "${FIREBASE_SENDER_ID:-}" ]; then
+        echo ">> Genero app/google-services.json da ENV Firebase..."
+        mkdir -p app
+        cat > app/google-services.json <<JSON
+{
+  "project_info": {
+    "project_number": "${FIREBASE_SENDER_ID}",
+    "project_id": "${FIREBASE_PROJECT_ID}",
+    "storage_bucket": "${FIREBASE_PROJECT_ID}.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "${FIREBASE_APP_ID}",
+        "android_client_info": { "package_name": "com.intelligame.huntix" }
+      },
+      "oauth_client": [
+        {
+          "client_id": "${WEB_CLIENT_ID}",
+          "client_type": 3
+        }
+      ],
+      "api_key": [ { "current_key": "${FIREBASE_API_KEY}" } ],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}
+JSON
+        echo ">> app/google-services.json creato."
+    else
+        echo "!! app/google-services.json ASSENTE. Scaricalo dalla Firebase Console"
+        echo "   (Project Settings > app Android com.intelligame.huntix) e mettilo in app/."
+        echo "   Oppure esporta FIREBASE_PROJECT_ID, FIREBASE_APP_ID, FIREBASE_API_KEY, FIREBASE_SENDER_ID."
+        exit 1
+    fi
+else
+    echo ">> app/google-services.json presente."
 fi
 
 echo ">> ANDROID_HOME=$ANDROID_HOME"
