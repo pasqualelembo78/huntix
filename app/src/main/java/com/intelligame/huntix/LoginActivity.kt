@@ -83,17 +83,26 @@ class LoginActivity : AppCompatActivity() {
 
     private fun loginAsGuest() {
         val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
-        PlayerProfileManager.initMyProfile(
-            context = this,
-            name = name,
-            onReady = {
-                startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                })
-                finish()
-            },
-            onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
-        )
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        auth.signInAnonymously()
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid ?: ""
+                PlayerProfileManager.initMyProfile(
+                    context = this,
+                    name = name,
+                    firebaseUid = uid,
+                    onReady = {
+                        startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        })
+                        finish()
+                    },
+                    onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                )
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, "Login anonimo fallito: ${e.message}", Toast.LENGTH_LONG).show()
+            }
     }
 
     @Deprecated("Use ActivityResult API")
@@ -105,20 +114,29 @@ class LoginActivity : AppCompatActivity() {
                 val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
                 val idToken = account?.idToken
                 if (idToken != null) {
-                    // TODO: Exchange idToken with Firebase Auth for full authentication
-                    // For now, create/update profile with Google name
-                    val googleName = account.displayName ?: "Cacciatore Google"
-                    PlayerProfileManager.initMyProfile(
-                        context = this,
-                        name = googleName,
-                        onReady = {
-                            startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            })
-                            finish()
-                        },
-                        onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
-                    )
+                    val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                    com.google.firebase.auth.FirebaseAuth.getInstance()
+                        .signInWithCredential(credential)
+                        .addOnSuccessListener { result ->
+                            val uid = result.user?.uid ?: ""
+                            val googleName = account.displayName ?: "Cacciatore Google"
+                            PlayerProfileManager.initMyProfile(
+                                context = this,
+                                name = googleName,
+                                firebaseUid = uid,
+                                isGoogleUser = true,
+                                onReady = {
+                                    startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                                    })
+                                    finish()
+                                },
+                                onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
+                            )
+                        }
+                        .addOnFailureListener { e ->
+                            Toast.makeText(this, "Auth Firebase fallita: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                 } else {
                     Toast.makeText(this, "Token Google non ricevuto", Toast.LENGTH_SHORT).show()
                 }
