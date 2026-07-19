@@ -5,6 +5,16 @@ plugins {
     id 'io.sentry.android.gradle'
 }
 
+// Carica keystore.properties se passato via -PkeystorePropsFile
+if (project.hasProperty("keystorePropsFile")) {
+    def propsFile = file(project.property("keystorePropsFile"))
+    if (propsFile.exists()) {
+        def props = new Properties()
+        props.load(new FileInputStream(propsFile))
+        project.ext.keystoreProps = props
+    }
+}
+
 android {
     namespace 'com.intelligame.huntix'
     compileSdk 35
