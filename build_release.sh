@@ -2,6 +2,21 @@
 #
 # build_release.sh — Compila e firma l'APK/AAB release di Huntix
 #
+#Portabile da zero: funziona anche subito dopo `git clone`, senza
+# keystore.properties. Se manca, genera keystore.properties (solo firma)
+# e il keystore, e compila un APK firmato.
+#
+# Le API key delle funzionalità (AdMob, Sentry, ARCore, Mapbox, Firebase)
+# si passano via ENVIRONMENT VARIABLES, NON più in keystore.properties:
+#   export ADMOB_APP_ID=ca-app-pub-xxxxx~yyyy
+#   export ADMOB_BANNER_ID=ca-app-pub-xxxxx/zzzz
+#   export ADMOB_REWARDED_ID=ca-app-pub-xxxxx/wwww
+#   export SENTRY_DSN=https://...
+#   export ARCORE_API_KEY=AIza...
+#   export MAPBOX_TOKEN=pk....
+#   export WEB_CLIENT_ID=....apps.googleusercontent.com
+# Se non settate, build.gradle usa i default hardcoded (AdMob di Huntix).
+#
 # Logica di build/firma ripresa da build_app.sh (aria):
 #   - rilevamento ANDROID_HOME
 #   - creazione local.properties
@@ -20,15 +35,26 @@ cd "$(dirname "$0")"
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"
 
-# ── Rileva configurazione di firma ────────────────────────
-# Carica i valori da keystore.properties se presente (anche parziale)
-if [ -f "$PROPS_FILE" ]; then
-    STORE_FILE_VAL=$(grep '^storeFile=' "$PROPS_FILE" | cut -d= -f2-)
-    STORE_PASS=$(grep '^storePassword=' "$PROPS_FILE" | cut -d= -f2-)
-    KEY_ALIAS=$(grep '^keyAlias=' "$PROPS_FILE" | cut -d= -f2-)
-    KEY_PASS=$(grep '^keyPassword=' "$PROPS_FILE" | cut -d= -f2-)
-    [ -n "$STORE_FILE_VAL" ] && KEYSTORE_FILE="$STORE_FILE_VAL"
+# ── Assicura un keystore.properties di solo firma (idempotente) ──
+# Se non esiste, ne creo uno vuoto: le API key arrivano da ENV (vedi build.gradle).
+if [ ! -f "$PROPS_FILE" ]; then
+    cat > "$PROPS_FILE" <<EOF
+# Generato automaticamente da build_release.sh (solo firma).
+# Le API key delle funzionalità vanno via ENV, non qui.
+storeFile=$KEYSTORE_FILE
+storePassword=huntix123
+keyAlias=huntix
+keyPassword=huntix123
+EOF
+    echo ">> Creato $PROPS_FILE (solo firma). Le API key sono lette da ENV."
 fi
+
+# ── Rileva configurazione di firma da keystore.properties ──
+STORE_FILE_VAL=$(grep '^storeFile=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+STORE_PASS=$(grep '^storePassword=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+KEY_ALIAS=$(grep '^keyAlias=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+KEY_PASS=$(grep '^keyPassword=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+[ -n "$STORE_FILE_VAL" ] && KEYSTORE_FILE="$STORE_FILE_VAL"
 
 # Genera/ricrea il keystore se il file fisico non esiste
 if [ ! -f "$KEYSTORE_FILE" ]; then
@@ -67,20 +93,7 @@ if [ ! -f "$KEYSTORE_FILE" ]; then
         -keypass "$KEY_PASS" \
         -dname "CN=${CN:-Huntix}, OU=${OU:-Huntix}, O=${O:-Huntix}, L=${L:-IT}, S=${S:-IT}, C=${C:-IT}"
 
-    # Aggiorna/Riscrive keystore.properties con i parametri di firma effettivi
-    if [ -f "$PROPS_FILE" ]; then
-        grep -v '^storeFile=\|^storePassword=\|^keyAlias=\|^keyPassword=' "$PROPS_FILE" > "${PROPS_FILE}.tmp" || true
-        mv "${PROPS_FILE}.tmp" "$PROPS_FILE"
-    fi
-    {
-        echo "storeFile=$KEYSTORE_FILE"
-        echo "storePassword=$STORE_PASS"
-        echo "keyAlias=$KEY_ALIAS"
-        echo "keyPassword=$KEY_PASS"
-        [ -f "$PROPS_FILE" ] && cat "$PROPS_FILE"
-    } > "${PROPS_FILE}.new"
-    mv "${PROPS_FILE}.new" "$PROPS_FILE"
-    echo ">> $PROPS_FILE aggiornato con i parametri di firma."
+    echo ">> Keystore $KEYSTORE_FILE generato (alias=$KEY_ALIAS)."
 else
     echo ">> Keystore $KEYSTORE_FILE già presente."
 fi
@@ -118,16 +131,35 @@ fi
 # ── Build APK + AAB (logica da build_app.sh) ───────────────
 chmod +x gradlew
 
+# Passa le ENV delle feature come -P al gradle (build.gradle dà loro priorità).
+# Se non settate, build.gradle usa i default hardcoded.
+GRADLE_ENV_PROPS=""
+for pair in \
+    "SENTRY_DSN:sentryDsn" \
+    "ADMOB_APP_ID:admobAppId" \
+    "ADMOB_BANNER_ID:admobBannerId" \
+    "ADMOB_REWARDED_ID:admobRewardedId" \
+    "ADMOB_INTERSTITIAL_ID:admobInterstitialId" \
+    "ARCORE_API_KEY:arcoreApiKey" \
+    "MAPBOX_TOKEN:mapboxToken" \
+    "WEB_CLIENT_ID:webClientId" ; do
+    env_name="${pair%%:*}"
+    prop_name="${pair##*:}"
+    if [ -n "${!env_name:-}" ]; then
+        GRADLE_ENV_PROPS="$GRADLE_ENV_PROPS -P$prop_name=${!env_name}"
+    fi
+done
+
 APK_DIR="app/build/outputs/apk/release"
 # Pulisci eventuali output di build precedenti (evita zipalign input==output)
 rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
-./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
+./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" $GRADLE_ENV_PROPS --no-daemon --console=plain
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 echo ">> Building AAB (bundleRelease)..."
-./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
+./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" $GRADLE_ENV_PROPS --no-daemon --console=plain
 AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
 
 if [ -f "$AAB_FILE" ]; then
