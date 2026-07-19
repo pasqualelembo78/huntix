@@ -20,21 +20,24 @@ cd "$(dirname "$0")"
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"
 
-# ── Rileva keystore esistente ──────────────────────────────
+# ── Rileva configurazione di firma ────────────────────────
+# Carica i valori da keystore.properties se presente (anche parziale)
 if [ -f "$PROPS_FILE" ]; then
-    echo ">> Trovato $PROPS_FILE esistente, carico la configurazione di firma."
     STORE_FILE_VAL=$(grep '^storeFile=' "$PROPS_FILE" | cut -d= -f2-)
     STORE_PASS=$(grep '^storePassword=' "$PROPS_FILE" | cut -d= -f2-)
     KEY_ALIAS=$(grep '^keyAlias=' "$PROPS_FILE" | cut -d= -f2-)
     KEY_PASS=$(grep '^keyPassword=' "$PROPS_FILE" | cut -d= -f2-)
     [ -n "$STORE_FILE_VAL" ] && KEYSTORE_FILE="$STORE_FILE_VAL"
-else
-    echo ">> Nessun $PROPS_FILE trovato. Genero un nuovo keystore..."
+fi
+
+# Genera/ricrea il keystore se il file fisico non esiste
+if [ ! -f "$KEYSTORE_FILE" ]; then
+    echo ">> Keystore $KEYSTORE_FILE assente — lo genero..."
 
     if [ "${1:-}" = "--auto" ]; then
-        STORE_PASS="huntix123"
-        KEY_ALIAS="huntix"
-        KEY_PASS="huntix123"
+        STORE_PASS="${STORE_PASS:-huntix123}"
+        KEY_ALIAS="${KEY_ALIAS:-huntix}"
+        KEY_PASS="${KEY_PASS:-huntix123}"
         CN="Huntix"
         OU="Huntix"
         O="Huntix"
@@ -42,9 +45,9 @@ else
         S="IT"
         C="IT"
     else
-        read -rsp "Password keystore: " STORE_PASS; echo
-        read -rp "Alias chiave: " KEY_ALIAS
-        read -rsp "Password chiave: " KEY_PASS; echo
+        [ -z "${STORE_PASS:-}" ] && { read -rsp "Password keystore: " STORE_PASS; echo; }
+        [ -z "${KEY_ALIAS:-}" ]  && { read -rp "Alias chiave: " KEY_ALIAS; }
+        [ -z "${KEY_PASS:-}" ]  && { read -rsp "Password chiave: " KEY_PASS; echo; }
         read -rp "Nome e cognome (CN): " CN
         read -rp "Unità organizzativa (OU): " OU
         read -rp "Organizzazione (O): " O
@@ -62,27 +65,24 @@ else
         -validity 10000 \
         -storepass "$STORE_PASS" \
         -keypass "$KEY_PASS" \
-        -dname "CN=$CN, OU=$OU, O=$O, L=$L, S=$S, C=$C"
+        -dname "CN=${CN:-Huntix}, OU=${OU:-Huntix}, O=${O:-Huntix}, L=${L:-IT}, S=${S:-IT}, C=${C:-IT}"
 
-    cat > "$PROPS_FILE" <<EOF
-storeFile=$KEYSTORE_FILE
-storePassword=$STORE_PASS
-keyAlias=$KEY_ALIAS
-keyPassword=$KEY_PASS
-
-sentryDsn=
-webClientId=
-admobAppId=ca-app-pub-2572171530354182~3428923397
-admobBannerId=ca-app-pub-2572171530354182/7280538494
-admobInterstitialId=
-admobRewardedId=ca-app-pub-2572171530354182/4905656590
-arcoreApiKey=
-mapboxToken=
-mapboxDownloadsToken=
-EOF
-
-    echo ">> Creato $KEYSTORE_FILE e $PROPS_FILE."
-    echo ">> IMPORTANTE: $PROPS_FILE è in .gitignore — conservalo e non perderlo!"
+    # Aggiorna/Riscrive keystore.properties con i parametri di firma effettivi
+    if [ -f "$PROPS_FILE" ]; then
+        grep -v '^storeFile=\|^storePassword=\|^keyAlias=\|^keyPassword=' "$PROPS_FILE" > "${PROPS_FILE}.tmp" || true
+        mv "${PROPS_FILE}.tmp" "$PROPS_FILE"
+    fi
+    {
+        echo "storeFile=$KEYSTORE_FILE"
+        echo "storePassword=$STORE_PASS"
+        echo "keyAlias=$KEY_ALIAS"
+        echo "keyPassword=$KEY_PASS"
+        [ -f "$PROPS_FILE" ] && cat "$PROPS_FILE"
+    } > "${PROPS_FILE}.new"
+    mv "${PROPS_FILE}.new" "$PROPS_FILE"
+    echo ">> $PROPS_FILE aggiornato con i parametri di firma."
+else
+    echo ">> Keystore $KEYSTORE_FILE già presente."
 fi
 
 # ── Localizza gli strumenti Android (logica da build_app.sh) ──
