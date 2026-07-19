@@ -42,6 +42,9 @@ if [ -z "${WEB_CLIENT_ID:-}" ] && [ -f "$PROPS_FILE" ]; then
 fi
 WEB_CLIENT_ID="${WEB_CLIENT_ID:-418980419674-mq5d7a5jmbpujj4gfpitngobjcg17km5.apps.googleusercontent.com}"
 
+# API key Firebase (Android key auto-created, non bloccata). Override via ENV FIREBASE_API_KEY.
+FIREBASE_API_KEY="${FIREBASE_API_KEY:-AIzaSyAUghQDddae_P_OFCHVqPCZO8I4q-JJhYE}"
+
 # ── Assicura un keystore.properties di solo firma (idempotente) ──
 # Se non esiste, ne creo uno vuoto: le API key arrivano da ENV (vedi build.gradle).
 if [ ! -f "$PROPS_FILE" ]; then
