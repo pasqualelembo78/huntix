@@ -89,6 +89,13 @@ class LoginActivity : AppCompatActivity() {
 
     // ── Facebook ────────────────────────────────────────────
     private fun signInWithFacebook(context: android.content.Context) {
+        // Se i valori in strings.xml sono ancora placeholder,Facebook non è configurato: avvisa e non tentare.
+        val fbAppId = getString(R.string.facebook_app_id)
+        if (fbAppId.isBlank() || fbAppId == "123456789012345" ||
+            getString(R.string.facebook_client_token).let { it.isBlank() || it == "placeholder_token_replace_me" }) {
+            Toast.makeText(context, "Login Facebook non ancora configurato", Toast.LENGTH_SHORT).show()
+            return
+        }
         val cm = com.facebook.CallbackManager.Factory.create()
         fbCallbackManager = cm
         val permissions = listOf("email", "public_profile")
