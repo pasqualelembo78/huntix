@@ -173,6 +173,17 @@ else
     echo ">> app/google-services.json presente."
 fi
 
+# ── Forza sempre la current_key corretta (evita key bloccate) ──
+if [ -f "app/google-services.json" ]; then
+    if grep -q '"current_key"' app/google-services.json; then
+        sed -i "s/\"current_key\": *\"[^\"]*\"/\"current_key\": \"${FIREBASE_API_KEY}\"/" app/google-services.json
+        echo ">> Forzata current_key Firebase in app/google-services.json."
+    else
+        echo "!! current_key non trovata in app/google-services.json" >&2
+        exit 1
+    fi
+fi
+
 echo ">> ANDROID_HOME=$ANDROID_HOME"
 
 BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
