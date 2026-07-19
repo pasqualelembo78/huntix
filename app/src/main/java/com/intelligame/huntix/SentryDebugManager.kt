@@ -45,7 +45,7 @@ object SentryDebugManager {
         val b = Breadcrumb().apply {
             this.category = category
             this.message = msg
-            this.type = Breadcrumb.TYPE_INFO
+            this.type = "info"
             data.forEach { (k, v) -> setData(k, v?.toString() ?: "null") }
         }
         Sentry.addBreadcrumb(b)
