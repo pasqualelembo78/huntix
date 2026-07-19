@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Huntix</string>
+
+    <!-- ⚠️ PLACEHOLDER — Sostituisci con i tuoi valori da developers.facebook.com -->
+    <string name="facebook_app_id">123456789012345</string>
+    <string name="facebook_client_token">placeholder_token_replace_me</string>
+    <string name="fb_login_protocol_scheme">fb123456789012345</string>
+    <string name="help_text">COME GIOCARE
+
+MODALITA\' GENITORE
+1. Apri l\'app e piazza la cassaforte AR toccando il pavimento
+2. Tocca altri punti per nascondere le uova AR
+3. Tocca un\'uovo per selezionarlo - puoi eliminarlo con il tasto apposito
+4. Carica i tuoi indovinelli dal menu in-game
+5. Premi INIZIA CACCIA e scegli chi gioca
+
+MODALITA\' BAMBINO
+1. Avvicinati fisicamente all\'uovo AR indicato
+2. Quando sei vicino, l\'uovo appare e pulsa
+3. Scorri velocemente verso l\'alto per lanciare il cestino
+4. Se miri bene, l\'uovo viene catturato!
+5. Porta la chiave alla cassaforte per aprirla
+6. La cassaforte si apre: appare il biglietto con l\'indizio fisico
+7. Leggi il biglietto e vai a trovare l\'uovo vero!
+
+SALVA/CARICA PARTITA
+- SALVA: memorizza giocatori, indovinelli e posizioni delle uova
+- CARICA: ripristina la configurazione - riposiziona le uova velocemente
+- Utile per preparare la caccia il giorno prima!
+
+NEGOZIO
+- Sblocca forme speciali: stella, cuore, pulcino, fiore
+- Colori premium: arcobaleno, glitter
+
+STATISTICHE
+- Tempo per ogni uovo
+- Confronto tra giocatori
+- Storico di tutte le partite</string>
+</resources>
+

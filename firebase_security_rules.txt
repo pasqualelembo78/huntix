@@ -1,0 +1,383 @@
+// ═══════════════════════════════════════════════════════════════
+//  FIREBASE REALTIME DATABASE — Production Security Rules
+//  Huntix — com.intelligame.huntix
+//  Incolla in: Firebase Console → Realtime Database → Regole
+//
+//  AGGIORNATO: Include tutte le collezioni trovate nel codebase
+// ═══════════════════════════════════════════════════════════════
+{
+  "rules": {
+    // ── STANZE OUTDOOR MULTIPLAYER ──────────────────────────────
+    "outdoor_rooms": {
+      "$roomCode": {
+        ".read":  "auth != null",
+        // Solo l'host può creare la stanza
+        ".write": "auth != null && (!data.exists() || data.child('hostId').val() == auth.uid || newData.child('hostId').val() == auth.uid)",
+        
+        "outdoor_eggs": {
+          "$eggId": {
+            // Chiunque nella stanza può catturare (segnare come preso)
+            ".write": "auth != null"
+          }
+        },
+        "scores": {
+          "$playerId": {
+            // Solo il proprio punteggio
+            ".write": "auth != null && auth.uid == $playerId"
+          }
+        },
+        "players": {
+          "$playerId": {
+            // Solo il proprio profilo nella stanza
+            ".write": "auth != null && auth.uid == $playerId",
+            // Validazione: nome non vuoto, online è boolean
+            ".validate": "newData.hasChildren(['playerName', 'online'])"
+          }
+        },
+        // Imposta TTL: le stanze scadono dopo 24 ore
+        ".validate": "newData.hasChildren(['hostName', 'roomName', 'createdAt'])"
+      }
+    },
+    
+    // ── STANZE INDOOR MULTIPLAYER ───────────────────────────────
+    "indoor_rooms": {
+      "$roomCode": {
+        ".read":  "auth != null",
+        // Solo l'host può creare; tutti i giocatori possono aggiornare
+        ".write": "auth != null",
+        
+        "scores": {
+          "$playerId": {
+            ".write": "auth != null && auth.uid == $playerId",
+            // Anti-cheat: punteggio massimo ragionevole
+            ".validate": "newData.child('eggsFound').val() <= 50 && newData.child('totalMs').val() >= 0"
+          }
+        },
+        "players": {
+          "$playerId": {
+            ".write": "auth != null && auth.uid == $playerId"
+          }
+        },
+        "chat": {
+          "$messageId": {
+            // Solo messaggi dal proprio uid
+            ".write": "auth != null && newData.child('senderId').val() == auth.uid",
+            ".validate": "newData.hasChildren(['senderId', 'senderName', 'text', 'ts']) && newData.child('text').val().length <= 500"
+          }
+        },
+        // Setup della partita — solo l'host
+        "setup": {
+          ".write": "auth != null && data.parent().child('meta').child('hostId').val() == auth.uid"
+        },
+        "game": {
+          // Game state — solo l'host gestisce turni
+          ".write": "auth != null"
+        },
+        "meta": {
+          ".write": "auth != null && (!data.exists() || data.child('hostId').val() == auth.uid)"
+        }
+      }
+    },
+    
+    // ── CHAT GLOBALE ───────────────────────────────────────────
+    "chat_global": {
+      "$messageId": {
+        ".read":  "auth != null",
+        ".write": "auth != null && newData.child('uid').val() == auth.uid",
+        // Limita lunghezza messaggi
+        ".validate": "newData.hasChildren(['uid', 'name', 'text', 'ts']) && newData.child('text').val().length <= 500"
+      }
+    },
+    
+    // ── CHAT PRIVATA (tra amici) ───────────────────────────────
+    "chat_private": {
+      "$chatId": {
+        // $chatId è la combinazione ordinata dei due uid
+        ".read":  "auth != null && $chatId.contains(auth.uid)",
+        "$messageId": {
+          ".write": "auth != null && $chatId.contains(auth.uid) && newData.child('uid').val() == auth.uid",
+          ".validate": "newData.hasChildren(['uid', 'name', 'text', 'ts']) && newData.child('text').val().length <= 500"
+        }
+      }
+    },
+    
+    // ── GAME PROGRESS SYNC (v7.2.1) ──────────────────────────
+    // Ogni utente può leggere/scrivere solo il proprio progresso
+    "game_progress": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    
+    // ── BLOCCA TUTTO IL RESTO ──────────────────────────────────
+    "$other": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  FIRESTORE — Production Security Rules (Complete)
+//  Huntix — com.intelligame.huntix
+//  Incolla in: Firebase Console → Firestore Database → Regole
+//
+//  AGGIORNATO: Include TUTTE le collezioni trovate nel codebase:
+//  players, quests, abilities, customization, teams, live_events,
+//  friend_requests, friends, referral_codes, world_eggs,
+//  leaderboard, sessions, trade_offers (NUOVA)
+// ═══════════════════════════════════════════════════════════════
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ════════════════════════════════════════════════════════════
+    
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isAuth() && request.auth.uid == uid;
+    }
+
+    // ── GAME PROGRESS SYNC (v7.2.1) ──────────────────────────
+    match /game_progress/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+    
+    function isTeamMember(teamId) {
+      return isAuth() && request.auth.uid in 
+        get(/databases/$(database)/documents/teams/$(teamId)).data.members;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 1. PROFILI GIOCATORI (collection principale)
+    // ════════════════════════════════════════════════════════════
+    match /players/{playerId} {
+      // Tutti gli utenti autenticati possono leggere profili
+      allow read:   if isAuth();
+      // Solo il proprietario può modificare il proprio profilo
+      allow write:  if isOwner(playerId);
+
+      // ── Quest personali ──────────────────────────────────────
+      match /quests/{questId} {
+        allow read, write: if isOwner(playerId);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 2. ABILITÀ (gamification)
+    // ════════════════════════════════════════════════════════════
+    match /abilities/{abilityId} {
+      allow read:   if isAuth();
+      allow write:  if false;  // Solo admin/Cloud Functions
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 3. PERSONALIZZAZIONE (skin, accessori)
+    // ════════════════════════════════════════════════════════════
+    match /customization/{itemId} {
+      allow read:   if isAuth();
+      allow write:  if false;  // Solo admin — catalogo gestito server-side
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 4. SQUADRE
+    // ════════════════════════════════════════════════════════════
+    match /teams/{teamId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        request.auth.uid in resource.data.members ||
+        request.auth.uid == resource.data.leaderId
+      );
+      allow delete: if isAuth() && request.auth.uid == resource.data.leaderId;
+
+      // Chat squadra
+      match /messages/{msgId} {
+        allow read:   if isAuth();
+        allow create: if isTeamMember(teamId);
+        allow update, delete: if false;
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 5. LIVE EVENTS
+    // ════════════════════════════════════════════════════════════
+    match /live_events/{eventId} {
+      allow read:   if isAuth();
+      allow write:  if false;  // Solo admin/Cloud Functions
+
+      match /participants/{uid} {
+        allow read:  if isAuth();
+        allow write: if isOwner(uid);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 6. RICHIESTE AMICIZIA
+    // ════════════════════════════════════════════════════════════
+    match /friend_requests/{targetUid} {
+      // Il destinatario può leggere le proprie richieste
+      allow read: if isOwner(targetUid);
+      
+      match /incoming/{senderUid} {
+        // Il mittente può creare la richiesta
+        allow create: if isOwner(senderUid);
+        // Il destinatario può eliminare (accetta/rifiuta)
+        allow delete: if isOwner(targetUid);
+        allow read:   if isOwner(targetUid) || isOwner(senderUid);
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 7. LISTA AMICI
+    // ════════════════════════════════════════════════════════════
+    match /friends/{userId} {
+      allow read: if isOwner(userId);
+      
+      match /list/{friendId} {
+        allow read:   if isOwner(userId);
+        // Scrittura bidirezionale gestita da batch in FriendsManager
+        allow write:  if isAuth() && (
+          request.auth.uid == userId || 
+          request.auth.uid == friendId
+        );
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 8. CODICI REFERRAL
+    // ════════════════════════════════════════════════════════════
+    match /referral_codes/{code} {
+      allow read:   if isAuth();
+      // Solo il creatore del codice (verifica ownerUid)
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if false;  // Aggiornamenti via batch in ReferralManager
+      allow delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 9. SESSIONI DI GIOCO (salvataggi)
+    // ════════════════════════════════════════════════════════════
+    match /sessions/{sessionId} {
+      allow read:   if isAuth() && resource.data.hostUid == request.auth.uid;
+      allow create: if isAuth();
+      allow update: if isAuth() && resource.data.hostUid == request.auth.uid;
+      allow delete: if false;
+    }
+    match /game_sessions/{sessionId} {
+      allow create: if isAuth();
+      allow read:   if isAuth() && resource.data.hostUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 10. LEADERBOARD
+    // ════════════════════════════════════════════════════════════
+    match /leaderboard/{playerId} {
+      allow read:  if isAuth();
+      allow write: if isOwner(playerId);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 11. STATISTICHE SESSIONE
+    // ════════════════════════════════════════════════════════════
+    match /player_stats/{uid}/sessions/{sessionId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 12. UOVA OUTDOOR (spawn sulla mappa)
+    // ════════════════════════════════════════════════════════════
+    match /world_eggs/{eggId} {
+      allow read:   if isAuth();
+      allow create: if isAuth();
+      // Solo chi cattura l'uovo può aggiornarlo (es. segnare "caught")
+      allow update: if isAuth();
+      allow delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 13. PALESTRE
+    // ════════════════════════════════════════════════════════════
+    match /gyms/{gymId} {
+      allow read:   if isAuth();
+      allow write:  if isAuth();  // Qualsiasi giocatore può interagire
+    }
+    match /gym_trainings/{trainId} {
+      allow read, write: if isAuth();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 14. STANZE OUTDOOR MULTIPLAYER (Firestore mirror)
+    // ════════════════════════════════════════════════════════════
+    match /outdoor_rooms/{code} {
+      allow read, write: if isAuth();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 15. MINI GAME STATS (se usi lo schema FIREBASE_SCHEMA.md)
+    // ════════════════════════════════════════════════════════════
+    match /mini_game_stats/{userId} {
+      allow read:  if isAuth();
+      allow write: if isOwner(userId) && validMiniGameStats();
+    }
+    match /mini_game_leaderboards/{gameId}/top100/{rank} {
+      allow read:  if isAuth();
+      allow write: if false;  // Solo Cloud Functions
+    }
+    match /mini_game_events/{eventId} {
+      allow read:  if isAuth();
+      allow write: if false;  // Solo admin
+    }
+    match /mini_game_daily_rewards/{date} {
+      allow read:  if isAuth();
+      allow write: if false;  // Solo admin
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // 16. SCAMBI CREATURE (NUOVA FEATURE)
+    // ════════════════════════════════════════════════════════════
+    match /trade_offers/{offerId} {
+      // Solo mittente e destinatario possono leggere
+      allow read: if isAuth() && (
+        resource.data.fromUid == request.auth.uid ||
+        resource.data.toUid == request.auth.uid
+      );
+      // Solo utenti autenticati possono creare (e devono essere il mittente)
+      allow create: if isAuth() 
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.status == "pending";
+      // Solo il destinatario può accettare/rifiutare
+      allow update: if isAuth() 
+        && resource.data.toUid == request.auth.uid
+        && resource.data.status == "pending"
+        && request.resource.data.status in ["accepted", "rejected"];
+      allow delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ANTI-CHEAT VALIDATION
+    // ════════════════════════════════════════════════════════════
+    function validMiniGameStats() {
+      let data = request.resource.data;
+      return data.totalMvcEarned <= 100000
+          && data.longestStreak <= 100
+          && data.totalGamesPlayed <= 10000;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // BLOCCA TUTTO IL RESTO (catch-all)
+    // ════════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

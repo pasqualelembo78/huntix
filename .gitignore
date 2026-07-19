@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════
+#  .gitignore — Huntix
+#  TUTTI i segreti devono essere in keystore.properties
+#  e questo file garantisce che non finiscano su Git.
+# ═══════════════════════════════════════════════════════════════
+
+# ── SEGRETI (MAI su Git) ─────────────────────────────────────
+keystore.properties
+*.jks
+*.keystore
+
+# Firebase config (contiene chiavi progetto)
+app/google-services.json
+google-services.json
+
+# Mapbox Download Token (è in keystore.properties, ma doppia protezione)
+# Non esporre mai sk.* tokens
+
+# ── Build outputs ─────────────────────────────────────────────
+/build
+/app/build
+*.apk
+*.aab
+*.dex
+*.class
+
+# ── Android Studio / IDE ──────────────────────────────────────
+/.idea
+*.iml
+.DS_Store
+/local.properties
+*.log
+*.hprof
+
+# ── Gradle cache ──────────────────────────────────────────────
+.gradle/
+gradle-app.setting
+
+# ── OS files ──────────────────────────────────────────────────
+Thumbs.db
+Desktop.ini

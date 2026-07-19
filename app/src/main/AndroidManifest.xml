@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- QR salvataggio in Immagini — necessario solo su Android 9 e precedenti -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <!-- GPS — richiesto per modalità Outdoor -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- ✅ FIX v7.2.1: VIBRATE — richiesto da AR minigames (haptic feedback) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="true" />
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="true" />
+    <!-- Depth API: opzionale — funziona anche senza sensore ToF fisico (ML depth estimation) -->
+    <uses-feature android:name="com.google.ar.core.depth" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:name=".EggHuntApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.ARProto">
+
+        <!-- Sentry DSN — da keystore.properties (non hardcodato) -->
+        <meta-data
+            android:name="io.sentry.dsn"
+            android:value="${sentryDsn}"/>
+
+        <!-- Sentry: abilita cattura ANR (Application Not Responding) -->
+        <meta-data
+            android:name="io.sentry.anr.enable"
+            android:value="true" />
+
+        <!-- Sentry: soglia ANR (ms prima di segnalare un blocco, default 5000) -->
+        <meta-data
+            android:name="io.sentry.anr.timeout-interval-mills"
+            android:value="5000" />
+
+        <!-- Sentry: allega screenshot al crash -->
+        <!-- ✅ FIX v7.2: Disabilitato per protezione minori (COPPA) -->
+        <meta-data
+            android:name="io.sentry.attach-screenshot"
+            android:value="false" />
+
+        <!-- Sentry: allega gerarchia delle View al crash -->
+        <meta-data
+            android:name="io.sentry.attach-view-hierarchy"
+            android:value="true" />
+
+        <!-- Sentry: traccia performance UI (frame lenti) -->
+        <meta-data
+            android:name="io.sentry.traces.sample-rate"
+            android:value="0.1" />
+
+        <!-- Sentry: campionamento profiling (CPU) — 5% in produzione -->
+        <meta-data
+            android:name="io.sentry.traces.profiling.sample-rate"
+            android:value="0.05" />
+
+        <!-- AdMob App ID — da keystore.properties (non hardcodato) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}"/>
+        <meta-data android:name="com.google.ar.core" android:value="required" tools:replace="android:value"/>
+
+        <!-- ARCore Cloud Anchor API Key — da keystore.properties (non hardcodato) -->
+        <meta-data
+            android:name="com.google.android.ar.API_KEY"
+            android:value="${arcoreApiKey}"/>
+
+        <!-- Facebook Login — sostituisci con il tuo App ID da developers.facebook.com -->
+        <meta-data
+            android:name="com.facebook.sdk.ApplicationId"
+            android:value="@string/facebook_app_id"/>
+        <meta-data
+            android:name="com.facebook.sdk.ClientToken"
+            android:value="@string/facebook_client_token"/>
+
+        <!-- Facebook Custom Tab Activity (richiesto da SDK v13+) -->
+        <activity
+            android:name="com.facebook.CustomTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="@string/fb_login_protocol_scheme"/>
+            </intent-filter>
+        </activity>
+
+       
+
+        <!-- LAUNCHER: Splash -->
+        <activity
+            android:name=".SplashActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".avatar.GenderSelectionActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".GenderChangeActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto"/>
+
+        <activity android:name=".LoginActivity"
+            android:exported="true" android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
+        <activity android:name=".ui.OutdoorArCatchActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+
+        <activity android:name=".ui.ArNavigationActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+
+        <activity android:name=".HomeActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".PlayersSetupActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".SettingsActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".StatsActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ShopActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".LegalActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".HelpActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        <activity android:name=".EggSetupModeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".GameModeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".SaveSlotActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <!--
+            OSMDroid (OpenStreetMap) — nessuna API Key richiesta.
+            I tile sono scaricati da tile.openstreetmap.org (gratuito, open-source).
+            Rispetta la tile usage policy OSM: https://operations.osmfoundation.org/policies/tiles/
+        -->
+
+        <activity android:name=".OutdoorModeActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.OutdoorGuestActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".OutdoorSetupActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.OutdoorHuntActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        <activity android:name=".ui.OutdoorWorldActivity"
+            android:exported="false" android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        <activity android:name=".ui.PlayerProfileActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.CharacterSelectionActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto" />
+
+        <activity android:name=".MultiplayerLobbyActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- ── Nuove Activity Indoor Multiplayer ────────────────── -->
+        <activity android:name=".IndoorModeSelectionActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".IndoorMultiplayerLobbyActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".EggInventoryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Hatching & Mining MVC Activity -->
+        <activity android:name=".HatchingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Info & Legale sottomenù -->
+        <activity android:name=".InfoLegalActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Classifica Mondiale outdoor -->
+        <activity android:name=".LeaderboardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+        <activity android:name=".ui.POIInteractionActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- ═══════════════════════════════════════════════════════
+             GAMIFICATION SYSTEM — Brawl Stars Style
+             ═══════════════════════════════════════════════════════ -->
+
+        <!-- Missioni giornaliere / settimanali -->
+        <activity android:name=".ui.QuestActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Sistema Squadre + Chat real-time -->
+        <activity android:name=".ui.TeamActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Classifiche Multiple (XP, Uova, Settimanale, Squadre) -->
+        <activity android:name=".ui.GamifiedLeaderboardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Abilità (Radar, Speed Boost, Magnete, Scudo, ...) -->
+        <activity android:name=".ui.AbilityActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Personalizzazione Avatar / Skin / Titoli / Temi -->
+        <activity android:name=".ui.CustomizationActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Apertura Uovo Animata Premium -->
+        <activity android:name=".ui.EggOpeningAnimationActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
+        <!-- Eventi Live (Egg Rush, Double XP, ...) -->
+        <activity android:name=".ui.LiveEventsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+    
+        <activity android:name=".ui.BattleActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.Character3DActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.SurpriseRevealActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.SurpriseInventoryActivity" android:screenOrientation="portrait" android:exported="false"/>
+
+        <!-- ═══════════════════════════════════════════════════════
+             MINIGIOCHI — Huntix
+             Hub centrale e tutti i minigiochi
+             ═══════════════════════════════════════════════════════ -->
+
+        <!-- Hub Minigiochi -->
+        <activity android:name=".MiniGamesHubActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Giochi di Numeri / Logica -->
+
+        <activity android:name=".minigames.MemoryGameActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.NumberPickActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Giochi di Carte -->
+        <activity android:name=".minigames.HighCardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- Giochi di Abilità -->
+        <activity android:name=".minigames.CatchEggActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+
+        <activity android:name=".minigames.Match3Activity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <!-- AR Minigames -->
+        <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARThreeCardActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARMatch3Activity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARHighCardActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARNumberPickActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <!-- AR Native exclusive games -->
+        <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.AREggRadarActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+
+        <!-- Mapbox public token — da keystore.properties (non hardcodato) -->
+        <meta-data
+            android:name="com.mapbox.token"
+            android:value="${mapboxToken}"/>
+
+            <activity android:name=".TutorialActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:screenOrientation="portrait" />
+    
+        <!-- ── Ready Player Me Avatar Creator ─────────────────────── -->
+        <activity
+            android:name=".avatar.ReadyPlayerMeActivity"
+            android:label="Crea Avatar"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+    
+    <!-- ═══ FCM PUSH NOTIFICATIONS (NUOVO) ═══════════════════ -->
+    <service
+        android:name=".EggHuntMessagingService"
+        android:exported="false">
+        <intent-filter>
+            <action android:name="com.google.firebase.MESSAGING_EVENT" />
+        </intent-filter>
+    </service>
+
+    <!-- ═══ FILE PROVIDER — foto AR condivisibili (NUOVO) ════ -->
+    <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.fileprovider"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+    </provider>
+
+    <!-- ═══ TRADE ACTIVITY (NUOVO) ═══════════════════════════ -->
+    <activity
+        android:name=".social.TradeActivity"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:screenOrientation="portrait"
+        android:exported="false" />
+
+
+    <!-- ═══ SOCIAL: FRIENDS + CHAT (FIX crash) ══════════════ -->
+    <activity
+        android:name=".social.FriendsActivity"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+        android:screenOrientation="portrait"
+        android:exported="false" />
+
+    <activity
+        android:name=".social.ChatActivity"
+        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:screenOrientation="portrait"
+        android:exported="false" />
+
+
+    <activity android:name=".ProfileSetupActivity" android:theme="@style/Theme.AppCompat.NoActionBar" android:screenOrientation="portrait" android:exported="false" />
+
+
+    <activity android:name=".social.ChatListActivity" android:theme="@style/Theme.AppCompat.NoActionBar" android:screenOrientation="portrait" android:exported="false" />
+
+</application>
+</manifest>

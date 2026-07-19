@@ -1,0 +1,20 @@
+
+// ═══ MODERATION RULES ══════════════════════════════════════════
+
+// Blocked users — solo il proprietario può leggere/scrivere
+match /blocked_users/{userId}/list/{blockedId} {
+    allow read, write: if request.auth != null && request.auth.uid == userId;
+}
+
+// Reports — chiunque autenticato può creare, solo admin può leggere
+match /reports/{reportId} {
+    allow create: if request.auth != null;
+    allow read, update: if request.auth != null && 
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
+}
+
+// User settings — solo il proprietario può leggere/scrivere
+match /user_settings/{userId} {
+    allow read: if request.auth != null;
+    allow write: if request.auth != null && request.auth.uid == userId;
+}

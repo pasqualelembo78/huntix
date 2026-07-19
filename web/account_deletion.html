@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elimina Account — Huntix</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0F0F2A;color:#C8C8E0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#1A1A35;border-radius:16px;padding:32px;max-width:480px;width:100%;border:1px solid #2A2A5A}
+h1{font-size:22px;color:#fff;text-align:center;margin-bottom:4px}
+.sub{text-align:center;color:#666699;font-size:13px;margin-bottom:24px}
+.warning{background:#FF336615;border:1px solid #FF336644;border-radius:10px;padding:14px;margin-bottom:20px;font-size:12px;color:#FF6688}
+.warning strong{color:#FF3366}
+label{display:block;font-size:12px;color:#9999CC;margin-bottom:4px;margin-top:14px}
+input{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #2A2A5A;background:#0F0F2A;color:#fff;font-size:14px}
+input:focus{outline:none;border-color:#00E5FF}
+.btn{width:100%;padding:12px;border-radius:10px;border:none;font-size:14px;font-weight:700;cursor:pointer;margin-top:16px}
+.btn-danger{background:linear-gradient(135deg,#FF3366,#CC0033);color:#fff}
+.btn-danger:hover{opacity:0.9}
+.btn-login{background:linear-gradient(135deg,#00E5FF,#7C3AED);color:#000}
+.btn-login:hover{opacity:0.9}
+.status{text-align:center;margin-top:14px;font-size:13px;padding:8px;border-radius:8px;display:none}
+.ok{background:#00FF8820;color:#00FF88;display:block}
+.err{background:#FF336620;color:#FF3366;display:block}
+.info{background:#00E5FF20;color:#00E5FF;display:block}
+#step2{display:none}
+.list{font-size:12px;color:#9999CC;margin:8px 0 8px 16px}
+.list li{margin:3px 0}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>🗑️ Elimina Account Huntix</h1>
+<p class="sub">Questa azione è irreversibile</p>
+
+<div id="step1">
+<p style="font-size:13px;margin-bottom:12px">Accedi con il tuo account per procedere:</p>
+<label>Email</label>
+<input type="email" id="email" placeholder="la-tua-email@esempio.com">
+<label>Password</label>
+<input type="password" id="password" placeholder="La tua password">
+<button class="btn btn-login" onclick="doLogin()">🔑 Accedi</button>
+<div id="loginStatus" class="status"></div>
+</div>
+
+<div id="step2">
+<div class="warning">
+<strong>⚠️ ATTENZIONE:</strong> Eliminando l'account perderai permanentemente:
+<ul class="list">
+<li>Profilo, avatar e personalizzazioni</li>
+<li>Cristalli raccolti, MVC, gemme e progressi</li>
+<li>Statistiche, classifiche e achievement</li>
+<li>Chat, amici e squadra</li>
+<li>Tutti i dati associati al tuo account</li>
+</ul>
+</div>
+<label>Scrivi "ELIMINA" per confermare</label>
+<input type="text" id="confirmText" placeholder='Scrivi ELIMINA'>
+<button class="btn btn-danger" onclick="doDelete()">🗑️ Elimina il mio account</button>
+<div id="deleteStatus" class="status"></div>
+</div>
+</div>
+
+<script>
+// ⚠️ SOSTITUISCI con la tua configurazione Firebase
+const firebaseConfig = {
+    apiKey: "LA-TUA-API-KEY",
+    authDomain: "il-tuo-progetto.firebaseapp.com",
+    projectId: "il-tuo-progetto",
+    storageBucket: "il-tuo-progetto.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abc123"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+function showStatus(id, msg, cls) {
+    const el = document.getElementById(id);
+    el.textContent = msg; el.className = 'status ' + cls;
+}
+
+async function doLogin() {
+    const email = document.getElementById('email').value;
+    const pass = document.getElementById('password').value;
+    if (!email || !pass) { showStatus('loginStatus', 'Inserisci email e password', 'err'); return; }
+    try {
+        showStatus('loginStatus', 'Accesso in corso...', 'info');
+        await auth.signInWithEmailAndPassword(email, pass);
+        showStatus('loginStatus', '✅ Accesso effettuato!', 'ok');
+        document.getElementById('step1').style.display = 'none';
+        document.getElementById('step2').style.display = 'block';
+    } catch (e) {
+        showStatus('loginStatus', '❌ ' + e.message, 'err');
+    }
+}
+
+async function doDelete() {
+    const confirm = document.getElementById('confirmText').value;
+    if (confirm !== 'ELIMINA') { showStatus('deleteStatus', 'Scrivi ELIMINA per confermare', 'err'); return; }
+    const user = auth.currentUser;
+    if (!user) { showStatus('deleteStatus', 'Non sei autenticato', 'err'); return; }
+    try {
+        showStatus('deleteStatus', 'Eliminazione in corso...', 'info');
+        const uid = user.uid;
+        // Elimina dati Firestore
+        const collections = ['players', 'mini_game_stats', 'blocked_users', 'user_settings'];
+        for (const col of collections) {
+            try { await db.collection(col).doc(uid).delete(); } catch(e) {}
+        }
+        // Elimina account Firebase Auth
+        await user.delete();
+        showStatus('deleteStatus', '✅ Account eliminato con successo. Puoi chiudere questa pagina.', 'ok');
+        document.querySelector('.btn-danger').style.display = 'none';
+    } catch (e) {
+        showStatus('deleteStatus', '❌ Errore: ' + e.message, 'err');
+    }
+}
+</script>
+</body>
+</html>

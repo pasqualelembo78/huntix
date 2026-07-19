@@ -1,0 +1,71 @@
+<!--
+    ══════════════════════════════════════════════════════════════
+    MINIGIOCHI — Aggiunte AndroidManifest.xml
+    ══════════════════════════════════════════════════════════════
+    
+    Copia queste <activity> DENTRO il tag <application> in:
+    app/src/main/AndroidManifest.xml
+    
+    Non sono necessarie nuove <uses-permission>.
+    ══════════════════════════════════════════════════════════════
+-->
+
+<!-- ═══ MINI GIOCHI HUB ════════════════════════════════════════ -->
+<activity
+    android:name=".MiniGamesHubActivity"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:windowSoftInputMode="adjustResize"
+    android:exported="false" />
+
+<!-- ═══ SINGOLI MINIGIOCHI ════════════════════════════════════ -->
+
+<activity
+
+<activity
+
+<activity
+
+<activity
+    android:name=".minigames.MemoryGameActivity"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false" />
+
+<activity
+    android:name=".minigames.NumberPickActivity"
+    android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false" />
+
+<activity
+    android:name=".minigames.HighCardActivity"
+    android:theme="@style/Theme.AppCompat.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false" />
+
+<activity
+    android:name=".minigames.ThreeCardActivity"
+    android:theme="@style/Theme.AppCompat.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false" />
+
+<activity
+    android:name=".minigames.CatchEggActivity"
+    android:theme="@style/Theme.AppCompat.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false"
+    android:hardwareAccelerated="true" />
+
+<activity
+    android:name=".minigames.Match3Activity"
+    android:theme="@style/Theme.AppCompat.NoActionBar"
+    android:screenOrientation="portrait"
+    android:configChanges="keyboardHidden|orientation|screenSize"
+    android:exported="false" />

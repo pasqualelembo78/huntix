@@ -1,0 +1,732 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/arContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF0D1530">
+
+    <!-- ─── AR SceneView (full screen) ──────────────────────────── -->
+    <io.github.sceneview.ar.ARSceneView
+        android:id="@+id/sceneView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- ─── Reticle (mirino centrale) ────────────────────────────── -->
+    <View
+        android:id="@+id/reticle"
+        android:layout_width="4dp"
+        android:layout_height="4dp"
+        android:background="@drawable/circle_green"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- ─── Status bar superiore ─────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/topStatusBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:background="#CC0D1530"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:id="@+id/statusDot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/circle_red"
+            android:layout_marginEnd="6dp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="12sp"
+            android:text="Avvio..." />
+
+        <TextView
+            android:id="@+id/tvGamePhase"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF00E5FF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Timer (visibile durante PLAYING) -->
+    <TextView
+        android:id="@+id/tvTimer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:visibility="gone"
+        android:padding="8dp"
+        android:background="#99000000"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topStatusBar" />
+
+    <!-- Instruction text -->
+    <TextView
+        android:id="@+id/tvInstruction"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#FFFFFFFF"
+        android:gravity="center"
+        android:padding="10dp"
+        android:background="#AA1A237E"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- ─── SCAN OVERLAY (Room Scan phase) ──────────────────────── -->
+    <FrameLayout
+        android:id="@+id/scanOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#CC0D1530"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp">
+
+            <TextView
+                android:id="@+id/tvScanTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="22sp"
+                android:textColor="#FFFFFFFF"
+                android:textStyle="bold"
+                android:text="Scansione stanza" />
+
+            <TextView
+                android:id="@+id/tvScanInstruction"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="#FFB0BEC5"
+                android:gravity="center"
+                android:layout_marginTop="12dp"
+                android:text="Punta la fotocamera e cammina" />
+
+            <TextView
+                android:id="@+id/tvScanPercent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="48sp"
+                android:textColor="#FF00FF88"
+                android:textStyle="bold"
+                android:layout_marginTop="24dp"
+                android:text="0%" />
+
+            <ProgressBar
+                android:id="@+id/scanProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="8dp"
+                android:layout_marginTop="12dp"
+                android:max="100"
+                android:progress="0"
+                android:progressTint="#FFFFD700" />
+
+            <TextView
+                android:id="@+id/tvScanSurfaces"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="#FF607D8B"
+                android:layout_marginTop="12dp"
+                android:text="In attesa di superfici..." />
+
+            <TextView
+                android:id="@+id/tvScanLiveBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#FFFF4444"
+                android:textStyle="bold"
+                android:layout_marginTop="8dp"
+                android:text="● REC" />
+
+            <TextView
+                android:id="@+id/tvNewSurface"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="#FF00FF88"
+                android:layout_marginTop="8dp"
+                android:visibility="invisible"
+                android:text="✨ Nuova area!" />
+
+            <Button
+                android:id="@+id/btnSkipScan"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="Salta scansione"
+                android:backgroundTint="#FF1A6B7C" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/scanGuideCenter"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_gravity="center"
+            android:background="@drawable/circle_green"
+            android:alpha="0.4" />
+    </FrameLayout>
+
+    <!-- ─── RIDDLE / TICKET OVERLAY ─────────────────────────────── -->
+    <FrameLayout
+        android:id="@+id/riddleOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#CC000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="8dp"
+            app:cardBackgroundColor="#FF1C2E40">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/tvRiddleTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="18sp"
+                    android:textColor="#FFFFD700"
+                    android:textStyle="bold"
+                    android:text="Uovo #1" />
+
+                <TextView
+                    android:id="@+id/tvRiddle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="15sp"
+                    android:textColor="#FFFFFFFF"
+                    android:gravity="center"
+                    android:layout_marginTop="12dp"
+                    android:text="..." />
+
+                <Button
+                    android:id="@+id/btnCloseRiddle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="CAPITO! VADO A TROVARLO!"
+                    android:backgroundTint="#FF1A6B7C" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+    </FrameLayout>
+
+    <!-- ─── STATS OVERLAY ────────────────────────────────────────── -->
+    <FrameLayout
+        android:id="@+id/statsOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#E60D1530"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="32dp">
+
+            <TextView
+                android:id="@+id/tvStatsTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="24sp"
+                android:textColor="#FFFFD700"
+                android:textStyle="bold"
+                android:text="Partita completata!" />
+
+            <TextView
+                android:id="@+id/tvStatsBody"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:textSize="14sp"
+                android:textColor="#FFFFFFFF"
+                android:typeface="monospace"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:text="" />
+
+            <Button
+                android:id="@+id/btnPlayAgain"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Gioca ancora"
+                android:backgroundTint="#FF1A6B7C" />
+
+            <Button
+                android:id="@+id/btnFullReset"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Torna alla home"
+                android:backgroundTint="#FFB71C1C" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ─── IN-GAME MENU ─────────────────────────────────────────── -->
+    <View
+        android:id="@+id/inGameMenuBg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#AA000000"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:id="@+id/inGameMenuSheet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:background="#FF1C2E40"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/menuTvPlayer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/menuTvTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#FFB0BEC5"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/menuTvProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#FFB0BEC5" />
+
+        <TextView
+            android:id="@+id/menuTvRiddleCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#FFB0BEC5" />
+
+        <TextView
+            android:id="@+id/menuTvSaveInfo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="#FF607D8B" />
+
+        <Button
+            android:id="@+id/menuBtnResume"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Riprendi" />
+
+        <Button
+            android:id="@+id/menuBtnStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stato partita" />
+
+        <Button
+            android:id="@+id/menuBtnRiddles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Carica indovinelli" />
+
+        <Button
+            android:id="@+id/menuBtnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Salva partita" />
+
+        <Button
+            android:id="@+id/menuBtnHelp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Aiuto" />
+
+        <Button
+            android:id="@+id/menuBtnHome"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Home" />
+
+        <Button
+            android:id="@+id/menuBtnExit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Esci"
+            android:backgroundTint="#FFB71C1C" />
+    </LinearLayout>
+
+    <!-- ─── BOTTOM CONTROLS ──────────────────────────────────────── -->
+    <!-- Throw zone (swipe area) -->
+    <FrameLayout
+        android:id="@+id/throwZone"
+        android:layout_width="match_parent"
+        android:layout_height="160dp"
+        android:visibility="gone"
+        android:background="#33000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Basket animation -->
+    <View
+        android:id="@+id/throwBasket"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:visibility="gone"
+        android:background="#FF00E5FF"
+        android:alpha="0.8" />
+
+    <!-- Catch burst text -->
+    <TextView
+        android:id="@+id/catchBurst"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:textSize="28sp"
+        android:textColor="#FFE0E0FF"
+        android:textStyle="bold"
+        android:gravity="center"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Action buttons -->
+    <Button
+        android:id="@+id/btnStart"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Avvia caccia"
+        android:visibility="gone"
+        android:backgroundTint="#FF1A6B7C"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/btnHint"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:text="?"
+        android:visibility="gone"
+        android:backgroundTint="#FF1B5E20"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="8dp" />
+
+    <Button
+        android:id="@+id/btnInsertKey"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Inserisci chiave"
+        android:visibility="gone"
+        android:backgroundTint="#FFFFD700"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/btnDeleteEgg"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:text="🗑"
+        android:visibility="gone"
+        android:backgroundTint="#FFB71C1C"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="8dp" />
+
+    <Button
+        android:id="@+id/btnTrapToggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🥚 Normale"
+        android:visibility="gone"
+        android:backgroundTint="#CC1A0A3A"
+        app:layout_constraintBottom_toTopOf="@id/btnStart"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/btnReset"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:text="≡"
+        android:visibility="visible"
+        android:backgroundTint="#CC0D1530"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginStart="8dp"
+        android:layout_marginTop="48dp" />
+
+    <!-- ─── KEY INVENTORY (bottom) ───────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/llKeyInventory"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="6dp"
+        android:background="#99000000"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- ─── PLAYER SELECT OVERLAY ────────────────────────────────── -->
+    <FrameLayout
+        android:id="@+id/playerSelectOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="#CC0D1530"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:padding="32dp"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="20sp"
+                android:textColor="#FFFFFFFF"
+                android:text="Seleziona giocatore" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ─── MULTIPLAYER LEADERBOARD ──────────────────────────────── -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/mpLeaderboardCard"
+        android:layout_width="180dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_margin="8dp"
+        app:cardCornerRadius="8dp"
+        app:cardElevation="4dp"
+        app:cardBackgroundColor="#CC1C2E40"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#FF00E5FF"
+                android:textStyle="bold"
+                android:text="CLASSIFICA" />
+
+            <TextView
+                android:id="@+id/mpLeaderboardContent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="#FFFFFFFF"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- ─── MULTIPLAYER CHAT ─────────────────────────────────────── -->
+    <!-- Chat FAB -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/mpChatFab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@android:drawable/ic_menu_edit"
+        android:visibility="gone"
+        android:tint="#FFFFFFFF"
+        app:backgroundTint="#FF1A6B7C"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        android:layout_margin="16dp" />
+
+    <!-- Badge notifica -->
+    <TextView
+        android:id="@+id/mpChatBadge"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:gravity="center"
+        android:textSize="10sp"
+        android:textColor="#FFFFFFFF"
+        android:background="@drawable/circle_red"
+        android:visibility="gone"
+        android:text="0"
+        app:layout_constraintEnd_toEndOf="@id/mpChatFab"
+        app:layout_constraintTop_toTopOf="@id/mpChatFab" />
+
+    <!-- Chat overlay -->
+    <FrameLayout
+        android:id="@+id/mpChatOverlay"
+        android:layout_width="280dp"
+        android:layout_height="320dp"
+        android:visibility="gone"
+        android:background="#F01C2E40"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/mpChatFab"
+        android:layout_margin="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/mpChatTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:textColor="#FF00E5FF"
+                    android:textStyle="bold"
+                    android:text="Chat" />
+
+                <ImageButton
+                    android:id="@+id/mpChatClose"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_close_clear_cancel"
+                    android:background="@null"
+                    android:tint="#FFFFFFFF" />
+            </LinearLayout>
+
+            <ScrollView
+                android:id="@+id/mpChatScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <LinearLayout
+                    android:id="@+id/mpChatMessageList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp">
+
+                <EditText
+                    android:id="@+id/mpChatInput"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:hint="Scrivi..."
+                    android:textColorHint="#FF607D8B"
+                    android:textColor="#FFFFFFFF"
+                    android:background="#33000000"
+                    android:padding="8dp"
+                    android:inputType="textShortMessage"
+                    android:imeOptions="actionSend" />
+
+                <ImageButton
+                    android:id="@+id/mpChatSendBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:src="@android:drawable/ic_menu_send"
+                    android:background="@null"
+                    android:tint="#FF00E5FF" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ─── BANNER AD CONTAINER ──────────────────────────────────── -->
+    <FrameLayout
+        android:id="@+id/adBannerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
