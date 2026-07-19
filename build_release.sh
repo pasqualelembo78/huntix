@@ -118,10 +118,13 @@ fi
 # ── Build APK + AAB (logica da build_app.sh) ───────────────
 chmod +x gradlew
 
+APK_DIR="app/build/outputs/apk/release"
+# Pulisci eventuali output di build precedenti (evita zipalign input==output)
+rm -f "$APK_DIR"/*.apk
+
 echo ">> Building APK (assembleRelease)..."
 ./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
-APK_DIR="app/build/outputs/apk/release"
-UNSIGNED_APK=$(ls "$APK_DIR"/*.apk 2>/dev/null | head -1)
+UNSIGNED_APK="${APK_DIR}/app-release.apk"
 
 echo ">> Building AAB (bundleRelease)..."
 ./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
