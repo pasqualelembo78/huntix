@@ -60,6 +60,24 @@ class LoginActivity : AppCompatActivity() {
             signInWithGitHub(c)
         })
         root.addView(spacer())
+
+        // ── Email / Password ─────────────────────────────────
+        val emailEdit = android.widget.EditText(c).apply {
+            hint = "Email"; inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setTextColor(Color.WHITE); setHintTextColor(Color.parseColor(UiKit.TEXT_DIM))
+            background = null; setPadding(0, UiKit.dp(c, 8), 0, UiKit.dp(c, 4))
+        }
+        val passEdit = android.widget.EditText(c).apply {
+            hint = "Password"; inputType = android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setTextColor(Color.WHITE); setHintTextColor(Color.parseColor(UiKit.TEXT_DIM))
+            background = null; setPadding(0, UiKit.dp(c, 8), 0, UiKit.dp(c, 8))
+        }
+        root.addView(emailEdit)
+        root.addView(passEdit)
+        root.addView(UiKit.button(c, "✉️  Continua con Email", "#1E88E5") {
+            signInWithEmail(c, emailEdit.text.toString(), passEdit.text.toString())
+        })
+        root.addView(spacer())
         root.addView(UiKit.button(c, "▶️  Gioca come Ospite", UiKit.ACCENT) {
             loginAsGuest()
         })
@@ -173,6 +191,47 @@ class LoginActivity : AppCompatActivity() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         })
         finish()
+    }
+
+    // ── Email / Password ───────────────────────────────────
+    private fun signInWithEmail(context: android.content.Context, email: String, password: String) {
+        if (email.isBlank() || password.isBlank()) {
+            Toast.makeText(context, "Inserisci email e password", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (password.length < 6) {
+            Toast.makeText(context, "La password deve essere di almeno 6 caratteri", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnSuccessListener { res -> onEmailSuccess(res, context) }
+            .addOnFailureListener { e ->
+                // Utente non esiste -> registrazione
+                if (e is com.google.firebase.auth.FirebaseAuthInvalidUserException) {
+                    auth.createUserWithEmailAndPassword(email, password)
+                        .addOnSuccessListener { res -> onEmailSuccess(res, context) }
+                        .addOnFailureListener { ex ->
+                            Toast.makeText(context, "Registrazione fallita: ${ex.message}", Toast.LENGTH_LONG).show()
+                        }
+                } else {
+                    Toast.makeText(context, "Login email fallito: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+    }
+
+    private fun onEmailSuccess(result: com.google.firebase.auth.AuthResult, context: android.content.Context) {
+        val uid = result.user?.uid ?: ""
+        val name = result.user?.email?.substringBefore('@')?.replaceFirstChar { it.uppercase() }
+            ?: "Cacciatore Email"
+        PlayerProfileManager.initMyProfile(
+            context = this,
+            name = name,
+            firebaseUid = uid,
+            isGoogleUser = false,
+            onReady = { goToProfile() },
+            onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+        )
     }
 
     // ── Guest ───────────────────────────────────────────────
