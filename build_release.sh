@@ -124,7 +124,7 @@ rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
 ./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
-UNSIGNED_APK="${APK_DIR}/app-release.apk"
+UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 echo ">> Building AAB (bundleRelease)..."
 ./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" --no-daemon --console=plain
