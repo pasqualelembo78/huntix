@@ -126,42 +126,44 @@ class LoginActivity : AppCompatActivity() {
         val cm = com.facebook.CallbackManager.Factory.create()
         fbCallbackManager = cm
         val permissions = listOf("email", "public_profile")
-        com.facebook.login.LoginManager.getInstance()
-            .logInWithReadPermissions(this, permissions, object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                override fun onSuccess(result: com.facebook.login.LoginResult) {
-                    val token = result.accessToken?.token
-                    if (token.isNullOrBlank()) {
-                        Toast.makeText(context, "Token Facebook non ricevuto", Toast.LENGTH_SHORT).show()
-                        return
+        val callback = object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+            override fun onSuccess(result: com.facebook.login.LoginResult) {
+                val token = result.accessToken?.token
+                if (token.isNullOrBlank()) {
+                    Toast.makeText(context, "Token Facebook non ricevuto", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
+                com.google.firebase.auth.FirebaseAuth.getInstance()
+                    .signInWithCredential(credential)
+                    .addOnSuccessListener { res ->
+                        val uid = res.user?.uid ?: ""
+                        val name = "Cacciatore Facebook"
+                        PlayerProfileManager.initMyProfile(
+                            context = this@LoginActivity,
+                            name = name,
+                            firebaseUid = uid,
+                            isGoogleUser = false,
+                            onReady = { goToProfile() },
+                            onError = { msg -> Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_LONG).show() }
+                        )
                     }
-                    val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
-                    com.google.firebase.auth.FirebaseAuth.getInstance()
-                        .signInWithCredential(credential)
-                        .addOnSuccessListener { res ->
-                            val uid = res.user?.uid ?: ""
-                            val name = "Cacciatore Facebook"
-                            PlayerProfileManager.initMyProfile(
-                                context = this@LoginActivity,
-                                name = name,
-                                firebaseUid = uid,
-                                isGoogleUser = false,
-                                onReady = { goToProfile() },
-                                onError = { msg -> Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_LONG).show() }
-                            )
-                        }
-                        .addOnFailureListener { e ->
-                            Toast.makeText(context, "Auth Firebase (FB) fallita: ${e.message}", Toast.LENGTH_LONG).show()
-                        }
-                }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(context, "Auth Firebase (FB) fallita: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+            }
 
-                override fun onCancel() {
-                    Toast.makeText(context, "Login Facebook annullato", Toast.LENGTH_SHORT).show()
-                }
+            override fun onCancel() {
+                Toast.makeText(context, "Login Facebook annullato", Toast.LENGTH_SHORT).show()
+            }
 
-                override fun onError(error: com.facebook.FacebookException) {
-                    Toast.makeText(context, "Login Facebook fallito: ${error.message}", Toast.LENGTH_LONG).show()
-                }
-            })
+            override fun onError(error: com.facebook.FacebookException) {
+                Toast.makeText(context, "Login Facebook fallito: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+        cm.registerCallback(callback)
+        com.facebook.login.LoginManager.getInstance()
+            .logInWithReadPermissions(this, cm, permissions)
     }
 
     // ── GitHub ──────────────────────────────────────────────
