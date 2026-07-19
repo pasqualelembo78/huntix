@@ -7,6 +7,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.intelligame.huntix.managers.SavedManager
 
 /**
  * GameProgressSync — Sincronizza i dati di progresso su Firestore.
@@ -87,9 +88,10 @@ object GameProgressSync {
     private fun doSave(ctx: Context, userId: String, onDone: ((Boolean) -> Unit)?) {
         try {
             val mvcBalance = SavedManager.getMvcBalance(ctx)
+            val prefs = ctx.getSharedPreferences("huntix_saved_v1", Context.MODE_PRIVATE)
 
             // Non salvare se MVC è 0 e non ci sono dati significativi
-            if (mvcBalance <= 0 && !SavedManager.getHatchedEggs(ctx).isEmpty().not()) {
+            if (mvcBalance <= 0 && SavedManager.getHatchedEggs(ctx).isEmpty()) {
                 Log.d(TAG, "Skip save — no meaningful data")
                 onDone?.invoke(false)
                 return
@@ -97,14 +99,10 @@ object GameProgressSync {
 
             val data = hashMapOf<String, Any>(
                 "mvcBalance" to mvcBalance,
-                "lastMiningCalcMs" to ctx.getSharedPreferences("huntix_saved_v1", Context.MODE_PRIVATE)
-                    .getLong("last_mining_calc_ms", System.currentTimeMillis()),
-                "pendingEggs" to ctx.getSharedPreferences("huntix_saved_v1", Context.MODE_PRIVATE)
-                    .getString("pending_eggs", "[]") ?: "[]",
-                "hatchingSlots" to ctx.getSharedPreferences("huntix_saved_v1", Context.MODE_PRIVATE)
-                    .getString("hatching_eggs", "[]") ?: "[]",
-                "hatchedEggs" to ctx.getSharedPreferences("huntix_saved_v1", Context.MODE_PRIVATE)
-                    .getString("hatched_eggs", "[]") ?: "[]",
+                "lastMiningCalcMs" to prefs.getLong("last_mining_calc_ms", System.currentTimeMillis()),
+                "pendingEggs" to (prefs.getString("pending_eggs", "[]") ?: "[]"),
+                "hatchingSlots" to (prefs.getString("hatching_eggs", "[]") ?: "[]"),
+                "hatchedEggs" to (prefs.getString("hatched_eggs", "[]") ?: "[]"),
                 "foodInventory" to getFoodInventory(ctx),
                 "toolInventory" to getToolInventory(ctx),
                 "syncedAt" to System.currentTimeMillis()

@@ -35,7 +35,7 @@ object SentryDebugManager {
         Sentry.configureScope { scope ->
             val user = User().apply {
                 id = userId
-                username = username
+                setUsername(username)
             }
             scope.setUser(user)
         }
@@ -45,7 +45,7 @@ object SentryDebugManager {
         val b = Breadcrumb().apply {
             this.category = category
             this.message = msg
-            this.type = io.sentry.BreadcrumbType.INFO
+            this.type = Breadcrumb.TYPE_INFO
             data.forEach { (k, v) -> setData(k, v?.toString() ?: "null") }
         }
         Sentry.addBreadcrumb(b)

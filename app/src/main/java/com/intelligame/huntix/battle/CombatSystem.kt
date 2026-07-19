@@ -37,7 +37,7 @@ class CombatSystem {
     }
 
     fun getRecentLogs(limit: Int = 20): List<String> {
-        return logQueue.takeLast(limit.coerceAtMost(logQueue.size)).toList()
+        return logQueue.toList().takeLast(limit.coerceAtMost(logQueue.size))
     }
 
     fun getStats() = CombatStats(

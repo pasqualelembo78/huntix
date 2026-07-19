@@ -1,6 +1,7 @@
 package com.intelligame.huntix.billing
 
 import android.content.Context
+import com.intelligame.huntix.managers.SavedManager
 import android.content.SharedPreferences
 
 /**

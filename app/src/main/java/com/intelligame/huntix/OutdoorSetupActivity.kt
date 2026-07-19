@@ -121,7 +121,7 @@ class OutdoorSetupActivity : BaseNavActivity() {
         ).apply { topMargin = UiKit.dp(this@OutdoorSetupActivity, 8) }
         root.addView(previewBtn)
 
-        setContentView(UiKit.scroll(this, *root.children.map { it }.toTypedArray()))
+        setContentView(UiKit.scroll(this, root))
     }
 
     private fun refreshHighlights(row: LinearLayout, selected: String) {

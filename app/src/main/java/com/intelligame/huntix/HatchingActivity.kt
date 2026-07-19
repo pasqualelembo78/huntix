@@ -7,6 +7,7 @@ import android.os.Looper
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.ui.EggOpeningAnimationActivity
 
 /**

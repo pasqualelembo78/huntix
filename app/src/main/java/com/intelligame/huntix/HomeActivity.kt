@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.ui.*
 import com.intelligame.huntix.billing.VipManager
+import com.intelligame.huntix.managers.SavedManager
 import android.widget.Toast
 
 /**

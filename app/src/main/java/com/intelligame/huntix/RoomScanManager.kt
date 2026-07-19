@@ -64,9 +64,9 @@ class RoomScanManager {
 
     fun getTrackedPlaneCount(session: Session): Int {
         return try {
-            val frame = session.update()
-            val planes = frame.updatedTrackables
-            planes.count { it is Plane && it.trackingState == TrackingState.TRACKING }
+            session.update()
+            val planes = session.getAllTrackables(Plane::class.java)
+            planes.count { it.trackingState == TrackingState.TRACKING }
         } catch (_: Exception) {
             cachedPlaneCount
         }.also { cachedPlaneCount = it }

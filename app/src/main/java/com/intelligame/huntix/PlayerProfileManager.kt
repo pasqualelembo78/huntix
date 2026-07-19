@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
+import com.intelligame.huntix.managers.SavedManager
 import com.google.firebase.firestore.SetOptions
 
 /**

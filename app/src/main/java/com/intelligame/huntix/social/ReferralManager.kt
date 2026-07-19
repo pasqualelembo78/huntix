@@ -1,6 +1,7 @@
 package com.intelligame.huntix.social
 
 import android.content.Context
+import com.intelligame.huntix.managers.SavedManager
 import android.content.Intent
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue

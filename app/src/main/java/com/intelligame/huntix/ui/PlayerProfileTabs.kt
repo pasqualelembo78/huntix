@@ -9,8 +9,8 @@ import android.webkit.*
 import android.widget.*
 import com.intelligame.huntix.LocationBadge
 import com.intelligame.huntix.PlayerProfileManager
-import com.intelligame.huntix.managers.MvcManager
 import com.intelligame.huntix.managers.MiniGameManager
+import com.intelligame.huntix.managers.SavedManager
 
 // ── TAB 0: PROFILO ────────────────────────────────────────────
 internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
