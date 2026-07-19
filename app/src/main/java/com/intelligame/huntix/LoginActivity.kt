@@ -10,10 +10,14 @@ import androidx.appcompat.app.AppCompatActivity
 
 /**
  * LoginActivity — schermata di accesso.
- * - Ospite: crea profilo locale via PlayerProfileManager e va al setup.
- * - Google / Facebook: placeholder (richiede wiring Credentials/SDK login).
+ * - Ospite: Firebase anonymous auth -> profilo locale.
+ * - Google: Firebase Auth via Google ID token.
+ * - Facebook: Firebase Auth via Facebook Access Token.
+ * - GitHub: Firebase Auth via OAuthProvider("github.com").
  */
 class LoginActivity : AppCompatActivity() {
+
+    private var fbCallbackManager: com.facebook.CallbackManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,7 +53,11 @@ class LoginActivity : AppCompatActivity() {
         })
         root.addView(spacer())
         root.addView(UiKit.button(c, "\uD83D\uDCAC  Continua con Facebook", "#4267B2") {
-            Toast.makeText(c, "Login Facebook in arrivo", Toast.LENGTH_SHORT).show()
+            signInWithFacebook(c)
+        })
+        root.addView(spacer())
+        root.addView(UiKit.button(c, "🐙  Continua con GitHub", "#24292e") {
+            signInWithGitHub(c)
         })
         root.addView(spacer())
         root.addView(UiKit.button(c, "▶️  Gioca come Ospite", UiKit.ACCENT) {
@@ -59,9 +67,8 @@ class LoginActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    // ── Google ──────────────────────────────────────────────
     private fun signInWithGoogle(context: android.content.Context) {
-        // Google Sign-In via Credential Manager (modern approach)
-        // Requires WEB_CLIENT_ID in BuildConfig (from keystore.properties)
         try {
             val signInIntent = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
                 this,
@@ -76,11 +83,92 @@ class LoginActivity : AppCompatActivity() {
             startActivityForResult(signInIntent, RC_GOOGLE_SIGN_IN)
         } catch (e: Exception) {
             Toast.makeText(context, "Google Sign-In non disponibile", Toast.LENGTH_SHORT).show()
-            // Fallback to guest
             loginAsGuest()
         }
     }
 
+    // ── Facebook ────────────────────────────────────────────
+    private fun signInWithFacebook(context: android.content.Context) {
+        val cm = com.facebook.CallbackManager.Factory.create()
+        fbCallbackManager = cm
+        val permissions = listOf("email", "public_profile")
+        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(this, cm, permissions)
+        cm.registerCallback(cm, object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+            override fun onSuccess(result: com.facebook.login.LoginResult) {
+                val token = result.accessToken?.token
+                if (token.isNullOrBlank()) {
+                    Toast.makeText(context, "Token Facebook non ricevuto", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
+                com.google.firebase.auth.FirebaseAuth.getInstance()
+                    .signInWithCredential(credential)
+                    .addOnSuccessListener { res ->
+                        val uid = res.user?.uid ?: ""
+                        val name = result.accessToken.userId?.let { "Cacciatore FB" } ?: "Cacciatore Facebook"
+                        PlayerProfileManager.initMyProfile(
+                            context = this@LoginActivity,
+                            name = name,
+                            firebaseUid = uid,
+                            isGoogleUser = false,
+                            onReady = { goToProfile() },
+                            onError = { msg -> Toast.makeText(this@LoginActivity, msg, Toast.LENGTH_LONG).show() }
+                        )
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(context, "Auth Firebase (FB) fallita: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+            }
+
+            override fun onCancel() {
+                Toast.makeText(context, "Login Facebook annullato", Toast.LENGTH_SHORT).show()
+            }
+
+            override fun onError(error: com.facebook.FacebookException) {
+                Toast.makeText(context, "Login Facebook fallito: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
+    // ── GitHub ──────────────────────────────────────────────
+    private fun signInWithGitHub(context: android.content.Context) {
+        val provider = com.google.firebase.auth.OAuthProvider.newBuilder("github.com").build()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        // Se c'è già una pending result (es. dopo il browser), prova a risolverla
+        val pending = auth.pendingAuthResult
+        if (pending != null) {
+            pending.addOnSuccessListener { res -> onGitHubSuccess(res, context) }
+                .addOnFailureListener { e -> Toast.makeText(context, "GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show() }
+            return
+        }
+        auth.startActivityForSignInWithProvider(this, provider)
+            .addOnSuccessListener { res -> onGitHubSuccess(res, context) }
+            .addOnFailureListener { e ->
+                Toast.makeText(context, "Login GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun onGitHubSuccess(result: com.google.firebase.auth.AuthResult, context: android.content.Context) {
+        val uid = result.user?.uid ?: ""
+        val name = result.user?.displayName ?: "Cacciatore GitHub"
+        PlayerProfileManager.initMyProfile(
+            context = this,
+            name = name,
+            firebaseUid = uid,
+            isGoogleUser = false,
+            onReady = { goToProfile() },
+            onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+        )
+    }
+
+    private fun goToProfile() {
+        startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        })
+        finish()
+    }
+
+    // ── Guest ───────────────────────────────────────────────
     private fun loginAsGuest() {
         val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
@@ -95,12 +183,7 @@ class LoginActivity : AppCompatActivity() {
                     context = this,
                     name = name,
                     firebaseUid = uid,
-                    onReady = {
-                        startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        })
-                        finish()
-                    },
+                    onReady = { goToProfile() },
                     onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
                 )
             }
@@ -112,6 +195,7 @@ class LoginActivity : AppCompatActivity() {
     @Deprecated("Use ActivityResult API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        fbCallbackManager?.onActivityResult(requestCode, resultCode, data)
         if (requestCode == RC_GOOGLE_SIGN_IN) {
             val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(data)
             try {
@@ -129,12 +213,7 @@ class LoginActivity : AppCompatActivity() {
                                 name = googleName,
                                 firebaseUid = uid,
                                 isGoogleUser = true,
-                                onReady = {
-                                    startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                                    })
-                                    finish()
-                                },
+                                onReady = { goToProfile() },
                                 onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
                             )
                         }
