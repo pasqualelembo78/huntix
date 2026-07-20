@@ -39,3 +39,16 @@ gradle-app.setting
 # ── OS files ──────────────────────────────────────────────────
 Thumbs.db
 Desktop.ini
+
+# ── Backend Huntix (Real Life) ───────────────────────────────
+backend/venv/
+backend/.env
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+backend/*.db
+backend/nohup.out
+backend/.env.example
+backend/.hf_token
+backend/.gen_status.json
+backend/static/

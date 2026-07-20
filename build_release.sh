@@ -313,3 +313,46 @@ echo ">> AAB:          $AAB_FILE"
 
 # Pulisci il file temporaneo keyless (se creato)
 [ -n "${TMP_PROPS:-}" ] && rm -f "$TMP_PROPS"
+
+# ════════════════════════════════════════════════════════════════
+#  FASE BACKEND HUNTIX (Real Life)
+#  Copiata/ispirata dalla logica di avvio backend di build_app.sh (aria),
+#  ma ricondotta al backend PROPRIO di Huntix in `backend/`.
+#  Crea il venv, installa le dipendenze e avvia uvicorn su PORT (5100).
+# ════════════════════════════════════════════════════════════════
+start_huntix_backend() {
+    echo "============================================================"
+    echo " Backend Huntix (Real Life) — setup & avvio"
+    echo "============================================================"
+    local BDIR="backend"
+    if [ ! -d "$BDIR" ]; then
+        echo "!! Backend dir '$BDIR' non trovata, salto la fase backend."; return 0
+    fi
+    cd "$BDIR"
+    if [ ! -d venv ]; then
+        echo ">> Creo venv backend..."
+        python3 -m venv venv
+    fi
+    if [ -f requirements.txt ]; then
+        echo ">> pip install -r requirements.txt ..."
+        ./venv/bin/pip install --upgrade pip >/dev/null 2>&1 || true
+        ./venv/bin/pip install -r requirements.txt 2>&1 | tail -8
+    fi
+    if [ ! -f .env ]; then
+        echo "!! backend/.env assente — crealo con le chiavi. Backend NON avviato."
+        cd ..; return 0
+    fi
+    local PORT
+    PORT=$(grep '^PORT=' .env | cut -d= -f2-)
+    PORT="${PORT:-5100}"
+    echo ">> Avvio backend huntix su porta $PORT ..."
+    HUNTIX_BACKEND_PORT="$PORT" ./start_backend.sh >/dev/null 2>&1 &
+    sleep 4
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/docs" 2>/dev/null | grep -q 200; then
+        echo ">> Backend huntix ATTIVO su http://localhost:$PORT"
+    else
+        echo "!! Backend non raggiungibile subito; controlla /tmp/huntix_backend.log"
+    fi
+    cd ..
+}
+start_huntix_backend || echo "!! Fase backend terminata con errori (vedi /tmp/huntix_backend.log)."
