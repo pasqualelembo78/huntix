@@ -83,10 +83,10 @@ internal fun MainActivity.updatePlayingUI() {
         playState == PlayState.SEARCHING || playState == PlayState.NEAR_EGG
     ) View.VISIBLE else View.GONE
     when (playState) {
-        PlayState.SEARCHING    -> binding.tvGamePhase.text = "${playerLabel}Cerca uovo #$n"
+        PlayState.SEARCHING    -> binding.tvGamePhase.text = "${playerLabel}Cerca uovo #$n  🪣 ${bucketHeld}/${getBucketCapacity()}"
         PlayState.NEAR_EGG    -> { binding.tvGamePhase.text = "${MainActivity.EGG_LABELS[currentEggIdx % MainActivity.EGG_LABELS.size]} UOVO #$n TROVATO!"; binding.throwZone.visibility = View.VISIBLE }
         PlayState.THROWING    -> Unit
-        PlayState.KEY_OBTAINED -> binding.tvGamePhase.text = "Chiave #$realEggsCaught - Vai alla cassaforte!"
+        PlayState.KEY_OBTAINED -> binding.tvGamePhase.text = "🪣 Secchiello pieno (${bucketHeld}/${getBucketCapacity()}) - Vai alla cassaforte!"
         PlayState.NEAR_SAFE   -> { binding.tvGamePhase.text = "CASSAFORTE VICINA!"; binding.btnInsertKey.visibility = View.VISIBLE }
         PlayState.TICKET_SHOWN -> binding.tvGamePhase.text = "Leggi il biglietto!"
     }

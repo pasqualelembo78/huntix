@@ -39,6 +39,50 @@ object PlayerProfileManager {
     private var _myProfile: PlayerProfile? = null
     val myProfile: PlayerProfile? get() = _myProfile
 
+    // ─── Persistenza metodo di login ────────────────────────────
+    private const val LOGIN_PREF_FILE = "login_prefs"
+    private const val KEY_METHOD      = "method"
+    private const val KEY_LOGIN_NAME  = "name"
+    private const val KEY_UID         = "uid"
+    private const val KEY_IS_GOOGLE   = "isGoogleUser"
+
+    /**
+     * Salva il metodo di login scelto dall'utente, così ai prossimi avvii
+     * possiamo effettuare l'accesso automatico (es. Google) senza ridomandarlo.
+     */
+    fun saveLoginMethod(
+        context: Context,
+        method: String,
+        name: String,
+        uid: String = "",
+        isGoogleUser: Boolean = false
+    ) {
+        context.getSharedPreferences(LOGIN_PREF_FILE, Context.MODE_PRIVATE).edit()
+            .putString(KEY_METHOD, method)
+            .putString(KEY_LOGIN_NAME, name)
+            .putString(KEY_UID, uid)
+            .putBoolean(KEY_IS_GOOGLE, isGoogleUser)
+            .apply()
+    }
+
+    /**
+     * Ritorna (metodo, nome, uid) salvati, oppure null se è il primo avvio.
+     * metodo ∈ { google, facebook, github, email, guest, local }.
+     */
+    fun getLoginMethod(context: Context): Triple<String, String, String>? {
+        val p = context.getSharedPreferences(LOGIN_PREF_FILE, Context.MODE_PRIVATE)
+        val method = p.getString(KEY_METHOD, null) ?: return null
+        return Triple(method, p.getString(KEY_LOGIN_NAME, "") ?: "", p.getString(KEY_UID, "") ?: "")
+    }
+
+    fun isGoogleLogin(context: Context): Boolean =
+        context.getSharedPreferences(LOGIN_PREF_FILE, Context.MODE_PRIVATE)
+            .getBoolean(KEY_IS_GOOGLE, false)
+
+    fun clearLoginMethod(context: Context) {
+        context.getSharedPreferences(LOGIN_PREF_FILE, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
     // ─── Init / get-or-create ────────────────────────────────────
 
     /**

@@ -14,23 +14,14 @@ import com.intelligame.huntix.model.PlayState
 
 internal fun SafeManager.onTicketClosed() {
     closeSafeDoor {
-        val nextIdx = activity.currentEggIdx + 1
-        if (nextIdx >= activity.eggs.size) {
-            activity.runOnUiThread { activity.finishGame() }
+        // Secchiello: mostra i biglietti rimanenti prima di passare all'uovo successivo
+        if (activity.pendingTickets > 1) {
+            activity.pendingTickets -= 1
+            showDepositTicket()
             return@closeSafeDoor
         }
-        activity.currentEggIdx = nextIdx
-        activity.keyInPocket = false
-        activity.eggStartMs = android.os.SystemClock.elapsedRealtime()
-        if (viewModel.turnMode == "alternating") {
-            activity.runOnUiThread { showTurnSwitchOverlay(activity.currentPlayer) }
-        } else {
-            activity.runOnUiThread {
-                activity.playState = PlayState.SEARCHING
-                activity.updateUI()
-                Toast.makeText(activity, "Cerca l'uovo #${activity.currentEggIdx + 1}!", Toast.LENGTH_LONG).show()
-            }
-        }
+        activity.pendingTickets = 0
+        activity.advanceAfterDeposit()
     }
 }
 

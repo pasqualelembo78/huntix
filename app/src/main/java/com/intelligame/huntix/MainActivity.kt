@@ -43,6 +43,7 @@ import com.intelligame.huntix.model.SafeObject
 import com.intelligame.huntix.manager.ArSceneManager
 import com.intelligame.huntix.manager.EggPlacementManager
 import com.intelligame.huntix.manager.SafeManager
+import com.intelligame.huntix.manager.showTurnSwitchOverlay
 import com.intelligame.huntix.viewmodel.IndoorGameViewModel
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -215,6 +216,13 @@ class MainActivity : AppCompatActivity() {
     var frameCount = 0
     var trackingLostFrames = 0
     var lastTrackingHintMs = 0L
+
+    // ── Secchiello (bucket) ───────────────────────────────────
+    var bucketHeld: Int = 0        // uova attualmente nel secchiello
+    var pendingTickets: Int = 0    // biglietti ancora da mostrare allo svuoto
+    internal var depositNextEgg: Int = 1 // numero uovo del prossimo biglietto da mostrare
+    internal var bucketNode: io.github.sceneview.node.Node? = null
+    private val bucketEggNodes = mutableListOf<io.github.sceneview.node.Node>()
 
     // Cloud Anchors (indoor MP)
     var pendingCloudRestore = false
@@ -500,4 +508,80 @@ class MainActivity : AppCompatActivity() {
     }
 
     internal fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    // ── Secchiello: capacità e modello 3D ──────────────────────
+
+    internal fun getBucketCapacity(): Int =
+        com.intelligame.huntix.CatchToolManager.getSelectedCapacity(this)
+
+    /** Costruisce (una volta) il secchiello 3D ancorato alla camera. */
+    internal fun ensureBucketModel() {
+        if (bucketNode != null) return
+        val sv = binding.sceneView
+        val tool = com.intelligame.huntix.CatchToolManager.getSelectedTool(this)
+        val bodyColor = android.graphics.Color.parseColor(tool.colorHex)
+        val bodyMat = sv.materialLoader.createColorInstance(color = bodyColor)
+        val metalMat = sv.materialLoader.createColorInstance(color = android.graphics.Color.rgb(210, 210, 210))
+        val bucket = io.github.sceneview.node.Node(sv.engine)
+        // Corpo del secchiello (cilindro aperto in alto)
+        val body = io.github.sceneview.node.CylinderNode(
+            sv.engine, 0.11f, 0.16f, materialInstance = bodyMat
+        ).apply { position = io.github.sceneview.math.Position(0f, 0f, 0f) }
+        // Fondo
+        val bottom = io.github.sceneview.node.CylinderNode(
+            sv.engine, 0.11f, 0.012f, materialInstance = bodyMat
+        ).apply { position = io.github.sceneview.math.Position(0f, -0.08f, 0f) }
+        // Manico
+        val handle = io.github.sceneview.node.CylinderNode(
+            sv.engine, 0.013f, 0.16f, materialInstance = metalMat
+        ).apply { position = io.github.sceneview.math.Position(0.10f, 0.04f, 0f); rotation = io.github.sceneview.math.Rotation(0f, 0f, 70f) }
+        bucket.addChildNode(body); bucket.addChildNode(bottom); bucket.addChildNode(handle)
+        bucket.position = io.github.sceneview.math.Position(0.32f, -0.32f, -0.55f)
+        bucket.scale = io.github.sceneview.math.Scale(1.1f, 1.1f, 1.1f)
+        sv.cameraNode.addChildNode(bucket)
+        bucketNode = bucket
+        refreshBucketModel()
+    }
+
+    /** Aggiorna il numero di uova visibili nel secchiello 3D. */
+    internal fun refreshBucketModel() {
+        val bucket = bucketNode ?: return
+        bucket.isVisible = bucketHeld > 0
+        val sv = binding.sceneView
+        bucketEggNodes.forEach { bucket.removeChildNode(it) }
+        bucketEggNodes.clear()
+        val eggMat = sv.materialLoader.createColorInstance(color = android.graphics.Color.parseColor("#FFE0B3"))
+        repeat(bucketHeld.coerceAtMost(getBucketCapacity())) { i ->
+            val ang = (i * 2.399963f)
+            val r = 0.045f
+            val node = io.github.sceneview.node.SphereNode(
+                sv.engine, 0.035f, materialInstance = eggMat
+            ).apply {
+                position = io.github.sceneview.math.Position(
+                    kotlin.math.cos(ang) * r, -0.02f, kotlin.math.sin(ang) * r
+                )
+            }
+            bucket.addChildNode(node)
+            bucketEggNodes.add(node)
+        }
+    }
+
+    /** Dopo lo svuotamento alla cassaforte: passa all'uovo successivo. */
+    internal fun advanceAfterDeposit() {
+        val nextIdx = currentEggIdx + 1
+        if (nextIdx >= eggs.size) { finishGame(); return }
+        currentEggIdx = nextIdx
+        keyInPocket = false
+        bucketHeld = 0
+        pendingTickets = 0
+        refreshBucketModel()
+        eggStartMs = android.os.SystemClock.elapsedRealtime()
+        if (viewModel.turnMode == "alternating") {
+            safeManager.showTurnSwitchOverlay(currentPlayer)
+        } else {
+            playState = com.intelligame.huntix.model.PlayState.SEARCHING
+            updateUI()
+            Toast.makeText(this, "Cerca l'uovo #${currentEggIdx + 1}!", Toast.LENGTH_LONG).show()
+        }
+    }
 }

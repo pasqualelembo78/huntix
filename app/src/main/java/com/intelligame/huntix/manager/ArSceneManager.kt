@@ -159,7 +159,11 @@ class ArSceneManager(internal val activity: MainActivity) {
             val revealD = activity.dm.getRevealDistMeters()
             val catchD = activity.dm.getCatchDistMeters()
 
-            val shouldShow = !activity.keyInPocket && eggDist < revealD
+            if (activity.bucketNode == null) activity.ensureBucketModel()
+
+            // L'uovo successivo resta nascosto finché non svuoti il secchiello
+            // (se pieno → keyInPocket; durante lo svuoto → pendingTickets).
+            val shouldShow = !(activity.keyInPocket || activity.pendingTickets > 0) && eggDist < revealD
             if (target.anchorNode.isVisible != shouldShow) {
                 target.anchorNode.isVisible = shouldShow
                 if (shouldShow) activity.runOnUiThread { activity.eggPlacementManager.startEggPulse(target) }

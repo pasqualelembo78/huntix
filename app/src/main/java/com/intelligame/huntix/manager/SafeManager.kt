@@ -159,18 +159,23 @@ class SafeManager(internal val activity: MainActivity) {
     // ── Key insertion ────────────────────────────────────────────
 
     fun insertKeyInSafe() {
-        if (!activity.keyInPocket || activity.safeObject == null) return
+        val held = activity.bucketHeld
+        if (!activity.keyInPocket || activity.safeObject == null || held <= 0) return
         SoundManager.playKeyInsert()
         val safe = activity.safeObject!!
-        val keyColor = MainActivity.KEY_COLORS[(activity.realEggsCaught - 1) % MainActivity.KEY_COLORS.size]
         val sv = binding.sceneView
-        val mat = sv.materialLoader.createColorInstance(color = keyColor)
-        val filled = CylinderNode(engine = sv.engine, radius = 0.020f, height = 0.016f, materialInstance = mat).apply {
-            position = slotPositionFor(activity.realEggsCaught - 1)
-            rotation = Rotation(90f, 0f, 0f)
+        // Aggiunge un "chio" colorato sulla cassaforte per ogni uovo del secchiello
+        val startColorIdx = activity.realEggsCaught - held
+        repeat(held) { i ->
+            val keyColor = MainActivity.KEY_COLORS[(startColorIdx + i) % MainActivity.KEY_COLORS.size]
+            val mat = sv.materialLoader.createColorInstance(color = keyColor)
+            val filled = CylinderNode(engine = sv.engine, radius = 0.020f, height = 0.016f, materialInstance = mat).apply {
+                position = slotPositionFor(startColorIdx + i)
+                rotation = Rotation(90f, 0f, 0f)
+            }
+            safe.anchorNode.addChildNode(filled)
+            safe.keySlots.add(filled)
         }
-        safe.anchorNode.addChildNode(filled)
-        safe.keySlots.add(filled)
 
         val curY = safe.dialNode.rotation.y
         ValueAnimator.ofFloat(curY, curY + 90f).apply {
@@ -180,15 +185,25 @@ class SafeManager(internal val activity: MainActivity) {
             start()
         }
 
+        // Coda di biglietti: uno per ogni uovo contenuto nel secchiello
+        activity.pendingTickets = held
+        activity.depositNextEgg = activity.currentEggIdx - held + 1
+
         activity.uiHandler.postDelayed({
             if (!activity.isActive || activity.isFinishing) return@postDelayed
             openSafeDoor {
                 SoundManager.playSafeOpen()
-                val riddleText = activity.riddles.getOrNull(activity.currentEggIdx) ?: ""
-                if (riddleText.isNotEmpty()) showTicket(activity.currentEggIdx + 1, riddleText)
-                else onTicketClosed()
+                showDepositTicket()
             }
         }, 600)
+    }
+
+    /** Mostra il biglietto (indovinello) per l'uovo successivo del secchiello. */
+    internal fun showDepositTicket() {
+        val eggNumber = activity.depositNextEgg
+        activity.depositNextEgg += 1
+        val riddleText = activity.riddles.getOrNull(eggNumber - 1) ?: "Uovo catturato! \uD83E\uDD5A"
+        showTicket(eggNumber, riddleText)
     }
 
     private fun slotPositionFor(idx: Int): Position {

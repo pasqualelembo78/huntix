@@ -122,27 +122,87 @@ internal fun PlayerProfileActivity.buildXpTab(root: LinearLayout) {
 
 // ── TAB 2: MVC ────────────────────────────────────────────────
 internal fun PlayerProfileActivity.buildMvcTab(root: LinearLayout) {
-    val mvcBalance = SavedManager.getMvcBalance(this)
-    val mvcTotal   = SavedManager.getTotalEarned(this)
-    val mvcToday   = MiniGameManager.totalMvcEarnedToday(this)
+    val c = this
+    val mvcBalance = SavedManager.getMvcBalance(c)
+    val mvcTotal   = SavedManager.getTotalEarned(c)
+    val mvcToday   = MiniGameManager.totalMvcEarnedToday(c)
+    val claimable  = SavedManager.canCheckInToday(c)
 
+    fun fmtHms(ms: Long): String {
+        val s = (ms / 1000).toInt()
+        val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
+        return "%02d:%02d:%02d".format(h, m, sec)
+    }
+
+    fun makeButton(label: String, color: String, onClick: () -> Unit): Button =
+        Button(c).apply {
+            text = label; textSize = 15f; setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE; cornerRadius = dp(50).toFloat()
+                setColor(Color.parseColor(color))
+            }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50))
+                .also { it.topMargin = dp(8) }
+            setOnClickListener { onClick() }
+        }
+
+    // ── Saldo ──
     root.addView(sectionCard("#001500", "#00FF88") {
         addView(tv("💰 Huntix Coins (MVC)", 16f, Color.parseColor("#66FFB2"), Gravity.START, true)
             .also { it.setPadding(0, 0, 0, dp(12)) })
-        addView(rowText("💳 Bilancio attuale",   SavedManager.formatMvc(mvcBalance), "#00FF88", "#FFFFFF"))
+        addView(rowText("💳 Saldo disponibile",   SavedManager.formatMvc(mvcBalance), "#00FF88", "#FFFFFF"))
         addView(rowText("📈 Totale guadagnato",  SavedManager.formatMvc(mvcTotal),   "#00FF88", "#A5D6A7"))
         addView(rowText("📅 Guadagnati oggi",    "$mvcToday MVC",                       "#00FF88", "#A5D6A7"))
     })
 
+    // ── Check-in giornaliero ──
+    root.addView(sectionCard("#0A1A00", "#7CB342") {
+        addView(tv("📅 Check-in Giornaliero", 15f, Color.parseColor("#AED581"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        if (claimable) {
+            addView(tv("Riscatta il tuo bonus quotidiano di +10 MVC! 🎁", 12f,
+                Color.parseColor("#0F0F2A"), Gravity.START).also { it.setPadding(0, 0, 0, dp(8)) })
+            addView(makeButton("🎁  Riscatta +10 MVC", "#00FF88") {
+                val got = SavedManager.doDailyCheckIn(c)
+                if (got > 0) {
+                    Toast.makeText(c, "+$got MVC! 🎉", Toast.LENGTH_LONG).show()
+                    recreate()
+                } else {
+                    Toast.makeText(c, "Già riscattato oggi.", Toast.LENGTH_SHORT).show()
+                }
+            })
+        } else {
+            addView(tv("✅ Check-in già riscattato oggi!", 13f,
+                Color.parseColor("#A5D6A7"), Gravity.START).also { it.setPadding(0, 0, 0, dp(4)) })
+            addView(tv("⏳ Prossimo tra: ${fmtHms(SavedManager.millisUntilNextCheckIn())}", 12f,
+                Color.parseColor("#0F0F2A"), Gravity.START).also { it.setPadding(0, dp(4), 0, dp(8)) })
+        }
+    })
+
+    // ── Bonus installazione (passivo) ──
+    root.addView(sectionCard("#001A1A", "#26A69A") {
+        addView(tv("📱 Bonus Presenza App", 15f, Color.parseColor("#80CBC4"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        addView(tv("MVC aumentano dal momento dell'installazione: il solo " +
+                   "fatto di avere l'app installata genera guadagni passivi.",
+            12f, Color.parseColor("#0F0F2A"), Gravity.START).also { it.setPadding(0, 0, 0, dp(6)) })
+        addView(rowText("⚡ Guadagno passivo",
+            "${String.format("%.3f", SavedManager.getInstallRatePerHour())} MVC/ora", "#26A69A", "#B2DFDB"))
+    })
+
+    // ── Come guadagnare ──
     root.addView(sectionCard("#001000", "#388E3C") {
         addView(tv("ℹ️ Come guadagnare MVC", 15f, Color.parseColor("#A5D6A7"), Gravity.START, true)
             .also { it.setPadding(0, 0, 0, dp(8)) })
         val tips = listOf(
+            "📅 Check-in giornaliero (+10 MVC al giorno)",
+            "📱 Bonus presenza app (MVC passivi dall'installazione)",
+            "⛏️ Mining delle uova schiuse (MVC nel tempo)",
             "🥚 Raccogliere uova rare ed epic",
-            "🎮 Giocare ai mini giochi (Memory, Carte, Match-3)",
+            "🎮 Mini giochi (Memory, Carte, Match-3, ecc.)",
             "⚔️ Vincere battaglie contro altri giocatori",
-            "🏋️ Completare allenamenti in palestra",
-            "📜 Completare quest giornaliere e settimanali"
+            "🤝 Invitare amici (referral +500 MVC)",
+            "👑 Ricompense VIP e eventi"
         )
         tips.forEach {
             addView(tv("• $it", 12f, Color.parseColor("#0F0F2A"), Gravity.START)
@@ -152,13 +212,13 @@ internal fun PlayerProfileActivity.buildMvcTab(root: LinearLayout) {
 
     // Uova regalo nell'inventario
     val rarities = listOf("common","uncommon","rare","epic","legendary")
-    val hasGift  = rarities.any { SavedManager.getGiftEggCount(this, it) > 0 }
+    val hasGift  = rarities.any { SavedManager.getGiftEggCount(c, it) > 0 }
     if (hasGift) {
         root.addView(sectionCard("#1A0010", "#E91E63") {
             addView(tv("🥚 Uova Regalo (da schiudere)", 15f, Color.parseColor("#F48FB1"), Gravity.START, true)
                 .also { it.setPadding(0, 0, 0, dp(8)) })
             rarities.forEach { rarity ->
-                val count = SavedManager.getGiftEggCount(this@buildMvcTab, rarity)
+                val count = SavedManager.getGiftEggCount(c, rarity)
                 if (count > 0) {
                     val emoji = when (rarity) {
                         "common"    -> "🥚"; "uncommon" -> "🌿🥚"; "rare"      -> "💙🥚"

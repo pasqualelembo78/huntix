@@ -32,7 +32,8 @@ object CatchToolManager {
         val colorHex: String,
         val isUnlimited: Boolean,
         val shopPrice: Int,    // prezzo per 1 unità, 0 = non acquistabile
-        val expiryDays: Int    // giorni prima che si rompa (0 = nessuna scadenza)
+        val expiryDays: Int,   // giorni prima che si rompa (0 = nessuna scadenza)
+        val capacity: Int      // uova trasportabili prima di dover svuotare il secchiello
     ) {
         BUCKET_BASE(
             id = "bucket_base",
@@ -42,7 +43,8 @@ object CatchToolManager {
             colorHex = "#00FF88",
             isUnlimited = true,
             shopPrice = 0,
-            expiryDays = 0
+            expiryDays = 0,
+            capacity = 1
         ),
         BUCKET_SUPER(
             id = "bucket_super",
@@ -52,7 +54,8 @@ object CatchToolManager {
             colorHex = "#00B4FF",
             isUnlimited = false,
             shopPrice = 50,
-            expiryDays = 10
+            expiryDays = 10,
+            capacity = 5
         ),
         BUCKET_ULTRA(
             id = "bucket_ultra",
@@ -62,7 +65,8 @@ object CatchToolManager {
             colorHex = "#FFD700",
             isUnlimited = false,
             shopPrice = 150,
-            expiryDays = 10
+            expiryDays = 10,
+            capacity = 10
         );
 
         companion object {
@@ -140,6 +144,9 @@ object CatchToolManager {
     fun setSelectedTool(ctx: Context, tool: CatchTool) {
         prefs(ctx).edit().putString("selected_tool", tool.id).apply()
     }
+
+    /** Capacità del secchiello attualmente selezionato (uova prima di svuotare). */
+    fun getSelectedCapacity(ctx: Context): Int = getSelectedTool(ctx).capacity
 
     /**
      * Giorni rimanenti prima che il lotto più vecchio di un tool scada.

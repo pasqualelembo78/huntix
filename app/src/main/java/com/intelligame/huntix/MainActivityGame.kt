@@ -104,13 +104,24 @@ internal fun MainActivity.onThrowHit() {
         })
         start()
     }
-    keyInPocket = true; playState = PlayState.KEY_OBTAINED
 
     // ─── Multiplayer sync ───
     if (isMultiplayer && mpRoomCode.isNotEmpty()) {
         val totalElapsed = SystemClock.elapsedRealtime() - huntStartMs + penaltyAccumMs
         mpManager.reportEggFound(currentEggIdx, elapsed)
         mpManager.updateMyScore(realEggsCaught, totalElapsed)
+    }
+
+    // ─── Secchiello: raccogli l'uovo e gestisci la capacità ───
+    bucketHeld++
+    refreshBucketModel()
+    val isLast = (currentEggIdx + 1) >= eggs.size
+    if (bucketHeld >= getBucketCapacity() || isLast) {
+        keyInPocket = true
+        playState = PlayState.KEY_OBTAINED
+    } else {
+        currentEggIdx++
+        playState = PlayState.SEARCHING
     }
 
     binding.catchBurst.visibility = View.VISIBLE; binding.catchBurst.alpha = 1f
@@ -122,7 +133,9 @@ internal fun MainActivity.onThrowHit() {
 
     runOnUiThread {
         updateUI()
-        Toast.makeText(this, "Chiave #$realEggsCaught! Vai alla cassaforte!", Toast.LENGTH_LONG).show()
+        val msg = if (keyInPocket) "🪣 Secchiello pieno! Vai alla cassaforte!"
+                  else "🪣 Uovo nel secchiello ($bucketHeld/${getBucketCapacity()})"
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 }
 

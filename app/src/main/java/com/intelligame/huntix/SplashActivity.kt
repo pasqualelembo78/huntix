@@ -7,14 +7,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * SplashActivity — LAUNCHER.
  * Mostra il logo, inizializza Sentry/Analytics e smista:
- *  - profilo già presente  → HomeActivity
- *  - nessun profilo        → LoginActivity
+ *  - profilo già presente / auto-login riuscito → HomeActivity
+ *  - nessun profilo e nessun metodo salvato        → LoginActivity
  */
 class SplashActivity : AppCompatActivity() {
 
@@ -42,7 +43,9 @@ class SplashActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             delay(1200)
-            val target = if (PlayerProfileManager.myProfile != null) {
+
+            val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
+            val target = if (login != null && tryAutoLogin(login)) {
                 HomeActivity::class.java
             } else {
                 LoginActivity::class.java
@@ -51,6 +54,40 @@ class SplashActivity : AppCompatActivity() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
             finish()
+        }
+    }
+
+    /**
+     * Tenta l'accesso automatico con l'ultimo metodo scelto.
+     * - "local": profilo 100% offline, nessun Firebase.
+     * - metodi Firebase (google/facebook/github/email/guest): richiede che
+     *   FirebaseAuth.currentUser sia ancora valido → accesso silenzioso senza
+     *   mostrare di nuovo il picker (es. Google).
+     * Ritorna true solo quando il profilo è stato (ri)caricato con successo.
+     */
+    private suspend fun tryAutoLogin(login: Triple<String, String, String>): Boolean {
+        val (method, name, uid) = login
+        return if (method == "local") {
+            kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                PlayerProfileManager.initLocalProfile(this@SplashActivity, name) { cont.resume(true) {} }
+            }
+        } else {
+            val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+            if (currentUid.isNullOrBlank()) {
+                false
+            } else {
+                val isGoogle = PlayerProfileManager.isGoogleLogin(this@SplashActivity)
+                kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                    PlayerProfileManager.initMyProfile(
+                        context = this@SplashActivity,
+                        name = name,
+                        firebaseUid = uid.ifBlank { currentUid },
+                        isGoogleUser = isGoogle,
+                        onReady = { cont.resume(true) {} },
+                        onError = { cont.resume(false) {} }
+                    )
+                }
+            }
         }
     }
 }

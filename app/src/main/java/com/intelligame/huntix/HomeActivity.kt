@@ -34,6 +34,14 @@ class HomeActivity : BaseNavActivity() {
     override fun activeTab() = "Home"
     private val RC_RPM_AVATAR = 900
 
+    override fun onResume() {
+        super.onResume()
+        try {
+            SavedManager.accrueInstallRewards(this)
+            SavedManager.accrueMiningRewards(this)
+        } catch (_: Exception) {}
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // ✅ FIX v7.2.1: Ripristina progresso da Firestore se dati locali cancellati

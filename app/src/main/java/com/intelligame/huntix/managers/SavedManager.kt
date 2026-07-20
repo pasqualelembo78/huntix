@@ -2,8 +2,10 @@ package com.intelligame.huntix.managers
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.util.Log
 import com.intelligame.huntix.EggInventoryItem
+import kotlin.math.floor
 import com.intelligame.huntix.EggInventoryManager
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.HatchedEgg
@@ -22,6 +24,13 @@ object SavedManager {
     private const val KEY_TOTAL_EARNED = "total_mvc_earned"
     private const val KEY_TOTAL_SPENT = "total_mvc_spent"
     private const val KEY_LAST_SYNC = "last_sync_ms"
+    private const val KEY_MVC_FRACTION = "mvc_fraction"
+    private const val KEY_LAST_CHECKIN_DAY = "mvc_last_checkin_day"
+    private const val KEY_INSTALL_BASE_MS = "mvc_install_base_ms"
+    private const val KEY_INSTALL_ACCRUE_MS = "mvc_install_accrue_ms"
+    private const val DAILY_CHECKIN_REWARD = 10.0
+    private const val INSTALL_MVC_PER_HOUR = 0.05      // piccolissima frazione/ora
+    private const val MAX_INSTALL_ACCRUE_H = 24.0 * 7  // cap anti-manomissione orologio
 
     // ── Hatching keys ──────────────────────────────────────────────────────
     private const val KEY_PENDING = "pending_eggs"
@@ -87,6 +96,84 @@ object SavedManager {
         amount >= 1_000 -> "${String.format("%.1f", amount / 1_000)}K MVC"
         else -> "${amount.toLong()} MVC"
     }
+
+    // ── Accredito frazionario ──────────────────────────────────
+    // Il saldo MVC è intero (Long): accumula la parte frazionaria in un
+    // apposito pref e versala al saldo solo quando supera 1 MVC.
+    private fun creditFractional(ctx: Context, amount: Double): Double {
+        if (amount <= 0) return 0.0
+        val p = prefs(ctx)
+        val remainder = p.getFloat(KEY_MVC_FRACTION, 0f).toDouble() + amount
+        val whole = floor(remainder)
+        p.edit().putFloat(KEY_MVC_FRACTION, (remainder - whole).toFloat()).apply()
+        if (whole >= 1.0) addMvc(ctx, whole)
+        return whole
+    }
+
+    // ── Check-in giornaliero ───────────────────────────────────
+    fun todayDayString(): String {
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return fmt.format(java.util.Date())
+    }
+
+    fun getLastCheckinDay(ctx: Context): String =
+        prefs(ctx).getString(KEY_LAST_CHECKIN_DAY, "") ?: ""
+
+    fun canCheckInToday(ctx: Context): Boolean = getLastCheckinDay(ctx) != todayDayString()
+
+    /** Riscatta il bonus giornaliero (+10 MVC). Ritorna 0 se già riscattato oggi. */
+    @Synchronized
+    fun doDailyCheckIn(ctx: Context): Double {
+        if (!canCheckInToday(ctx)) return 0.0
+        prefs(ctx).edit().putString(KEY_LAST_CHECKIN_DAY, todayDayString()).apply()
+        addMvc(ctx, DAILY_CHECKIN_REWARD)
+        return DAILY_CHECKIN_REWARD
+    }
+
+    /** Millisecondi rimanenti al prossimo check-in (mezzanotte locale). */
+    fun millisUntilNextCheckIn(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return (cal.timeInMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+    }
+
+    // ── Bonus presenza app (dal momento dell'installazione) ────
+    fun getInstallBaseMs(ctx: Context): Long {
+        val p = prefs(ctx)
+        var base = p.getLong(KEY_INSTALL_BASE_MS, 0L)
+        if (base == 0L) {
+            base = try {
+                val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+                pi.firstInstallTime
+            } catch (_: Exception) { System.currentTimeMillis() }
+            p.edit().putLong(KEY_INSTALL_BASE_MS, base).apply()
+        }
+        return base
+    }
+
+    /** Accredita MVC passivi dal momento dell'installazione (piccola frazione/ora). */
+    @Synchronized
+    fun accrueInstallRewards(ctx: Context): Double {
+        val now = System.currentTimeMillis()
+        val p = prefs(ctx)
+        var last = p.getLong(KEY_INSTALL_ACCRUE_MS, 0L)
+        if (last == 0L) {
+            last = getInstallBaseMs(ctx)
+            p.edit().putLong(KEY_INSTALL_ACCRUE_MS, last).apply()
+        }
+        val elapsedMs = (now - last).coerceAtLeast(0L)
+        val cappedMs = elapsedMs.coerceAtMost((MAX_INSTALL_ACCRUE_H * 3_600_000L).toLong())
+        p.edit().putLong(KEY_INSTALL_ACCRUE_MS, now).apply()
+        val hours = cappedMs / 3_600_000.0
+        return creditFractional(ctx, hours * INSTALL_MVC_PER_HOUR)
+    }
+
+    /** Stima MVC/ora del bonus installazione (per la UI). */
+    fun getInstallRatePerHour(): Double = INSTALL_MVC_PER_HOUR
 
     fun syncWithProfile(ctx: Context) {
         val profile = PlayerProfileManager.myProfile
@@ -423,8 +510,8 @@ object SavedManager {
 
         val hps = getTotalMiningHps(ctx)
         val earned = hps * elapsedSec
-        if (earned > 0) addMvc(ctx, earned)
-        return earned
+        if (earned > 0) return creditFractional(ctx, earned)
+        return 0.0
     }
 
     // ── Accelerazione schiusura via energia camminata ────────────

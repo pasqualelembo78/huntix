@@ -84,6 +84,7 @@ class LoginActivity : AppCompatActivity() {
         root.addView(spacer())
         root.addView(UiKit.button(c, "\uD83D\uDCF1  Gioca in locale (offline)", "#6A1B9A") {
             val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
+            PlayerProfileManager.saveLoginMethod(this, "local", name)
             PlayerProfileManager.initLocalProfile(
                 context = c,
                 name = name,
@@ -150,6 +151,7 @@ class LoginActivity : AppCompatActivity() {
     private fun onGitHubSuccess(result: com.google.firebase.auth.AuthResult, context: android.content.Context) {
         val uid = result.user?.uid ?: ""
         val name = result.user?.displayName ?: "Cacciatore GitHub"
+        PlayerProfileManager.saveLoginMethod(this, "github", name, uid)
         PlayerProfileManager.initMyProfile(
             context = this,
             name = name,
@@ -198,6 +200,7 @@ class LoginActivity : AppCompatActivity() {
         val uid = result.user?.uid ?: ""
         val name = result.user?.email?.substringBefore('@')?.replaceFirstChar { it.uppercase() }
             ?: "Cacciatore Email"
+        PlayerProfileManager.saveLoginMethod(this, "email", name, uid)
         PlayerProfileManager.initMyProfile(
             context = this,
             name = name,
@@ -219,6 +222,7 @@ class LoginActivity : AppCompatActivity() {
                     Toast.makeText(this, "Auth anonima senza UID", Toast.LENGTH_LONG).show()
                     return@addOnSuccessListener
                 }
+                PlayerProfileManager.saveLoginMethod(this, "guest", name, uid)
                 PlayerProfileManager.initMyProfile(
                     context = this,
                     name = name,
@@ -245,6 +249,7 @@ class LoginActivity : AppCompatActivity() {
                 .signInWithCredential(credential)
                 .addOnSuccessListener { res ->
                     val uid = res.user?.uid ?: ""
+                    PlayerProfileManager.saveLoginMethod(this, "facebook", "Cacciatore Facebook", uid)
                     PlayerProfileManager.initMyProfile(
                         context = this,
                         name = "Cacciatore Facebook",
@@ -272,6 +277,7 @@ class LoginActivity : AppCompatActivity() {
                         .addOnSuccessListener { result ->
                             val uid = result.user?.uid ?: ""
                             val googleName = account.displayName ?: "Cacciatore Google"
+                            PlayerProfileManager.saveLoginMethod(this, "google", googleName, uid, true)
                             PlayerProfileManager.initMyProfile(
                                 context = this,
                                 name = googleName,

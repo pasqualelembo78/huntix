@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseApp
 import io.sentry.Sentry
 import com.intelligame.huntix.billing.BillingManager
 import com.intelligame.huntix.billing.VipManager
+import com.intelligame.huntix.managers.SavedManager
 
 class EggHuntApplication : Application() {
 
@@ -35,6 +36,14 @@ class EggHuntApplication : Application() {
             VipManager.syncVipStatus(this)
         } catch (e: Exception) {
             Log.e("HuntixApp", "Billing init failed: ${e.message}")
+        }
+
+        // MVC passivi: bonus installazione + mining dalle uova schiuse
+        try {
+            SavedManager.accrueInstallRewards(this)
+            SavedManager.accrueMiningRewards(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
         }
     }
 }

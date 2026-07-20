@@ -5,7 +5,9 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.intelligame.huntix.CatchToolManager
 import com.intelligame.huntix.billing.BillingManager
+import com.intelligame.huntix.managers.SavedManager
 
 /**
  * ShopActivity — negozio MVC e VIP Pass (Google Play Billing).
@@ -46,6 +48,13 @@ class ShopActivity : BaseNavActivity() {
                 }
             } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
         })
+        children.add(UiKit.section(c, "🪣 Secchielli (con MVC)"))
+        children.add(UiKit.subtitle(c,
+            "MVC attuali: ${SavedManager.getMvcBalance(c).toInt()}  🪙"))
+        CatchToolManager.CatchTool.values().filter { !it.isUnlimited }.forEach { tool ->
+            children.add(bucketRow(tool))
+        }
+
         children.add(UiKit.section(c, "⚡ Pacchetti MVC"))
 
         BillingManager.MVC_PACKAGES.forEach { pkg ->
@@ -66,5 +75,37 @@ class ShopActivity : BaseNavActivity() {
                 Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun bucketRow(tool: CatchToolManager.CatchTool): LinearLayout {
+        val c = this
+        val box = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, UiKit.dp(c, 6), 0, UiKit.dp(c, 10))
+        }
+        val owned = CatchToolManager.getQuantity(c, tool)
+        val selected = CatchToolManager.getSelectedTool(c) == tool
+        box.addView(UiKit.row(c,
+            "${tool.emoji} ${tool.displayName}  ·  cap. ${tool.capacity}  ·  posseduti: $owned${if (selected) " ✓" else ""}"))
+        if (owned > 0) {
+            box.addView(UiKit.button(c, if (selected) "✓ Equipaggiato" else "Equipaggia", "#00C853") {
+                CatchToolManager.setSelectedTool(c, tool)
+                Toast.makeText(c, "${tool.displayName} equipaggiato!", Toast.LENGTH_SHORT).show()
+                recreate()
+            })
+        }
+        box.addView(UiKit.button(c, "🪙 Compra — ${tool.shopPrice} MVC", UiKit.PURPLE) {
+            val bal = SavedManager.getMvcBalance(c)
+            if (bal < tool.shopPrice) {
+                Toast.makeText(c, "MVC insufficienti! Hai ${bal.toInt()} MVC", Toast.LENGTH_LONG).show()
+                return@button
+            }
+            SavedManager.spendMvc(c, tool.shopPrice.toDouble())
+            CatchToolManager.addQuantity(c, tool, 1)
+            CatchToolManager.setSelectedTool(c, tool)
+            Toast.makeText(c, "Acquistato ${tool.displayName}!", Toast.LENGTH_LONG).show()
+            recreate()
+        })
+        return box
     }
 }

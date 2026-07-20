@@ -7,15 +7,30 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import com.intelligame.huntix.EggSetupModeActivity
+import com.intelligame.huntix.GameModeActivity
 
 /**
- * IndoorMultiplayerLobbyActivity — crea o unisciti a una stanza locale/online.
- * Lo stato dei giocatori è salvato in locale (MultiplayerManager è ancora uno stub).
+ * IndoorMultiplayerLobbyActivity — crea o unisciti a una stanza ONLINE (Firebase).
+ * Gli altri giocatori compaiono in tempo reale e, una volta avviata la partita,
+ * i punteggi si sincronizzano tramite IndoorSessionManager (indoor_rooms).
  */
 class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
 
     override fun activeTab() = ""
     private var mode = "local"
+    private var roomCode = ""
+    private var isHost = false
+    private var playerUid = ""
+    private var playerName = "Giocatore"
+
+    private val roomsRef get() = FirebaseDatabase.getInstance().getReference("indoor_rooms")
+    private var playersListener: ValueEventListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val c = this
@@ -23,7 +38,12 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences("mp_room", MODE_PRIVATE)
-        var roomCode = prefs.getString("room_code", "") ?: ""
+        val auth = FirebaseAuth.getInstance()
+        playerUid = auth.currentUser?.uid
+            ?: PlayerProfileManager.myProfile?.playerId
+            ?: "p_${System.currentTimeMillis()}"
+        playerName = PlayerProfileManager.myProfile?.name?.takeIf { it.isNotBlank() } ?: "Giocatore"
+        roomCode = prefs.getString("room_code", "") ?: ""
 
         val codeView = TextView(c).apply {
             text = if (roomCode.isBlank()) "Stanza: —" else "Stanza: $roomCode"
@@ -33,17 +53,41 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
         }
 
         val playersBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        fun renderPlayers() {
+
+        fun renderPlayers(map: Map<String, String>) {
             playersBox.removeAllViews()
-            val names = prefs.getStringSet("room_players", emptySet()) ?: emptySet()
-            if (names.isEmpty()) playersBox.addView(UiKit.comingSoon(c, "Nessun giocatore", "Crea o unisciti per popolare la stanza."))
-            names.forEach { n -> playersBox.addView(UiKit.row(c, "🧑  $n")) }
+            if (map.isEmpty()) {
+                playersBox.addView(UiKit.comingSoon(c, "Nessun giocatore", "Crea o unisciti per popolare la stanza."))
+            } else {
+                map.forEach { (uid, name) ->
+                    val you = if (uid == playerUid) "  (tu)" else ""
+                    playersBox.addView(UiKit.row(c, "🧑  $name$you"))
+                }
+            }
         }
-        renderPlayers()
+
+        fun attachPlayersListener(code: String) {
+            playersListener?.let { roomsRef.child(code).child("players").removeEventListener(it) }
+            playersListener = object : ValueEventListener {
+                override fun onDataChange(snap: DataSnapshot) {
+                    val map = snap.children.mapNotNull { ds ->
+                        val name = ds.getValue(String::class.java)
+                        val key = ds.key
+                        if (name != null && key != null) key to name else null
+                    }.toMap()
+                    renderPlayers(map)
+                }
+                override fun onCancelled(e: DatabaseError) {
+                    Toast.makeText(c, "Errore stanza: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+            roomsRef.child(code).child("players").addValueEventListener(playersListener!!)
+        }
 
         val nameInput = EditText(c).apply {
             hint = "Tuo nome"; setHintTextColor(android.graphics.Color.parseColor("#555577"))
             setTextColor(android.graphics.Color.WHITE); textSize = 15f; maxLines = 1
+            setText(playerName)
             background = android.graphics.drawable.GradientDrawable().apply {
                 cornerRadius = UiKit.dp(c, 10).toFloat()
                 setColor(android.graphics.Color.parseColor(UiKit.BG_CARD))
@@ -55,39 +99,78 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
             ).apply { bottomMargin = UiKit.dp(c, 10) }
         }
 
+        val codeInput = EditText(c).apply {
+            hint = "Codice stanza (per unirsi)"; setHintTextColor(android.graphics.Color.parseColor("#555577"))
+            setTextColor(android.graphics.Color.WHITE); textSize = 15f; maxLines = 1
+            setText(roomCode)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = UiKit.dp(c, 10).toFloat()
+                setColor(android.graphics.Color.parseColor(UiKit.BG_CARD))
+                setStroke(1, android.graphics.Color.parseColor("#334466"))
+            }
+            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = UiKit.dp(c, 10) }
+        }
+
+        fun joinRoom(code: String, asHost: Boolean) {
+            if (code.length < 3) { Toast.makeText(c, "Codice stanza non valido", Toast.LENGTH_SHORT).show(); return }
+            val me = nameInput.text.toString().trim().ifBlank { playerName }
+            playerName = me
+            roomCode = code; isHost = asHost
+            prefs.edit().putString("room_code", roomCode).apply()
+            codeView.text = "Stanza: $roomCode"
+            roomsRef.child(roomCode).child("players").child(playerUid).setValue(me)
+                .addOnSuccessListener { attachPlayersListener(roomCode) }
+                .addOnFailureListener { e ->
+                    Toast.makeText(c, "Impossibile entrare: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+        }
+
         val content = UiKit.scroll(c,
             UiKit.title(c, "Lobby ${if (mode == "online") "Online" else "Locale"}", "👥"),
             codeView,
             UiKit.section(c, "Il tuo nome"),
             nameInput,
-            UiKit.button(c, "➕  Crea stanza", UiKit.ACCENT) {
-                val me = nameInput.text.toString().trim().ifBlank { "Host" }
-                roomCode = (1000..9999).random().toString()
-                prefs.edit()
-                    .putString("room_code", roomCode)
-                    .putStringSet("room_players", linkedSetOf(me))
-                    .apply()
-                codeView.text = "Stanza: $roomCode"
-                renderPlayers()
-                Toast.makeText(c, "Stanza creata: $roomCode", Toast.LENGTH_SHORT).show()
+            UiKit.button(c, "➕  Crea stanza online", UiKit.ACCENT) {
+                val code = (1000..9999).random().toString()
+                joinRoom(code, asHost = true)
+                Toast.makeText(c, "Stanza creata: $code", Toast.LENGTH_SHORT).show()
             },
+            UiKit.section(c, "Unisciti a una stanza"),
+            codeInput,
             UiKit.button(c, "🚪  Unisciti", UiKit.PURPLE) {
-                if (roomCode.isBlank()) { Toast.makeText(c, "Crea prima una stanza", Toast.LENGTH_SHORT).show(); return@button }
-                val me = nameInput.text.toString().trim().ifBlank { "Giocatore" }
-                val set = (prefs.getStringSet("room_players", emptySet()) ?: emptySet()).toMutableSet()
-                set.add(me); prefs.edit().putStringSet("room_players", set).apply()
-                renderPlayers()
+                joinRoom(codeInput.text.toString().trim(), asHost = false)
             },
-            UiKit.section(c, "Giocatori"), playersBox,
+            UiKit.section(c, "Giocatori"),
+            playersBox,
             UiKit.button(c, "▶️  Inizia partita", "#00FF88") {
-                if ((prefs.getStringSet("room_players", emptySet()) ?: emptySet()).isEmpty()) {
-                    Toast.makeText(c, "Aggiungi almeno un giocatore", Toast.LENGTH_SHORT).show(); return@button
+                if (roomCode.isBlank()) {
+                    Toast.makeText(c, "Crea o unisciti a una stanza prima", Toast.LENGTH_SHORT).show(); return@button
                 }
-                startActivity(Intent(c, MainActivity::class.java)
-                    .putExtra("mp_mode", mode)
-                    .putExtra("room_code", roomCode))
+                startActivity(Intent(c, MainActivity::class.java).apply {
+                    putExtra("indoor_mp", true)
+                    putExtra("room_code", roomCode)
+                    putExtra("room_is_host", isHost)
+                    putExtra("current_player", playerName)
+                    putExtra("room_uid", playerUid)
+                    putExtra(EggSetupModeActivity.EXTRA_SETUP_MODE, "auto")
+                    putExtra(EggSetupModeActivity.EXTRA_AUTO_EGG_COUNT, 4)
+                    putExtra(EggSetupModeActivity.EXTRA_TRAP_EGG_COUNT, 0)
+                    putExtra(EggSetupModeActivity.EXTRA_PENALTY_SECS, 30)
+                    putExtra(GameModeActivity.EXTRA_TURN_MODE, "sequential")
+                })
             }
         )
         setContentView(content)
+
+        // Se già dentro a una stanza (es. ritorno dalla partita) riattacca il listener
+        if (roomCode.isNotBlank()) attachPlayersListener(roomCode)
+    }
+
+    override fun onDestroy() {
+        playersListener?.let { roomsRef.child(roomCode).child("players").removeEventListener(it) }
+        super.onDestroy()
     }
 }
