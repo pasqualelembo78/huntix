@@ -2,7 +2,8 @@
 HUNTIX — REAL LIFE  (backend proprietario di Huntix)
 ================================================================================
 Data: 2026-07-20
-Stato: DESIGN + backend copiato e rebrandizzato in `huntix/backend/`
+Stato: DESIGN + backend copiato/rebrandizzato + Fase A implementata (Android:
+       RealLifeActivity lista personaggi + RealLifeChatActivity chat JWT)
 Obiettivo: un layer "Real Life" sopra il gioco Huntix in cui il giocatore
            interagisce con PERSONAGGI/NPC REALI tramite chat AI (LLM gratuiti),
            servito da un backend FastAPI di proprietà di Huntix.
@@ -134,7 +135,13 @@ AVVIO DEL BACKEND (via build_release.sh)
 ================================================================================
 ROADMAP (incrementale)
 ================================================================================
-  Fase A: RealLifeActivity → /characters + /chat (streaming, JWT, history)
+  Fase A: RealLifeActivity → /characters + /chat  [FATTO 2026-07-20]
+          Implementato in Android (package com.intelligame.huntix.reallife):
+          RealLifeClient (OkHttp/Gson) + RealLifeAuth (JWT anonimo per-device,
+          refresh via persistent_token) + RealLifeActivity (lista personaggi
+          per categoria) + RealLifeChatActivity (chat, history in sessione).
+          Nota: /chat backend ritorna JSON intero (non streaming); implementato
+          non-streaming. Verificato end-to-end (local-login -> /chat -> Groq).
   Fase B: bisogni/skill lato backend; world state visibile; mappa/città 2D minima
   Fase C: group chat multi-NPC; immagini via PEXELS_API_KEY; evoluzione personalità
 
