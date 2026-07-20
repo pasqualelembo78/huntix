@@ -198,22 +198,30 @@ fi
 # ── Build APK + AAB (logica da build_app.sh) ───────────────
 chmod +x gradlew
 
-# Passa le ENV delle feature come -P al gradle (build.gradle dà loro priorità).
-# Se non settate, build.gradle usa i default hardcoded.
+# Passa le chiavi delle feature come -P al gradle.
+# Priorità: ENV var > keystore.properties > default hardcoded in build.gradle.
+# Così basta lanciare ./build_release.sh: le chiavi sono lette da keystore.properties,
+# senza bisogno di esportare nessuna ENV.
 GRADLE_ENV_PROPS=""
 for pair in \
     "SENTRY_DSN:sentryDsn" \
     "ADMOB_APP_ID:admobAppId" \
     "ADMOB_BANNER_ID:admobBannerId" \
     "ADMOB_REWARDED_ID:admobRewardedId" \
-    "ADMOB_INTERSTITIAL_ID:admobInterstitialId" \
+    "ADMOB_INTERSTITUAL_ID:admobInterstitialId" \
     "ARCORE_API_KEY:arcoreApiKey" \
     "MAPBOX_TOKEN:mapboxToken" \
     "WEB_CLIENT_ID:webClientId" ; do
     env_name="${pair%%:*}"
     prop_name="${pair##*:}"
+    val=""
     if [ -n "${!env_name:-}" ]; then
-        GRADLE_ENV_PROPS="$GRADLE_ENV_PROPS -P$prop_name=${!env_name}"
+        val="${!env_name}"
+    elif [ -f "$PROPS_FILE" ]; then
+        val=$(grep "^${prop_name}=" "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+    fi
+    if [ -n "${val:-}" ]; then
+        GRADLE_ENV_PROPS="$GRADLE_ENV_PROPS -P$prop_name=$val"
     fi
 done
 
