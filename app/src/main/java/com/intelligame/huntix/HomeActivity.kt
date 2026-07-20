@@ -168,7 +168,7 @@ class HomeActivity : BaseNavActivity() {
         }
         row2.addView(gameTile("\uD83C\uDFAE", "MINIGIOCHI", "9 + 13 AR", "#FF6F00", "#E65100") { startActivity(Intent(this, MiniGamesHubActivity::class.java)) })
         row2.addView(spacerH(dp(8)))
-        row2.addView(gameTile("\u2694\uFE0F", "BATTAGLIA", "1v1 Street Fighter", "#C62828", "#B71C1C") { startActivity(Intent(this, com.intelligame.huntix.ui.BattleActivity::class.java)) })
+        row2.addView(gameTile("\uD83D\uDC65", "REAL LIFE", "Persone vere", "#00897B", "#004D40") { startActivity(Intent(this, RealLifeActivity::class.java)) })
         grid.addView(row2)
         root.addView(grid)
 

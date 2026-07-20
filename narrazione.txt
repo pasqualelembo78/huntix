@@ -1,0 +1,195 @@
+================================================================================
+HUNTIX — REAL LIFE  (adattamento di "ARIA / Simulatore di Vita Virtuale")
+================================================================================
+Data: 2026-07-20
+Stato: DESIGN / integrazione backend aria (vedi /opt/aria)
+Obiettivo: un layer "Real Life" sopra il gioco Huntix in cui il giocatore
+           interagisce con PERSONAGGI REALI (NPC guidati da LLM) tramite chat
+           AI, riusando il backend già pronto in /opt/aria.
+
+ISPIRAZIONE (dalla bozza originale "ARIA")
+  The Sims / Sakura School Simulator / Persona / Yakuza — vivere una "vita"
+  dentro il gioco, ma con le conversazioni generate da LLM gratuiti invece
+  di dialoghi scriptati.
+
+PRINCIPIO CHIAVE
+  Non è "una mappa per raggiungere le chat": è un MONDO VIVO in cui il
+  giocatore È un cittadino di "Sakura City" (o della città di Huntix) e le
+  relazioni con i personaggi nascono ORGANICAMENTE dalle conversazioni AI.
+  La chat testuale è il cuore dell'esperienza, non un appendice.
+
+================================================================================
+1. ARCHITETTURA — RIUSO DEL BACKEND /opt/aria
+================================================================================
+
+Huntix (Android) NON chiama direttamente i provider LLM (le API key non
+devono finire nell'APK). Invece:
+
+   Huntix App  ──HTTP/JSON──▶  Backend aria (FastAPI, /opt/aria/backend)
+                                 │
+                                 ├─ ai_engine/  → provider LLM (Groq, Gemini,
+                                 │                 Ollama, OpenRouter, Mistral…)
+                                 ├─ characters/ → personaggi/NPC e categorie
+                                 ├─ app_routes/ → /chat, /group_chat, /characters
+                                 └─ storage/    → PostgreSQL + Redis
+                                                      (relazioni, memorie,
+                                                       personalità, world_state)
+
+Moduli aria riutilizzati COSÌ COM'È (o con adattamenti minimi):
+  • backend/ai_engine/providers/  → integrazioni già pronte:
+        groq.py, gemini.py, ollama.py, openrouter (openai_compat), mistral.py,
+        huggingface.py, github.py, anthropic.py, cloudflare.py, llamacpp.py,
+        pollinations.py, openai_compat.py
+  • backend/ai_engine/chain.py    → catena di fallback (locale → cloud)
+  • backend/ai_engine/ensemble.py → ensemble parallelo (Cerebras + Groq)
+  • backend/characters/           → personaggi, categorie, dati JSON
+        (amicizia, anime, business, creativi, cucina, detective, esperti,
+         fantasy, gamer, …) → da estendere con personaggi "Huntix"
+  • backend/app_routes/chat.py    → ChatRequest { character, text, username,
+        memory_context, user_memory, character_data, image, relationship_state,
+        personality_state, evolution_state, shifts } → chat_engine.process_message
+  • backend/app_routes/group_chat.py → chat di gruppo multi-NPC
+  • backend/storage/              → tabelle già presenti e RIUSABILI:
+        relationships, personality, personality_shifts, world_state,
+        messages, conversation_memory, user_memory, user_characters,
+        character_evolution, shared_memory, group_chats, …
+
+CONNESSIONE APP ↔ BACKEND
+  • L'app Huntix ha bisogno SOLO dell'URL base del backend
+    (es. BuildConfig.API_BASE o una string resource), NON delle API key.
+  • Le API key vivono esclusivamente in /opt/aria/.env (gitignorato).
+  • Autenticazione: aria usa già JWT (JWT_SECRET in .env) + Google OAuth
+    (GOOGLE_CLIENT_ID). Huntix può riusare il flusso login esistente e
+    passare il token JWT nelle chiamate /chat.
+
+================================================================================
+2. PROVIDER LLM E CHIAVI (da /opt/aria/.env)
+================================================================================
+
+CHAT_PROVIDER=groq  → scelta default: Groq 70B, italiano ottimo, GRATIS
+                      (~1000 req/giorno). Ideale per il lancio.
+
+Provider configurati nel .env (gratuiti/low-cost in priority):
+  GROQ_API_KEY        ✓ attiva  — default, qualità IT alta, free tier
+  GEMINI_API_KEY      ✓ attiva  — Google Gemini
+  OPENROUTER_API_KEY  ✓ attiva  — accesso a molti modelli
+  MISTRAL_API_KEY     ✓ attiva  — Mistral
+  HUGGINGFACE_API_KEY ✓ attiva  — HF inference
+  GITHUB_TOKEN        ✓ attiva  — GitHub Models
+  CEREBRAS_API_KEY    ✓ attiva  — usato dall'ensemble (gpt-oss-120b)
+  SAMBANOVA_API_KEY   ✓ attiva
+  PEXELS_API_KEY      ✓ attiva  — immagini (avatar/sfondi personaggi)
+  OPENAI_API_KEY      (vuoto)   — opzionale a pagamento
+  ANTHROPIC_API_KEY   (vuoto)   — opzionale a pagamento
+  TOGETHER / COHERE / DEEPINFRA / FIREWORKS / NEBIUS / NOVITA / INFERENCE
+                       (vuoti)  — pronti all'uso, da attivare se serve
+
+Modello LOCALE (NESSUN costo, OFFLINE):
+  OLLAMA_BASE=http://localhost:11434  (es. Qwen 3B). FORCE_LOCAL_FIRST=0
+  → attivabile per privacy/testi; qualità IT modesta ma gratis.
+
+ENSEMBLE_PARALLELO=1  → invia il prompt a Cerebras + Groq in parallelo,
+  il primo che risponde vince. (ENSEMBLE_MODELS di default già impostati.)
+
+Nota di sicurezza: TUTTE le chiavi sono nel .env del backend (gitignorato).
+L'app non le contiene. Non inserire mai queste chiavi in string.xml,
+BuildConfig o keystore.properties dell'app Android.
+
+================================================================================
+3. MODELLO DATI — ADATTAMENTO DA "SIMS" A "CHAT-DRIVEN"
+================================================================================
+
+Dalla bozza originale manteniamo i CONCETTI di vita sim, ma alimentati
+dalle conversazioni AI e dallo storage aria (già presente):
+
+  • Relazioni (relationships) — tabella aria già pronta
+      last_interaction_location, last_interaction_time,
+      relationship_progress_events, pet_name, shared_activities
+      → estese con i bisogni/stile Sims come campi opzionali.
+
+  • Personalità (personality / personality_shifts) — aria già pronta
+      Il personaggio "evolve" in base alle chat (character_evolution,
+      shifts). Questo SOSTITUISCE lo scripting dei dialoghi.
+
+  • World State (world_state / user_world_state) — aria già pronta
+      data, ora, stagione, meteo, eventi attivi → la "città" vive nel tempo.
+
+  • Memorie (conversation_memory / user_memory / shared_memory) — aria pronta
+      danno continuità alle relazioni tra sessioni.
+
+  • Bisogni stile Sims (fame, sonno, igiene, socialità, divertimento…)
+      NON sono más una simulazione passiva: calano col tempo reale e si
+      ricaricano INTERAGENDO con i personaggi (chat). Es. "socialità" sale
+      parlando con un NPC, "divertimento" facendo attività con lui.
+
+  • Skill (forza, intelletto, carisma, creatività, resistenza…)
+      sbloccano dialoghi/attività speciali con certi personaggi.
+
+  • Economia: aria USA GIÀ "mevacoins" (MVC) — LA STESSA valuta di Huntix!
+      categories.json ha mvc_cost → sbloccare un personaggio/categoria costa
+      MVC. Si integra 1:1 con l'economia uova/MVC di Huntix.
+
+================================================================================
+4. INTEGRAZIONE CON HUNTIX (what's already there)
+================================================================================
+
+  • Tab "REAL LIFE" nella Home (griglia 2x2) → RealLifeActivity (sottomenu).
+  • RealLifeActivity mostra: Città / Personaggi / Chat AI (placeholder ora).
+  • Battaglia è stata spostata in Minigiochi (MiniGamesHubActivity).
+  • Economics: MVC condiviso tra uova, battaglia, minigiochi e Real Life.
+  • Possibili ponti futuri (non richiesti ora):
+      - un uovo raro "si schiude" in un personaggio Real Life sbloccabile;
+      - vincere una battaglia sblocca un NPC come alleato nella città;
+      - eventi live di Huntix appaiono come "eventi" nel world_state.
+
+================================================================================
+5. FLUSSO TIPICO (utente)
+================================================================================
+
+  1. Home → REAL LIFE
+  2. Sceglie un personaggio (lista da /characters, filtrata per categoria/MVC)
+  3. Apre la chat → app chiama backend /chat con JWT + character_id + testo
+  4. Backend: chat_engine.process_message → provider LLM (Groq di default)
+     + inietta memoria/relazione/personalità del personaggio
+  5. Risposta streaming → mostrata nell'app; relazione/personalità aggiornate
+  6. Col tempo il personaggio "evolve" (personality_shifts, evolution_state)
+
+================================================================================
+6. ROADMAP (incrementale, "aggiustiamo man mano")
+================================================================================
+
+  Fase A (base, riuso aria):
+    - RealLifeActivity → chiama /characters e /chat del backend aria
+    - Streaming risposte, history, gestione JWT/auth esistente
+    - Personaggi "Huntix" aggiunti a backend/characters/data/
+
+  Fase B (vita sim):
+    - Bisogni/skill lato backend, ricaricati tramite chat/attività
+    - World state (stagioni/meteo/eventi) visibile nella UI Real Life
+    - Mappa/città 2D minima (tap-to-move) che richiama le location
+
+  Fase C (profondità):
+    - Group chat multi-NPC (group_chat.py già pronto)
+    - Immagini personaggi via PEXELS_API_KEY / generazione avatar
+    - Evoluzione personalità + eventi relazionali speciali
+
+================================================================================
+7. FILE / MODULI DI RIFERIMENTO (aria)
+================================================================================
+  /opt/aria/backend/ai_engine/providers/*.py   provider LLM
+  /opt/aria/backend/ai_engine/chain.py         fallback chain
+  /opt/aria/backend/ai_engine/ensemble.py      ensemble parallelo
+  /opt/aria/backend/characters/                personaggi + categorie
+  /opt/aria/backend/app_routes/chat.py         API chat
+  /opt/aria/backend/app_routes/group_chat.py   API group chat
+  /opt/aria/backend/storage/schema.py          tabelle DB (relazioni, memorie…)
+  /opt/aria/.env                               CHIAVI/PROVIDER (gitignorato)
+  /opt/aria/README.md, Relazione_tecnica_chatai.txt, analisi_app.txt (docs)
+
+================================================================================
+NOTE
+================================================================================
+  • Le chiavi fornite sono state salvate in /opt/aria/.env (NON nel repo
+    Huntix, per evitare leak nell'APK/commit).
+  • L'app Android deve contenere solo l'URL del backend + token JWT utente.
+  • ADULT_APP_REDIRECT lasciato vuoto (conformità Google Play / AdMob).

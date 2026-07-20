@@ -260,6 +260,7 @@
 
     
         <activity android:name=".ui.BattleActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.RealLifeActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.Character3DActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.SurpriseRevealActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.SurpriseInventoryActivity" android:screenOrientation="portrait" android:exported="false"/>

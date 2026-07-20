@@ -16,10 +16,11 @@ class MiniGamesHubActivity : BaseNavActivity() {
 
     data class GameEntry(
         val id: String, val label: String, val emoji: String,
-        val cls: Class<*>, val isAr: Boolean
+        val cls: Class<*>, val isAr: Boolean, val limitPlays: Boolean = true
     )
 
     private val games = listOf(
+        GameEntry("battle", "Battaglia", "\u2694\uFE0F", com.intelligame.huntix.ui.BattleActivity::class.java, false, limitPlays = false),
         GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, false),
@@ -48,6 +49,12 @@ class MiniGamesHubActivity : BaseNavActivity() {
         box.removeAllViews()
         val c = this
         games.forEach { g ->
+            if (!g.limitPlays) {
+                box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}", UiKit.PURPLE) {
+                    startActivity(Intent(c, g.cls))
+                })
+                return@forEach
+            }
             val remaining = try { MiniGameManager.remainingPlays(c, g.id) } catch (_: Exception) { 3 }
             val can = remaining > 0
             box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}  (${remaining})",
