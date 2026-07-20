@@ -1,10 +1,12 @@
 package com.intelligame.huntix.ui
-import android.graphics.Color; import android.graphics.Typeface; import android.graphics.drawable.GradientDrawable; import android.os.*; import android.view.*; import android.widget.*
-import androidx.appcompat.app.AppCompatActivity; import com.intelligame.huntix.*; import com.intelligame.huntix.battle.*
+import android.Manifest; import android.content.pm.PackageManager; import android.graphics.Color; import android.graphics.Typeface; import android.graphics.drawable.GradientDrawable; import android.os.*; import android.view.*; import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts; import androidx.appcompat.app.AppCompatActivity; import androidx.camera.core.CameraSelector; import androidx.camera.core.Preview; import androidx.camera.lifecycle.ProcessCameraProvider; import androidx.camera.view.PreviewView; import androidx.core.content.ContextCompat
+import com.intelligame.huntix.*; import com.intelligame.huntix.battle.*
 import com.intelligame.huntix.BaseNavActivity
 class BattleActivity : BaseNavActivity() {
     private lateinit var pl: PlayerController; private lateinit var en: Enemy; private lateinit var ai: AIController; private lateinit var co: ComboSystem; private lateinit var cb: CombatSystem; private lateinit var hf: HitFeelSystem
-    private lateinit var an: AnimationController; private lateinit var eg: FightingEngine; private lateinit var sp: BattleSpawnManager.SpawnResult; private lateinit var av: ArenaView; private lateinit var root: FrameLayout
+    private lateinit var an: AnimationController; private lateinit var eg: FightingEngine; private lateinit var sp: BattleSpawnManager.SpawnResult; private lateinit var av: ArenaView; private lateinit var root: FrameLayout; private lateinit var previewView: PreviewView
+    private val camPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) startCamera() else Toast.makeText(this, "Camera necessaria per lo sfondo AR", Toast.LENGTH_LONG).show() }
     private val vib by lazy { getSystemService(VIBRATOR_SERVICE) as? Vibrator }; private val vh = Handler(Looper.getMainLooper()); private val vr = object : Runnable { override fun run() { if (eg.gameState == FightingEngine.GameState.FIGHTING) hf.consumeVibration()?.let { try { @Suppress("DEPRECATION") vib?.vibrate(it.durationMs) } catch (_: Exception) {} }; vh.postDelayed(this, 16) } }
     override fun onCreate(s: Bundle?) { super.onCreate(s); window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); @Suppress("DEPRECATION") window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY; AdsManager.init(this); setup() }
     override fun onPause() { super.onPause(); eg.pause(); vh.removeCallbacks(vr) }; override fun onResume() { super.onResume(); eg.resume(); vh.post(vr) }; override fun onDestroy() { super.onDestroy(); vh.removeCallbacks(vr) }
@@ -14,11 +16,14 @@ class BattleActivity : BaseNavActivity() {
         // CONNECT animController to engine and AI for projectiles
         eg.animController = an; ai.animController = an
         eg.onBattleEvent = { t, m -> runOnUiThread { onEv(t, m) } }
-        root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        root = FrameLayout(this)
+        previewView = PreviewView(this).apply { scaleType = PreviewView.ScaleType.FILL_CENTER; layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
+        root.addView(previewView)
         av = ArenaView(this).apply { engine = eg; animController = an }
         root.addView(av, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         buildArcadePad()
         setContentView(root); eg.startCountdown(); vh.post(vr)
+        startCameraWithPermission()
     }
     private fun buildArcadePad() { val dp = { v: Int -> (v * resources.displayMetrics.density).toInt() }
         val dpad = FrameLayout(this); val dpadSize = dp(140)
@@ -32,6 +37,22 @@ class BattleActivity : BaseNavActivity() {
         actions.addView(holdBtn("\uD83D\uDEE1", dp(46), dp(46), "#CC006677", { eg.onPlayerBlock() }, { pl.releaseBlock() }).apply { layoutParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP or Gravity.CENTER_HORIZONTAL) })
         actions.addView(tapBtn("\u26A1", dp(46), dp(46), "#CCFF8800") { eg.onPlayerSpecialAttack() }.apply { layoutParams = FrameLayout.LayoutParams(dp(46), dp(46), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) })
         root.addView(actions, FrameLayout.LayoutParams(actSize, actSize, Gravity.BOTTOM or Gravity.END).apply { rightMargin = dp(8); bottomMargin = dp(6) })
+    }
+    private fun startCameraWithPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
+        else camPermLauncher.launch(Manifest.permission.CAMERA)
+    }
+    private fun startCamera() {
+        val future = ProcessCameraProvider.getInstance(this)
+        future.addListener({
+            try {
+                val provider = future.get()
+                val preview = Preview.Builder().build()
+                preview.setSurfaceProvider(previewView.surfaceProvider)
+                provider.unbindAll()
+                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
+            } catch (_: Exception) {}
+        }, ContextCompat.getMainExecutor(this))
     }
     private fun tapBtn(text: String, w: Int, h: Int, hex: String, onClick: () -> Unit) = TextView(this).apply { this.text = text; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
         background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor(hex)); setStroke(2, Color.parseColor("#55FFFFFF")) }; layoutParams = FrameLayout.LayoutParams(w, h); isClickable = true; setOnClickListener { onClick() } }

@@ -163,6 +163,7 @@ dependencies {
     implementation "androidx.camera:camera-lifecycle:$camerax_version"
     implementation "androidx.camera:camera-view:$camerax_version"
     implementation "androidx.camera:camera-extensions:$camerax_version"
+    implementation "com.google.guava:guava:32.1.3-android"
 
     // ── Mappa ───────────────────────────────────────────────────
     // NOTA: la dipendenza Mapbox è stata rimossa perché mai utilizzata nel codice

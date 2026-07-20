@@ -38,14 +38,10 @@ class ArenaView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
-        // Fondale
-        val bg = GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.parseColor("#1A1030"), Color.parseColor("#0A0618"))
-        )
-        bg.setBounds(0, 0, width, height)
-        bg.draw(canvas)
         val ground = h * 0.78f
+        // Ombra a terra (sfondo AR trasparente: si vede la camera)
+        paint.color = Color.parseColor("#000000"); paint.alpha = 60
+        canvas.drawOval(0f, ground - 6f, w, ground + 18f, paint); paint.alpha = 255
 
         val eng = engine
         val anim = animController
