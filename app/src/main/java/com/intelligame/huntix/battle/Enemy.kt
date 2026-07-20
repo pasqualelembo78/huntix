@@ -12,4 +12,6 @@ class Enemy(
     var positionX: Float = 0.75f
     var hp: Float = 100f * difficultyScale
     val maxHp: Float = hp
+    var attackTimer: Float = 0f
+    var hitFlash: Float = 0f
 }

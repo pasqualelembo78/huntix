@@ -35,6 +35,10 @@ class FightingEngine(
         private set
     var totalPlayerDamage: Int = 0
         private set
+    var timeRemainingMs: Long = durationMs
+        private set
+    val playerHpRatio: Float get() = (playerHp / 100f).coerceIn(0f, 1f)
+    val enemyHpRatio: Float get() = (enemyHp / enemy.maxHp).coerceIn(0f, 1f)
 
     private var playerHp = 100f
     private var enemyHp = enemy.hp
@@ -72,6 +76,12 @@ class FightingEngine(
     }
 
     private fun step() {
+        // Animazione timer
+        player.attackTimer = max(0f, player.attackTimer - 0.016f)
+        player.hitFlash = max(0f, player.hitFlash - 0.016f)
+        enemy.attackTimer = max(0f, enemy.attackTimer - 0.016f)
+        enemy.hitFlash = max(0f, enemy.hitFlash - 0.016f)
+        timeRemainingMs = max(0L, durationMs - (System.currentTimeMillis() - startTime))
         // IA nemica
         aiCooldown -= 16
         if (aiCooldown <= 0) {
@@ -82,6 +92,8 @@ class FightingEngine(
             playerHp = max(0f, playerHp - dmg)
             combo.breakCombo()
             hitFeel.requestHit(false)
+            enemy.attackTimer = 0.25f
+            player.hitFlash = 0.15f
             onBattleEvent?.invoke(BattleEventType.ENEMY_HIT, "Subito -${dmg.toInt()}")
         }
         // Tempo scaduto
@@ -120,6 +132,8 @@ class FightingEngine(
         hitFeel.requestHit(crit)
         animController?.showComboCounter(combo.currentCombo, combo.comboLevel)
         combat.log("player -${dmg.toInt()}")
+        player.attackTimer = if (type == BattleEventType.SPECIAL) 0.4f else 0.22f
+        enemy.hitFlash = 0.15f
         onBattleEvent?.invoke(if (crit) BattleEventType.CRIT else type, "Colpito -${dmg.toInt()}")
         if (enemyHp <= 0f) {
             battleResult = BattleResult.PLAYER_WIN

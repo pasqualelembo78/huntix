@@ -4,6 +4,8 @@ package com.intelligame.huntix.battle
 class PlayerController {
     var positionX: Float = 0.25f
     var isBlocking: Boolean = false
+    var attackTimer: Float = 0f
+    var hitFlash: Float = 0f
 
     fun releaseBlock() { isBlocking = false }
 }

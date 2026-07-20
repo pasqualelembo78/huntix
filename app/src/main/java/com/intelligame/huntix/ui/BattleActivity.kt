@@ -5,7 +5,7 @@ import com.intelligame.huntix.*; import com.intelligame.huntix.battle.*
 import com.intelligame.huntix.BaseNavActivity
 class BattleActivity : BaseNavActivity() {
     private lateinit var pl: PlayerController; private lateinit var en: Enemy; private lateinit var ai: AIController; private lateinit var co: ComboSystem; private lateinit var cb: CombatSystem; private lateinit var hf: HitFeelSystem
-    private lateinit var an: AnimationController; private lateinit var eg: FightingEngine; private lateinit var sp: BattleSpawnManager.SpawnResult; private lateinit var av: ArenaView; private lateinit var root: FrameLayout; private lateinit var previewView: PreviewView
+    private lateinit var an: AnimationController; private lateinit var eg: FightingEngine; private lateinit var sp: BattleSpawnManager.SpawnResult; private lateinit var av: ArenaView; private lateinit var root: FrameLayout; private lateinit var previewView: PreviewView; private lateinit var banner: TextView
     private val camPermLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) startCamera() else Toast.makeText(this, "Camera necessaria per lo sfondo AR", Toast.LENGTH_LONG).show() }
     private val vib by lazy { getSystemService(VIBRATOR_SERVICE) as? Vibrator }; private val vh = Handler(Looper.getMainLooper()); private val vr = object : Runnable { override fun run() { if (eg.gameState == FightingEngine.GameState.FIGHTING) hf.consumeVibration()?.let { try { @Suppress("DEPRECATION") vib?.vibrate(it.durationMs) } catch (_: Exception) {} }; vh.postDelayed(this, 16) } }
     override fun onCreate(s: Bundle?) { super.onCreate(s); window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); @Suppress("DEPRECATION") window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY; AdsManager.init(this); setup() }
@@ -21,6 +21,8 @@ class BattleActivity : BaseNavActivity() {
         root.addView(previewView)
         av = ArenaView(this).apply { engine = eg; animController = an }
         root.addView(av, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        banner = TextView(this).apply { textSize = 42f; setTextColor(Color.parseColor("#FFD700")); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-black", Typeface.BOLD); visibility = View.GONE }
+        root.addView(banner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         buildArcadePad()
         setContentView(root); eg.startCountdown(); vh.post(vr)
         startCameraWithPermission()
@@ -60,7 +62,8 @@ class BattleActivity : BaseNavActivity() {
         background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor(hex)); setStroke(2, Color.parseColor("#55FFFFFF")) }; layoutParams = FrameLayout.LayoutParams(w, h); isClickable = true
         setOnTouchListener { _, ev -> when (ev.action) { MotionEvent.ACTION_DOWN -> { onDown(); true }; MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { onUp(); true }; else -> false } } }
     private fun onEv(t: FightingEngine.BattleEventType, m: String) { val ex = en.positionX * av.width; val ey = av.height * 0.55f
-        when (t) { FightingEngine.BattleEventType.CRIT -> { an.spawnHitParticles(ex, ey, Color.parseColor("#FFD700"), 20); an.spawnDamageNumber(ex, ey - 60f, eg.totalPlayerDamage, true) }
+        when (t) { FightingEngine.BattleEventType.COUNTDOWN -> { banner.text = m; banner.visibility = View.VISIBLE; if (m.contains("Combatti")) Handler(Looper.getMainLooper()).postDelayed({ banner.visibility = View.GONE }, 900) }
+            FightingEngine.BattleEventType.CRIT -> { an.spawnHitParticles(ex, ey, Color.parseColor("#FFD700"), 20); an.spawnDamageNumber(ex, ey - 60f, eg.totalPlayerDamage, true) }
             FightingEngine.BattleEventType.HIT -> { an.spawnHitParticles(ex, ey, Color.parseColor("#66FF88"), 10); an.spawnDamageNumber(ex, ey - 40f, eg.totalPlayerDamage, false) }
             FightingEngine.BattleEventType.SPECIAL -> an.spawnHitParticles(ex, ey, Color.parseColor("#E879F9"), 25)
             FightingEngine.BattleEventType.ENEMY_HIT -> { val px = pl.positionX * av.width; an.spawnHitParticles(px, ey, Color.parseColor("#FF4444"), 10) }
