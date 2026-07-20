@@ -32,6 +32,25 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# ── Scelta autorizzazione ARCore Cloud Anchor ──────────────
+# api     -> API key nel manifest, persistenza max 24h
+# keyless -> OAuth client ID (package + SHA-1), persistenza 30+ giorni
+echo "============================================================"
+echo " Autorizzazione ARCore Cloud Anchor"
+echo "   1) api     -> API key nel manifest  (persistenza max 24h)"
+echo "   2) keyless -> OAuth client ID       (persistenza 30+ giorni)"
+echo "============================================================"
+AUTH_MODE=""
+while [ -z "$AUTH_MODE" ]; do
+    read -rp "Vuoi usare 'api' o 'keyless'? [default: api]: " choice
+    case "$choice" in
+        keyless|Keyless|KEYLESS|2) AUTH_MODE="keyless" ;;
+        api|Api|API|1|"")          AUTH_MODE="api" ;;
+        *) echo "Inserisci 'api' o 'keyless'." ;;
+    esac
+done
+echo ">> Modalita' scelta: $AUTH_MODE"
+
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"
 
@@ -65,6 +84,16 @@ STORE_PASS=$(grep '^storePassword=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
 KEY_ALIAS=$(grep '^keyAlias=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
 KEY_PASS=$(grep '^keyPassword=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
 [ -n "$STORE_FILE_VAL" ] && KEYSTORE_FILE="$STORE_FILE_VAL"
+
+# ── File keystore.properties effettivo passato a gradle ──
+GRADLE_KEYSTORE_PROPS="$PROPS_FILE"
+if [ "$AUTH_MODE" = "keyless" ]; then
+    echo ">> Keyless: escludo arcoreApiKey dal manifest (uso OAuth client ID Android)."
+    TMP_PROPS="$(dirname "$PROPS_FILE")/keystore_properties_keyless.tmp"
+    grep -v '^arcoreApiKey=' "$PROPS_FILE" > "$TMP_PROPS"
+    GRADLE_KEYSTORE_PROPS="$TMP_PROPS"
+    unset ARCORE_API_KEY
+fi
 
 # Genera/ricrea il keystore se il file fisico non esiste
 if [ ! -f "$KEYSTORE_FILE" ]; then
@@ -214,6 +243,9 @@ for pair in \
     "WEB_CLIENT_ID:webClientId" ; do
     env_name="${pair%%:*}"
     prop_name="${pair##*:}"
+    if [ "$AUTH_MODE" = "keyless" ] && [ "$prop_name" = "arcoreApiKey" ]; then
+        continue
+    fi
     val=""
     if [ -n "${!env_name:-}" ]; then
         val="${!env_name}"
@@ -230,11 +262,11 @@ APK_DIR="app/build/outputs/apk/release"
 rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
-./gradlew assembleRelease -PkeystorePropsFile="$PROPS_FILE" $GRADLE_ENV_PROPS --no-daemon --console=plain
+./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --no-daemon --console=plain
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 echo ">> Building AAB (bundleRelease)..."
-./gradlew bundleRelease -PkeystorePropsFile="$PROPS_FILE" $GRADLE_ENV_PROPS --no-daemon --console=plain
+./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --no-daemon --console=plain
 AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
 
 if [ -f "$AAB_FILE" ]; then
@@ -278,3 +310,6 @@ echo ">> Verifica firma..."
 
 echo ">> APK firmato: $SIGNED_APK"
 echo ">> AAB:          $AAB_FILE"
+
+# Pulisci il file temporaneo keyless (se creato)
+[ -n "${TMP_PROPS:-}" ] && rm -f "$TMP_PROPS"
