@@ -28,12 +28,12 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_AR_SHOOTER, "AR Egg Shooter", "🔫", com.intelligame.huntix.minigames.ar.AREggShooterActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_BOMB, "AR Color Bomb", "💣", com.intelligame.huntix.minigames.ar.ARColorBombActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "AR Egg Radar", "📡", com.intelligame.huntix.minigames.ar.AREggRadarActivity::class.java, true),
-        GameEntry("ar_high_card", "AR Carta Alta", "🃏", com.intelligame.huntix.minigames.ar.ARHighCardActivity::class.java, true),
-        GameEntry("ar_match3", "AR Match 3", "💎", com.intelligame.huntix.minigames.ar.ARMatch3Activity::class.java, true),
-        GameEntry("ar_memory", "AR Memory", "🧠", com.intelligame.huntix.minigames.ar.ARMemoryActivity::class.java, true),
-        GameEntry("ar_number_pick", "AR Numero", "🔢", com.intelligame.huntix.minigames.ar.ARNumberPickActivity::class.java, true),
-        GameEntry("ar_three_card", "AR Tre Carte", "🎴", com.intelligame.huntix.minigames.ar.ARThreeCardActivity::class.java, true),
-        GameEntry("ar_catch_egg", "AR Prendi Uovo", "🥚", com.intelligame.huntix.minigames.ar.ARCatchEggActivity::class.java, true)
+        GameEntry(MiniGameManager.GAME_HIGH_CARD, "AR Carta Alta", "🃏", com.intelligame.huntix.minigames.ar.ARHighCardActivity::class.java, true),
+        GameEntry(MiniGameManager.GAME_MATCH3, "AR Match 3", "💎", com.intelligame.huntix.minigames.ar.ARMatch3Activity::class.java, true),
+        GameEntry(MiniGameManager.GAME_MEMORY, "AR Memory", "🧠", com.intelligame.huntix.minigames.ar.ARMemoryActivity::class.java, true),
+        GameEntry(MiniGameManager.GAME_NUMBER_PICK, "AR Numero", "🔢", com.intelligame.huntix.minigames.ar.ARNumberPickActivity::class.java, true),
+        GameEntry(MiniGameManager.GAME_THREE_CARD, "AR Tre Carte", "🎴", com.intelligame.huntix.minigames.ar.ARThreeCardActivity::class.java, true),
+        GameEntry(MiniGameManager.GAME_CATCH_EGG, "AR Prendi Uovo", "🥚", com.intelligame.huntix.minigames.ar.ARCatchEggActivity::class.java, true)
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,7 +53,9 @@ class MiniGamesHubActivity : BaseNavActivity() {
             box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}  (${remaining})",
                 if (can) UiKit.PURPLE else "#444") {
                 if (!can) return@button
-                try { MiniGameManager.consumePlay(c, g.id) } catch (_: Exception) { }
+                // Il consumo della giocata è gestito dall'activity stessa
+                // (così conta anche i "Gioca Ancora"), non qui, per evitare
+                // doppi conteggi. L'hub mostra solo le rimanenti.
                 startActivity(Intent(c, g.cls))
             })
         }

@@ -26,7 +26,7 @@ class OutdoorRadarView @JvmOverloads constructor(
     )
 
     var blips: List<Blip> = emptyList()
-    var maxRangeM: Float = 300f
+    var maxRangeM: Float = 400f
     var headingDeg: Float = 0f
 
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

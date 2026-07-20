@@ -3,6 +3,10 @@ package com.intelligame.huntix.manager
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -11,6 +15,7 @@ import com.intelligame.huntix.EggInventoryItem
 import com.intelligame.huntix.EggInventoryManager
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.WorldEgg
+import com.intelligame.huntix.managers.WeatherZoneManager
 
 /**
  * OutdoorManager — cuore della modalita' GPS del mondo esterno.
@@ -20,7 +25,7 @@ import com.intelligame.huntix.WorldEgg
  * - Espone distanza/bearing per la UI radar e la logica di cattura.
  * - Integra l'inventario tramite EggInventoryManager al momento della cattura.
  */
-class OutdoorManager private constructor() {
+class OutdoorManager private constructor() : SensorEventListener {
 
     data class Poi(
         val id: String,
@@ -53,37 +58,104 @@ class OutdoorManager private constructor() {
     private val pois = mutableListOf<Poi>()
     private var listening = false
 
+    // ── Bussola (orientamento dispositivo) per il radar ──────────
+    private var sensorManager: SensorManager? = null
+    private val gravity = FloatArray(3)
+    private val geomagnetic = FloatArray(3)
+    @Volatile private var deviceAzimuth: Float = 0f
+    private var sensorsRegistered = false
+
+    fun getDeviceHeadingDeg(): Float = deviceAzimuth
+
     private val listener = LocationListener { loc ->
         currentLocation = loc
         ensureSpawns(loc)
+        appCtx?.let { WeatherZoneManager.refreshAsync(it, loc.latitude, loc.longitude) }
     }
+
+    private var appCtx: Context? = null
 
     fun start(ctx: Context) {
         if (listening) return
+        appCtx = ctx.applicationContext
         locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        val hasGps = ContextCompat.checkSelfPermission(
+        val hasPerm = ContextCompat.checkSelfPermission(
             ctx, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        if (hasGps && locationManager != null) {
-            try {
-                locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                    ?.let { currentLocation = it; ensureSpawns(it) }
-                locationManager?.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER, 3000L, 5f, listener
-                )
-                listening = true
-            } catch (_: Exception) {
-                ensureSpawns(defaultLocation())
-            }
-        } else {
+        if (!hasPerm || locationManager == null) {
             ensureSpawns(defaultLocation())
+            return
+        }
+        val lm = locationManager!!
+        val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val netEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        try {
+            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?.let { currentLocation = it; ensureSpawns(it) }
+        } catch (_: Exception) {
+            ensureSpawns(currentLocation ?: defaultLocation())
+        }
+        var started = false
+        if (gpsEnabled) {
+            try {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 5f, listener)
+                started = true
+            } catch (_: Exception) {}
+        }
+        if (netEnabled) {
+            try {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 10f, listener)
+                started = true
+            } catch (_: Exception) {}
+        }
+        listening = started
+        if (!started) ensureSpawns(currentLocation ?: defaultLocation())
+        currentLocation?.let {
+            WeatherZoneManager.refreshAsync(ctx, it.latitude, it.longitude)
+        }
+        registerCompass(ctx)
+    }
+
+    private fun registerCompass(ctx: Context) {
+        if (sensorsRegistered) return
+        val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as? SensorManager ?: return
+        sensorManager = sm
+        sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+            sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        sm.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
+            sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        sensorsRegistered = true
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) return
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> event.values.copyInto(gravity, 0)
+            Sensor.TYPE_MAGNETIC_FIELD -> event.values.copyInto(geomagnetic, 0)
+        }
+        val r = FloatArray(9)
+        val i = FloatArray(9)
+        if (SensorManager.getRotationMatrix(r, i, gravity, geomagnetic)) {
+            val orientation = FloatArray(3)
+            SensorManager.getOrientation(r, orientation)
+            deviceAzimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            if (deviceAzimuth < 0) deviceAzimuth += 360f
         }
     }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     fun stop() {
         if (listening) {
             try { locationManager?.removeUpdates(listener) } catch (_: Exception) {}
             listening = false
+        }
+        if (sensorsRegistered) {
+            try { sensorManager?.unregisterListener(this) } catch (_: Exception) {}
+            sensorsRegistered = false
         }
     }
 
@@ -132,13 +204,10 @@ class OutdoorManager private constructor() {
     }
 
     private fun pickRarity(rng: java.util.Random): EggRarity {
-        val total = EggRarity.values().sumOf { it.spawnWeight }.toDouble()
-        var r = rng.nextDouble() * total
-        for (rarity in EggRarity.values()) {
-            r -= rarity.spawnWeight
-            if (r <= 0) return rarity
-        }
-        return EggRarity.COMMON
+        val weights = WeatherZoneManager.getRaritySpawnWeights(
+            WeatherZoneManager.currentWeather, WeatherZoneManager.currentZone
+        )
+        return WeatherZoneManager.pickWeightedRarity(weights)
     }
 
     // ── Distanza / bearing ────────────────────────────────────────

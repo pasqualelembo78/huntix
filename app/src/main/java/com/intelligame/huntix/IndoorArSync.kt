@@ -33,7 +33,6 @@ object IndoorArSync {
         hostedSafe = null; resolvingSafe = null; hostedEgg = null; resolvingEgg = null
         handler.removeCallbacksAndMessages(null)
     }
-    fun checkPending() {}
 
     // ── Safe ──────────────────────────────────────────────────────
 

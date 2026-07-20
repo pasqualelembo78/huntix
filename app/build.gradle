@@ -43,7 +43,7 @@ android {
         def sentryDsn        = resolve('sentryDsn',        'SENTRY_DSN',         '')
         def admobAppId       = resolve('admobAppId',       'ADMOB_APP_ID',       'ca-app-pub-2572171530354182~3428923397')
         def arcoreApiKey     = resolve('arcoreApiKey',     'ARCORE_API_KEY',     '')
-        def mapboxToken      = resolve('mapboxToken',      'MAPBOX_TOKEN',       '')
+        def owmApiKey        = resolve('owmApiKey',        'OWM_API_KEY',        '')
         def webClientId      = resolve('webClientId',      'WEB_CLIENT_ID',      '')
         def admobBannerId    = resolve('admobBannerId',    'ADMOB_BANNER_ID',    'ca-app-pub-2572171530354182/7280538494')
         def admobRewardedId  = resolve('admobRewardedId',  'ADMOB_REWARDED_ID',  'ca-app-pub-2572171530354182/4905656590')
@@ -53,12 +53,11 @@ android {
             sentryDsn:    sentryDsn,
             admobAppId:   admobAppId,
             arcoreApiKey: arcoreApiKey,
-            mapboxToken:  mapboxToken
         ]
         buildConfigField "String", "SENTRY_DSN",            "\"${sentryDsn}\""
         buildConfigField "String", "ADMOB_APP_ID",          "\"${admobAppId}\""
         buildConfigField "String", "ARCORE_API_KEY",        "\"${arcoreApiKey}\""
-        buildConfigField "String", "MAPBOX_TOKEN",          "\"${mapboxToken}\""
+        buildConfigField "String", "OWM_API_KEY",            "\"${owmApiKey}\""
         buildConfigField "String", "WEB_CLIENT_ID",         "\"${webClientId}\""
         buildConfigField "String", "ADMOB_BANNER_ID",       "\"${admobBannerId}\""
         buildConfigField "String", "ADMOB_REWARDED_ID",     "\"${admobRewardedId}\""
@@ -148,8 +147,11 @@ dependencies {
     implementation "androidx.camera:camera-view:$camerax_version"
     implementation "androidx.camera:camera-extensions:$camerax_version"
 
-    // ── Mappa: Mapbox Maps SDK for Android (sostituisce OSMDroid) ──
-    implementation 'com.mapbox.maps:android:11.8.0'
+    // ── Mappa ───────────────────────────────────────────────────
+    // NOTA: la dipendenza Mapbox è stata rimossa perché mai utilizzata nel codice
+    // (nessun import com.mapbox e nessuna MapView). La "Mappa del Mondo" usa il
+    // radar AR disegnato a mano (OutdoorRadarView). Se serve una vera mappa a
+    // tile, reintegrare com.mapbox.maps:android e cablare una MapView qui.
 
     implementation 'io.sentry:sentry-android:7.14.0'
     implementation 'io.sentry:sentry-android-okhttp:7.14.0'

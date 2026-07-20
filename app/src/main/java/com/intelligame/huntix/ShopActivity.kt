@@ -31,6 +31,21 @@ class ShopActivity : BaseNavActivity() {
                 }
             } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
         })
+        children.add(UiKit.section(c, "🎟️ Pass & Pro"))
+        children.add(UiKit.button(c, "🗓️ Season Pass — 90 giorni x2 ricompense", UiKit.ACCENT) {
+            try {
+                BillingManager.purchaseOneTime(c, BillingManager.PRODUCT_SEASON_PASS) { ok, msg ->
+                    Toast.makeText(c, if (ok) "Season Pass attivato!" else msg, Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
+        })
+        children.add(UiKit.button(c, "🎮 Multiplayer Pro — lobby 8 giocatori", UiKit.PURPLE) {
+            try {
+                BillingManager.purchaseOneTime(c, BillingManager.PRODUCT_MULTIPLAYER) { ok, msg ->
+                    Toast.makeText(c, if (ok) "Multiplayer Pro attivato!" else msg, Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
+        })
         children.add(UiKit.section(c, "⚡ Pacchetti MVC"))
 
         BillingManager.MVC_PACKAGES.forEach { pkg ->

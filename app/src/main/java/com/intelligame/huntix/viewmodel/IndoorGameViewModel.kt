@@ -160,18 +160,11 @@ class IndoorGameViewModel : ViewModel() {
     fun setRestoreSlotId(v: String) { restoreSlotId = v }
 
     // ── Gameplay actions ────────────────────────────────────────
-
-    fun onEggNearby() {
-        _uiState.update { it.copy(playState = PlayState.NEAR_EGG) }
-    }
-
-    fun onEggSearching() {
-        _uiState.update { it.copy(playState = PlayState.SEARCHING) }
-    }
-
-    fun onThrowStart() {
-        _uiState.update { it.copy(playState = PlayState.THROWING) }
-    }
+    // NOTA: le transizioni di stato NEAR_EGG/SEARCHING/KEY_OBTAINED/NEAR_SAFE
+    // sono gestite centralmente da ArSceneManager.checkProximity (che scrive
+    // playState via delegazione). I metodi duplicati onEggNearby/onEggSearching/
+    // onThrowStart/onNearSafe/onSafeFar/onTicketShown sono stati rimossi per
+    // evitare una state machine duplicata e divergente.
 
     fun onThrowHit(isTrap: Boolean, penaltySecs: Int) {
         if (isTrap) {
@@ -198,18 +191,6 @@ class IndoorGameViewModel : ViewModel() {
                 eggTimesMs = it.eggTimesMs + elapsed
             )
         }
-    }
-
-    fun onNearSafe() {
-        _uiState.update { it.copy(playState = PlayState.NEAR_SAFE) }
-    }
-
-    fun onSafeFar() {
-        _uiState.update { it.copy(playState = PlayState.KEY_OBTAINED) }
-    }
-
-    fun onTicketShown() {
-        _uiState.update { it.copy(playState = PlayState.TICKET_SHOWN) }
     }
 
     fun onTicketClosed() {

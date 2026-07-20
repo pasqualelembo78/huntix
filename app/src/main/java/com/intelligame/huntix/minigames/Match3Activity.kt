@@ -204,6 +204,7 @@ class Match3Activity : MiniGameBase() {
         val isWin = score > 50
         val label = if (isWin) "Match3: $score punti!" else "Match3: $score punti"
         try {
+            MiniGameManager.consumePlay(this, MiniGameManager.GAME_MATCH3)
             MiniGameManager.applyReward(
                 this,
                 MiniGameManager.GameReward(

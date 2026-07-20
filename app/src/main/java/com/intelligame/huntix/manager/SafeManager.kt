@@ -104,7 +104,11 @@ class SafeManager(internal val activity: MainActivity) {
                 activity.eggPlacementManager.restoreEggsFromCloud(activity.safeObject!!.anchorNode)
             }
         } else if (viewModel.isRestoreMode) {
-            activity.eggPlacementManager.restoreEggsFromSession(activity.safeObject!!.anchorNode)
+            if (activity.localAnchorSessionId.isNotEmpty()) {
+                activity.eggPlacementManager.restoreFromLocalStore(activity.safeObject!!.anchorNode)
+            } else {
+                activity.eggPlacementManager.restoreEggsFromSession(activity.safeObject!!.anchorNode)
+            }
             viewModel.isRestoreMode = false
             activity.gamePhase = GamePhase.SETUP_EGGS
             activity.runOnUiThread {

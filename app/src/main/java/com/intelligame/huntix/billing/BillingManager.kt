@@ -17,7 +17,9 @@ object BillingManager {
 
     private const val TAG = "BillingManager"
     private var billingClient: BillingClient? = null
-    private var onPurchaseComplete: ((Boolean, String) -> Unit)? = null
+    private var appContext: Context? = null
+    private val onPurchaseComplete = mutableMapOf<String, (Boolean, String) -> Unit>()
+    private var pendingProductId: String? = null
 
     // ── Product IDs (da creare su Google Play Console) ──────────
     data class MvcPackage(
@@ -44,6 +46,7 @@ object BillingManager {
     // ── Inizializzazione ────────────────────────────────────────
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         if (billingClient?.isReady == true) return
 
         billingClient = BillingClient.newBuilder(context)
@@ -68,7 +71,8 @@ object BillingManager {
     // ── Acquisto consumabile (pacchetto MVC) ────────────────────
 
     fun purchaseMvcPackage(activity: Activity, productId: String, onComplete: (Boolean, String) -> Unit) {
-        onPurchaseComplete = onComplete
+        onPurchaseComplete[productId] = onComplete
+        pendingProductId = productId
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()
@@ -100,7 +104,8 @@ object BillingManager {
     // ── Acquisto abbonamento VIP ─────────────────────────────────
 
     fun purchaseVip(activity: Activity, onComplete: (Boolean, String) -> Unit) {
-        onPurchaseComplete = onComplete
+        onPurchaseComplete[PRODUCT_VIP_MONTHLY] = onComplete
+        pendingProductId = PRODUCT_VIP_MONTHLY
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()
@@ -142,10 +147,12 @@ object BillingManager {
                 }
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> {
-                onPurchaseComplete?.invoke(false, "Acquisto annullato")
+                pendingProductId?.let { onPurchaseComplete[it]?.invoke(false, "Acquisto annullato") }
+                pendingProductId = null
             }
             else -> {
-                onPurchaseComplete?.invoke(false, "Errore: ${result.debugMessage}")
+                pendingProductId?.let { onPurchaseComplete[it]?.invoke(false, "Errore: ${result.debugMessage}") }
+                pendingProductId = null
             }
         }
     }
@@ -171,18 +178,28 @@ object BillingManager {
                 .setPurchaseToken(purchase.purchaseToken)
                 .build()
             billingClient?.consumeAsync(consumeParams) { _, _ ->
-                onPurchaseComplete?.invoke(true, "mvc:${mvcPack.mvcAmount}")
+                onPurchaseComplete[productId]?.invoke(true, "mvc:${mvcPack.mvcAmount}")
             }
             return
         }
 
-        // VIP subscription or one-time purchase
+        // VIP subscription or one-time purchase -> activate the related perks
         when (productId) {
-            PRODUCT_VIP_MONTHLY -> onPurchaseComplete?.invoke(true, "vip")
-            PRODUCT_SEASON_PASS -> onPurchaseComplete?.invoke(true, "season")
-            PRODUCT_MULTIPLAYER -> onPurchaseComplete?.invoke(true, "multiplayer")
-            else -> onPurchaseComplete?.invoke(true, productId)
+            PRODUCT_VIP_MONTHLY -> {
+                appContext?.let { VipManager.syncVipStatus(it) }
+                onPurchaseComplete[productId]?.invoke(true, "vip")
+            }
+            PRODUCT_SEASON_PASS -> {
+                appContext?.let { SeasonPassManager.activate(it) }
+                onPurchaseComplete[productId]?.invoke(true, "season")
+            }
+            PRODUCT_MULTIPLAYER -> {
+                appContext?.let { MultiplayerProManager.activate(it) }
+                onPurchaseComplete[productId]?.invoke(true, "multiplayer")
+            }
+            else -> onPurchaseComplete[productId]?.invoke(true, productId)
         }
+        pendingProductId = null
     }
 
     // ── Verifica abbonamento attivo ──────────────────────────────
@@ -209,7 +226,8 @@ object BillingManager {
     // ── Acquisto one-time (Season Pass, Multiplayer Pro) ────────
 
     fun purchaseOneTime(activity: Activity, productId: String, onComplete: (Boolean, String) -> Unit) {
-        onPurchaseComplete = onComplete
+        onPurchaseComplete[productId] = onComplete
+        pendingProductId = productId
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()

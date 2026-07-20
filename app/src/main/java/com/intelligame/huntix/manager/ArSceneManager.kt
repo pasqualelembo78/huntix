@@ -40,7 +40,13 @@ class ArSceneManager(internal val activity: MainActivity) {
                 planeRenderer.isEnabled = true
                 configureSession { session, config ->
                     config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+                    // ENVIRONMENTAL_HDR richiede supporto dispositivo: proviamolo,
+                    // altrimenti fallback ad AMBIENT_INTENSITY (senza fallback le
+                    // uova resterebbero nere su molti device).
                     config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+                    if (!session.isSupported(config)) {
+                        config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
+                    }
                     config.focusMode = Config.FocusMode.AUTO
                     config.depthMode = when {
                         viewModel.arMode == "standard" -> Config.DepthMode.DISABLED
@@ -55,10 +61,6 @@ class ArSceneManager(internal val activity: MainActivity) {
                 onSessionUpdated = handler@{ session, frame ->
                     if (!activity.isActive) return@handler
                     activity.lastArFrame = frame
-
-                    if (viewModel.isIndoorMp && IndoorArSync.hasPendingOperations) {
-                        IndoorArSync.checkPending()
-                    }
 
                     if (activity.gamePhase == GamePhase.SCAN_ROOM && activity.roomScanManager.isScanning) {
                         val prog = activity.roomScanManager.getProgressPercent(session)
@@ -177,7 +179,9 @@ class ArSceneManager(internal val activity: MainActivity) {
                     activity.updateUI()
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("ArScene", "checkProximity failed: ${e.message}")
+        }
     }
 
     private fun handleTouch(event: MotionEvent, hitNode: Node?) {

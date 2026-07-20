@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.UiKit
@@ -26,9 +27,13 @@ class OutdoorArCatchActivity : BaseNavActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED
+            == android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             mgr.start(this)
+        } else {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 2001
+            )
         }
 
         eggView = TextView(this).apply {
@@ -55,6 +60,17 @@ class OutdoorArCatchActivity : BaseNavActivity() {
     override fun onDestroy() {
         refresh.removeCallbacks(tick)
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 2001 &&
+            grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            mgr.start(this)
+        }
     }
 
     private fun update() {

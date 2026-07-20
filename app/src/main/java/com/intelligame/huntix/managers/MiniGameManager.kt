@@ -171,6 +171,9 @@ object MiniGameManager {
         val day      = todayStr()
         val prevGames = prefs.getInt(totalGamesKey(day), 0)
         prefs.edit().putInt(totalGamesKey(day), prevGames + 1).apply()
+        // Lo streak si incrementa una sola volta per partita giocata, qui
+        // (unica fonte di conteggio, per evitare doppi conteggi con applyReward).
+        incrementStreak(ctx)
         checkDailyBonus(ctx, prevGames + 1)
         return true
     }
@@ -261,16 +264,15 @@ object MiniGameManager {
             catch (e: Exception) { Log.w(TAG, "giftEgg failed: ${e.message}") }
         }
 
+        // NOTA: il conteggio partite (totalGames), lo streak e il daily bonus
+        // sono gestiti da consumePlay() — qui applichiamo SOLO i premi, altrimenti
+        // ogni partita verrebbe contata due volte (consumePlay + applyReward).
         val prefs     = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val day       = todayStr()
         val prevMvc   = prefs.getLong(mvcTodayKey(day), 0L)
-        val prevGames = prefs.getInt(totalGamesKey(day), 0)
         prefs.edit()
             .putLong(mvcTodayKey(day), prevMvc + finalMvc)
-            .putInt(totalGamesKey(day), prevGames + 1)
             .apply()
-
-        checkDailyBonus(ctx, prevGames + 1)
 
         return GameReward(
             mvcCoins        = finalMvc,

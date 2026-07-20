@@ -2,6 +2,7 @@ package com.intelligame.huntix
 
 import android.content.Context
 import com.google.ar.core.Anchor
+import com.google.ar.core.Pose
 import io.github.sceneview.ar.node.AnchorNode
 import org.json.JSONArray
 import org.json.JSONObject
@@ -78,7 +79,23 @@ class LocalAnchorStore private constructor() {
         label: String
     ): LocalAnchor = LocalAnchor(id, refTrans, refRot, eggTrans, eggRot, colorIdx, shape, isTrap, label)
 
-    fun buildAnchor(session: com.google.ar.core.Session, localAnchor: LocalAnchor): Anchor? = null
+    /**
+     * Ricostruisce un [Anchor] ARCore reale a partire da un [LocalAnchor] salvato.
+     *
+     * Al salvataggio, [saveAnchorLocally] memorizza in `eggTrans`/`eggRot` la pose
+     * mondiale dell'uovo e in `refTrans`/`refRot` quella della cassaforte. Il
+     * ripristino locale (stessa stanza) ricrea l'uovo nel punto assoluto salvato,
+     * coerente con [EggPlacementManager.autoPlaceEggs] che usa
+     * `session.createAnchor(Pose(...))`.
+     */
+    fun buildAnchor(session: com.google.ar.core.Session, localAnchor: LocalAnchor): Anchor? {
+        return try {
+            session.createAnchor(Pose(localAnchor.eggTrans, localAnchor.eggRot))
+        } catch (e: Exception) {
+            android.util.Log.w("LocalAnchorStore", "buildAnchor failed: ${e.message}")
+            null
+        }
+    }
 
     fun createSession(
         name: String,

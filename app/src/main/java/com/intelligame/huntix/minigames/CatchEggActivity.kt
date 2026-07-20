@@ -182,6 +182,7 @@ class CatchEggActivity : MiniGameBase() {
         val isWin = score > 40
         val label = if (isWin) "CatchEgg: $score punti!" else "CatchEgg: $score punti"
         try {
+            MiniGameManager.consumePlay(this, MiniGameManager.GAME_CATCH_EGG)
             MiniGameManager.applyReward(
                 this,
                 MiniGameManager.GameReward(

@@ -7,6 +7,7 @@ import android.os.Looper
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.UiKit
@@ -31,9 +32,13 @@ class OutdoorHuntActivity : BaseNavActivity() {
         eggId = intent.getStringExtra("eggId") ?: mgr.nearestUnfoundEgg()?.id ?: ""
 
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED
+            == android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             mgr.start(this)
+        } else {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 2003
+            )
         }
 
         distText = TextView(this).apply {
@@ -71,6 +76,17 @@ class OutdoorHuntActivity : BaseNavActivity() {
         super.onDestroy()
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 2003 &&
+            grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            mgr.start(this)
+        }
+    }
+
     private fun update() {
         val egg = mgr.getEgg(eggId)
         if (egg == null) {
@@ -85,6 +101,7 @@ class OutdoorHuntActivity : BaseNavActivity() {
             d > OutdoorManager.CATCH_RADIUS_M -> "Avvicinati all'uovo per catturarlo."
             else -> "Sei abbastanza vicino: premi Cattura!"
         }
+        radar.headingDeg = mgr.getDeviceHeadingDeg()
         radar.blips = listOf(
             OutdoorRadarView.Blip(mgr.bearingTo(egg), d, 0xFFFFEB3.toInt())
         )

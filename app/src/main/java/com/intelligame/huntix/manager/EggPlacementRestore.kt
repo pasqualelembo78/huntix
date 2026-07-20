@@ -66,55 +66,60 @@ internal fun EggPlacementManager.restoreEggsWithSafeAnchor(
     snap: IndoorSessionManager.RoomSnapshot,
     safeAnchor: Anchor
 ) {
-    activity.runOnUiThread {
-        binding.tvStatus.text = "Caricamento uova..."
-        val sv = binding.sceneView
-        val safeTrans = safeAnchor.pose.translation
-        val eggList = snap.eggs.filter { !it.found }
-
-        if (eggList.isEmpty()) {
+    val eggList = snap.eggs.filter { !it.found }
+    if (eggList.isEmpty()) {
+        activity.runOnUiThread {
             Toast.makeText(activity, "Nessuna uova da trovare (tutte gia' trovate).", Toast.LENGTH_LONG).show()
             activity.gamePhase = GamePhase.SETUP_EGGS
             binding.btnStart.visibility = android.view.View.VISIBLE
             activity.updateUI()
-            return@runOnUiThread
         }
+        return
+    }
 
-        var restored = 0
-        eggList.forEach { egg ->
-            try {
-                val cloudId = egg.cloudAnchorId
-                if (cloudId.isNotBlank() && viewModel.isIndoorMp) {
-                    val session = sv.session
-                    if (session != null) {
-                        IndoorArSync.resolveEggAnchor(session, cloudId, egg.idx)
-                        IndoorArSync.onEggResolved = { eggIdx, resolvedAnchor ->
-                            activity.runOnUiThread {
-                                placeEggAtAnchorDirect(resolvedAnchor, egg.colorIdx, egg.shape, egg.isTrap)
-                                restored++
-                                if (restored >= eggList.size) finishRestore()
-                            }
-                        }
-                        IndoorArSync.onResolvingError = { _, _ ->
-                            activity.runOnUiThread {
-                                placeEggByOffset(sv, safeTrans, egg)
-                                restored++
-                                if (restored >= eggList.size) finishRestore()
-                            }
-                        }
-                        return@forEach
+    activity.runOnUiThread { binding.tvStatus.text = "Caricamento uova..." }
+
+    val sv = binding.sceneView
+    val safeTrans = safeAnchor.pose.translation
+    var restored = 0
+
+    fun placeOne(egg: IndoorSessionManager.IndoorEggData) {
+        val advance = {
+            restored++
+            if (restored >= eggList.size) finishRestore() else placeOne(eggList[restored])
+        }
+        try {
+            val cloudId = egg.cloudAnchorId
+            if (cloudId.isNotBlank() && viewModel.isIndoorMp && sv.session != null) {
+                val session = sv.session!!
+                // Risoluzione SEQUENZIALE: IndoorArSync gestisce un solo
+                // resolve alla volta, quindi non si possono lanciare tutti
+                // insieme (altrimenti le callback si sovrascrivono a vicenda).
+                IndoorArSync.onEggResolved = { _, resolvedAnchor ->
+                    activity.runOnUiThread {
+                        placeEggAtAnchorDirect(resolvedAnchor, egg.colorIdx, egg.shape, egg.isTrap)
+                        advance()
                     }
                 }
-                placeEggByOffset(sv, safeTrans, egg)
-                restored++
-                if (restored >= eggList.size) finishRestore()
-            } catch (e: Exception) {
-                android.util.Log.e("EggPlacement", "restoreEggsFromCloud egg[${egg.idx}]: ${e.message}")
-                restored++
-                if (restored >= eggList.size) finishRestore()
+                IndoorArSync.onResolvingError = { _, _ ->
+                    activity.runOnUiThread {
+                        placeEggByOffset(sv, safeTrans, egg)
+                        advance()
+                    }
+                }
+                IndoorArSync.resolveEggAnchor(session, cloudId, egg.idx)
+                return
             }
+            placeEggByOffset(sv, safeTrans, egg)
+            advance()
+        } catch (e: Exception) {
+            android.util.Log.e("EggPlacement", "restoreEggsWithSafeAnchor egg[${egg.idx}]: ${e.message}")
+            placeEggByOffset(sv, safeTrans, egg)
+            advance()
         }
     }
+
+    placeOne(eggList[0])
 }
 
 internal fun EggPlacementManager.finishRestore() {
@@ -139,6 +144,56 @@ internal fun EggPlacementManager.placeEggByOffset(
         ) ?: return
         placeEggAtAnchorDirect(anchor, egg.colorIdx, egg.shape, egg.isTrap)
     } catch (_: Exception) {}
+}
+
+/**
+ * Ripristina uova salvate in locale tramite [LocalAnchorStore].
+ *
+ * Ogni [LocalAnchorStore.LocalAnchor] contiene la pose mondiale assoluta
+ * dell'uovo (`eggTrans`/`eggRot`); [LocalAnchorStore.buildAnchor] ricrea
+ * l'[Anchor] ARCore corrispondente. Funziona per ripristino nella stessa
+ * stanza in cui è stato fatto il salvataggio.
+ */
+internal fun EggPlacementManager.restoreFromLocalStore(safeAnchorNode: AnchorNode) {
+    val sessionId = activity.localAnchorSessionId
+    if (sessionId.isEmpty()) return
+    val stored = activity.localAnchorStore.load(sessionId) ?: return
+    val sv = binding.sceneView
+    val session = sv.session ?: return
+    if (stored.anchors.isEmpty()) return
+
+    activity.runOnUiThread { binding.tvStatus.text = "Ripristino uova dalla sessione locale..." }
+
+    var restored = 0
+    stored.anchors.forEachIndexed { i, la ->
+        try {
+            val anchor = activity.localAnchorStore.buildAnchor(session, la) ?: return@forEachIndexed
+            val colorIdx = la.colorIdx % MainActivity.EGG_COLORS.size
+            val mat = sv.materialLoader.createColorInstance(color = MainActivity.EGG_COLORS[colorIdx])
+            val an = AnchorNode(sv.engine, anchor)
+            val eggNode: Node = when (la.shape) {
+                "cube" -> CubeNode(sv.engine, Size(0.10f, 0.12f, 0.10f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
+                "cylinder" -> CylinderNode(sv.engine, 0.055f, 0.12f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
+                "diamond" -> CubeNode(sv.engine, Size(0.09f, 0.13f, 0.09f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); rotation = Rotation(45f, 45f, 0f) }
+                else -> SphereNode(sv.engine, 0.055f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); scale = Scale(1f, 1.45f, 1f) }
+            }
+            an.addChildNode(eggNode)
+            an.isVisible = true
+            sv.addChildNode(an)
+            activity.eggs.add(EggObject(i, la.colorIdx, la.shape, an, eggNode, la.isTrap))
+            restored++
+        } catch (e: Exception) {
+            android.util.Log.e("EggPlacement", "restoreFromLocalStore egg[$i]: ${e.message}")
+        }
+    }
+
+    activity.runOnUiThread {
+        binding.tvStatus.text = "Cassaforte e uova ripristinate"
+        binding.btnStart.visibility = android.view.View.VISIBLE
+        Toast.makeText(activity, "$restored uova ripristinate dalla sessione locale!", Toast.LENGTH_LONG).show()
+        activity.gamePhase = GamePhase.SETUP_EGGS
+        activity.updateUI()
+    }
 }
 
 internal fun EggPlacementManager.restoreEggsFromSession(safeAnchorNode: AnchorNode) {

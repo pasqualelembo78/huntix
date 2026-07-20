@@ -4,6 +4,8 @@ import android.app.Application
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import io.sentry.Sentry
+import com.intelligame.huntix.billing.BillingManager
+import com.intelligame.huntix.billing.VipManager
 
 class EggHuntApplication : Application() {
 
@@ -27,6 +29,12 @@ class EggHuntApplication : Application() {
             Log.e("HuntixApp", "Sentry init failed: ${e.message}")
         }
 
-
+        // Billing: inizializza il client e sincronizza lo stato VIP all'avvio
+        try {
+            BillingManager.init(this)
+            VipManager.syncVipStatus(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "Billing init failed: ${e.message}")
+        }
     }
 }

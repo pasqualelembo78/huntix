@@ -12,6 +12,7 @@ import android.os.Looper
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.UiKit
@@ -27,13 +28,21 @@ class ArNavigationActivity : BaseNavActivity(), SensorEventListener {
     private lateinit var targetText: TextView
     private var deviceAzimuth = 0f
     private var sensorManager: SensorManager? = null
+    private val gravity = FloatArray(3)
+    private val geomagnetic = FloatArray(3)
+    private var haveAccel = false
+    private var haveMag = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED
+            == android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             mgr.start(this)
+        } else {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 2002
+            )
         }
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
 
@@ -70,7 +79,10 @@ class ArNavigationActivity : BaseNavActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        sensorManager?.getDefaultSensor(Sensor.TYPE_ORIENTATION)?.let {
+        sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+        sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
         update()
@@ -82,13 +94,39 @@ class ArNavigationActivity : BaseNavActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ORIENTATION) {
-            deviceAzimuth = event.values[0]
-            updateArrow()
+        if (event == null) return
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                System.arraycopy(event.values, 0, gravity, 0, 3); haveAccel = true
+            }
+            Sensor.TYPE_MAGNETIC_FIELD -> {
+                System.arraycopy(event.values, 0, geomagnetic, 0, 3); haveMag = true
+            }
+        }
+        if (haveAccel && haveMag) {
+            val r = FloatArray(9); val i = FloatArray(9)
+            if (SensorManager.getRotationMatrix(r, i, gravity, geomagnetic)) {
+                val orientation = FloatArray(3)
+                SensorManager.getOrientation(r, orientation)
+                deviceAzimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+                if (deviceAzimuth < 0) deviceAzimuth += 360f
+                updateArrow()
+            }
         }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 2002 &&
+            grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            mgr.start(this)
+        }
+    }
 
     private fun update() {
         val egg = mgr.nearestUnfoundEgg()

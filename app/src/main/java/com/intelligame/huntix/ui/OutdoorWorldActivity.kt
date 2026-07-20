@@ -133,6 +133,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
             row.setOnClickListener { openPoi(poi.id) }
             poiList.addView(row)
         }
+        radar.headingDeg = mgr.getDeviceHeadingDeg()
         radar.blips = blips
         radar.invalidate()
     }

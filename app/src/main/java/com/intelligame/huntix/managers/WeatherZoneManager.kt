@@ -10,7 +10,7 @@ import java.util.Calendar
 
 object WeatherZoneManager {
     private const val PREFS = "weather_zone_prefs_v1"
-    private const val OWM_API_KEY = "YOUR_OPENWEATHERMAP_API_KEY"
+    private val OWM_API_KEY = com.intelligame.huntix.BuildConfig.OWM_API_KEY
     private const val CACHE_TTL_MS = 10 * 60 * 1000L
 
     var currentWeather: WeatherType = WeatherType.CLEAR
@@ -38,6 +38,11 @@ object WeatherZoneManager {
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
                 val isNight = hour < 6 || hour >= 21
 
+                if (OWM_API_KEY.isBlank()) {
+                    withContext(Dispatchers.Main) { onDone?.invoke() }
+                    return@launch
+                }
+
                 val url = "https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lng&appid=$OWM_API_KEY"
                 val json = JSONObject(URL(url).readText())
                 val weatherCode = json.getJSONArray("weather").getJSONObject(0).getInt("id")
@@ -61,7 +66,6 @@ object WeatherZoneManager {
         }
     }
 
-    @Suppress("UNUSED_PARAMETER")
     private fun detectZone(lat: Double, lng: Double, owmJson: JSONObject): ZoneType {
         return try {
             val weatherId = owmJson.getJSONArray("weather").getJSONObject(0).getInt("id")

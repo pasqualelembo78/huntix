@@ -12,6 +12,7 @@ exports.notifyEggReady = functions.firestore
       try {
         await admin.messaging().send({
           token: after.fcmToken,
+          notification: { title: 'Uovo pronto!', body: 'Il tuo uovo si e schiuso!' },
           data: { type: 'egg_ready', title: 'Uovo pronto!', body: 'Il tuo uovo si e schiuso!' }
         });
       } catch (e) { console.error('FCM error:', e); }
@@ -26,8 +27,12 @@ exports.notifyLiveEvent = functions.firestore
     const users = await admin.firestore().collection('players').where('fcmToken', '!=', '').get();
     const tokens = users.docs.map(d => d.data().fcmToken).filter(Boolean);
     if (tokens.length === 0) return;
+    const title = event.title || 'Nuovo evento!';
+    const body = event.description || '';
     await admin.messaging().sendEachForMulticast({
-      tokens, data: { type: 'live_event', title: event.title || 'Nuovo evento!', body: event.description || '' }
+      tokens,
+      notification: { title, body },
+      data: { type: 'live_event', title, body }
     });
   });
 
@@ -38,8 +43,11 @@ exports.notifyFriendRequest = functions.firestore
     const target = await admin.firestore().collection('players').doc(context.params.targetUid).get();
     const token = target.data()?.fcmToken;
     if (!token) return;
+    const body = (snap.data().senderName || 'Qualcuno') + ' vuole essere tuo amico!';
     await admin.messaging().send({
-      token, data: { type: 'friend_request', title: 'Nuova richiesta!', body: snap.data().senderName + ' vuole essere tuo amico!' }
+      token,
+      notification: { title: 'Nuova richiesta!', body },
+      data: { type: 'friend_request', title: 'Nuova richiesta!', body }
     });
   });
 
@@ -51,8 +59,11 @@ exports.notifyTradeOffer = functions.firestore
     const target = await admin.firestore().collection('players').doc(offer.toUid).get();
     const token = target.data()?.fcmToken;
     if (!token) return;
+    const body = (offer.fromName || 'Qualcuno') + ' ti offre ' + (offer.offeredCreatureName || '');
     await admin.messaging().send({
-      token, data: { type: 'trade_offer', title: 'Offerta di scambio!', body: offer.fromName + ' ti offre ' + offer.offeredCreatureName }
+      token,
+      notification: { title: 'Offerta di scambio!', body },
+      data: { type: 'trade_offer', title: 'Offerta di scambio!', body }
     });
   });
 

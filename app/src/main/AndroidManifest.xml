@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- ✅ FIX v7.2.1: VIBRATE — richiesto da AR minigames (haptic feedback) -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-feature android:name="android.hardware.camera.ar" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="true" />
     <!-- Depth API: opzionale — funziona anche senza sensore ToF fisico (ML depth estimation) -->
@@ -71,7 +71,7 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}"/>
-        <meta-data android:name="com.google.ar.core" android:value="required" tools:replace="android:value"/>
+        <meta-data android:name="com.google.ar.core" android:value="optional" tools:replace="android:value"/>
 
         <!-- ARCore Cloud Anchor API Key — da keystore.properties (non hardcodato) -->
         <meta-data
@@ -307,11 +307,6 @@
         <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
         <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
         <activity android:name=".minigames.ar.AREggRadarActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-
-        <!-- Mapbox public token — da keystore.properties (non hardcodato) -->
-        <meta-data
-            android:name="com.mapbox.token"
-            android:value="${mapboxToken}"/>
 
             <activity android:name=".TutorialActivity"
             android:theme="@style/Theme.AppCompat.NoActionBar"
