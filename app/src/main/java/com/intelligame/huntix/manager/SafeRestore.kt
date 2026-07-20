@@ -46,15 +46,22 @@ internal fun SafeManager.attemptAutoSafeRestore() {
                             activity.eggPlacementManager.restoreEggsWithSafeAnchor(snap, resolvedAnchor)
                         }
                     }
-                    IndoorArSync.onResolvingError = { eggIdx, msg ->
-                        if (eggIdx == -1) {
-                            android.util.Log.w("SafeManager", "Cloud Anchor cassaforte fallito ($msg) - piazzamento manuale")
-                            activity.runOnUiThread {
-                                binding.tvInstruction.text = "Piazza la cassaforte NELLO STESSO PUNTO dell'host"
-                                showSafeTypePicker()
-                            }
-                        }
-                    }
+                     IndoorArSync.onResolvingError = { eggIdx, msg ->
+                         if (eggIdx == -1) {
+                             android.util.Log.w("SafeManager", "Cloud Anchor cassaforte fallito ($msg) - piazzamento manuale")
+                             activity.runOnUiThread {
+                                 binding.tvInstruction.text = "Piazza la cassaforte NELLO STESSO PUNTO dell'host"
+                                 showSafeTypePicker()
+                             }
+                         }
+                     }
+                     IndoorArSync.onApiKeyMissing = {
+                         android.util.Log.w("SafeManager", "ARCore API Key mancante - piazzamento manuale")
+                         activity.runOnUiThread {
+                             binding.tvInstruction.text = "Piazza la cassaforte NELLO STESSO PUNTO dell'host"
+                             showSafeTypePicker()
+                         }
+                     }
                 } catch (e: Exception) {
                     android.util.Log.e("SafeManager", "attemptAutoSafeRestore exception: ${e.message}")
                     activity.runOnUiThread {

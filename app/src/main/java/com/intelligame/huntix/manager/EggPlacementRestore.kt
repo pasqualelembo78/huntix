@@ -39,11 +39,15 @@ internal fun EggPlacementManager.restoreEggsFromCloud(safeAnchorNode: AnchorNode
                         android.util.Log.d("EggPlacement", "Cassaforte risolto da Cloud")
                         restoreEggsWithSafeAnchor(snap, resolvedSafeAnchor)
                     }
-                    IndoorArSync.onResolvingError = { eggIdx, msg ->
-                        if (eggIdx == -1) {
-                            android.util.Log.w("EggPlacement", "Cloud cassaforte fallito, usando fallback")
-                            restoreEggsWithSafeAnchor(snap, safeAnchorNode.anchor)
-                        }
+                     IndoorArSync.onResolvingError = { eggIdx, msg ->
+                         if (eggIdx == -1) {
+                             android.util.Log.w("EggPlacement", "Cloud cassaforte fallito, usando fallback")
+                             restoreEggsWithSafeAnchor(snap, safeAnchorNode.anchor)
+                         }
+                     }
+                    IndoorArSync.onApiKeyMissing = {
+                        android.util.Log.w("EggPlacement", "ARCore API Key mancante, usando fallback")
+                        restoreEggsWithSafeAnchor(snap, safeAnchorNode.anchor)
                     }
                     return@getRoomSnapshot
                 } catch (e: Exception) {

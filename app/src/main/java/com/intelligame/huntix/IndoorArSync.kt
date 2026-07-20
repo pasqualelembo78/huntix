@@ -18,6 +18,10 @@ object IndoorArSync {
     var onEggHosted: ((Int, String) -> Unit)? = null
     var onEggResolved: ((Int, Anchor) -> Unit)? = null
 
+    // Durata delle Cloud Anchor delle stanze (giorni). Max ARCore = 365.
+    // 30 giorni = le stanze restano "fuse" con l'ambiente per un mese intero.
+    var ROOM_ANCHOR_TTL_DAYS = 30
+
     private val handler = Handler(Looper.getMainLooper())
     private var hostedSafe: Anchor? = null
     private var resolvingSafe: Anchor? = null
@@ -39,7 +43,7 @@ object IndoorArSync {
     fun hostSafeAnchor(session: Session, anchor: Anchor) {
         if (BuildConfig.ARCORE_API_KEY.isBlank()) { onApiKeyMissing?.invoke(); return }
         hasPendingOperations = true
-        val hosted = runCatching { session.hostCloudAnchor(anchor) }.getOrElse { e ->
+        val hosted = runCatching { session.hostCloudAnchorWithTtl(anchor, ROOM_ANCHOR_TTL_DAYS) }.getOrElse { e ->
             hasPendingOperations = false
             onHostingError?.invoke(-1, e.message ?: "host failed")
             return
@@ -117,7 +121,7 @@ object IndoorArSync {
     fun hostEggAnchor(session: Session, anchor: Anchor, idx: Int, colorIdx: Int, shape: String, isTrap: Boolean) {
         if (BuildConfig.ARCORE_API_KEY.isBlank()) { onApiKeyMissing?.invoke(); return }
         hasPendingOperations = true
-        val hosted = runCatching { session.hostCloudAnchor(anchor) }.getOrElse { e ->
+        val hosted = runCatching { session.hostCloudAnchorWithTtl(anchor, ROOM_ANCHOR_TTL_DAYS) }.getOrElse { e ->
             hasPendingOperations = false
             onHostingError?.invoke(idx, e.message ?: "host egg failed")
             return
