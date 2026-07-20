@@ -73,7 +73,10 @@
             android:value="${admobAppId}"/>
         <meta-data android:name="com.google.ar.core" android:value="optional" tools:replace="android:value"/>
 
-        <!-- ARCore Cloud Anchor API Key — da keystore.properties (non hardcodato) -->
+        <!-- ARCore Cloud Anchor API Key (da ARCORE_API_KEY / local.properties).
+             Se la key è vuota, un task Gradle rimuove questa <meta-data> così
+             ARCore usa la keyless authorization (OAuth client ID Android:
+             package + SHA-1) che sblocca TTL Cloud Anchor fino a 365gg. -->
         <meta-data
             android:name="com.google.android.ar.API_KEY"
             android:value="${arcoreApiKey}"/>

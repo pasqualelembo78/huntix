@@ -31,6 +31,11 @@ android {
     namespace 'com.intelligame.huntix'
     compileSdk 35
 
+    // ARCore Cloud Anchor API key (priorità: -P gradle prop > ENV > keystore.properties).
+    // Se vuota, la <meta-data> API_KEY non viene inclusa e ARCore usa la keyless
+    // authorization (OAuth client ID Android: package + SHA-1) -> TTL fino a 365gg.
+    def arcoreApiKey = resolve('arcoreApiKey', 'ARCORE_API_KEY', '')
+
     defaultConfig {
         applicationId "com.intelligame.huntix"
         minSdk 26
@@ -42,7 +47,6 @@ android {
         // Priorità: -P gradle prop > ENV > keystore.properties > default hardcoded
         def sentryDsn        = resolve('sentryDsn',        'SENTRY_DSN',         '')
         def admobAppId       = resolve('admobAppId',       'ADMOB_APP_ID',       'ca-app-pub-2572171530354182~3428923397')
-        def arcoreApiKey     = resolve('arcoreApiKey',     'ARCORE_API_KEY',     '')
         def owmApiKey        = resolve('owmApiKey',        'OWM_API_KEY',        '')
         def webClientId      = resolve('webClientId',      'WEB_CLIENT_ID',      '')
         def admobBannerId    = resolve('admobBannerId',    'ADMOB_BANNER_ID',    'ca-app-pub-2572171530354182/7280538494')
@@ -50,9 +54,9 @@ android {
         def admobInterId     = resolve('admobInterstitialId','ADMOB_INTERSTITIAL_ID','')
 
         manifestPlaceholders = [
-            sentryDsn:    sentryDsn,
-            admobAppId:   admobAppId,
-            arcoreApiKey: arcoreApiKey,
+            sentryDsn:        sentryDsn,
+            admobAppId:       admobAppId,
+            arcoreApiKey:     arcoreApiKey,
         ]
         buildConfigField "String", "SENTRY_DSN",            "\"${sentryDsn}\""
         buildConfigField "String", "ADMOB_APP_ID",          "\"${admobAppId}\""
@@ -71,6 +75,11 @@ android {
         // Stringhe/localizzazione: l'app usa solo italiano + inglese.
         resConfigs "it", "en"
     }
+
+    // La <meta-data> ARCore API_KEY è presente nel manifest principale con valore
+    // ${arcoreApiKey}. Se la key è vuota, il task 'stripArcoreApiKey*' la rimuove
+    // dal merged manifest, così ARCore usa la keyless authorization (OAuth client
+    // ID Android: package + SHA-1) che sblocca TTL Cloud Anchor fino a 365gg.
 
 signingConfigs {
     release {
@@ -195,4 +204,29 @@ sentry {
     includeNativeSources = false
     org = "pasquale-lembo"
     projectName = "android"
+}
+// Rimuove la <meta-data> ARCore API_KEY dal merged manifest quando ARCORE_API_KEY
+// è vuota, così ARCore usa la keyless authorization (OAuth client ID Android:
+// package + SHA-1) che sblocca TTL Cloud Anchor fino a 365gg.
+afterEvaluate {
+    android.applicationVariants.all { variant ->
+        def mergeTask = tasks.findByName("process${variant.name.capitalize()}Manifest")
+        if (mergeTask != null) {
+            def stripTask = tasks.register("stripArcoreApiKey${variant.name.capitalize()}") {
+                dependsOn mergeTask
+                doLast {
+                    def ak = resolve('arcoreApiKey', 'ARCORE_API_KEY', '')
+                    if (ak.isEmpty()) {
+                        def mf = file("${buildDir}/intermediates/merged_manifests/${variant.dirName}/AndroidManifest.xml")
+                        if (mf.exists()) {
+                            def text = mf.getText("UTF-8")
+                            text = text.replaceAll(~/<meta-data\s+android:name="com\.google\.android\.ar\.API_KEY"[^>]*\/>/, "")
+                            mf.write(text, "UTF-8")
+                        }
+                    }
+                }
+            }
+            mergeTask.finalizedBy(stripTask)
+        }
+    }
 }
