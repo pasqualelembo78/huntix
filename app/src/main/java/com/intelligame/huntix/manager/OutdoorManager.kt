@@ -78,6 +78,7 @@ class OutdoorManager private constructor() : SensorEventListener {
     fun start(ctx: Context) {
         if (listening) return
         appCtx = ctx.applicationContext
+        registerCompass(ctx)
         locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         val hasPerm = ContextCompat.checkSelfPermission(
             ctx, Manifest.permission.ACCESS_FINE_LOCATION

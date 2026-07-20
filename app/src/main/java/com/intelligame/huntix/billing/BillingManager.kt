@@ -58,6 +58,8 @@ object BillingManager {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d(TAG, "Billing connected")
+                    // Una volta pronti, sincronizza lo stato VIP persistito.
+                    appContext?.let { VipManager.syncVipStatus(it) }
                 } else {
                     Log.e(TAG, "Billing setup failed: ${result.debugMessage}")
                 }
@@ -205,8 +207,11 @@ object BillingManager {
     // ── Verifica abbonamento attivo ──────────────────────────────
 
     fun checkVipStatus(onResult: (Boolean) -> Unit) {
-        val client = billingClient ?: run { onResult(false); return }
-        if (!client.isReady) { onResult(false); return }
+        val client = billingClient ?: return
+        if (!client.isReady) return
+        // NOTA: se il client non e' pronto NON invochiamo onResult(false),
+        // altrimenti si azzerrebbe lo stato VIP locale prima che Play Billing
+        // abbia risposto (vedi VipManager.syncVipStatus).
 
         val params = QueryPurchasesParams.newBuilder()
             .setProductType(BillingClient.ProductType.SUBS)
