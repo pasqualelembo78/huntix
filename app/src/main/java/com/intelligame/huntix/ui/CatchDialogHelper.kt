@@ -24,7 +24,7 @@ object CatchDialogHelper {
     ) {
         val foods = EggFoodManager.getAvailableFoods(ctx)
         if (foods.isEmpty()) {
-            showTimingBar(ctx, 1f, 1f, onReady)
+            showSwipeCatch(ctx, egg, 1f, 1f, onReady)
             return
         }
 
@@ -41,21 +41,22 @@ object CatchDialogHelper {
             .setItems(items.toTypedArray()) { _, which ->
                 if (which == 0) {
                     EggFoodManager.resetEncounter()
-                    showTimingBar(ctx, 1f, 1f, onReady)
+                    showSwipeCatch(ctx, egg, 1f, 1f, onReady)
                 } else {
                     val food = foods[which - 1].first
                     val reaction = EggFoodManager.applyFood(ctx, food, egg.element)
                     val bonus = EggFoodManager.currentFoodBonus
                     val xpMul = EggFoodManager.currentXpMultiplier
-                    showTimingBar(ctx, bonus, xpMul, onReady)
+                    showSwipeCatch(ctx, egg, bonus, xpMul, onReady)
                 }
             }
             .setNegativeButton("Annulla", null)
             .show()
     }
 
-    private fun showTimingBar(
+    private fun showSwipeCatch(
         ctx: Context,
+        egg: WorldEgg,
         foodBonus: Float,
         xpMultiplier: Float,
         onReady: OnCatchReady
@@ -63,40 +64,38 @@ object CatchDialogHelper {
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(32, 24, 32, 8)
+            setPadding(16, 16, 16, 8)
         }
 
         val title = TextView(ctx).apply {
-            text = "Tocca per fermare nella zona dorata!"
-            textSize = 16f
+            text = "Swipe verso l'alto per lanciare il cestino!"
+            textSize = 14f
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 16)
+            setPadding(0, 0, 0, 8)
         }
 
-        val timingBar = CatchTimingBarView(ctx).apply {
+        val swipeView = SwipeToCatchView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                UiKit.dp(ctx, 64)
+                UiKit.dp(ctx, 280)
             )
+            setEggColor(egg.rarity.color)
         }
 
         container.addView(title)
-        container.addView(timingBar)
+        container.addView(swipeView)
 
         val dialog = AlertDialog.Builder(ctx)
             .setView(container)
-            .setCancelable(false)
+            .setCancelable(true)
             .create()
 
-        dialog.setOnShowListener {
-            timingBar.listener = object : CatchTimingBarView.OnTimingResult {
-                override fun onResult(success: Boolean, zoneMultiplier: Float) {
-                    dialog.dismiss()
-                    val effectiveBonus = if (success) foodBonus * zoneMultiplier else 0f
-                    onReady.onCatchReady(effectiveBonus, xpMultiplier)
-                }
+        swipeView.listener = object : SwipeToCatchView.OnThrowResult {
+            override fun onResult(quality: Float) {
+                val effectiveBonus = if (quality >= 0.3f) foodBonus * quality else 0f
+                dialog.dismiss()
+                onReady.onCatchReady(effectiveBonus, xpMultiplier)
             }
-            timingBar.startTiming()
         }
 
         dialog.show()

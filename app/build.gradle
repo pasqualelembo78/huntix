@@ -166,10 +166,8 @@ dependencies {
     implementation "com.google.guava:guava:32.1.3-android"
 
     // ── Mappa ───────────────────────────────────────────────────
-    // NOTA: la dipendenza Mapbox è stata rimossa perché mai utilizzata nel codice
-    // (nessun import com.mapbox e nessuna MapView). La "Mappa del Mondo" usa il
-    // radar AR disegnato a mano (OutdoorRadarView). Se serve una vera mappa a
-    // tile, reintegrare com.mapbox.maps:android e cablare una MapView qui.
+    implementation 'com.google.android.gms:play-services-maps:19.0.0'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 
     implementation 'io.sentry:sentry-android:7.14.0'
     implementation 'io.sentry:sentry-android-okhttp:7.14.0'

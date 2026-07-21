@@ -112,11 +112,22 @@ class OutdoorHuntActivity : BaseNavActivity() {
     }
 
     private fun doCatch() {
-        val res = mgr.tryCatch(this, eggId)
-        Toast.makeText(this, res.message, Toast.LENGTH_LONG).show()
-        if (res.success) {
-            distText.text = "✅ Catturato!"
+        val egg = mgr.getEgg(eggId) ?: return
+        if (egg.found) {
+            Toast.makeText(this, "Già catturato", Toast.LENGTH_SHORT).show()
+            return
         }
-        update()
+        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
+            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
+                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
+                val res = mgr.tryCatch(this@OutdoorHuntActivity, eggId, effectiveBonus)
+                Toast.makeText(this@OutdoorHuntActivity, res.message, Toast.LENGTH_LONG).show()
+                if (res.success && res.egg != null) {
+                    distText.text = "✅ Catturato!"
+                    EggOpeningAnimationActivity.start(this@OutdoorHuntActivity, res.egg.rarity, res.egg.name, res.egg.rarity.xpReward)
+                }
+                update()
+            }
+        })
     }
 }

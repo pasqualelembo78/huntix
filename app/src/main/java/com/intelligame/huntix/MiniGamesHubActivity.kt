@@ -50,9 +50,10 @@ class MiniGamesHubActivity : BaseNavActivity() {
         val c = this
         games.forEach { g ->
             if (!g.limitPlays) {
-                box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}", UiKit.PURPLE) {
-                    startActivity(Intent(c, g.cls))
-                })
+            box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}", UiKit.PURPLE) {
+                com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(c, "play_minigame")
+                startActivity(Intent(c, g.cls))
+            })
                 return@forEach
             }
             val remaining = try { MiniGameManager.remainingPlays(c, g.id) } catch (_: Exception) { 3 }

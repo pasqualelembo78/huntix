@@ -13,11 +13,11 @@ import org.json.JSONObject
  *  MAX  → fusione di 3 × Lv.3              (8x mining)
  *
  * Mining power base per rarità (h/s):
- *  COMMON    → 1.0e-9 h/s
- *  UNCOMMON  → 3.0e-9 h/s
- *  RARE      → 1.0e-8 h/s
- *  EPIC      → 5.0e-8 h/s
- *  LEGENDARY → 2.0e-7 h/s
+ *  COMMON    → 0.01  h/s   (~0.02 MVC/giorno)
+ *  UNCOMMON  → 0.03  h/s   (~0.07 MVC/giorno)
+ *  RARE      → 0.10  h/s   (~0.24 MVC/giorno)
+ *  EPIC      → 0.30  h/s   (~0.72 MVC/giorno)
+ *  LEGENDARY → 1.00  h/s   (~2.4 MVC/giorno)
  */
 data class HatchedEgg(
     val instanceId:     String  = java.util.UUID.randomUUID().toString().take(12),
@@ -83,11 +83,11 @@ data class HatchedEgg(
         )
 
         fun baseMiningPower(rarity: EggRarity): Double = when (rarity) {
-            EggRarity.COMMON    -> 1.0e-9
-            EggRarity.UNCOMMON  -> 3.0e-9
-            EggRarity.RARE      -> 1.0e-8
-            EggRarity.EPIC      -> 5.0e-8
-            EggRarity.LEGENDARY -> 2.0e-7
+            EggRarity.COMMON    -> 0.01
+            EggRarity.UNCOMMON  -> 0.03
+            EggRarity.RARE      -> 0.10
+            EggRarity.EPIC      -> 0.30
+            EggRarity.LEGENDARY -> 1.00
         }
 
         fun formatHps(hps: Double): String = when {

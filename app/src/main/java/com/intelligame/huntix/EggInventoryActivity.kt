@@ -20,7 +20,10 @@ class EggInventoryActivity : BaseNavActivity() {
         val items = EggInventoryManager.getInventory(c)
         val children = mutableListOf<android.view.View>(
             UiKit.title(c, "Inventario Uova", "🎒"),
-            UiKit.subtitle(c, "Tocca un'uovo per aggiungerla/rimuoverla dalla squadra di battaglia.")
+            UiKit.subtitle(c, "Tocca un'uovo per aggiungerla/rimuoverla dalla squadra di battaglia."),
+            UiKit.button(c, "⚔️  Vai in Battaglia", UiKit.PURPLE) {
+                startActivity(android.content.Intent(c, com.intelligame.huntix.ui.BattleActivity::class.java))
+            }
         )
         if (items.isEmpty()) {
             children.add(UiKit.comingSoon(c, "Inventario vuoto", "Ottieni uova giocando in Indoor o Outdoor!"))

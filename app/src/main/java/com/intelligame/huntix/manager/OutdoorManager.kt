@@ -42,7 +42,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         private var instance: OutdoorManager? = null
         fun get(): OutdoorManager = instance ?: OutdoorManager().also { instance = it }
 
-        private const val BASE_CATCH_RADIUS_M = 33f
+        private const val BASE_CATCH_RADIUS_M = 50f
         private const val DEFAULT_LAT = 41.9028
         private const val DEFAULT_LNG = 12.4964
         private const val RESPAWN_THRESHOLD_M = 150f
@@ -359,8 +359,26 @@ class OutdoorManager private constructor() : SensorEventListener {
         val added = EggInventoryManager.addEgg(ctx, EggInventoryItem.fromWorldEgg(caught))
         PlayerProfileManager.recordEggCatch(caught.rarity) { }
         PlayerProfileManager.markHasPlayedOutdoor()
-        val msg = if (added) "Catturato! ${caught.displayLabel}"
-        else "Catturato ma inventario pieno!"
+        val mvcReward = when (caught.rarity) {
+            EggRarity.COMMON -> 5.0
+            EggRarity.UNCOMMON -> 15.0
+            EggRarity.RARE -> 40.0
+            EggRarity.EPIC -> 100.0
+            EggRarity.LEGENDARY -> 250.0
+        }
+        com.intelligame.huntix.managers.SavedManager.addMvc(ctx, mvcReward)
+        // Track research tasks
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_3")
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_20")
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "earn_500_mvc", mvcReward.toInt())
+        if (caught.rarity.ordinal >= EggRarity.RARE.ordinal) {
+            com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_rare")
+        }
+        if (caught.rarity.ordinal >= EggRarity.EPIC.ordinal) {
+            com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "find_epic")
+        }
+        val msg = if (added) "Catturato! ${caught.displayLabel} +${mvcReward.toInt()} MVC"
+        else "Catturato ma inventario pieno! +${mvcReward.toInt()} MVC"
         return CatchResult(true, msg, caught)
     }
 

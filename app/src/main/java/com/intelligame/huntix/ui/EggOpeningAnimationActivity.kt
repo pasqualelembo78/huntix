@@ -345,6 +345,19 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         }
         upgradePanel.addView(skipUpgrade)
 
+        val battleBtn = TextView(this).apply {
+            text = "⚔️ Vai in Battaglia!"
+            textSize = 14f
+            setTextColor(Color.parseColor("#FFD700"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+            setOnClickListener {
+                startActivity(Intent(this@EggOpeningAnimationActivity, BattleActivity::class.java))
+                finishWithResult(rarity)
+            }
+        }
+        upgradePanel.addView(battleBtn)
+
         ObjectAnimator.ofFloat(upgradePanel, "alpha", 0f, 1f).apply { duration = 500; start() }
     }
 

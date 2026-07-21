@@ -45,5 +45,12 @@ class EggHuntApplication : Application() {
         } catch (e: Exception) {
             Log.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
         }
+
+        // Starter kit cibo: 5 Mele + 3 Peperoncini (una tantum)
+        try {
+            EggFoodManager.giveStarterKit(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "Starter kit failed: ${e.message}")
+        }
     }
 }

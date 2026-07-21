@@ -19,6 +19,7 @@ import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.ui.*
 import com.intelligame.huntix.billing.VipManager
 import com.intelligame.huntix.managers.SavedManager
+import com.intelligame.huntix.managers.DistanceTracker
 import android.widget.Toast
 
 /**
@@ -39,7 +40,16 @@ class HomeActivity : BaseNavActivity() {
         try {
             SavedManager.accrueInstallRewards(this)
             SavedManager.accrueMiningRewards(this)
+            // Start distance tracking for incubators
+            if (!DistanceTracker.isListening(this)) {
+                DistanceTracker.startListening(this) { /* handled internally */ }
+            }
         } catch (_: Exception) {}
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { DistanceTracker.stopListening(this) } catch (_: Exception) {}
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,13 +84,6 @@ class HomeActivity : BaseNavActivity() {
         header.addView(resourceChip("\u26CF\uFE0F", "${profile?.let { HatchedEgg.formatMvc(SavedManager.getMvcBalance(this)) } ?: "0"} MVC", "#00FF88"))
         header.addView(spacer())
         header.addView(resourceChip("\uD83D\uDC8E", "${profile?.gems ?: 0}", "#00BCD4"))
-        header.addView(spacer())
-        // Settings gear
-        header.addView(TextView(this).apply {
-            text = "\u2699\uFE0F"; textSize = 18f; gravity = Gravity.CENTER
-            setPadding(dp(8), 0, 0, 0)
-            setOnClickListener { startActivity(Intent(this@HomeActivity, SettingsActivity::class.java)) }
-        })
         root.addView(header)
 
         // ═══ 2. AVATAR AREA (prominente) ═══
@@ -170,6 +173,15 @@ class HomeActivity : BaseNavActivity() {
         row2.addView(spacerH(dp(8)))
         row2.addView(gameTile("\uD83D\uDC65", "REAL LIFE", "Persone vere", "#00897B", "#004D40") { startActivity(Intent(this, RealLifeActivity::class.java)) })
         grid.addView(row2)
+        // Row 3
+        val row3 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW)
+        }
+        row3.addView(gameTile("\uD83E\uDD5A", "UOVA", "Incubatrici e schiusa", "#9C27B0", "#4A148C") { startActivity(Intent(this, HatchingActivity::class.java)) })
+        row3.addView(spacerH(dp(8)))
+        row3.addView(gameTile("\uD83C\uDFDF\uFE0F", "RAID", "Boss battles", "#D32F2F", "#B71C1C") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
+        grid.addView(row3)
         root.addView(grid)
 
         // ═══ 5. QUICK ACCESS ROW ═══
@@ -177,14 +189,27 @@ class HomeActivity : BaseNavActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
         }
-        quickRow.addView(quickChip("\uD83C\uDFAF", "Missioni", "#00E5FF") { startActivity(Intent(this, QuestActivity::class.java)) })
+        quickRow.addView(quickChip("\uD83D\uDCD3", "Pokédex", "#00E5FF") { startActivity(Intent(this, PokedexActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))
-        quickRow.addView(quickChip("\uD83C\uDFEA", "Negozio", "#E65100") { startActivity(Intent(this, ShopActivity::class.java)) })
+        quickRow.addView(quickChip("\uD83D\uDDD3\uFE0F", "Streak", "#FFD700") { startActivity(Intent(this, DailyStreakActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))
-        quickRow.addView(quickChip("\uD83D\uDC65", "Squadra", "#6A1B9A") { startActivity(Intent(this, TeamActivity::class.java)) })
+        quickRow.addView(quickChip("\uD83D\uDCCB", "Missioni", "#00E5FF") { startActivity(Intent(this, ResearchTaskActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))
-        quickRow.addView(quickChip("\uD83C\uDFC6", "Classifica", "#FF3366") { startActivity(Intent(this, GamifiedLeaderboardActivity::class.java)) })
+        quickRow.addView(quickChip("\uD83C\uDFDF\uFE0F", "Raid", "#FF3366") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
         root.addView(quickRow)
+
+        val quickRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
+        }
+        quickRow2.addView(quickChip("\uD83C\uDFEA", "Negozio", "#E65100") { startActivity(Intent(this, ShopActivity::class.java)) })
+        quickRow2.addView(spacerH(dp(6)))
+        quickRow2.addView(quickChip("\uD83D\uDC65", "Squadra", "#6A1B9A") { startActivity(Intent(this, TeamActivity::class.java)) })
+        quickRow2.addView(spacerH(dp(6)))
+        quickRow2.addView(quickChip("\uD83C\uDFC6", "Classifica", "#FF3366") { startActivity(Intent(this, GamifiedLeaderboardActivity::class.java)) })
+        quickRow2.addView(spacerH(dp(6)))
+        quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666") { startActivity(Intent(this, SettingsActivity::class.java)) })
+        root.addView(quickRow2)
 
         setContentView(scroll)
 

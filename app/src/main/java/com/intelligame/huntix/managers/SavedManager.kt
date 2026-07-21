@@ -308,6 +308,9 @@ object SavedManager {
         saveHatchingSlots(ctx, slots)
         removePendingEgg(ctx, item.instanceId)
         EggInventoryManager.removeEgg(ctx, item.instanceId)
+        // Track research tasks
+        ResearchTaskManager.trackProgress(ctx, "hatch_1")
+        ResearchTaskManager.trackProgress(ctx, "hatch_5")
         return true
     }
 

@@ -46,7 +46,9 @@ class SplashActivity : AppCompatActivity() {
 
             val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
             val target = if (login != null && tryAutoLogin(login)) {
-                HomeActivity::class.java
+                val tutorialDone = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                    .getBoolean("tutorial_done", false)
+                if (tutorialDone) HomeActivity::class.java else TutorialActivity::class.java
             } else {
                 LoginActivity::class.java
             }

@@ -177,6 +177,8 @@ object EggFoodManager {
         currentAppliedFood = food
         currentFoodBonus = calculateCatchBonus(food, eggElement)
         currentXpMultiplier = food.xpMultiplier
+        // Track research tasks
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "spend_food")
         return getReaction(food, eggElement)
     }
 
@@ -187,11 +189,15 @@ object EggFoodManager {
     }
 
     /**
-     * Starter kit DISABILITATO — i cibi si ottengono solo dal negozio.
-     * Il giocatore inizia senza nessun cibo.
+     * Starter kit: 5 Mele Dolci + 3 Peperoncini Ardenti.
+     * Il giocatore deve poter giocare dal primo minuto.
      */
     fun giveStarterKit(ctx: Context) {
-        // Starter kit rimosso: il giocatore deve acquistare cibi dal negozio.
-        // Il menu cibo mostrerà "Nessun cibo — vai al negozio!"
+        val p = prefs(ctx)
+        val migratedKey = "starter_kit_given"
+        if (p.getBoolean(migratedKey, false)) return
+        addQuantity(ctx, EggFood.MELA_DOLCE, 5)
+        addQuantity(ctx, EggFood.PEPERONCINO, 3)
+        p.edit().putBoolean(migratedKey, true).apply()
     }
 }

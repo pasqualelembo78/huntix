@@ -105,7 +105,7 @@ enum class EggRarity(
         basePower    = 1000,
         xpReward     = 2500,
         spawnWeight  = 2,
-        catchRadius  = 0.15f,
+        catchRadius  = 0.30f,
         catchSpeed   = 0.90f,
         ttlMinutes   = 15,
         namePool     = listOf(

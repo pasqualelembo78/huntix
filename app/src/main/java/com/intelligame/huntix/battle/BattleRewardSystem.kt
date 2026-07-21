@@ -48,6 +48,11 @@ object BattleRewardSystem {
         }
         if (reward.mvcGained > 0) {
             SavedManager.addMvc(context, reward.mvcGained.toDouble())
+            // Track research tasks
+            com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "earn_500_mvc", reward.mvcGained)
         }
+        // Track battle quests
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_battle")
+        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_5_battles")
     }
 }

@@ -29,6 +29,7 @@ class OutdoorModeActivity : BaseNavActivity() {
             UiKit.subtitle(c, "Esplora la mappa, cattura uova GPS e completa le palestre."),
             UiKit.card(c, UiKit.row(c, "Permesso GPS", if (hasGps) "✅ Attivo" else "⚠️ Negato")),
             UiKit.button(c, "🗺️  Mappa del Mondo", UiKit.ACCENT) {
+                com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(c, "play_outdoor")
                 startActivity(Intent(c, OutdoorWorldActivity::class.java))
             },
             UiKit.button(c, "🥚  Caccia (Hunt)", UiKit.PURPLE) {
