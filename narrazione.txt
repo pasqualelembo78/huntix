@@ -104,7 +104,9 @@ MODELLO DATI — "SIMS" CHAT-DRIVEN
 INTEGRAZIONE CON HUNTIX
 ================================================================================
   • Home → tab REAL LIFE → RealLifeActivity (sottomenu).
-  • RealLifeActivity chiama /characters e /chat del backend Huntix (porta 5100).
+  • RealLifeActivity: /characters, /chat, world state, mappa 2D, bottone "Città 3D".
+  • CityActivity: città proceduralmente generata (SceneView non-AR / Filament),
+    player navigabile col touch, ponte futuro verso NPC visibili + chat.
   • Battaglia è in Minigiochi (MiniGamesHubActivity).
   • Economia MVC condivisa tra uova, battaglia, minigiochi e Real Life.
   • Ponti futuri: uovo raro → personaggio sbloccabile; vittoria battaglia →
@@ -114,6 +116,7 @@ INTEGRAZIONE CON HUNTIX
 FLUSSO TIPICO (utente)
 ================================================================================
   1. Home → REAL LIFE
+  1b. (opzionale) → Esplora Città 3D (CityActivity, prototipo 3D standalone)
   2. Sceglie un personaggio (lista da /characters, filtrata per categoria/MVC)
   3. Apre la chat → app chiama backend /chat (JWT + character_id + testo)
   4. Backend: chat_engine.process_message → provider LLM (Groq default)
@@ -142,8 +145,14 @@ ROADMAP (incrementale)
           per categoria) + RealLifeChatActivity (chat, history in sessione).
           Nota: /chat backend ritorna JSON intero (non streaming); implementato
           non-streaming. Verificato end-to-end (local-login -> /chat -> Groq).
-  Fase B: bisogni/skill lato backend; world state visibile; mappa/città 2D minima
-  Fase C: group chat multi-NPC; immagini via PEXELS_API_KEY; evoluzione personalità
+  Fase B: bisogni/skill lato backend [FATTO]; world state visibile [FATTO];
+          mappa 2D minima [FATTO]; città 3D prototipo [FATTO 2026-07-20]
+          CityActivity — scena 3D non-AR (SceneView/Filament) con città
+          proceduralmente generata (edifici, strade, marciapiedi), player
+          navigabile col touch via ray-plane intersection. Accessibile da
+          RealLifeActivity → bottone "Esplora Città 3D".
+  Fase C: group chat multi-NPC; immagini via PEXELS_API_KEY; evoluzione personalità;
+          NPC visibili sulla città 3D; collisioni edifici; giorno/notte dal world_state
 
 ================================================================================
 FILE / MODULI DI RIFERIMENTO (huntix)
@@ -159,3 +168,5 @@ FILE / MODULI DI RIFERIMENTO (huntix)
   huntix/backend/.env                       CHIAVI/PROVIDER (gitignorato)
   huntix/backend/requirements.txt           dipendenze Python
   app/build.gradle, build_release.sh        build Android + avvio backend
+  app/.../ui/CityActivity.kt               città 3D prototipo (SceneView non-AR)
+  app/.../ui/RealLifeActivity.kt            hub Real Life + launch CityActivity

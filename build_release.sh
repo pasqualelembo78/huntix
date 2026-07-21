@@ -320,6 +320,175 @@ echo ">> AAB:          $AAB_FILE"
 #  ma ricondotta al backend PROPRIO di Huntix in `backend/`.
 #  Crea il venv, installa le dipendenze e avvia uvicorn su PORT (5100).
 # ════════════════════════════════════════════════════════════════
+# ── Verifica/apre la porta nel firewall (ufw) ──────────────
+# Il backend Real Life ascolta su PORT (default 5100). Se il firewall (ufw)
+# è attivo e NON ha una regola per quella porta, né emulatore né dispositivi
+# reali sulla LAN possono raggiungerla. Verifichiamo e, se serve, apriamo.
+ensure_fw_port() {
+    local PORT="$1"
+    if ! command -v ufw >/dev/null 2>&1; then
+        echo ">> ufw non presente: impossibile gestire il firewall (ignoro)."
+        return 0
+    fi
+    if ! ufw status 2>/dev/null | grep -qi "Status: active"; then
+        echo ">> ufw NON attivo: porta $PORT raggiungibile senza regole."
+        return 0
+    fi
+    if ufw status 2>/dev/null | grep -qw "$PORT/tcp"; then
+        echo ">> Firewall: porta $PORT/tcp già aperta. OK."
+    else
+        echo ">> Firewall: porta $PORT/tcp CHIUSA. Apro (ufw allow)..."
+        ufw allow "$PORT/tcp" comment "Huntix Real Life backend (auto build_release.sh)" \
+            && echo ">> Firewall: porta $PORT/tcp aperta." \
+            || echo "!! Firewall: impossibile aprire $PORT/tcp (esegui lo script come root?)."
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Dipendenze backend: check → install → activate (idempotente)
+#  Garantisce che PostgreSQL (+DB huntix), Redis e (opzionale) Ollama siano
+#  presenti e attivi. Se mancano, li installa e avvia. Così build_release.sh
+#  è auto-sufficiente anche dopo un format/nuova macchina.
+# ─────────────────────────────────────────────────────────────────────────
+have_root() { [ "$(id -u)" -eq 0 ]; }
+
+ensure_postgres() {
+    echo ">> [dep] PostgreSQL..."
+    if ! command -v psql >/dev/null 2>&1; then
+        echo "   PostgreSQL assente — installo (apt-get)..."
+        have_root || { echo "!! serve root per installare PostgreSQL"; return 1; }
+        apt-get update -qq && apt-get install -y -qq postgresql postgresql-contrib
+    fi
+    # avvio servizio se non attivo
+    if ! pg_isready -q 2>/dev/null; then
+        echo "   Avvio PostgreSQL..."
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl enable postgresql >/dev/null 2>&1 || true
+            systemctl start postgresql >/dev/null 2>&1 || service postgresql start >/dev/null 2>&1 || true
+        else
+            service postgresql start >/dev/null 2>&1 || true
+        fi
+        sleep 2
+    fi
+    pg_isready -q 2>/dev/null && echo "   PostgreSQL ATTIVO." || echo "!! PostgreSQL NON raggiungibile."
+}
+
+ensure_redis() {
+    echo ">> [dep] Redis..."
+    if ! command -v redis-server >/dev/null 2>&1; then
+        echo "   Redis assente — installo (apt-get)..."
+        have_root || { echo "!! serve root per installare Redis"; return 1; }
+        apt-get update -qq && apt-get install -y -qq redis-server
+    fi
+    if ! redis-cli ping >/dev/null 2>&1; then
+        echo "   Avvio Redis..."
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl enable redis-server >/dev/null 2>&1 || true
+            systemctl start redis-server >/dev/null 2>&1 || service redis-server start >/dev/null 2>&1 || true
+        fi
+        # fallback: daemonize diretto
+        redis-cli ping >/dev/null 2>&1 || redis-server --daemonize yes >/dev/null 2>&1 || true
+        sleep 1
+    fi
+    redis-cli ping >/dev/null 2>&1 && echo "   Redis ATTIVO." || echo "!! Redis NON raggiungibile."
+}
+
+ensure_ollama() {
+    # Opzionale: condiviso con aria. Se non presente, il backend usa i provider cloud.
+    echo ">> [dep] Ollama (opzionale)..."
+    if [ -n "${OLLAMA_BASE:-}" ] && curl -s -o /dev/null -m 3 "$OLLAMA_BASE"; then
+        echo "   Ollama già raggiungibile (${OLLAMA_BASE})."
+        return 0
+    fi
+    if command -v ollama >/dev/null 2>&1; then
+        if ! curl -s -o /dev/null -m 3 "http://localhost:11434"; then
+            echo "   Avvio Ollama..."
+            (ollama serve >/tmp/ollama.log 2>&1 &) || true
+            sleep 2
+        fi
+        echo "   Ollama gestito (modelli locali opzionali)."
+    else
+        echo "   Ollama non installato — skip (il backend userà i provider cloud)."
+    fi
+}
+
+# Esegue psql come utente admin postgres (root via su, altrimenti sudo).
+pg_exec() {
+    local sql="$1"
+    if [ "$(id -u)" -eq 0 ]; then
+        su postgres -c "psql -tAc $(printf '%q' "$sql")"
+    else
+        sudo -u postgres psql -tAc "$sql"
+    fi
+}
+pg_createdb() {
+    local owner="$1" db="$2"
+    if [ "$(id -u)" -eq 0 ]; then
+        su postgres -c "createdb -O '$owner' '$db'"
+    else
+        sudo -u postgres createdb -O "$owner" "$db"
+    fi
+}
+
+# Crea ruolo + database Postgres se non esistono, coerenti con DATABASE_URL.
+ensure_pg_database() {
+    local URL="$1"
+    [ -z "$URL" ] && return 0
+    # parse postgresql://user:pass@host:port/db
+    local rest="${URL#postgresql://}"
+    local user="${rest%%:*}"
+    rest="${rest#*:}"; local pass="${rest%%@*}"
+    rest="${rest#*@}"; local host="${rest%%:*}"
+    rest="${rest#*:}"; local port="${rest%%/*}"
+    local db="${rest#*/}"
+    echo ">> [dep] Database Postgres '$db' (utente '$user')..."
+    if ! pg_isready -q 2>/dev/null; then echo "!! Postgres non attivo: impossibile creare il DB."; return 1; fi
+    if pg_exec "SELECT 1 FROM pg_roles WHERE rolname='$user'" | grep -q 1; then
+        echo "   Ruolo '$user' già esistente."
+    else
+        if [ "$(id -u)" -eq 0 ]; then
+            su postgres -c "psql -c \"CREATE ROLE $user LOGIN PASSWORD '$pass';\""
+        else
+            sudo -u postgres psql -c "CREATE ROLE $user LOGIN PASSWORD '$pass';"
+        fi
+        echo "   Ruolo '$user' creato."
+    fi
+    if pg_exec "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
+        echo "   Database '$db' già esistente."
+    else
+        pg_createdb "$user" "$db"
+        echo "   Database '$db' creato (owner '$user')."
+    fi
+}
+
+# Prepara backend/.env se mancante: da ENV (HUNTIX_DOTENV) o da .env.example.
+ensure_backend_env() {
+    if [ -f .env ]; then echo ">> [dep] backend/.env presente."; return 0; fi
+    echo ">> [dep] backend/.env assente — tento di ricrearlo..."
+    if [ -n "${HUNTIX_DOTENV:-}" ]; then
+        printf '%s\n' "$HUNTIX_DOTENV" > .env
+        echo "   .env creato da ENV HUNTIX_DOTENV."
+    elif [ -f .env.example ]; then
+        cp .env.example .env
+        echo "   .env creato da .env.example (controlla le chiavi!)."
+    else
+        # template minimo: il backend PARTE ma i provider cloud senza chiavi falliranno.
+        cat > .env <<'EOF'
+DATABASE_URL=postgresql://chatai:chatai_secret@localhost:5432/huntix
+REDIS_URL=redis://:f436958355c2375ee687c7d6ebe79c13b1fc978dd02f9ef5@localhost:6379/1
+JWT_SECRET=changeme_genera_un_secret_random
+PORT=5100
+CHAT_PROVIDER=groq
+GROQ_API_KEY=
+GEMINI_API_KEY=
+OLLAMA_BASE=http://localhost:11434
+FORCE_LOCAL_FIRST=0
+ENSEMBLE_ENABLED=1
+EOF
+        echo "!! .env di DEFAULT creato (SENZA API key): imposta le chiavi o esporta HUNTIX_DOTENV."
+    fi
+}
+
 start_huntix_backend() {
     echo "============================================================"
     echo " Backend Huntix (Real Life) — setup & avvio"
@@ -328,7 +497,23 @@ start_huntix_backend() {
     if [ ! -d "$BDIR" ]; then
         echo "!! Backend dir '$BDIR' non trovata, salto la fase backend."; return 0
     fi
+
+    # ── 1) Dipendenze di sistema (installa/avvia se mancano) ──
+    ensure_postgres
+    ensure_redis
+    ensure_ollama
+
     cd "$BDIR"
+
+    # ── 2) .env (ricrea da ENV/.example se assente) ──
+    ensure_backend_env
+
+    # ── 3) Database Postgres coerente con DATABASE_URL ──
+    local DB_URL
+    DB_URL=$(grep '^DATABASE_URL=' .env 2>/dev/null | cut -d= -f2-)
+    ensure_pg_database "$DB_URL"
+
+    # ── 4) venv + dipendenze Python ──
     if [ ! -d venv ]; then
         echo ">> Creo venv backend..."
         python3 -m venv venv
@@ -338,13 +523,15 @@ start_huntix_backend() {
         ./venv/bin/pip install --upgrade pip >/dev/null 2>&1 || true
         ./venv/bin/pip install -r requirements.txt 2>&1 | tail -8
     fi
-    if [ ! -f .env ]; then
-        echo "!! backend/.env assente — crealo con le chiavi. Backend NON avviato."
-        cd ..; return 0
-    fi
+
     local PORT
     PORT=$(grep '^PORT=' .env | cut -d= -f2-)
     PORT="${PORT:-5100}"
+
+    # ── 5) Firewall ──
+    ensure_fw_port "$PORT"
+
+    # ── 6) Avvio backend ──
     echo ">> Avvio backend huntix su porta $PORT ..."
     HUNTIX_BACKEND_PORT="$PORT" ./start_backend.sh >/dev/null 2>&1 &
     sleep 4

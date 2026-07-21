@@ -114,6 +114,12 @@ class OutdoorSetupActivity : BaseNavActivity() {
         root.addView(startBtn)
 
         val previewBtn = UiKit.button(this, "🗺️ Anteprima Mappa", UiKit.PURPLE) {
+            prefs.edit()
+                .putInt("radius", selectedRadius.toInt())
+                .putInt("eggs", selectedEggs.toInt())
+                .putBoolean("gyms", selectedGyms.toBoolean())
+                .putString("difficulty", selectedDifficulty)
+                .apply()
             startActivity(Intent(this, OutdoorWorldActivity::class.java))
         }
         previewBtn.layoutParams = LinearLayout.LayoutParams(

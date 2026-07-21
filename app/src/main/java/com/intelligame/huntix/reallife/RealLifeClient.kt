@@ -173,4 +173,76 @@ object RealLifeClient {
             (m["message"] ?: m["error"] ?: m["detail"])?.toString()
         }.getOrNull()
     }
+
+    // ── Fase B: mondo / bisogni / skill / mappa ──────────────
+
+    /** Stato del mondo (data/ora/stagione/meteo). */
+    suspend fun getWorldState(): Result<WorldState> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("${RealLifeConfig.BASE_URL}/reallife/world").get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), WorldState::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Bisogni Sims del personaggio per l'utente corrente. */
+    suspend fun getNeeds(characterId: String, userId: String): Result<Needs> = withContext(Dispatchers.IO) {
+        val url = "${RealLifeConfig.BASE_URL}/reallife/needs?character_id=$characterId&user_id=$userId"
+        val req = Request.Builder().url(url).get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), Needs::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Skill dell'utente + catalogo. */
+    suspend fun getSkills(userId: String): Result<SkillsResponse> = withContext(Dispatchers.IO) {
+        val url = "${RealLifeConfig.BASE_URL}/reallife/skills?user_id=$userId"
+        val req = Request.Builder().url(url).get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), SkillsResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Mappa 2D della città con le posizioni degli NPC. */
+    suspend fun getMap(): Result<MapState> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("${RealLifeConfig.BASE_URL}/reallife/map").get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), MapState::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Dopo una chat: ricarica bisogni + XP skill. */
+    suspend fun interact(
+        characterId: String,
+        userId: String,
+        characterTags: List<String>
+    ): Result<InteractResponse> = withContext(Dispatchers.IO) {
+        val body = gson.toJson(mapOf(
+            "character_id" to characterId,
+            "user_id" to userId,
+            "character_tags" to characterTags,
+            "interaction" to "chat"
+        ))
+        val req = Request.Builder()
+            .url("${RealLifeConfig.BASE_URL}/reallife/interact")
+            .post(body.toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), InteractResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
 }

@@ -22,7 +22,7 @@ class POIInteractionActivity : BaseNavActivity() {
 
         val nameText = TextView(this).apply { textSize = 22f }
         val descText = TextView(this).apply { textSize = 15f }
-        val rewardText = TextView(this).apply { textSize = 16f ; setTextColor(0xFFFFEB3.toInt()) }
+        val rewardText = TextView(this).apply { textSize = 16f ; setTextColor(0xFFFFEB3B.toInt()) }
 
         val poi = mgr.getPois().firstOrNull { it.id == poiId }
         nameText.text = poi?.name ?: "POI non disponibile"
@@ -33,7 +33,7 @@ class POIInteractionActivity : BaseNavActivity() {
             UiKit.title(this, "Palestra", "🏟️"),
             UiKit.card(this, nameText, descText, rewardText),
             UiKit.button(this, "🌀 Spinna la palestra", UiKit.ACCENT) {
-                val msg = mgr.spinPoi(poiId)
+                val msg = mgr.spinPoi(this, poiId)
                 rewardText.text = msg
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             },

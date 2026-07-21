@@ -118,6 +118,11 @@ async def lifespan(application):
     init_db()
     init_group_chat_tables()
     try:
+        from reallife.store import init_reallife_tables
+        init_reallife_tables()
+    except Exception as e:
+        logger.error(f"init_reallife_tables FAILED (continuing): {e}")
+    try:
         init_provider()
     except Exception as e:
         logger.error(f"init_provider FAILED (continuing): {e}")
@@ -162,6 +167,7 @@ from app_routes.admin import router as admin_router
 from app_routes.group_chat import router as group_chat_router
 from app_routes.chat import router as chat_router
 from app_routes.users import router as users_router
+from app_routes.reallife import router as reallife_router
 
 app.include_router(public_router)
 app.include_router(auth_router)
@@ -173,6 +179,7 @@ app.include_router(admin_router)
 app.include_router(group_chat_router)
 app.include_router(chat_router)
 app.include_router(users_router)
+app.include_router(reallife_router)
 
 # ─── Socket.IO ───────────────────────────────────────────────────
 from app_socket import register_socket_handlers

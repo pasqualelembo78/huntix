@@ -12,7 +12,10 @@ import androidx.lifecycle.lifecycleScope
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.CharacterItem
+import com.intelligame.huntix.reallife.MapNode
+import com.intelligame.huntix.reallife.MapState
 import com.intelligame.huntix.reallife.RealLifeClient
+import com.intelligame.huntix.reallife.WorldState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,6 +31,8 @@ class RealLifeActivity : BaseNavActivity() {
     private lateinit var chipRow: LinearLayout
     private lateinit var listContainer: LinearLayout
     private lateinit var statusText: TextView
+    private lateinit var worldText: TextView
+    private lateinit var mapView: RealLifeMapView
 
     private var allCharacters: List<CharacterItem> = emptyList()
     private var currentCategory: String = "Tutti"
@@ -55,6 +60,23 @@ class RealLifeActivity : BaseNavActivity() {
             setPadding(0, UiKit.dp(c, 8), 0, 0)
         }
 
+        // ── World state bar (Fase B) ──
+        worldText = TextView(c).apply {
+            text = "🌍 …"
+            textSize = 12f
+            setTextColor(Color.parseColor("#FFD86B"))
+            setPadding(0, UiKit.dp(c, 6), 0, 0)
+        }
+
+        // ── Mappa 2D (Fase B) ──
+        mapView = RealLifeMapView(c).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, UiKit.dp(c, 200)
+            ).apply { bottomMargin = UiKit.dp(c, 8) }
+            setBackgroundColor(Color.parseColor("#0E0820"))
+            onNodeTap = { node -> openChat(node) }
+        }
+
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 12))
@@ -62,6 +84,11 @@ class RealLifeActivity : BaseNavActivity() {
         root.addView(UiKit.title(c, "Real Life", "\uD83D\uDC65"))
         root.addView(UiKit.subtitle(c,
             "Un mondo vivo sopra il gioco: parla con persone vere guidate da intelligenza artificiale."))
+        root.addView(worldText)
+        root.addView(UiKit.button(c, "Esplora Città 3D", "#FF6D00") {
+            startActivity(Intent(c, CityActivity::class.java))
+        })
+        root.addView(mapView)
         root.addView(chipRow)
         root.addView(statusText)
         root.addView(listContainer)
@@ -72,7 +99,29 @@ class RealLifeActivity : BaseNavActivity() {
         }
         setContentView(scroll)
 
+        loadWorldAndMap()
         loadCharacters()
+    }
+
+    private fun loadWorldAndMap() {
+        lifecycleScope.launch {
+            val world = withContext(Dispatchers.IO) { RealLifeClient.getWorldState() }.getOrNull()
+            world?.let { updateWorldBar(it) }
+            val map = withContext(Dispatchers.IO) { RealLifeClient.getMap() }.getOrNull()
+            map?.let { mapView.setMap(it) }
+        }
+    }
+
+    private fun updateWorldBar(w: WorldState) {
+        worldText.text = "🌍 ${w.date} · ${w.time} · ${w.season} · ${w.weather}"
+    }
+
+    private fun openChat(node: MapNode) {
+        startActivity(Intent(this, RealLifeChatActivity::class.java).apply {
+            putExtra("CHAR_ID", node.id)
+            putExtra("CHAR_NAME", node.name)
+            putExtra("CHAR_AVATAR", node.avatar.takeIf { it.length <= 2 } ?: "🙂")
+        })
     }
 
     private fun loadCharacters() {
@@ -221,6 +270,7 @@ class RealLifeActivity : BaseNavActivity() {
                     putExtra("CHAR_ID", char.id)
                     putExtra("CHAR_NAME", char.name)
                     putExtra("CHAR_AVATAR", (char.avatar ?: "🙂").takeIf { it.length <= 2 } ?: "🙂")
+                    putExtra("CHAR_TAGS", ArrayList(char.tags ?: emptyList()))
                 })
             }
         }

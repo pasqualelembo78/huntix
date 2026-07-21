@@ -9,7 +9,9 @@ data class WorldEgg(
     val displayLabel: String = "",
     val currentPower: Int = -1,
     val rarity: EggRarity = EggRarity.COMMON,
+    val element: EggElement = EggElement.NORMAL,
     val lat: Double = 0.0,
     val lng: Double = 0.0,
-    val found: Boolean = false
+    val found: Boolean = false,
+    val spawnedAt: Long = System.currentTimeMillis()
 )

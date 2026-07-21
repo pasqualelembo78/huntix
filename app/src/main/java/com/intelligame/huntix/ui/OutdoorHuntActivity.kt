@@ -30,6 +30,7 @@ class OutdoorHuntActivity : BaseNavActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         eggId = intent.getStringExtra("eggId") ?: mgr.nearestUnfoundEgg()?.id ?: ""
+        mgr.huntingEggId = eggId.ifEmpty { null }
 
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION)
             == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -73,6 +74,8 @@ class OutdoorHuntActivity : BaseNavActivity() {
 
     override fun onDestroy() {
         refresh.removeCallbacks(tick)
+        mgr.huntingEggId = null
+        mgr.stop()
         super.onDestroy()
     }
 
@@ -98,12 +101,12 @@ class OutdoorHuntActivity : BaseNavActivity() {
         distText.text = if (egg.found) "✅ Già catturato" else "${d.toInt()} m"
         hintText.text = when {
             egg.found -> "Torna alla mappa per un'altra uova."
-            d > OutdoorManager.CATCH_RADIUS_M -> "Avvicinati all'uovo per catturarlo."
+            d > mgr.getCatchRadiusM(egg) -> "Avvicinati all'uovo per catturarlo."
             else -> "Sei abbastanza vicino: premi Cattura!"
         }
         radar.headingDeg = mgr.getDeviceHeadingDeg()
         radar.blips = listOf(
-            OutdoorRadarView.Blip(mgr.bearingTo(egg), d, 0xFFFFEB3.toInt())
+            OutdoorRadarView.Blip(mgr.bearingTo(egg), d, 0xFFFFEB3B.toInt())
         )
         radar.invalidate()
     }

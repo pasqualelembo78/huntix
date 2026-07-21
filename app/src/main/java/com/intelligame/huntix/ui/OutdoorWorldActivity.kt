@@ -14,7 +14,9 @@ import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.WeatherType
 import com.intelligame.huntix.manager.OutdoorManager
+import com.intelligame.huntix.managers.WeatherZoneManager
 
 class OutdoorWorldActivity : BaseNavActivity() {
 
@@ -24,6 +26,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var radar: OutdoorRadarView
     private lateinit var eggList: LinearLayout
     private lateinit var poiList: LinearLayout
+    private lateinit var weatherText: android.widget.TextView
     private val refresh = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() { refreshUi(); refresh.postDelayed(this, 2000) }
@@ -38,16 +41,15 @@ class OutdoorWorldActivity : BaseNavActivity() {
             ActivityCompat.requestPermissions(
                 this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 101
             )
-        } else {
-            mgr.start(this)
         }
 
         radar = OutdoorRadarView(this)
-        eggList = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        poiList = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        eggList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        poiList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        weatherText = android.widget.TextView(this).apply {
+            textSize = 15f
+            setPadding(16, 8, 16, 8)
+            setTextColor(0xFFB0BEC5.toInt())
         }
 
         val radarHolder = FrameLayout(this).apply {
@@ -64,10 +66,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
             this,
             UiKit.title(this, "Mappa del Mondo", "🗺️"),
             UiKit.subtitle(this, "Cammina per trovare uova e palestre vicino a te."),
+            weatherText,
             radarHolder,
             UiKit.button(this, "🔄 Rigenera spawn", UiKit.PURPLE) {
                 mgr.currentLocation?.let { mgr.regenerate(it) }
                     ?: mgr.regenerate(mgr.defaultLocation())
+                refreshUi()
                 Toast.makeText(this, "Nuovi spawn generati", Toast.LENGTH_SHORT).show()
             },
             UiKit.section(this, "Uova vicine"),
@@ -93,12 +97,21 @@ class OutdoorWorldActivity : BaseNavActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            mgr.start(this)
-        } else {
+        if (requestCode == 101 && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Permesso GPS negato: usato spawn dimostrativo", Toast.LENGTH_LONG).show()
-            mgr.start(this)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        mgr.start(this)
+        if (!refresh.hasCallbacks(tick)) refresh.post(tick)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        refresh.removeCallbacks(tick)
+        mgr.stop()
     }
 
     override fun onDestroy() {
@@ -110,6 +123,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private fun refreshUi() {
         val blips = mutableListOf<OutdoorRadarView.Blip>()
         eggList.removeAllViews()
+        poiList.removeAllViews()
+
+        val w = WeatherZoneManager.currentWeather
+        val boostDesc = w.rarityBoost.entries.joinToString(", ") { (r, b) -> "$r ×${"%.1f".format(b)}" }
+        weatherText.text = "${w.emoji} ${w.displayName} — Bonus rarita': $boostDesc"
+
         mgr.getEggs().forEach { egg ->
             val d = mgr.distanceMeters(egg)
             blips.add(OutdoorRadarView.Blip(mgr.bearingTo(egg), d, rarityColor(egg.rarity)))
@@ -139,9 +158,22 @@ class OutdoorWorldActivity : BaseNavActivity() {
     }
 
     private fun doCatch(eggId: String) {
-        val res = mgr.tryCatch(this, eggId)
-        Toast.makeText(this, res.message, Toast.LENGTH_LONG).show()
-        refreshUi()
+        val egg = mgr.getEgg(eggId) ?: return
+        if (egg.found) {
+            Toast.makeText(this, "Gia' catturato", Toast.LENGTH_SHORT).show()
+            return
+        }
+        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
+            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
+                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
+                val res = mgr.tryCatch(this@OutdoorWorldActivity, eggId, effectiveBonus)
+                Toast.makeText(this@OutdoorWorldActivity, res.message, Toast.LENGTH_LONG).show()
+                if (res.success && res.egg != null) {
+                    EggOpeningAnimationActivity.start(this@OutdoorWorldActivity, res.egg.rarity, res.egg.name, res.egg.rarity.xpReward)
+                }
+                refreshUi()
+            }
+        })
     }
 
     private fun openHunt(eggId: String) {

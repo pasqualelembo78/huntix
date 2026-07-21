@@ -7,6 +7,29 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Mappa provider -> variabile d'ambiente che contiene la API key (backend/.env).
+# Usata da test_provider_connection per risolvere la chiave quando l'app
+# non la passa esplicitamente nel body (es. "Test modello" nell'UI).
+PROVIDER_ENV_KEY = {
+    "groq": "GROQ_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "together": "TOGETHER_API_KEY",
+    "cerebras": "CEREBRAS_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "deepinfra": "DEEPINFRA_API_KEY",
+    "fireworks": "FIREWORKS_API_KEY",
+    "sambanova": "SAMBANOVA_API_KEY",
+    "nebius": "NEBIUS_API_KEY",
+    "novita": "NOVITA_API_KEY",
+    "inference": "INFERENCE_API_KEY",
+    "huggingface": "HUGGINGFACE_API_KEY",
+    "github": "GITHUB_TOKEN",
+}
+
 
 def init_provider():
     from ai_engine.registry import DEFAULT_PROVIDER, DEFAULT_MODEL, PROVIDERS
@@ -70,7 +93,12 @@ def _apply_defaults(provider, model):
 
 def test_provider_connection(provider_id, api_key):
     if not api_key:
-        return False, "Nessuna API key fornita"
+        # Fallback su backend/.env (caricato in os.environ) se l'app non passa la chiave.
+        env_name = PROVIDER_ENV_KEY.get(provider_id)
+        if env_name:
+            api_key = os.environ.get(env_name, "")
+    if not api_key:
+        return False, "Nessuna API key configurata per il provider (controlla backend/.env)"
     try:
         if provider_id == "groq":
             resp = requests.get(
@@ -87,6 +115,12 @@ def test_provider_connection(provider_id, api_key):
         elif provider_id == "openrouter":
             resp = requests.get(
                 "https://openrouter.ai/api/v1/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10
+            )
+        elif provider_id == "mistral":
+            resp = requests.get(
+                "https://api.mistral.ai/v1/models",
                 headers={"Authorization": f"Bearer {api_key}"},
                 timeout=10
             )

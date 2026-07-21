@@ -67,3 +67,60 @@ data class AuthUser(
     @SerializedName("role") val role: String = "",
     @SerializedName("email") val email: String? = null
 )
+
+// ── Fase B: mondo vivo ───────────────────────────────────────
+data class WorldState(
+    @SerializedName("date") val date: String = "",
+    @SerializedName("time") val time: String = "",
+    @SerializedName("season") val season: String = "",
+    @SerializedName("weather") val weather: String = ""
+)
+
+// ── Fase B: bisogni stile Sims ──────────────────────────────
+data class Needs(
+    @SerializedName("user_id") val userId: String = "",
+    @SerializedName("character_id") val characterId: String = "",
+    @SerializedName("hunger") val hunger: Double = 0.0,
+    @SerializedName("sleep") val sleep: Double = 0.0,
+    @SerializedName("hygiene") val hygiene: Double = 0.0,
+    @SerializedName("social") val social: Double = 0.0,
+    @SerializedName("fun") val funLevel: Double = 0.0
+)
+
+// ── Fase B: skill ───────────────────────────────────────────
+data class Skill(
+    @SerializedName("id") val id: String = "",
+    @SerializedName("name") val name: String = "",
+    @SerializedName("desc") val desc: String = "",
+    @SerializedName("tag") val tag: String = "",
+    @SerializedName("level") val level: Int = 0,
+    @SerializedName("xp") val xp: Int = 0,
+    @SerializedName("unlocked") val unlocked: Boolean = false
+)
+data class SkillsResponse(
+    @SerializedName("user_id") val userId: String = "",
+    @SerializedName("skills") val skills: List<Skill> = emptyList()
+)
+
+// ── Fase B: mappa 2D ────────────────────────────────────────
+data class MapNode(
+    @SerializedName("id") val id: String = "",
+    @SerializedName("x") val x: Double = 0.0,
+    @SerializedName("y") val y: Double = 0.0,
+    @SerializedName("zone") val zone: String = "",
+    @SerializedName("name") val name: String = "",
+    @SerializedName("avatar") val avatar: String = "",
+    @SerializedName("category") val category: String = ""
+)
+data class MapState(
+    @SerializedName("width") val width: Int = 100,
+    @SerializedName("height") val height: Int = 100,
+    @SerializedName("nodes") val nodes: List<MapNode> = emptyList()
+)
+
+// ── Fase B: risposta interact ───────────────────────────────
+data class InteractResponse(
+    @SerializedName("needs") val needs: Needs? = null,
+    @SerializedName("skills_leveled_up") val skillsLeveledUp: List<String> = emptyList(),
+    @SerializedName("skills") val skills: SkillsResponse? = null
+)

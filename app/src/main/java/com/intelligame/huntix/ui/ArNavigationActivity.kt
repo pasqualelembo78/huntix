@@ -19,41 +19,38 @@ import androidx.core.content.ContextCompat
 import com.google.ar.core.Config
 import com.google.ar.core.TrackingState
 import com.intelligame.huntix.R
+import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.WorldEgg
+import com.intelligame.huntix.manager.GeospatialAnchorManager
 import com.intelligame.huntix.manager.OutdoorManager
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Scale
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 
-/**
- * ArNavigationActivity — navigazione AR del mondo outdoor.
- *
- * Mostra il feed camera in realtà aumentata (ARSceneView, già in dipendenze → 0 MB extra)
- * con una freccia 3D fluttuante ancorata alla camera che indica la direzione verso
- * l'uovo più vicino (calcolata da bussola + bearing GPS), e fa "fluttuare" un uovo
- * davanti al giocatore quando è abbastanza vicino da poterlo catturare.
- */
 class ArNavigationActivity : AppCompatActivity() {
 
     companion object {
-        private const val REVEAL_RADIUS_M = 60f   // entro cui compare l'uovo fluttuante
-        private val ARROW_COLOR = 0xFFFDD835.toInt() // giallo
+        private const val REVEAL_RADIUS_M = 60f
+        private val ARROW_COLOR = 0xFFFDD835.toInt()
     }
 
     private val mgr by lazy { OutdoorManager.get() }
+    private val geoMgr = GeospatialAnchorManager()
 
     private lateinit var sceneView: ARSceneView
     private lateinit var overlay: FrameLayout
 
     private var arrowNode: Node? = null
-    private var eggNode: SphereNode? = null
-    private var currentEggId: String? = null
+    @Volatile private var eggNode: SphereNode? = null
+    @Volatile private var currentEggId: String? = null
     private var trackingReady = false
     private var bobT = 0.0
 
+    private lateinit var compassArrow: CompassArrowView
     private lateinit var targetText: TextView
     private lateinit var hintText: TextView
     private lateinit var catchBtn: Button
@@ -78,7 +75,7 @@ class ArNavigationActivity : AppCompatActivity() {
     }
     private val requestCam = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* ARCore gestisce il sessione; senza camera non parte il tracking */ }
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,23 +83,35 @@ class ArNavigationActivity : AppCompatActivity() {
 
         sceneView = findViewById(R.id.sceneView)
         overlay = findViewById(R.id.arOverlay)
+        sceneView.lifecycle = lifecycle
+        mgr.huntingEggId = mgr.nearestUnfoundEgg()?.id
         buildHud()
         configureSession()
 
-        sceneView.onSessionUpdated = { _, frame ->
+        sceneView.onSessionUpdated = { session, frame ->
             if (!trackingReady) {
                 if (frame.camera.trackingState == TrackingState.TRACKING) {
                     trackingReady = true
                     onTrackingReady()
                 }
             }
-            // freccia sempre aggiornata ad ogni frame (fluida col movimento)
-            updateArrow()
-            // bob dell'uovo fluttuante
-            eggNode?.let { node ->
-                bobT += 0.06
-                val y = (-0.3f + 0.06f * Math.sin(bobT).toFloat())
-                node.position = Position(0f, y, -1.3f)
+            val wasTracking = geoMgr.isTracking()
+            geoMgr.updateEarthState(session)
+
+            if (geoMgr.isTracking()) {
+                updateGeospatialAnchors()
+            } else if (wasTracking) {
+                geoMgr.removeAll()
+                currentEggId = null
+                eggNode = null
+            } else {
+                updateArrow3D()
+                showEggNode(mgr.nearestUnfoundEgg()?.takeIf { mgr.distanceMeters(it) <= 80f })
+                eggNode?.let { node ->
+                    bobT += 0.06
+                    val y = (-0.3f + 0.06f * Math.sin(bobT).toFloat())
+                    node.position = Position(0f, y, -1.3f)
+                }
             }
         }
 
@@ -132,6 +141,9 @@ class ArNavigationActivity : AppCompatActivity() {
         sceneView.configureSession { session, config ->
             config.planeFindingMode = Config.PlaneFindingMode.DISABLED
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
+            config.focusMode = Config.FocusMode.AUTO
+            config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+            geoMgr.configureSession(session, config)
         }
     }
 
@@ -140,28 +152,59 @@ class ArNavigationActivity : AppCompatActivity() {
         val mat = sceneView.materialLoader.createColorInstance(ARROW_COLOR)
 
         val arrow = Node(sceneView.engine)
-        val shaft = SphereNode(sceneView.engine, 0.1f, materialInstance = mat).apply {
-            scale = Scale(0.3f, 0.3f, 1.2f)
-            position = Position(0f, 0f, -0.2f)
+        val shaft = SphereNode(sceneView.engine, 0.15f, materialInstance = mat).apply {
+            scale = Scale(0.35f, 0.35f, 1.5f)
+            position = Position(0f, 0f, -0.3f)
         }
-        val head = SphereNode(sceneView.engine, 0.13f, materialInstance = mat).apply {
-            position = Position(0f, 0f, -0.5f)
+        val head = SphereNode(sceneView.engine, 0.2f, materialInstance = mat).apply {
+            position = Position(0f, 0f, -0.7f)
         }
         arrow.addChildNode(shaft)
         arrow.addChildNode(head)
-        arrow.position = Position(0f, -0.1f, -0.8f)
+        arrow.position = Position(0f, -0.05f, -0.6f)
 
         sceneView.cameraNode.addChildNode(arrow)
         arrowNode = arrow
     }
 
-    private fun updateArrow() {
+    private fun updateGeospatialAnchors() {
+        if (!geoMgr.isTracking()) return
+        val egg = mgr.nearestUnfoundEgg() ?: return
+        if (egg.found) return
+        if (currentEggId == egg.id) return
+
+        currentEggId?.let { geoMgr.removeAnchor(it) }
+        eggNode?.let { it.parent?.removeChildNode(it) }
+        eggNode = null
+
+        val anchor = geoMgr.createAnchorForEgg(egg) ?: return
+        val anchorNode = AnchorNode(sceneView.engine, anchor).apply { isVisible = true }
+        sceneView.addChildNode(anchorNode)
+        geoMgr.registerAnchor(egg.id, anchor)
+        val mat = sceneView.materialLoader.createColorInstance(egg.rarity.color)
+        val sphere = SphereNode(sceneView.engine, 0.25f, materialInstance = mat)
+        anchorNode.addChildNode(sphere)
+        val glowColor = android.graphics.Color.argb(
+            (0.3f * 255).toInt(),
+            android.graphics.Color.red(egg.rarity.glowColor),
+            android.graphics.Color.green(egg.rarity.glowColor),
+            android.graphics.Color.blue(egg.rarity.glowColor)
+        )
+        val glowMat = sceneView.materialLoader.createColorInstance(glowColor)
+        val glow = SphereNode(sceneView.engine, 0.35f, materialInstance = glowMat)
+        anchorNode.addChildNode(glow)
+        eggNode = sphere
+        currentEggId = egg.id
+        geoMgr.trackNode(egg.id, anchorNode)
+    }
+
+    private fun updateArrow3D() {
         val arrow = arrowNode ?: return
         val egg = mgr.nearestUnfoundEgg() ?: return
-        val relative = mgr.bearingTo(egg) - mgr.getDeviceHeadingDeg()
-        // L'arrow di default punta lungo -Z (avanti). Ruotando di -relative attorno
-        // a Y, -Z si orienta verso l'uovo (relative>0 = a destra del giocatore).
-        arrow.rotation = Rotation(0f, Math.toRadians(-relative.toDouble()).toFloat(), 0f)
+        var relative = mgr.bearingTo(egg) - mgr.getDeviceHeadingDeg()
+        if (relative > 180f) relative -= 360f
+        else if (relative < -180f) relative += 360f
+        arrow.rotation = Rotation(0f, -relative, 0f)
     }
 
     private fun updateHud() {
@@ -170,25 +213,39 @@ class ArNavigationActivity : AppCompatActivity() {
             targetText.text = "Nessuna uova nelle vicinanze"
             hintText.text = "Spostati per trovarne"
             catchBtn.visibility = View.GONE
+            compassArrow.visibility = View.GONE
             showEggNode(null)
             return
         }
         val dist = mgr.distanceMeters(egg)
-        targetText.text = "${egg.rarity.displayName}: ${dist.toInt()} m"
-        hintText.text = "Segui la freccia gialla"
-        showEggNode(if (dist <= REVEAL_RADIUS_M) egg else null)
-        catchBtn.visibility = if (dist <= OutdoorManager.CATCH_RADIUS_M) View.VISIBLE else View.GONE
+
+        compassArrow.headingDeg = mgr.getDeviceHeadingDeg()
+        compassArrow.targetBearingDeg = mgr.bearingTo(egg)
+        compassArrow.invalidate()
+
+        if (geoMgr.isTracking() && dist <= 20f) {
+            targetText.text = "${egg.rarity.displayName} [VPS]"
+            hintText.text = "Guarda attorno: l'uovo e' vicino!"
+            compassArrow.visibility = View.GONE
+            showEggNode(null)
+        } else {
+            targetText.text = "${egg.rarity.displayName}: ${dist.toInt()} m"
+            hintText.text = if (geoMgr.isTracking()) "VPS attivo — segui la freccia" else "Segui la freccia gialla"
+            compassArrow.visibility = View.VISIBLE
+            showEggNode(if (dist <= REVEAL_RADIUS_M) egg else null)
+        }
+        catchBtn.visibility = if (dist <= mgr.getCatchRadiusM(egg)) View.VISIBLE else View.GONE
     }
 
     private fun showEggNode(egg: WorldEgg?) {
         if (egg == null) {
-            eggNode?.let { sceneView.cameraNode.removeChildNode(it) }
+            eggNode?.let { it.parent?.removeChildNode(it) }
             eggNode = null
             currentEggId = null
             return
         }
         if (currentEggId == egg.id) return
-        eggNode?.let { sceneView.cameraNode.removeChildNode(it) }
+        eggNode?.let { it.parent?.removeChildNode(it) }
         val mat = sceneView.materialLoader.createColorInstance(egg.rarity.color)
         val node = SphereNode(sceneView.engine, 0.18f, materialInstance = mat).apply {
             position = Position(0f, -0.3f, -1.3f)
@@ -199,6 +256,15 @@ class ArNavigationActivity : AppCompatActivity() {
     }
 
     private fun buildHud() {
+        compassArrow = CompassArrowView(this).apply {
+            alpha = 0.92f
+        }
+        val arrowSize = UiKit.dp(this, 180)
+        val arrowP = FrameLayout.LayoutParams(arrowSize, arrowSize).apply {
+            gravity = Gravity.CENTER
+            bottomMargin = UiKit.dp(this@ArNavigationActivity, 60)
+        }
+
         targetText = TextView(this).apply {
             setTextColor(Color.WHITE); textSize = 20f
             setShadowLayer(6f, 0f, 0f, Color.BLACK)
@@ -236,6 +302,7 @@ class ArNavigationActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.BOTTOM or Gravity.START; setMargins(30, 0, 0, 40) }
 
+        overlay.addView(compassArrow, arrowP)
         overlay.addView(targetText, topP)
         overlay.addView(hintText, hintP)
         overlay.addView(catchBtn, catchP)
@@ -245,20 +312,30 @@ class ArNavigationActivity : AppCompatActivity() {
 
     private fun onCatch() {
         val egg = mgr.nearestUnfoundEgg() ?: return
-        if (mgr.distanceMeters(egg) > OutdoorManager.CATCH_RADIUS_M) {
+        if (mgr.distanceMeters(egg) > mgr.getCatchRadiusM(egg)) {
             Toast.makeText(this, "Avvicinati per catturare", Toast.LENGTH_SHORT).show()
             return
         }
-        val res = mgr.tryCatch(this, egg.id)
-        Toast.makeText(this, res?.message ?: "Uova non trovata", Toast.LENGTH_LONG).show()
-        if (res?.success == true) {
-            showEggNode(null)
-            updateHud()
-        }
+        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
+            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
+                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
+                val res = mgr.tryCatch(this@ArNavigationActivity, egg.id, effectiveBonus)
+                Toast.makeText(this@ArNavigationActivity, res.message, Toast.LENGTH_LONG).show()
+                if (res.success) {
+                    geoMgr.removeAnchor(egg.id)
+                    showEggNode(null)
+                    updateHud()
+                    EggOpeningAnimationActivity.start(this@ArNavigationActivity, res.egg!!.rarity, res.egg.name, res.egg.rarity.xpReward)
+                }
+            }
+        })
     }
 
     override fun onDestroy() {
         hudHandler.removeCallbacks(hudRunnable)
+        geoMgr.removeAll()
+        mgr.huntingEggId = null
+        mgr.stop()
         super.onDestroy()
     }
 }
