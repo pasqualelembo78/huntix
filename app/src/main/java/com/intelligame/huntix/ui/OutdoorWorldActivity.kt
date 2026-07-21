@@ -251,45 +251,76 @@ class OutdoorWorldActivity : BaseNavActivity() {
     }
 
     private fun makeMarkerBitmap(rarity: EggRarity): android.graphics.Bitmap {
-        val size = 64
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val w = 80; val h = 100
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        p.color = rarityColor(rarity)
+        val color = rarityColor(rarity)
+        val headR = 28f
+        val headY = h - 55f
+
+        val pin = android.graphics.Path()
+        pin.moveTo(w / 2f, h.toFloat())
+        pin.quadTo(w / 2f - 8f, h - 30f, w / 2f - headR, headY)
+        pin.arcTo(w / 2f - headR, headY - headR, w / 2f + headR, headY + headR, 180f, -180f, false)
+        pin.quadTo(w / 2f + 8f, h - 30f, w / 2f, h.toFloat())
+        pin.close()
+
+        p.color = color
         p.style = Paint.Style.FILL
-        c.drawCircle(size / 2f, size / 2f, size / 2f - 4f, p)
+        c.drawPath(pin, p)
+
+        p.color = Color.argb(40, 255, 255, 255)
+        c.drawCircle(w / 2f - 4f, headY - 6f, headR - 8f, p)
+
         p.color = Color.WHITE
-        p.textSize = 20f
-        p.textAlign = Paint.Align.CENTER
-        val emoji = when (rarity) {
-            EggRarity.COMMON -> "C"
-            EggRarity.UNCOMMON -> "U"
-            EggRarity.RARE -> "R"
-            EggRarity.EPIC -> "E"
-            EggRarity.LEGENDARY -> "L"
-        }
-        c.drawText(emoji, size / 2f, size / 2f + 7f, p)
+        p.style = Paint.Style.FILL
+        val eggW = 10f; val eggH = 14f
+        val eggPath = android.graphics.Path()
+        eggPath.addOval(w / 2f - eggW, headY - eggH, w / 2f + eggW, headY + eggH, android.graphics.Path.Direction.CW)
+        c.drawPath(eggPath, p)
+
+        p.color = color
+        val dotR = 3f
+        c.drawCircle(w / 2f, headY + 2f, dotR, p)
+
         return bmp
     }
 
     private fun makePoiBitmap(): android.graphics.Bitmap {
-        val size = 56
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val w = 80; val h = 100
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        p.color = 0xFF2196F3.toInt()
+        val color = 0xFF42A5F5.toInt()
+        val headR = 26f
+        val headY = h - 52f
+
+        val pin = android.graphics.Path()
+        pin.moveTo(w / 2f, h.toFloat())
+        pin.quadTo(w / 2f - 8f, h - 28f, w / 2f - headR, headY)
+        pin.arcTo(w / 2f - headR, headY - headR, w / 2f + headR, headY + headR, 180f, -180f, false)
+        pin.quadTo(w / 2f + 8f, h - 28f, w / 2f, h.toFloat())
+        pin.close()
+
+        p.color = color
         p.style = Paint.Style.FILL
-        val path = android.graphics.Path()
-        path.moveTo(size / 2f, 0f)
-        path.lineTo(size.toFloat(), size * 0.7f)
-        path.lineTo(size / 2f, size.toFloat())
-        path.lineTo(0f, size * 0.7f)
-        path.close()
-        c.drawPath(path, p)
+        c.drawPath(pin, p)
+
         p.color = Color.WHITE
-        p.textSize = 18f
-        p.textAlign = Paint.Align.CENTER
-        c.drawText("\u26FF", size / 2f, size * 0.55f, p)
+        p.style = Paint.Style.FILL
+        val bx = w / 2f; val by = headY
+        val bw = 14f; val bh = 16f
+        val bld = android.graphics.Path()
+        bld.addRect(bx - bw, by - bh, bx + bw, by + bh, android.graphics.Path.Direction.CW)
+        c.drawPath(bld, p)
+
+        p.color = color
+        val ww = 4f; val wh = 5f
+        c.drawRect(bx - ww, by - wh, bx + ww, by + wh, p)
+        c.drawRect(bx - bw + 3f, by - bh + 3f, bx - bw + 7f, by - 3f, p)
+        c.drawRect(bx + bw - 7f, by - bh + 3f, bx + bw - 3f, by - 3f, p)
+
         return bmp
     }
 
