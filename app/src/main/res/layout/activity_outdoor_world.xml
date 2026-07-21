@@ -1,119 +1,115 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="#0D0620">
 
-    <ScrollView
+    <!-- Fullscreen OSMDroid map -->
+    <org.osmdroid.views.MapView
+        android:id="@+id/mapView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent" />
 
-        <LinearLayout
+    <!-- Floating top bar: weather + status -->
+    <LinearLayout
+        android:id="@+id/floatingTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#CC0D0620"
+        android:padding="10dp"
+        android:layout_gravity="top">
+
+        <TextView
+            android:id="@+id/tvWeather"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
+            android:textSize="13sp"
+            android:textColor="#B0BEC5"
+            android:layout_marginBottom="2dp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="#A78BFA" />
+    </LinearLayout>
+
+    <!-- Bottom sheet: egg/poi info on tap -->
+    <LinearLayout
+        android:id="@+id/bottomSheet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#EE1A1030"
+        android:padding="16dp"
+        android:layout_gravity="bottom"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvSheetTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvSheetInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="#B0BEC5"
+            android:layout_marginBottom="10dp" />
+
+        <LinearLayout
+            android:id="@+id/btnSheetAction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/btn_accent"
+            android:padding="14dp"
+            android:clickable="true"
+            android:focusable="true">
 
             <TextView
-                android:id="@+id/tvTitle"
-                android:layout_width="match_parent"
+                android:id="@+id/tvSheetAction"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🗺️ Mappa del Mondo"
-                android:textSize="18sp"
+                android:text="Cattura"
+                android:textSize="15sp"
                 android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:id="@+id/tvWeather"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="14sp"
-                android:textColor="#B0BEC5"
-                android:layout_marginBottom="4dp" />
-
-            <TextView
-                android:id="@+id/tvStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="#6B5B95"
-                android:layout_marginBottom="8dp" />
-
-            <fragment
-                android:id="@+id/mapFragment"
-                android:name="com.google.android.gms.maps.SupportMapFragment"
-                android:layout_width="match_parent"
-                android:layout_height="260dp"
-                android:layout_marginBottom="12dp" />
-
-            <LinearLayout
-                android:id="@+id/eggList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="🏟️ Palestre / POI"
-                android:textSize="13sp"
-                android:textColor="#A78BFA"
-                android:textStyle="bold"
-                android:paddingTop="12dp"
-                android:paddingBottom="6dp" />
-
-            <LinearLayout
-                android:id="@+id/poiList"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" />
-
-            <LinearLayout
-                android:id="@+id/btnNavigate"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:background="@drawable/btn_accent"
-                android:padding="12dp"
-                android:layout_marginTop="12dp"
-                android:layout_marginBottom="10dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🧭 Naviga verso l'uovo più vicino"
-                    android:textSize="14sp"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/btnArCatch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center"
-                android:background="@drawable/btn_purple"
-                android:padding="12dp"
-                android:layout_marginBottom="10dp"
-                android:clickable="true"
-                android:focusable="true">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📍 Caccia AR"
-                    android:textSize="14sp"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
+                android:textStyle="bold" />
         </LinearLayout>
-    </ScrollView>
-</LinearLayout>
+    </LinearLayout>
+
+    <!-- Floating settings gear (top-right) -->
+    <TextView
+        android:id="@+id/btnSettings"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="56dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:text="\u2699\uFE0F"
+        android:textSize="22sp"
+        android:background="@drawable/btn_accent" />
+
+    <!-- Center-location button -->
+    <TextView
+        android:id="@+id/btnCenter"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="16dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:text="📍"
+        android:textSize="20sp"
+        android:background="@drawable/btn_purple" />
+
+</FrameLayout>

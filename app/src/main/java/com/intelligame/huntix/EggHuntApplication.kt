@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import io.sentry.Sentry
+import org.osmdroid.config.Configuration
 import com.intelligame.huntix.billing.BillingManager
 import com.intelligame.huntix.billing.VipManager
 import com.intelligame.huntix.managers.SavedManager
@@ -18,6 +19,14 @@ class EggHuntApplication : Application() {
             FirebaseApp.initializeApp(this)
         } catch (e: Exception) {
             Log.e("HuntixApp", "Firebase init failed: ${e.message}")
+        }
+
+        // OSMDroid (OpenStreetMap) — configura user agent per tile policy
+        try {
+            Configuration.getInstance().load(this, getSharedPreferences("osmdroid", MODE_PRIVATE))
+            Configuration.getInstance().userAgentValue = packageName
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "OSMDroid init failed: ${e.message}")
         }
 
         // Sentry (crash reporting) — DSN from manifest meta-data

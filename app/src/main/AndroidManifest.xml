@@ -78,10 +78,7 @@
             android:name="com.google.ar.core"
             android:value="optional" tools:replace="android:value"/>
 
-        <!-- Google Maps API Key -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="@string/maps_api_key"/>
+
 
         <!-- ARCore Cloud Anchor API Key (da ARCORE_API_KEY / local.properties).
              Se la key è vuota, un task Gradle rimuove questa <meta-data> così
