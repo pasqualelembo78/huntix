@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +19,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.EggRarity
+import com.intelligame.huntix.OutdoorSetupActivity
 import com.intelligame.huntix.R
 import com.intelligame.huntix.manager.OutdoorManager
 import com.intelligame.huntix.managers.WeatherZoneManager
@@ -154,7 +156,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 val marker = Marker(map).apply {
                     position = gp
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    icon = makeMarkerBitmap(egg.rarity)
+                    icon = BitmapDrawable(resources, makeMarkerBitmap(egg.rarity))
                     title = egg.displayLabel
                     setOnMarkerClickListener { _, _ ->
                         showEggSheet(egg)
@@ -179,7 +181,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
             val marker = Marker(map).apply {
                 position = gp
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                icon = makePoiBitmap()
+                icon = BitmapDrawable(resources, makePoiBitmap())
                 title = poi.name
                 setOnMarkerClickListener { _, _ ->
                     showPoiSheet(poi)
