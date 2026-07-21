@@ -1,16 +1,14 @@
 package com.intelligame.huntix
 
-import android.content.Context
 import com.google.ar.core.Plane
-import com.google.ar.core.Session
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-// Radar target per SemanticRadarView
 data class RadarTarget(
     val id: String,
     val name: String,
@@ -27,40 +25,40 @@ class RoomMapRepository private constructor() {
 
     data class SemanticPlane(
         val planeId: String,
-        val semanticLabel: String,  // WALL, FLOOR, CEILING, TABLE, CHAIR, DOOR, WINDOW, SHELF, CABINET, PLANTER, COUNTER, DESK, BED, SOFA
-        val centerPose: FloatArray,  // [tx, ty, tz, qx, qy, qz, qw]
+        val semanticLabel: String,
+        val centerPose: FloatArray,
         val extentX: Float,
         val extentZ: Float,
-        val polygon: List<FloatArray>  // lista di [x, y, z] vertici
+        val polygon: List<FloatArray>
     )
 
     data class PersistentAnchor(
-        val anchorId: String,           // UUID locale
-        val cloudAnchorId: String?,     // Cloud Anchor ID (se hostato)
-        val anchorType: String,         // "EGG", "SAFE", "POI"
-        val semanticLabel: String,      // es. "DRAWER_KITCHEN_TOP", "PLANTER_BALCONY", "GARAGE_SHELF"
-        val customName: String,         // es. "Cassetto cucina alto", "Fioriera balcone"
-        val roomName: String,           // es. "Cucina", "Camera da letto", "Garage"
-        val worldPose: FloatArray,      // [tx, ty, tz, qx, qy, qz, qw] pose mondiale
-        val relativeToSafe: FloatArray, // trasformazione relativa alla cassaforte
-        val metadata: Map<String, String>, // extra: drawer_index, shelf_level, etc.
+        val anchorId: String,
+        val cloudAnchorId: String?,
+        val anchorType: String,
+        val semanticLabel: String,
+        val customName: String,
+        val roomName: String,
+        val worldPose: FloatArray,
+        val relativeToSafe: FloatArray,
+        val metadata: Map<String, String>,
         val createdAt: Long,
         val ttlDays: Int
     )
 
     data class RoomMap(
         val roomId: String,
-        val name: String,               // "Casa di Mario"
-        val floorPlanImage: String?,    // base64 o URL immagine piano
+        val name: String,
+        val floorPlanImage: String?,
         val semanticPlanes: List<SemanticPlane>,
         val anchors: List<PersistentAnchor>,
-        val safeAnchorId: String?,      // ID dell'ancora cassaforte (riferimento)
+        val safeAnchorId: String?,
         val createdAt: Long,
         val updatedAt: Long,
         val version: Int,
-        val sceneAnchorFile: String?    // path file Scene Anchor locale
+        val sceneAnchorFile: String?
     ) {
-        fun toFirestore(): Map<String, Any> = mapOf(
+        fun toFirestore(): Map<String, Any?> = mapOf(
             "roomId" to roomId,
             "name" to name,
             "floorPlanImage" to floorPlanImage,
@@ -81,7 +79,7 @@ class RoomMapRepository private constructor() {
         private const val COLLECTION = "room_maps"
         private const val MAX_TTL_DAYS = 365
 
-        fun SemanticPlane.toMap(): Map<String, Any> = mapOf(
+        fun SemanticPlane.toMap(): Map<String, Any?> = mapOf(
             "planeId" to planeId,
             "semanticLabel" to semanticLabel,
             "centerPose" to centerPose,
@@ -90,7 +88,7 @@ class RoomMapRepository private constructor() {
             "polygon" to polygon
         )
 
-        fun PersistentAnchor.toMap(): Map<String, Any> = mapOf(
+        fun PersistentAnchor.toMap(): Map<String, Any?> = mapOf(
             "anchorId" to anchorId,
             "cloudAnchorId" to cloudAnchorId,
             "anchorType" to anchorType,
@@ -122,8 +120,8 @@ class RoomMapRepository private constructor() {
     suspend fun loadRoomMap(roomId: String): Result<RoomMap> = withContext(Dispatchers.IO) {
         try {
             val doc = firestore.collection(COLLECTION).document(roomId).get().await()
-            if (!doc.exists()) return Result.failure(IllegalStateException("Room map non trovato: $roomId"))
-            val data = doc.data!! 
+            if (!doc.exists()) return@withContext Result.failure(IllegalStateException("Room map non trovato: $roomId"))
+            val data = doc.data!!
             Result.success(parseRoomMap(data))
         } catch (e: Exception) {
             Result.failure(e)
@@ -133,7 +131,7 @@ class RoomMapRepository private constructor() {
     suspend fun listUserRooms(userId: String): Result<List<RoomMap>> = withContext(Dispatchers.IO) {
         try {
             val query = firestore.collection(COLLECTION).whereEqualTo("ownerId", userId).get().await()
-            Result.success(query.documents.map { parseRoomMap(it.data!!) })
+            Result.success(query.documents.map { doc -> parseRoomMap(doc.data!!) })
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -147,7 +145,7 @@ class RoomMapRepository private constructor() {
                 centerPose = (p["centerPose"] as List<Double>).map { it.toFloat() }.toFloatArray(),
                 extentX = (p["extentX"] as Number).toFloat(),
                 extentZ = (p["extentZ"] as Number).toFloat(),
-                polygon = (p["polygon"] as List<List<Double>>).map { it.map { it.toFloat() }.toFloatArray() }
+                polygon = (p["polygon"] as List<List<Double>>).map { it.map { v -> v.toFloat() }.toFloatArray() }
             )
         }
         val anchors = (data["anchors"] as? List<Map<String, Any>> ?: emptyList()).map { a ->
@@ -165,7 +163,7 @@ class RoomMapRepository private constructor() {
                 ttlDays = (a["ttlDays"] as Number).toInt()
             )
         }
-        RoomMap(
+        return RoomMap(
             roomId = data["roomId"] as String,
             name = data["name"] as String,
             floorPlanImage = data["floorPlanImage"] as? String,
@@ -226,7 +224,6 @@ class RoomMapRepository private constructor() {
     }
 }
 
-// Estensioni per ARCore Plane → SemanticPlane
 fun Plane.toSemanticPlane(planeId: String): RoomMapRepository.SemanticPlane {
     val centerPose = this.centerPose
     val poseArray = floatArrayOf(
@@ -234,24 +231,23 @@ fun Plane.toSemanticPlane(planeId: String): RoomMapRepository.SemanticPlane {
         centerPose.qx(), centerPose.qy(), centerPose.qz(), centerPose.qw()
     )
     val polygonVertices = mutableListOf<FloatArray>()
-    this.polygon?.forEach { point ->
-        polygonVertices.add(floatArrayOf(point.x, point.y, point.z))
-    }
-    val label = when (this.semanticLabel) {
-        Plane.SemanticLabel.WALL -> "WALL"
-        Plane.SemanticLabel.FLOOR -> "FLOOR"
-        Plane.SemanticLabel.CEILING -> "CEILING"
-        Plane.SemanticLabel.TABLE -> "TABLE"
-        Plane.SemanticLabel.CHAIR -> "CHAIR"
-        Plane.SemanticLabel.DOOR -> "DOOR"
-        Plane.SemanticLabel.WINDOW -> "WINDOW"
-        Plane.SemanticLabel.SHELF -> "SHELF"
-        Plane.SemanticLabel.CABINET -> "CABINET"
-        Plane.SemanticLabel.PLANTER -> "PLANTER"
-        Plane.SemanticLabel.COUNTER -> "COUNTER"
-        Plane.SemanticLabel.DESK -> "DESK"
-        Plane.SemanticLabel.BED -> "BED"
-        Plane.SemanticLabel.SOFA -> "SOFA"
+    try {
+        val polygonBuf = this.polygon
+        if (polygonBuf != null) {
+            val remaining = FloatArray(polygonBuf.remaining())
+            polygonBuf.duplicate().get(remaining)
+            var i = 0
+            while (i + 2 < remaining.size) {
+                polygonVertices.add(floatArrayOf(remaining[i], remaining[i + 1], remaining[i + 2]))
+                i += 3
+            }
+        }
+    } catch (_: Exception) {}
+
+    val label = when (this.type) {
+        Plane.Type.HORIZONTAL_UPWARD_FACING -> "FLOOR"
+        Plane.Type.HORIZONTAL_DOWNWARD_FACING -> "CEILING"
+        Plane.Type.VERTICAL -> "WALL"
         else -> "UNKNOWN"
     }
     return RoomMapRepository.SemanticPlane(

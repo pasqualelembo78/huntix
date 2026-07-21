@@ -111,7 +111,7 @@ class SemanticRadarView @JvmOverloads constructor(
         }
 
         // Nord (freccia)
-        val northRad = Math.toRadians(-headingDeg)
+        val northRad = Math.toRadians(-headingDeg.toDouble())
         val northX = cx + radius * 0.9f * Math.cos(northRad).toFloat()
         val northY = cy + radius * 0.9f * Math.sin(northRad).toFloat()
         canvas.drawLine(cx, cy, northX, northY, northPaint)
@@ -219,14 +219,14 @@ class SemanticRadarView @JvmOverloads constructor(
     fun setCurrentTarget(targetId: String?) {
         targets = targets.map { t ->
             t.copy(isCurrentTarget = targetId != null && t.id == targetId)
-        }
+        }.toMutableList()
         invalidate()
     }
 
     fun markTargetFound(targetId: String) {
         targets = targets.map { t ->
             if (t.id == targetId) t.copy(isFound = true) else t
-        }
+        }.toMutableList()
         invalidate()
     }
 
