@@ -208,7 +208,7 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\uD83C\uDFC6", "Classifica", "#FF3366") { startActivity(Intent(this, GamifiedLeaderboardActivity::class.java)) })
         quickRow2.addView(spacerH(dp(6)))
-        quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666") { startActivity(Intent(this, SettingsActivity::class.java)) })
+        quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
 
         setContentView(scroll)
