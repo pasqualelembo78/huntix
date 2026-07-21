@@ -25,7 +25,7 @@ object ResearchTaskManager {
         var progress: Int = 0,
         val rewardMvc: Int,
         val rewardXp: Int,
-        val type: String, // "daily" or "weekly"
+        val type: String,
         val category: String,
         val claimed: Boolean = false
     ) {
@@ -52,26 +52,31 @@ object ResearchTaskManager {
         }
     }
 
+    private data class QuestTemplate(
+        val category: String, val title: String, val description: String,
+        val emoji: String, val target: Int
+    )
+
     private val dailyTemplates = listOf(
-        Triple("catch_3", "Cattura 3 uova", "Cattura uova in Outdoor o Indoor", "🥚", 3),
-        Triple("catch_rare", "Cattura un uovo raro", "Cattura un Cristallo Viola o meglio", "🔮", 1),
-        Triple("hatch_1", "Schiudi 1 uovo", "Metti un uovo in incubatrice e aspetta", "🧬", 1),
-        Triple("walk_2km", "Cammina 2 km", "Cammina per accumulare distanza", "🚶", 2),
-        Triple("play_indoor", "Gioca in Indoor", "Nascondi o cerca uova in AR", "🏠", 1),
-        Triple("play_outdoor", "Gioca in Outdoor", "Esplora la mappa e cattura uova", "🌍", 1),
-        Triple("win_battle", "Vinci una battaglia", "Sfida un nemico in battaglia", "⚔️", 1),
-        Triple("play_minigame", "Gioca 2 minigiochi", "Prova i minigiochi disponibili", "🎮", 2),
-        Triple("spend_food", "Usa un'esca", "Usa un cibo per aumentare le chance", "🍎", 1),
-        Triple("mine_mvc", "Guadagna 50 MVC", "Accumula MVC con mining o catture", "💰", 50)
+        QuestTemplate("catch_3", "Cattura 3 uova", "Cattura uova in Outdoor o Indoor", "🥚", 3),
+        QuestTemplate("catch_rare", "Cattura un uovo raro", "Cattura un Cristallo Viola o meglio", "🔮", 1),
+        QuestTemplate("hatch_1", "Schiudi 1 uovo", "Metti un uovo in incubatrice e aspetta", "🧬", 1),
+        QuestTemplate("walk_2km", "Cammina 2 km", "Cammina per accumulare distanza", "🚶", 2),
+        QuestTemplate("play_indoor", "Gioca in Indoor", "Nascondi o cerca uova in AR", "🏠", 1),
+        QuestTemplate("play_outdoor", "Gioca in Outdoor", "Esplora la mappa e cattura uova", "🌍", 1),
+        QuestTemplate("win_battle", "Vinci una battaglia", "Sfida un nemico in battaglia", "⚔️", 1),
+        QuestTemplate("play_minigame", "Gioca 2 minigiochi", "Prova i minigiochi disponibili", "🎮", 2),
+        QuestTemplate("spend_food", "Usa un'esca", "Usa un cibo per aumentare le chance", "🍎", 1),
+        QuestTemplate("mine_mvc", "Guadagna 50 MVC", "Accumula MVC con mining o catture", "💰", 50)
     )
 
     private val weeklyTemplates = listOf(
-        Triple("catch_20", "Cattura 20 uova", "Cattura uova in tutta la settimana", "🥚", 20),
-        Triple("hatch_5", "Schiudi 5 uova", "Metti in incubatrice e raccogli", "🧬", 5),
-        Triple("walk_10km", "Cammina 10 km", "Cammina per accumulare distanza", "🚶", 10),
-        Triple("win_5_battles", "Vinci 5 battaglie", "Sfida e vinci nemici", "⚔️", 5),
-        Triple("find_epic", "Trova un uovo Epico", "Cattura un Cristallo di Fuoco o meglio", "🔥", 1),
-        Triple("earn_500_mvc", "Guadagna 500 MVC", "Accumula MVC in qualsiasi modo", "💰", 500)
+        QuestTemplate("catch_20", "Cattura 20 uova", "Cattura uova in tutta la settimana", "🥚", 20),
+        QuestTemplate("hatch_5", "Schiudi 5 uova", "Metti in incubatrice e raccogli", "🧬", 5),
+        QuestTemplate("walk_10km", "Cammina 10 km", "Cammina per accumulare distanza", "🚶", 10),
+        QuestTemplate("win_5_battles", "Vinci 5 battaglie", "Sfida e vinci nemici", "⚔️", 5),
+        QuestTemplate("find_epic", "Trova un uovo Epico", "Cattura un Cristallo di Fuoco o meglio", "🔥", 1),
+        QuestTemplate("earn_500_mvc", "Guadagna 500 MVC", "Accumula MVC in qualsiasi modo", "💰", 500)
     )
 
     fun refreshIfNeeded(ctx: Context) {
@@ -79,28 +84,26 @@ object ResearchTaskManager {
         val today = todayString()
         val thisWeek = weekString()
 
-        // Refresh daily
         if (p.getString(KEY_LAST_DAILY_REFRESH, "") != today) {
             val selected = dailyTemplates.shuffled().take(3)
-            val tasks = selected.map { (id, title, desc, emoji, target) ->
+            val tasks = selected.map { t ->
                 ResearchTask(
-                    id = "${id}_${today}", title = title, description = desc,
-                    emoji = emoji, target = target, rewardMvc = target * 20 + 30,
-                    rewardXp = target * 50 + 50, type = "daily", category = id
+                    id = "${t.category}_${today}", title = t.title, description = t.description,
+                    emoji = t.emoji, target = t.target, rewardMvc = t.target * 20 + 30,
+                    rewardXp = t.target * 50 + 50, type = "daily", category = t.category
                 )
             }
             saveTasks(ctx, KEY_DAILY, tasks)
             p.edit().putString(KEY_LAST_DAILY_REFRESH, today).apply()
         }
 
-        // Refresh weekly
         if (p.getString(KEY_LAST_WEEKLY_REFRESH, "") != thisWeek) {
             val selected = weeklyTemplates.shuffled().take(2)
-            val tasks = selected.map { (id, title, desc, emoji, target) ->
+            val tasks = selected.map { t ->
                 ResearchTask(
-                    id = "${id}_${thisWeek}", title = title, description = desc,
-                    emoji = emoji, target = target, rewardMvc = target * 30 + 100,
-                    rewardXp = target * 80 + 200, type = "weekly", category = id
+                    id = "${t.category}_${thisWeek}", title = t.title, description = t.description,
+                    emoji = t.emoji, target = t.target, rewardMvc = t.target * 30 + 100,
+                    rewardXp = t.target * 80 + 200, type = "weekly", category = t.category
                 )
             }
             saveTasks(ctx, KEY_WEEKLY, tasks)

@@ -1,12 +1,12 @@
 package com.intelligame.huntix
 
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -17,27 +17,25 @@ class TutorialActivity : AppCompatActivity() {
     private var currentPage = 0
     private lateinit var pagesContainer: LinearLayout
     private lateinit var dots: Array<TextView>
-    private lateinit var nextBtn: TextView
+    private lateinit var nextBtn: LinearLayout
     private var pageViews = mutableListOf<View>()
 
-    private data class Page(val emoji: String, val title: String, val desc: String, val color: Int)
+    private data class Page(val emoji: String, val title: String, val desc: String)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = this
 
         val pages = listOf(
-            Page("🥚", "Benvenuto in Huntix", "Una caccia alle uova con Realtà Aumentata e GPS.", UiKit.ACCENT),
-            Page("🏠", "Modalità Indoor", "Nascondi uova AR in una stanza e sfida amici a trovarle.", UiKit.PURPLE),
-            Page("🌍", "Modalità Outdoor", "Esplora la mappa reale, cattura uova e completa palestre.", "#4CAF50"),
-            Page("⚔️", "Battaglia", "Sfida altri giocatori 1v1 con le uova della tua squadra.", UiKit.ACCENT),
-            Page("Swipe!", "Prova a Catturare", "Swipe verso l'alto per lanciare il cestino!", UiKit.PURPLE)
+            Page("🥚", "Benvenuto in Huntix", "Una caccia alle uova con Realtà Aumentata e GPS."),
+            Page("🏠", "Modalità Indoor", "Nascondi uova AR in una stanza e sfida amici a trovarle."),
+            Page("🌍", "Modalità Outdoor", "Esplora la mappa reale, cattura uova e completa palestre."),
+            Page("⚔️", "Battaglia", "Sfida altri giocatori 1v1 con le uova della tua squadra."),
+            Page("Swipe!", "Prova a Catturare", "Swipe verso l'alto per lanciare il cestino!")
         )
 
-        // Build page views
         pages.forEachIndexed { idx, page ->
             if (idx == 4) {
-                // Swipe demo page
                 val demoRoot = LinearLayout(c).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
@@ -55,7 +53,7 @@ class TutorialActivity : AppCompatActivity() {
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(c, 280)
                     )
-                    setEggColor(UiKit.PURPLE)
+                    setEggColor(Color.parseColor(UiKit.ACCENT))
                 }
 
                 val resultLabel = TextView(c).apply {
@@ -82,7 +80,6 @@ class TutorialActivity : AppCompatActivity() {
                 demoRoot.addView(resultLabel)
                 pageViews.add(demoRoot)
             } else {
-                // Standard info page
                 val pageRoot = LinearLayout(c).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
@@ -111,7 +108,6 @@ class TutorialActivity : AppCompatActivity() {
             }
         }
 
-        // Pages container (stacked, show one at a time)
         pagesContainer = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -119,13 +115,11 @@ class TutorialActivity : AppCompatActivity() {
             )
         }
 
-        // Add all pages, hide non-current
         pageViews.forEachIndexed { idx, view ->
             view.visibility = if (idx == 0) View.VISIBLE else View.GONE
             pagesContainer.addView(view)
         }
 
-        // Dots
         dots = Array(pages.size) { i ->
             TextView(c).apply {
                 text = "●"; textSize = 16f
@@ -138,7 +132,6 @@ class TutorialActivity : AppCompatActivity() {
             dots.forEach { addView(it) }
         }
 
-        // Next button
         nextBtn = UiKit.button(c, "Avanti", UiKit.ACCENT) {
             if (currentPage < pages.size - 1) {
                 showPage(currentPage + 1)
@@ -188,7 +181,10 @@ class TutorialActivity : AppCompatActivity() {
             dot.setTextColor(if (i == currentPage) 0xFFFFFFFF.toInt() else 0xFF333355.toInt())
         }
 
-        nextBtn.text = if (currentPage == pageViews.size - 1) "Inizia a giocare!" else "Avanti"
+        val label = nextBtn.getChildAt(0) as? TextView
+        if (label != null) {
+            label.text = if (currentPage == pageViews.size - 1) "Inizia a giocare!" else "Avanti"
+        }
     }
 
     private fun goHome() {
