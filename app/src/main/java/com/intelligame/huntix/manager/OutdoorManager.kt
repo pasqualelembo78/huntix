@@ -342,6 +342,11 @@ class OutdoorManager private constructor() : SensorEventListener {
     fun nearestUnfoundEgg(): WorldEgg? =
         eggs.filter { !it.found }.minByOrNull { distanceMeters(it) }
 
+    fun targetEgg(): WorldEgg? {
+        huntingEggId?.let { id -> getEgg(id)?.takeIf { !it.found }?.let { return it } }
+        return nearestUnfoundEgg()
+    }
+
     fun getEgg(id: String): WorldEgg? = eggs.firstOrNull { it.id == id }
 
     fun tryCatch(ctx: Context, eggId: String, foodBonus: Float = 1f): CatchResult {

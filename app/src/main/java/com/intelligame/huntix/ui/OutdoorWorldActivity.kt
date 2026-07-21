@@ -44,8 +44,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var bottomSheet: LinearLayout
     private lateinit var tvSheetTitle: TextView
     private lateinit var tvSheetInfo: TextView
-    private lateinit var tvSheetAction: TextView
-    private lateinit var btnSheetAction: LinearLayout
+    private lateinit var btnSheetHunt: LinearLayout
+    private lateinit var tvSheetHunt: TextView
+    private lateinit var btnSheetAr: LinearLayout
+    private lateinit var tvSheetAr: TextView
     private var activeEggId: String? = null
     private var activePoiId: String? = null
     private val refresh = Handler(Looper.getMainLooper())
@@ -72,8 +74,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
         bottomSheet = findViewById(R.id.bottomSheet)
         tvSheetTitle = findViewById(R.id.tvSheetTitle)
         tvSheetInfo = findViewById(R.id.tvSheetInfo)
-        tvSheetAction = findViewById(R.id.tvSheetAction)
-        btnSheetAction = findViewById(R.id.btnSheetAction)
+        btnSheetHunt = findViewById(R.id.btnSheetHunt)
+        tvSheetHunt = findViewById(R.id.tvSheetHunt)
+        btnSheetAr = findViewById(R.id.btnSheetAr)
+        tvSheetAr = findViewById(R.id.tvSheetAr)
 
         map = findViewById(R.id.mapView)
         map?.setTileSource(TileSourceFactory.MAPNIK)
@@ -85,16 +89,18 @@ class OutdoorWorldActivity : BaseNavActivity() {
             override fun onZoom(event: ZoomEvent?): Boolean = true
         })
 
-        map?.setOnClickListener { hideBottomSheet() }
-
         findViewById<View>(R.id.btnCenter).setOnClickListener { centerOnUser() }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, OutdoorSetupActivity::class.java))
         }
 
-        btnSheetAction.setOnClickListener {
-            activeEggId?.let { eid -> doCatch(eid) }
-            activePoiId?.let { pid -> openPoi(pid) }
+        btnSheetHunt.setOnClickListener {
+            activeEggId?.let { doHunt(it) }
+            activePoiId?.let { openPoi(it) }
+        }
+
+        btnSheetAr.setOnClickListener {
+            activeEggId?.let { doArNavigation(it) }
         }
 
         refresh.post(tick)
@@ -152,19 +158,6 @@ class OutdoorWorldActivity : BaseNavActivity() {
         mgr.getEggs().forEach { egg ->
             if (!egg.found) {
                 val gp = GeoPoint(egg.lat, egg.lng)
-
-                val marker = Marker(map).apply {
-                    position = gp
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    icon = BitmapDrawable(resources, makeMarkerBitmap(egg.rarity))
-                    title = egg.displayLabel
-                    setOnMarkerClickListener { _, _ ->
-                        showEggSheet(egg)
-                        true
-                    }
-                }
-                map?.overlays?.add(marker)
-
                 val circle = Polygon().apply {
                     points = createCirclePoints(gp, mgr.getCatchRadiusM(egg).toDouble())
                     outlinePaint.color = rarityColor(egg.rarity)
@@ -176,11 +169,28 @@ class OutdoorWorldActivity : BaseNavActivity() {
             }
         }
 
+        mgr.getEggs().forEach { egg ->
+            if (!egg.found) {
+                val gp = GeoPoint(egg.lat, egg.lng)
+                val marker = Marker(map).apply {
+                    position = gp
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    icon = BitmapDrawable(resources, makeMarkerBitmap(egg.rarity))
+                    title = egg.displayLabel
+                    setOnMarkerClickListener { _, _ ->
+                        showEggSheet(egg)
+                        true
+                    }
+                }
+                map?.overlays?.add(marker)
+            }
+        }
+
         mgr.getPois().forEach { poi ->
             val gp = GeoPoint(poi.lat, poi.lng)
             val marker = Marker(map).apply {
                 position = gp
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 icon = BitmapDrawable(resources, makePoiBitmap())
                 title = poi.name
                 setOnMarkerClickListener { _, _ ->
@@ -200,8 +210,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activePoiId = null
         tvSheetTitle.text = "${egg.rarity.emoji} ${egg.displayLabel}"
         tvSheetInfo.text = "${egg.rarity.displayName} — ${d.toInt()} m — ${egg.element.name}"
-        tvSheetAction.text = "Cattura!"
-        btnSheetAction.visibility = View.VISIBLE
+        tvSheetHunt.text = "\uD83C\uDFAF Cattura"
+        tvSheetAr.text = "\uD83D\uDCF1 Caccia AR"
+        btnSheetHunt.visibility = View.VISIBLE
+        btnSheetAr.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
     }
 
@@ -211,8 +223,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activeEggId = null
         tvSheetTitle.text = "\uD83C\uDFDF\uFE0F ${poi.name}"
         tvSheetInfo.text = "${d.toInt()} m"
-        tvSheetAction.text = "Spinna"
-        btnSheetAction.visibility = View.VISIBLE
+        tvSheetHunt.text = "Spinna"
+        btnSheetHunt.visibility = View.VISIBLE
+        btnSheetAr.visibility = View.GONE
         bottomSheet.visibility = View.VISIBLE
     }
 
@@ -222,25 +235,30 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activePoiId = null
     }
 
-    private fun doCatch(eggId: String) {
+    private fun doHunt(eggId: String) {
         val egg = mgr.getEgg(eggId) ?: return
         if (egg.found) {
             Toast.makeText(this, "Gia catturato", Toast.LENGTH_SHORT).show()
             hideBottomSheet()
             return
         }
-        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
-            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
-                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
-                val res = mgr.tryCatch(this@OutdoorWorldActivity, eggId, effectiveBonus)
-                Toast.makeText(this@OutdoorWorldActivity, res.message, Toast.LENGTH_LONG).show()
-                if (res.success && res.egg != null) {
-                    EggOpeningAnimationActivity.start(this@OutdoorWorldActivity, res.egg.rarity, res.egg.name, res.egg.rarity.xpReward)
-                }
-                hideBottomSheet()
-                refreshUi()
-            }
+        startActivity(Intent(this, OutdoorHuntActivity::class.java).apply {
+            putExtra("eggId", eggId)
         })
+        hideBottomSheet()
+    }
+
+    private fun doArNavigation(eggId: String) {
+        val egg = mgr.getEgg(eggId) ?: return
+        if (egg.found) {
+            Toast.makeText(this, "Gia catturato", Toast.LENGTH_SHORT).show()
+            hideBottomSheet()
+            return
+        }
+        startActivity(Intent(this, ArNavigationActivity::class.java).apply {
+            putExtra("eggId", eggId)
+        })
+        hideBottomSheet()
     }
 
     private fun openPoi(poiId: String) {
@@ -250,7 +268,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         hideBottomSheet()
     }
 
-    private fun makeMarkerBitmap(rarity: EggRarity): android.graphics.Bitmap {
+    private fun makeMarkerBitmap(rarity: EggRarity): Bitmap {
         val w = 80; val h = 100
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -287,7 +305,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         return bmp
     }
 
-    private fun makePoiBitmap(): android.graphics.Bitmap {
+    private fun makePoiBitmap(): Bitmap {
         val w = 80; val h = 100
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -316,8 +334,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         c.drawPath(bld, p)
 
         p.color = color
-        val ww = 4f; val wh = 5f
-        c.drawRect(bx - ww, by - wh, bx + ww, by + wh, p)
+        c.drawRect(bx - 4f, by - 5f, bx + 4f, by + 5f, p)
         c.drawRect(bx - bw + 3f, by - bh + 3f, bx - bw + 7f, by - 3f, p)
         c.drawRect(bx + bw - 7f, by - bh + 3f, bx + bw - 3f, by - 3f, p)
 

@@ -64,25 +64,57 @@
             android:textColor="#B0BEC5"
             android:layout_marginBottom="10dp" />
 
+        <!-- Two side-by-side buttons -->
         <LinearLayout
-            android:id="@+id/btnSheetAction"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:background="@drawable/btn_accent"
-            android:padding="14dp"
-            android:clickable="true"
-            android:focusable="true">
+            android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/tvSheetAction"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/btnSheetHunt"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="Cattura"
-                android:textSize="15sp"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold" />
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/btn_accent"
+                android:padding="14dp"
+                android:layout_marginEnd="6dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/tvSheetHunt"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Cattura"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/btnSheetAr"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/btn_purple"
+                android:padding="14dp"
+                android:layout_marginStart="6dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/tvSheetAr"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Caccia AR"
+                    android:textSize="14sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -108,7 +140,7 @@
         android:layout_marginBottom="16dp"
         android:layout_marginEnd="12dp"
         android:gravity="center"
-        android:text="📍"
+        android:text="\uD83D\uDCCD"
         android:textSize="20sp"
         android:background="@drawable/btn_purple" />
 

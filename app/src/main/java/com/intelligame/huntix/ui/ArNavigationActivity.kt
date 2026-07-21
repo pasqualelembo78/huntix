@@ -84,7 +84,8 @@ class ArNavigationActivity : AppCompatActivity() {
         sceneView = findViewById(R.id.sceneView)
         overlay = findViewById(R.id.arOverlay)
         sceneView.lifecycle = lifecycle
-        mgr.huntingEggId = mgr.nearestUnfoundEgg()?.id
+        val intentEggId = intent.getStringExtra("eggId")
+        mgr.huntingEggId = intentEggId ?: mgr.nearestUnfoundEgg()?.id
         buildHud()
         configureSession()
 
@@ -106,7 +107,7 @@ class ArNavigationActivity : AppCompatActivity() {
                 eggNode = null
             } else {
                 updateArrow3D()
-                showEggNode(mgr.nearestUnfoundEgg()?.takeIf { mgr.distanceMeters(it) <= 80f })
+                showEggNode(mgr.targetEgg()?.takeIf { mgr.distanceMeters(it) <= 80f })
                 eggNode?.let { node ->
                     bobT += 0.06
                     val y = (-0.3f + 0.06f * Math.sin(bobT).toFloat())
@@ -169,7 +170,7 @@ class ArNavigationActivity : AppCompatActivity() {
 
     private fun updateGeospatialAnchors() {
         if (!geoMgr.isTracking()) return
-        val egg = mgr.nearestUnfoundEgg() ?: return
+        val egg = mgr.targetEgg() ?: return
         if (egg.found) return
         if (currentEggId == egg.id) return
 
@@ -200,7 +201,7 @@ class ArNavigationActivity : AppCompatActivity() {
 
     private fun updateArrow3D() {
         val arrow = arrowNode ?: return
-        val egg = mgr.nearestUnfoundEgg() ?: return
+        val egg = mgr.targetEgg() ?: return
         var relative = mgr.bearingTo(egg) - mgr.getDeviceHeadingDeg()
         if (relative > 180f) relative -= 360f
         else if (relative < -180f) relative += 360f
@@ -208,7 +209,7 @@ class ArNavigationActivity : AppCompatActivity() {
     }
 
     private fun updateHud() {
-        val egg = mgr.nearestUnfoundEgg()
+        val egg = mgr.targetEgg()
         if (egg == null) {
             targetText.text = "Nessuna uova nelle vicinanze"
             hintText.text = "Spostati per trovarne"
@@ -311,7 +312,7 @@ class ArNavigationActivity : AppCompatActivity() {
     }
 
     private fun onCatch() {
-        val egg = mgr.nearestUnfoundEgg() ?: return
+        val egg = mgr.targetEgg() ?: return
         if (mgr.distanceMeters(egg) > mgr.getCatchRadiusM(egg)) {
             Toast.makeText(this, "Avvicinati per catturare", Toast.LENGTH_SHORT).show()
             return
