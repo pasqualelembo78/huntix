@@ -18,6 +18,14 @@
         android:clickable="false"
         android:focusable="false" />
 
+    <!-- Sky event overlay (balloons/lightning/stars during events) -->
+    <com.intelligame.huntix.ui.SkyEventOverlay
+        android:id="@+id/skyOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false" />
+
     <!-- Floating HUD: top-left column -->
     <LinearLayout
         android:id="@+id/hudColumn"

@@ -90,6 +90,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var incubationProgress: LinearLayout
     private lateinit var tvIncubationKm: TextView
     private lateinit var incubationBarFill: View
+    private lateinit var skyOverlay: SkyEventOverlay
 
     // ── Phase 3: sensor + animation state ─────────────────────
     private var currentHeading: Float = 0f
@@ -154,6 +155,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         incubationProgress = findViewById(R.id.incubationProgress)
         tvIncubationKm = findViewById(R.id.tvIncubationKm)
         incubationBarFill = findViewById(R.id.incubationBarFill)
+        skyOverlay = findViewById(R.id.skyOverlay)
 
         mapView = findViewById(R.id.mapView)
         mapView?.onCreate(savedInstanceState)
@@ -344,6 +346,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Phase 1.5: Radar view
         refreshRadar()
+
+        // Phase 4.1: Sky event overlay
+        refreshSkyOverlay()
 
         // Phase 1.4: Catch button state
         refreshCatchButton()
@@ -553,6 +558,25 @@ class OutdoorWorldActivity : BaseNavActivity() {
             } else {
                 btnCalendar.visibility = View.GONE
             }
+        }
+    }
+
+    // ─── Phase 4.1: Sky events ───────────────────────────────
+
+    private fun refreshSkyOverlay() {
+        val activeEvent = LiveEventManager.getCurrentEvent()
+        if (activeEvent != null && activeEvent.isActive) {
+            val type = when (activeEvent.type) {
+                LiveEventManager.EventType.EGG_RUSH -> SkyEventOverlay.SkyEvent.EGG_RUSH
+                LiveEventManager.EventType.DOUBLE_XP -> SkyEventOverlay.SkyEvent.DOUBLE_XP
+                LiveEventManager.EventType.MYSTERY_EGGS -> SkyEventOverlay.SkyEvent.MYSTERY_EGGS
+                LiveEventManager.EventType.GOLDEN_HOUR -> SkyEventOverlay.SkyEvent.GOLDEN_HOUR
+                LiveEventManager.EventType.LEGENDARY_WEEK -> SkyEventOverlay.SkyEvent.LEGENDARY_WEEK
+                else -> SkyEventOverlay.SkyEvent.NONE
+            }
+            skyOverlay.setEventType(type)
+        } else {
+            skyOverlay.setEventType(SkyEventOverlay.SkyEvent.NONE)
         }
     }
 

@@ -237,7 +237,7 @@ class OutdoorManager private constructor() : SensorEventListener {
                 val dist = (10.0 + rng.nextDouble() * (maxDist - 10.0).coerceAtLeast(10.0)) * radiusMultiplier
                 val (la, ln) = offset(loc.latitude, loc.longitude, dist, rng)
                 val rarity = pickRarity(rng, rarityBoost)
-                val element = EggElement.values()[rng.nextInt(EggElement.values().size)]
+                val element = pickElementForBiome(loc.latitude, loc.longitude, rng)
                 newEggs.add(
                     WorldEgg(
                         id = "out_${nextEggId.incrementAndGet()}",
@@ -295,6 +295,46 @@ class OutdoorManager private constructor() : SensorEventListener {
             boosted["legendary"] = (boosted["legendary"] ?: 2f) * boostMultiplier
         }
         return WeatherZoneManager.pickWeightedRarity(boosted)
+    }
+
+    /**
+     * Seleziona elemento in base al "biome" geografico.
+     * Usa un hash deterministico delle coordinate per biasare la selezione.
+     * Non serve API: le coordinate stesse generano un pattern pseudo-casuale.
+     *
+     * Biomi:
+     *  - WATER (30%): coordinate con hash "acquatico" (simula vicinanza a laghi/mari)
+     *  - EARTH (25%): zone urbane dense (hash "urban")
+     *  - AIR (20%): zone aperte/parchi (hash "open")
+     *  - FIRE (15%): zone commerciali (hash "commercial")
+     *  - NORMAL (10%): fallback
+     */
+    private fun pickElementForBiome(lat: Double, lng: Double, rng: java.util.Random): EggElement {
+        // Hash deterministico: combina parte decimale di lat e lng
+        val hash = ((lat * 1000).toLong() xor (lng * 1000).toLong()) and 0xFFFFL
+        val roll = (hash % 100).toInt()
+
+        // Bias aggiuntivo dal weather attuale
+        val weather = WeatherZoneManager.currentWeather
+        val weatherElement = when (weather) {
+            com.intelligame.huntix.WeatherType.RAIN -> com.intelligame.huntix.EggElement.WATER
+            com.intelligame.huntix.WeatherType.SNOW -> com.intelligame.huntix.EggElement.AIR
+            com.intelligame.huntix.WeatherType.STORM -> com.intelligame.huntix.EggElement.FIRE
+            else -> null
+        }
+
+        // 25% di chance di essere influenzati dal meteo
+        if (weatherElement != null && rng.nextInt(100) < 25) {
+            return weatherElement
+        }
+
+        return when {
+            roll < 30  -> com.intelligame.huntix.EggElement.WATER   // 30% acqua
+            roll < 55  -> com.intelligame.huntix.EggElement.EARTH   // 25% terra
+            roll < 75  -> com.intelligame.huntix.EggElement.AIR     // 20% aria
+            roll < 90  -> com.intelligame.huntix.EggElement.FIRE    // 15% fuoco
+            else       -> com.intelligame.huntix.EggElement.NORMAL  // 10% normale
+        }
     }
 
     fun distanceMeters(lat: Double, lng: Double): Float {

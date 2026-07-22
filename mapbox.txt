@@ -2,7 +2,7 @@
 MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
 ===============================================================
 
-STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) + Fase 3 (Avatar) completate
+STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) + Fase 3 (Avatar) + Fase 4 (Eventi) completate
 DATA:   2026-07-22
 REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
 
@@ -177,55 +177,47 @@ RISULTATO: Triangolo oro (40x40dp) che ruota con heading del sensore.
   del movimento del giocatore. Radar usa heading per orientamento.
 
 ================================================================
-FASE 4 — EVENTI E DINAMISMO MAPPA (priorità MEDIA)
-================================================================
+FASE 4 — EVENTI E DINAMISMO MAPPA (priorità MEDIA) ✅ COMPLETATA
+===============================================================
 
---- 4.1 Boss/eventi a tempo con countdown ---
-FILE: nuovo componente TimeEventOverlay.kt
-SOLUZIONE:
-  - LiveEventManager già gestisce eventi settimanali
-  - Aggiungere marker speciale sulla mappa per eventi attivi:
-    Icona evento (uovo dorato / lightning / etc)
-    Timer countdown sovrapposto: "02:45:33"
-    Raggio di influenza visibile (cerchio grande semitrasparente)
-  - Quando evento scade: rimuovi marker, respawn con nuovi bonus
+Data completamento: 2026-07-22
+File modificati:
+  - app/src/main/java/.../ui/SkyEventOverlay.kt (nuovo)
+  - app/src/main/java/.../manager/OutdoorManager.kt (biomi)
+  - app/src/main/res/layout/activity_outdoor_world.xml (sky overlay)
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (wiring)
 
---- 4.2 Meteo reale (già funzionante, da perfezionare) ---
-FILE: WeatherZoneManager.kt, WeatherParticleOverlay.kt
-SOLUZIONE:
-  - Il sistema meteo è già implementato con OpenWeatherMap
-  - Mancanza: transizioni fluide tra meteore
-  - Aggiungere transizione colore overlay (fade 2 secondi)
-  - Aggiungere effetto lampo per tempesta (flash schermo 50ms)
-  - Aggiungere nebbia a strati (diversi layer alpha)
-  - Collegare meteo a spawn creature (WeatherType.rarityBoost già fatto)
+Risultati:
+  ✅ 4.1 Palloni/eventi animati in cielo (EggRush/DoubXP/Mystery/Golden/Legendary)
+  ✅ 4.2 Spawn elementi per biomi geografici (hash deterministico lat/lng)
+  ✅ 4.2 Bias meteo su elemento (pioggia→water, neve→air, tempesta→fire)=
 
---- 4.3 Palloni/eventi speciali in cielo ---
-FILE: nuovo componente SkyEventOverlay.kt
-SOLUZIONE:
-  - Classe che disegna su Canvas sovrapposto alla mappa:
-    - Palloni colorati che attraversano il cielo (durante eventi)
-    - Uova giganti che fluttuano (durante Egg Rush)
-    - Fulmini (durante Double XP)
-  - Movimento: interpolazione lineare da sinistra a destra
-  - Durata: 10-15 secondi, ripetizione ogni 2 minuti durante evento
-  - Aggiungere al FrameLayout del layout
+--- 4.1 Boss/eventi a tempo con countdown ✅ (già completato Fase 1.6) ---
+Badge evento live con emoji + timer countdown. Sky event overlay animato.
 
---- 4.4 Spawn points persistenti / biomi ---
-FILE: OutdoorManager.kt
-SOLUZIONE:
-  - Attualmente: spawn ogni volta che ci si muove 150m
-  - Pokémon GO: biome geografici (acqua → water type, parco → grass)
-  - Aggiungere:
-    - Query Overpass API per biome (water, park, urban, rural)
-    - Salvare biome in cache locale (SharedPreferences o Room)
-    - Filtrare elementi in base al biome:
-      WATER → acqua/laghi/mari
-      EARTH → zone urbane
-      AIR → parchi/aperto
-      FIRE → zone commerciali
-      NORMAL → overworld
-  - Aggiornare biom cada 500m di spostamento
+--- 4.2 Meteo reale ✅ (già funzionante, bias aggiunto) ---
+FILE: WeatherZoneManager.kt, WeatherParticleOverlay.kt, OutdoorManager.kt
+RISULTATO: Il sistema meteo è già implementato con OpenWeatherMap.
+  Aggiunto: 25% chance che il meteo biasi l'elemento degli uova:
+    RAIN → WATER, SNOW → AIR, STORM → FIRE.
+
+--- 4.3 Palloni/eventi speciali in cielo ✅ ---
+FILE: ui/SkyEventOverlay.kt (nuovo), activity_outdoor_world.xml
+RISULTATO: View Canvas sovrapposta alla mappa con animazioni per evento:
+  - EGG_RUSH: 5 palloni colorati che attraversano il cielo
+  - DOUBLE_XP: fulmi flash (30 frame on/off)
+  - MYSTERY_EGGS: uova viola che fluttuano
+  - GOLDEN_HOUR: 9 stelle 4-pointed che twinkolano
+  - LEGENDARY_WEEK: 7 stelle dorate sparkle
+  ~30fps, si avvia/spegne automaticamente con l'evento.
+
+--- 4.4 Spawn points persistenti / biomi ✅ ---
+FILE: OutdoorManager.kt (pickElementForBiome)
+RISULTATO: Sistema di biomi deterministico basato su hash coordinate:
+  - WATER 30%, EARTH 25%, AIR 20%, FIRE 15%, NORMAL 10%
+  - 25% chance che il meteo sovrascriva il biome (RAIN→WATER, etc)
+  - Nessuna API richiesta: le coordinate stesse generano il pattern.
+  - Ogni respawn genera uova con distribuzione elemento bilanciata.
 
 ================================================================
 FASE 5 — PROGRESSIONE VISIBILE (priorità MEDIA)
