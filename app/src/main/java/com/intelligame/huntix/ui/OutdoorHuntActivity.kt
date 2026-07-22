@@ -119,6 +119,11 @@ class OutdoorHuntActivity : BaseNavActivity() {
         }
         CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
             override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
+                if (foodBonus <= 0f && xpMultiplier <= 0f) {
+                    Toast.makeText(this@OutdoorHuntActivity, "L'uovo è fuggito! Riprova.", Toast.LENGTH_LONG).show()
+                    update()
+                    return
+                }
                 val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
                 val res = mgr.tryCatch(this@OutdoorHuntActivity, eggId, effectiveBonus)
                 Toast.makeText(this@OutdoorHuntActivity, res.message, Toast.LENGTH_LONG).show()

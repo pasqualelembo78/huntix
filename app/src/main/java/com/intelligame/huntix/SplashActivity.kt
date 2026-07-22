@@ -43,6 +43,7 @@ class SplashActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             delay(1200)
+            if (isFinishing || isDestroyed) return@launch
 
             val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
             val target = if (login != null && tryAutoLogin(login)) {
@@ -52,10 +53,12 @@ class SplashActivity : AppCompatActivity() {
             } else {
                 LoginActivity::class.java
             }
-            startActivity(Intent(this@SplashActivity, target).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            })
-            finish()
+            try {
+                startActivity(Intent(this@SplashActivity, target).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                })
+                finish()
+            } catch (_: Exception) { finish() }
         }
     }
 

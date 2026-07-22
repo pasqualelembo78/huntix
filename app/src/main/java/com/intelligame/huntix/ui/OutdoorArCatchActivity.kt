@@ -21,6 +21,7 @@ import com.google.ar.core.TrackingState
 import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.WorldEgg
+import com.intelligame.huntix.manager.BuildingObstacleManager
 import com.intelligame.huntix.manager.GeospatialAnchorManager
 import com.intelligame.huntix.manager.OutdoorManager
 import io.github.sceneview.ar.ARSceneView
@@ -33,6 +34,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
 
     private val mgr by lazy { OutdoorManager.get() }
     private val geoMgr = GeospatialAnchorManager()
+    private val buildingMgr = BuildingObstacleManager()
 
     private lateinit var sceneView: ARSceneView
     private lateinit var overlay: FrameLayout
@@ -46,6 +48,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
     private lateinit var compassArrow: CompassArrowView
     private lateinit var distText: TextView
     private lateinit var hintText: TextView
+    private lateinit var obstacleHint: TextView
     private lateinit var catchBtn: Button
     private lateinit var mapBtn: Button
 
@@ -124,6 +127,10 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         }
         if (needsCam) requestCam.launch(arrayOf(Manifest.permission.CAMERA))
 
+        mgr.currentLocation?.let { loc ->
+            buildingMgr.fetchBuildingsIfNeeded(loc.latitude, loc.longitude)
+        }
+
         hudHandler.post(hudRunnable)
     }
 
@@ -201,14 +208,33 @@ class OutdoorArCatchActivity : AppCompatActivity() {
             hintText.text = "Spostati per trovarne"
             catchBtn.visibility = View.GONE
             compassArrow.visibility = View.GONE
+            obstacleHint.visibility = View.GONE
             showEggNode(null)
             return
         }
         val dist = mgr.distanceMeters(egg)
+        val loc = mgr.currentLocation
 
         compassArrow.headingDeg = mgr.getDeviceHeadingDeg()
         compassArrow.targetBearingDeg = mgr.bearingTo(egg)
         compassArrow.invalidate()
+
+        if (loc != null) {
+            buildingMgr.fetchBuildingsIfNeeded(loc.latitude, loc.longitude)
+            val obs = buildingMgr.checkObstacle(
+                loc.latitude, loc.longitude,
+                egg.lat, egg.lng,
+                mgr.getDeviceHeadingDeg()
+            )
+            if (obs.blocked && obs.suggestion != null) {
+                obstacleHint.text = "\u26A0 ${obs.suggestion}"
+                obstacleHint.visibility = View.VISIBLE
+            } else {
+                obstacleHint.visibility = View.GONE
+            }
+        } else {
+            obstacleHint.visibility = View.GONE
+        }
 
         if (geoMgr.isTracking() && dist <= 20f) {
             distText.text = "${egg.rarity.emoji} ${egg.rarity.displayName} [VPS]"
@@ -280,6 +306,11 @@ class OutdoorArCatchActivity : AppCompatActivity() {
             setTextColor(Color.WHITE); textSize = 14f
             setShadowLayer(6f, 0f, 0f, Color.BLACK)
         }
+        obstacleHint = TextView(this).apply {
+            setTextColor(0xFFFF9800.toInt()); textSize = 16f
+            setShadowLayer(6f, 0f, 0f, Color.BLACK)
+            visibility = View.GONE
+        }
         catchBtn = Button(this).apply {
             text = "Cattura!"
             setBackgroundColor(0xFF2E7D32.toInt())
@@ -302,6 +333,9 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         val hintP = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setMargins(0, 88, 0, 0) }
+        val obstacleP = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setMargins(0, 120, 0, 0) }
         val catchP = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; setMargins(0, 0, 0, 130) }
@@ -312,6 +346,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         overlay.addView(compassArrow, arrowP)
         overlay.addView(distText, topP)
         overlay.addView(hintText, hintP)
+        overlay.addView(obstacleHint, obstacleP)
         overlay.addView(catchBtn, catchP)
         overlay.addView(mapBtn, mapP)
         catchBtn.visibility = View.GONE
@@ -341,6 +376,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
     override fun onDestroy() {
         hudHandler.removeCallbacks(hudRunnable)
         geoMgr.removeAll()
+        buildingMgr.destroy()
         mgr.huntingEggId = null
         mgr.stop()
         super.onDestroy()

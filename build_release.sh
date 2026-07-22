@@ -6,14 +6,13 @@
 # keystore.properties. Se manca, genera keystore.properties (solo firma)
 # e il keystore, e compila un APK firmato.
 #
-# Le API key delle funzionalità (AdMob, Sentry, ARCore, Mapbox, Firebase)
+# Le API key delle funzionalità (AdMob, Sentry, ARCore, Firebase)
 # si passano via ENVIRONMENT VARIABLES, NON più in keystore.properties:
 #   export ADMOB_APP_ID=ca-app-pub-xxxxx~yyyy
 #   export ADMOB_BANNER_ID=ca-app-pub-xxxxx/zzzz
 #   export ADMOB_REWARDED_ID=ca-app-pub-xxxxx/wwww
 #   export SENTRY_DSN=https://...
 #   export ARCORE_API_KEY=AIza...
-#   export MAPBOX_TOKEN=pk....
 #   export WEB_CLIENT_ID=....apps.googleusercontent.com
 # Se non settate, build.gradle usa i default hardcoded (AdMob di Huntix).
 #
@@ -239,7 +238,6 @@ for pair in \
     "ADMOB_REWARDED_ID:admobRewardedId" \
     "ADMOB_INTERSTITUAL_ID:admobInterstitialId" \
     "ARCORE_API_KEY:arcoreApiKey" \
-    "MAPBOX_TOKEN:mapboxToken" \
     "WEB_CLIENT_ID:webClientId" ; do
     env_name="${pair%%:*}"
     prop_name="${pair##*:}"

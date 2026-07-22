@@ -54,12 +54,13 @@ class HomeActivity : BaseNavActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // ✅ FIX v7.2.1: Ripristina progresso da Firestore se dati locali cancellati
-        GameProgressSync.restoreProgress(this) { restored ->
-            if (restored) {
-                android.widget.Toast.makeText(this, "☁️ Progresso ripristinato!", android.widget.Toast.LENGTH_SHORT).show()
+        try {
+            GameProgressSync.restoreProgress(this) { restored ->
+                if (restored && !isFinishing && !isDestroyed) {
+                    try { Toast.makeText(this, "☁️ Progresso ripristinato!", Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
+                }
             }
-        }
+        } catch (_: Exception) {}
 
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0D0620"))
@@ -81,7 +82,12 @@ class HomeActivity : BaseNavActivity() {
         }
         header.addView(resourceChip("\u26A1", "Lv.${profile?.level ?: 1}", "#A78BFA"))
         header.addView(spacer())
-        header.addView(resourceChip("\u26CF\uFE0F", "${profile?.let { HatchedEgg.formatMvc(SavedManager.getMvcBalance(this)) } ?: "0"} MVC", "#00FF88"))
+        try {
+            val mvcText = profile?.let { HatchedEgg.formatMvc(SavedManager.getMvcBalance(this)) } ?: "0"
+            header.addView(resourceChip("\u26CF\uFE0F", "$mvcText MVC", "#00FF88"))
+        } catch (_: Exception) {
+            header.addView(resourceChip("\u26CF\uFE0F", "0 MVC", "#00FF88"))
+        }
         header.addView(spacer())
         header.addView(resourceChip("\uD83D\uDC8E", "${profile?.gems ?: 0}", "#00BCD4"))
         root.addView(header)
@@ -137,18 +143,20 @@ class HomeActivity : BaseNavActivity() {
         root.addView(avatarCard)
 
         // ═══ 3. LIVE EVENT BANNER ═══
-        val activeEvents = LiveEventManager.getActiveEvents()
-        val evtText = if (activeEvents.isNotEmpty()) "\uD83D\uDD34  LIVE: ${activeEvents.first().title}" else "\uD83D\uDD34  LIVE: Uova Misteriose \u2014 Doppio XP!"
-        root.addView(TextView(this).apply {
-            text = evtText; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                intArrayOf(Color.parseColor("#E91E63"), Color.parseColor("#FF6EC7"))
-            ).apply { cornerRadius = dp(8).toFloat() }
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(12) }
-            if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
-        })
+        try {
+            val activeEvents = LiveEventManager.getActiveEvents()
+            val evtText = if (activeEvents.isNotEmpty()) "\uD83D\uDD34  LIVE: ${activeEvents.first().title}" else "\uD83D\uDD34  LIVE: Uova Misteriose \u2014 Doppio XP!"
+            root.addView(TextView(this).apply {
+                text = evtText; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(Color.parseColor("#E91E63"), Color.parseColor("#FF6EC7"))
+                ).apply { cornerRadius = dp(8).toFloat() }
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(12) }
+                if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
+            })
+        } catch (_: Exception) {}
 
         // ═══ 4. GAME MODES GRID (2x2) ═══
         val grid = LinearLayout(this).apply {
@@ -213,10 +221,11 @@ class HomeActivity : BaseNavActivity() {
 
         setContentView(scroll)
 
-        // VIP daily bonus
-        if (VipManager.claimDailyVipBonus(this)) {
-            Toast.makeText(this, "\u2B50 VIP Bonus: +200 MVC!", Toast.LENGTH_SHORT).show()
-        }
+        try {
+            if (VipManager.claimDailyVipBonus(this)) {
+                Toast.makeText(this, "\u2B50 VIP Bonus: +200 MVC!", Toast.LENGTH_SHORT).show()
+            }
+        } catch (_: Exception) {}
     }
 
     // ─── Game Tile (2x2 grid) ────────────────────────────────────

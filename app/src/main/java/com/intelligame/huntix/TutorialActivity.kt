@@ -63,8 +63,14 @@ class TutorialActivity : AppCompatActivity() {
                     setPadding(0, UiKit.dp(c, 16), 0, 0)
                 }
 
-                swipeView.listener = object : SwipeToCatchView.OnThrowResult {
-                    override fun onResult(quality: Float) {
+                swipeView.listener = object : SwipeToCatchView.OnCatchResult {
+                    override fun onCaptured(totalAttempts: Int) {
+                        resultLabel.text = "Catturato in $totalAttempts lanci! ⭐⭐⭐"
+                    }
+                    override fun onEscaped(totalAttempts: Int) {
+                        resultLabel.text = "L'uovo è fuggito! Riprova!"
+                    }
+                    override fun onThrowAttempt(attempt: Int, quality: Float) {
                         val score = when {
                             quality >= 0.8f -> "Perfetto! ⭐⭐⭐"
                             quality >= 0.5f -> "Bene! ⭐⭐"

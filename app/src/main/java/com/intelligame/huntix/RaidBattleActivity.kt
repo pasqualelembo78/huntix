@@ -1,5 +1,6 @@
 package com.intelligame.huntix
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -16,6 +17,7 @@ import com.intelligame.huntix.managers.IncubatorManager
 import com.intelligame.huntix.managers.RaidManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.SurpriseManager
+import com.intelligame.huntix.ui.RaidLootActivity
 
 class RaidBattleActivity : BaseNavActivity() {
 
@@ -120,20 +122,36 @@ class RaidBattleActivity : BaseNavActivity() {
                     RaidManager.incrementRaidCount(c)
 
                     if (result != null && result.defeated) {
-                        Toast.makeText(c, "🎉 Boss sconfitto! Ricompense in arrivo...", Toast.LENGTH_SHORT).show()
-                        // Give rewards
+                        // Launch loot screen
                         val rarity = boss.rewardRarity
-                        SavedManager.addMvc(c, (boss.tier * 100).toDouble())
+                        val mvcReward = boss.tier * 100
+                        val xpReward = boss.tier * 150
+                        val candiesDropped = 3 + boss.tier * 2
+                        val itemsList = mutableListOf<String>()
+                        itemsList.add("🍬 Caramelle")
+                        if (boss.tier >= 3) itemsList.add("🧬 Super Incubatrice")
+                        if (boss.tier >= 4) itemsList.add("⭐ Stella Rara")
+                        if (boss.tier >= 5) itemsList.add("💎 Gemma Leggendaria")
+
+                        SavedManager.addMvc(c, mvcReward.toDouble())
                         val eggItem = EggInventoryItem(
                             rarityId = rarity.id,
                             fantasyName = rarity.randomName(),
                             power = rarity.basePower
                         )
                         SavedManager.addPendingEgg(c, eggItem)
-                        // 30% chance of incubator drop
-                        if ((0..99).random() < 30) {
-                            Toast.makeText(c, "🧬 Super Incubatrice drop!", Toast.LENGTH_SHORT).show()
-                        }
+
+                        RaidLootActivity.start(
+                            c,
+                            bossEmoji = boss.emoji,
+                            bossName = boss.name,
+                            mvcReward = mvcReward,
+                            xpReward = xpReward,
+                            eggRarityId = rarity.id,
+                            candiesDropped = candiesDropped,
+                            itemsDropped = itemsList
+                        )
+                        finish()
                     } else if (result != null) {
                         Toast.makeText(c, "⚔️ -$damage danni! HP: ${result.currentHp}/${result.maxHp}", Toast.LENGTH_SHORT).show()
                     }

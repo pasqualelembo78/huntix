@@ -162,12 +162,16 @@ class LoginActivity : AppCompatActivity() {
         )
     }
 
-    private fun goToProfile() {
-        startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        })
-        finish()
+    private fun safeGoToProfile() {
+        if (isFinishing || isDestroyed) return
+        try {
+            startActivity(Intent(this, ProfileSetupActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            })
+            finish()
+        } catch (_: Exception) {}
     }
+    private fun goToProfile() = safeGoToProfile()
 
     // ── Email / Password ───────────────────────────────────
     private fun signInWithEmail(context: android.content.Context, email: String, password: String) {

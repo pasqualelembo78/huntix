@@ -6,32 +6,11 @@ pluginManagement {
     }
 }
 
-def mapboxDownloadsToken = { ->
-    def props = new Properties()
-    def f = new File(rootDir, "keystore.properties")
-    if (f.exists()) f.withInputStream { props.load(it) }
-    def token = props['mapboxDownloadsToken']
-    if (token == null || token.toString().isBlank()) {
-        throw new GradleException(
-            "MAPBOX_DOWNLOADS_TOKEN mancante!\n" +
-            "Aggiungilo a keystore.properties:\n" +
-            "  mapboxDownloadsToken=sk.eyJ...\n" +
-            "Ottieni il token su: https://account.mapbox.com/access-tokens/"
-        )
-    }
-    token
-}()
-
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://api.mapbox.com/downloads/v2/releases/maven")
-            authentication { create("basic", BasicAuthentication) }
-            credentials { username = "mapbox"; password = mapboxDownloadsToken }
-        }
     }
 }
 

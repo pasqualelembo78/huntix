@@ -2,7 +2,7 @@
 MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
 ===============================================================
 
-STATUS: Step 1-5 completati + Fase 1-5 completate
+STATUS: Step 1-5 completati + Fase 1-6 completate
 DATA:   2026-07-22
 REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
 
@@ -257,7 +257,7 @@ SOLUZIONE:
   - Disattivabile nelle impostazioni
 
 ================================================================
-FASE 6 — GAMEPLAY CORE (priorità ALTA)
+FASE 6 — GAMEPLAY CORE (priorità ALTA) ✅ COMPLETATA
 ================================================================
 
 --- 6.1 Lancio Pokéball (meccanica di lancio) ---
@@ -307,6 +307,13 @@ SOLUZIONE:
     - Screen ricompense con icone che volano verso inventario
     - Possibilità di catturare il boss se sconfitto (mini-game)
     - Badge raid completati visibili nel profilo
+
+RISULTATI FASE 6 ✅:
+  ✅ 6.1 SwipeToCatchView riscritto: 3 tentativi, shake animation, capture flash, escape drift
+  ✅ 6.2 Sistema cibo/berry (EggFoodManager: 6 tipi + compatibilità elemento + reazione visiva)
+  ✅ 6.3 Sistema evoluzione (15 creature evolute, catene 2 livelli, candyCost, animazione Canvas)
+  ✅ 6.4 Loot screen raid (RaidLootActivity: ricompense animate stagger + badge completati)
+  Data: 2026-07-22
 
 ================================================================
 FASE 7 — SOCIAL E MULTIPLAYER (priorità MEDIA)

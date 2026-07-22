@@ -111,4 +111,62 @@ object SurpriseManager {
         if (idx >= 0) list[idx] = updated else list.add(updated)
         saveAll(ctx, list)
     }
+
+    // ── Evolution ────────────────────────────────────────────────
+
+    /** Check if an owned creature can evolve. */
+    fun canEvolve(ctx: Context, ownedId: String): Boolean {
+        val owned = getAll(ctx).firstOrNull { it.id == ownedId } ?: return false
+        val creature = owned.creature ?: return false
+        return creature.canEvolve && owned.candies >= creature.candyCost
+    }
+
+    /** Get the evolved creature for an owned creature, or null. */
+    fun getEvolvedCreature(ctx: Context, ownedId: String): SurpriseCreature? {
+        val owned = getAll(ctx).firstOrNull { it.id == ownedId } ?: return null
+        return owned.creature?.getEvolvedCreature()
+    }
+
+    /** Get candy cost for evolution, or 0 if not evolvable. */
+    fun getEvolutionCandyCost(ctx: Context, ownedId: String): Int {
+        val creature = getAll(ctx).firstOrNull { it.id == ownedId }?.creature ?: return 0
+        return creature.candyCost
+    }
+
+    /** Perform evolution: consume candies, change creatureId, boost level+1. */
+    fun evolve(ctx: Context, ownedId: String): OwnedSurprise? {
+        val list = getAll(ctx).toMutableList()
+        val idx = list.indexOfFirst { it.id == ownedId }
+        if (idx < 0) return null
+
+        val owned = list[idx]
+        val creature = owned.creature ?: return null
+        if (!creature.canEvolve) return null
+        if (owned.candies < creature.candyCost) return null
+
+        val evolved = creature.getEvolvedCreature() ?: return null
+
+        // Consume candies, change creature, boost level
+        val newOwned = owned.copy(
+            creatureId = evolved.id,
+            candies = owned.candies - creature.candyCost,
+            level = owned.level + 1
+        )
+        list[idx] = newOwned
+        saveAll(ctx, list)
+        return newOwned
+    }
+
+    /** Count how many of the same creature species are owned. */
+    fun countSpecies(ctx: Context, creatureId: String): Int {
+        return getAll(ctx).count { it.creatureId == creatureId }
+    }
+
+    /** Get all creatures that can evolve right now. */
+    fun getEvolvableCreatures(ctx: Context): List<OwnedSurprise> {
+        return getAll(ctx).filter { owned ->
+            val creature = owned.creature ?: return@filter false
+            creature.canEvolve && owned.candies >= creature.candyCost
+        }
+    }
 }

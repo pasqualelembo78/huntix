@@ -100,13 +100,16 @@ class ProfileSetupActivity : BaseNavActivity() {
         val year = spinnerYear?.selectedItem?.toString()?.toIntOrNull()
         if (city.isBlank() || city.length < 2) { Toast.makeText(this, "Inserisci la tua citta!", Toast.LENGTH_SHORT).show(); return }
         if (year == null) { Toast.makeText(this, "Seleziona anno di nascita!", Toast.LENGTH_SHORT).show(); return }
-        val profile = PlayerProfileManager.myProfile ?: return
+        val profile = PlayerProfileManager.myProfile
+        if (profile == null) { Toast.makeText(this, "Errore: profilo non caricato. Riprova.", Toast.LENGTH_LONG).show(); return }
         profile.country = country; profile.city = city.replaceFirstChar { it.uppercase() }; profile.birthYear = year
         profile.isMinor = AgeGateManager.isMinor(year); profile.profileCompleted = true
         PlayerProfileManager.persistMyProfile()
         Toast.makeText(this, if (profile.isMinor) "Profilo completato! Alcune funzionalita limitate." else "Profilo completato!", Toast.LENGTH_SHORT).show()
         setResult(Activity.RESULT_OK)
-        startActivity(Intent(this, HomeActivity::class.java))
+        try {
+            startActivity(Intent(this, HomeActivity::class.java))
+        } catch (_: Exception) {}
         finish()
     }
     private fun mkLabel(text: String, size: Float, color: Int, bold: Boolean) = TextView(this).apply { this.text = text; textSize = size; setTextColor(color); if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT) }
