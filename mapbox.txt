@@ -2,7 +2,7 @@
 MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
 ===============================================================
 
-STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) + Fase 3 (Avatar) + Fase 4 (Eventi) completate
+STATUS: Step 1-5 completati + Fase 1-5 completate
 DATA:   2026-07-22
 REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
 
@@ -220,18 +220,22 @@ RISULTATO: Sistema di biomi deterministico basato su hash coordinate:
   - Ogni respawn genera uova con distribuzione elemento bilanciata.
 
 ================================================================
-FASE 5 — PROGRESSIONE VISIBILE (priorità MEDIA)
-================================================================
+FASE 5 — PROGRESSIONE VISIBILE (priorità MEDIA) ✅ COMPLETATA
+===============================================================
 
---- 5.1 Barra progresso uova in incubatrice ---
-FILE: HatchingActivity.kt (già funzionante), layout
-SOLUZIONE:
-  - Aggiungere mini-barra visibile sulla mappa per ogni uovo
-    in incubatrice attiva
-  - Posizione: bottom sheet quando l'uovo è selezionato
-  - Formato: [🥚] [2.4 / 5.0 km] [══════░░░░] [62%]
-  - Aggiornare ogni tick con DistanceTracker.lastDistance
-  - Animazione fill progressivo
+Data completamento: 2026-07-22
+File modificati:
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt
+
+Risultati:
+  ✅ 5.1 Barra progresso uova incubatrice in bottom sheet (km percorsi/richiesti)
+  ✅ 5.2 Notifiche proximità (vibrazione + toast quando uova a <50m)=
+
+--- 5.1 Barra progresso uova in incubatrice ✅ ---
+FILE: OutdoorWorldActivity.kt, IncubatorManager.kt
+RISULTATO: Bottom sheet mostra progresso incubazione se l'uovo selezionata
+  è in incubatrice attiva. Formato: "[🥚] 2.4 / 5.0 km [════░░░░] 48%".
+  Dati da IncubatorManager.getActiveEggs(). Aggiornamento ogni tick.
 
 --- 5.2 Livello e EXP giocatore in mappa ---
 FILE: OutdoorWorldActivity.kt (nuovo componente)

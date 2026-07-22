@@ -353,6 +353,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
         // Phase 1.4: Catch button state
         refreshCatchButton()
 
+        // Phase 5.2: Proximity hint
+        checkProximityHint()
+
         // Incubation progress in bottom sheet
         refreshIncubationProgress()
 
@@ -561,6 +564,31 @@ class OutdoorWorldActivity : BaseNavActivity() {
         }
     }
 
+    // ─── Phase 5.2: Proximity hint ─────────────────────────────
+
+    private var lastProximityEggId: String? = null
+    private var lastProximityTime: Long = 0L
+
+    private fun checkProximityHint() {
+        val now = System.currentTimeMillis()
+        if (now - lastProximityTime < 30_000) return  // max 1 ogni 30s
+
+        val nearestEgg = mgr.getEggs()
+            .filter { !it.found }
+            .minByOrNull { mgr.distanceMeters(it) } ?: return
+
+        val dist = mgr.distanceMeters(nearestEgg)
+        if (dist < 50f && nearestEgg.id != lastProximityEggId) {
+            lastProximityEggId = nearestEgg.id
+            lastProximityTime = now
+            // Vibrate
+            @Suppress("DEPRECATION")
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as? android.os.Vibrator
+            vibrator?.vibrate(android.os.VibrationEffect.createOneShot(100, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            Toast.makeText(this, "${nearestEgg.rarity.emoji} ${nearestEgg.displayLabel} vicino! (${dist.toInt()}m)", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // ─── Phase 4.1: Sky events ───────────────────────────────
 
     private fun refreshSkyOverlay() {
@@ -583,10 +611,30 @@ class OutdoorWorldActivity : BaseNavActivity() {
     // ─── Incubation progress ───────────────────────────────────
 
     private fun refreshIncubationProgress() {
-        // Show incubation info if there are eggs being incubated
-        // This is shown in the bottom sheet when an egg is selected
-        // For now, hide it (will be populated when an incubating egg is tapped)
-        incubationProgress.visibility = View.GONE
+        // Check if any egg in the bottom sheet is being incubated
+        val currentEggId = activeEggId ?: return
+        val egg = mgr.getEgg(currentEggId) ?: return
+        refreshIncubationForEgg(egg)
+    }
+
+    private fun refreshIncubationForEgg(egg: com.intelligame.huntix.WorldEgg) {
+        val activeEggs = com.intelligame.huntix.managers.IncubatorManager.getActiveEggs(this)
+        val incubating = activeEggs.firstOrNull {
+            it.rarityId == egg.rarity.name.lowercase() && !it.isReady
+        }
+
+        if (incubating != null) {
+            incubationProgress.visibility = View.VISIBLE
+            tvIncubationKm.text = "%.1f / %.0f km".format(
+                incubating.distanceWalked, incubating.distanceRequired
+            )
+            val lp = incubationBarFill.layoutParams
+            val progressPercent = (incubating.progress * 100).toInt()
+            lp.width = (120 * resources.displayMetrics.density * progressPercent / 100).toInt()
+            incubationBarFill.layoutParams = lp
+        } else {
+            incubationProgress.visibility = View.GONE
+        }
     }
 
     // ─── Phase 1.3: Screenshot ────────────────────────────────
@@ -689,6 +737,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnSheetHunt.visibility = View.VISIBLE
         btnSheetAr.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
+
+        // Phase 5.1: Show incubation progress if this egg is being incubated
+        refreshIncubationForEgg(egg)
     }
 
     private fun showPoiSheet(poi: OutdoorManager.Poi) {
