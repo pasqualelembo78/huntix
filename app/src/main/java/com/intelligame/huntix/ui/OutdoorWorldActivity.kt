@@ -91,6 +91,23 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var tvIncubationKm: TextView
     private lateinit var incubationBarFill: View
 
+    // ── Phase 3: sensor + animation state ─────────────────────
+    private var currentHeading: Float = 0f
+    private var walkTick: Int = 0
+    private var sensorManager: android.hardware.SensorManager? = null
+    private var hasSensor: Boolean = false
+    private val sensorListener = object : android.hardware.SensorEventListener {
+        override fun onSensorChanged(event: android.hardware.SensorEvent) {
+            val rotation = FloatArray(9)
+            android.hardware.SensorManager.getRotationMatrixFromVector(rotation, event.values)
+            val orientation = FloatArray(3)
+            android.hardware.SensorManager.getOrientation(rotation, orientation)
+            currentHeading = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            if (currentHeading < 0) currentHeading += 360f
+        }
+        override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -234,6 +251,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
         }
 
         refresh.post(tick)
+
+        // Phase 3: compass sensor
+        sensorManager = getSystemService(SENSOR_SERVICE) as? android.hardware.SensorManager
+        val rotationVector = sensorManager?.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR)
+        if (rotationVector != null) {
+            sensorManager?.registerListener(sensorListener, rotationVector, android.hardware.SensorManager.SENSOR_DELAY_UI)
+            hasSensor = true
+        }
     }
 
     override fun onResume() {
@@ -250,6 +275,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         refresh.removeCallbacks(tick)
         mapView?.onPause()
         mgr.stop()
+        if (hasSensor) sensorManager?.unregisterListener(sensorListener)
     }
 
     override fun onStop() {
@@ -295,6 +321,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     private fun refreshUi() {
         val w = WeatherZoneManager.currentWeather
+        walkTick = (walkTick + 1) % 64
 
         tvWeatherEmoji.text = w.emoji
         tvWeatherName.text = w.displayName
@@ -371,16 +398,51 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 )
             }
 
-        // Phase 1.7: Player avatar marker
+        // Phase 3: Player avatar marker + buddy + direction indicator
         val currentLoc = mgr.currentLocation
         if (currentLoc != null) {
+            val profile = PlayerProfileManager.myProfile
+            val level = profile?.level ?: 1
+
+            // 3.1: Player avatar (RPM or fallback)
+            val avatarDrawable = com.intelligame.huntix.avatar.AvatarMapRenderer
+                .makeAvatarMarkerDrawable(resources, 104, walkTick, level, currentHeading, this)
+            val avatarBitmap = avatarDrawable.bitmap
             map.addMarker(MarkerOptions()
                 .position(LatLng(currentLoc.latitude, currentLoc.longitude))
-                .icon(iconFactory.fromBitmap(makePlayerBitmap()))
+                .icon(iconFactory.fromBitmap(avatarBitmap))
                 .title("Io")
-                .snippet("La tua posizione")
+                .snippet("Lv.$level")
             )
+
+            // 3.2: Buddy creature marker (offset slightly)
+            val buddy = com.intelligame.huntix.managers.SurpriseManager.getAll(this)
+                .firstOrNull { it.isBuddy }
+            if (buddy != null) {
+                val creature = com.intelligame.huntix.SurpriseCreature.ALL
+                    .firstOrNull { it.id == buddy.creatureId }
+                if (creature != null) {
+                    val buddyBitmap = makeBuddyBitmap(creature.emoji)
+                    // Offset the buddy marker ~20m in a fixed direction
+                    val offsetLat = currentLoc.latitude + 0.00018
+                    val offsetLng = currentLoc.longitude + 0.00012
+                    map.addMarker(MarkerOptions()
+                        .position(LatLng(offsetLat, offsetLng))
+                        .icon(iconFactory.fromBitmap(buddyBitmap))
+                        .title(creature.name)
+                        .snippet("Compagno - ${buddy.candies} caramelle")
+                    )
+                }
             }
+
+            // 3.3: Direction indicator (triangle pointing where player faces)
+            val dirBitmap = makeDirectionBitmap(currentHeading)
+            map.addMarker(MarkerOptions()
+                .position(LatLng(currentLoc.latitude, currentLoc.longitude))
+                .icon(iconFactory.fromBitmap(dirBitmap))
+                .title("")
+            )
+        }
         }
     }
 
@@ -443,14 +505,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         radarView.blips = blips.sortedBy { it.distanceM }
         radarView.maxRangeM = 500f
-        radarView.headingDeg = 0f
+        radarView.headingDeg = currentHeading
         radarView.invalidate()
     }
 
     // ─── Phase 1.4: Catch button ──────────────────────────────
 
     private fun refreshCatchButton() {
-        val loc = mgr.currentLocation ?: return
+        if (mgr.currentLocation == null) return
         val nearestEgg = mgr.getEggs()
             .filter { !it.found }
             .minByOrNull { mgr.distanceMeters(it) }
@@ -819,6 +881,78 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val bld = android.graphics.Path()
         bld.addRect(bx - bw, by - bh, bx + bw, by + bh, android.graphics.Path.Direction.CW)
         c.drawPath(bld, p)
+
+        return bmp
+    }
+
+    private fun makeBuddyBitmap(emoji: String): Bitmap {
+        val w = 56; val h = 56
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Outer circle (light purple)
+        p.color = 0xFF9C27B0.toInt()
+        p.style = Paint.Style.FILL
+        c.drawCircle(w / 2f, h / 2f, 26f, p)
+
+        // Inner circle (white)
+        p.color = Color.WHITE
+        c.drawCircle(w / 2f, h / 2f, 22f, p)
+
+        // Creature emoji
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = 28f
+            textAlign = Paint.Align.CENTER
+        }
+        c.drawText(emoji, w / 2f, h / 2f + 10f, textPaint)
+
+        return bmp
+    }
+
+    private fun makeDirectionBitmap(heading: Float): Bitmap {
+        val w = 40; val h = 40
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val cx = w / 2f
+        val cy = h / 2f
+
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFD700.toInt()
+            style = Paint.Style.FILL
+        }
+
+        // Triangle pointing up, rotated by heading
+        val path = android.graphics.Path()
+        val radius = 16f
+        val angleRad = Math.toRadians(heading.toDouble())
+
+        // Tip of triangle (in direction of heading)
+        val tipX = cx + (radius * Math.sin(angleRad)).toFloat()
+        val tipY = cy - (radius * Math.cos(angleRad)).toFloat()
+
+        // Base points (perpendicular to heading)
+        val baseAngle1 = angleRad + Math.PI * 0.75
+        val baseAngle2 = angleRad - Math.PI * 0.75
+        val baseR = radius * 0.45f
+
+        val base1X = cx + (baseR * Math.sin(baseAngle1)).toFloat()
+        val base1Y = cy - (baseR * Math.cos(baseAngle1)).toFloat()
+        val base2X = cx + (baseR * Math.sin(baseAngle2)).toFloat()
+        val base2Y = cy - (baseR * Math.cos(baseAngle2)).toFloat()
+
+        path.moveTo(tipX, tipY)
+        path.lineTo(base1X, base1Y)
+        path.lineTo(base2X, base2Y)
+        path.close()
+
+        c.drawPath(path, p)
+
+        // Outline
+        p.color = 0xFF000000.toInt()
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 2f
+        c.drawPath(path, p)
 
         return bmp
     }

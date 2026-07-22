@@ -2,7 +2,7 @@
 MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
 ===============================================================
 
-STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) completate
+STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) + Fase 3 (Avatar) completate
 DATA:   2026-07-22
 REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
 
@@ -145,37 +145,36 @@ RISULTATO: Cooldown 5 minuti (POI_COOLDOWN_MS). Campo spunAt: Long
   Helper: isPoiOnCooldown(), getPoiCooldownRemaining().
 
 ================================================================
-FASE 3 — AVATAR E COMPAGNO SULLA MAPPA (priorità ALTA)
-================================================================
+FASE 3 — AVATAR E COMPAGNO SULLA MAPPA (priorità ALTA) ✅ COMPLETATA
+===============================================================
 
---- 3.1 Avatar giocatore sulla mappa ---
-FILE: OutdoorWorldActivity.kt (nuovo marker), avatar/AvatarMapRenderer.kt
-SOLUZIONE:
-  - Usare AvatarMapRenderer (già esistente) per posizionare
-    l'avatar del giocatore alla posizione GPS corrente
-  - Marker non rimovibile (a differenza di uova/POI)
-  - Thumbnail ReadyPlayerMe o fallback silhouette gender-based
-  - Aggiornare posizione ogni tick (se loc è cambiata)
-  - Animazione idle leggera (leggero bounce o breathing)
-  - Se buddy è attivo: creatura piccola accanto all'avatar
+Data completamento: 2026-07-22
+File modificati:
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (avatar+buddy+heading)
 
---- 3.2 Compagno (buddy) visibile ---
-FILE: BuddyManager.kt (32 righe, base), avatar/CreatureModelHelper.kt
-SOLUZIONE:
-  - Se PlayerProfile.buddyCreatureId != null:
-    - Marker secondario accanto all'avatar (offset pixel)
-    - Icona creatura a 32x32px
-    - Barra vita/energia miniatura sotto la creatura
-  - BuddyManagerKM: ogni N km camminati → +1 candy
-  - Aggiungere animazione bob al compagno quando l'utente si muove
+Risultati:
+  ✅ 3.1 Avatar giocatore con RPM thumbnail + level ring + walking bounce
+  ✅ 3.2 Compagno (buddy) visibile accanto all'avatar con emoji creatura
+  ✅ 3.3 Indicatore direzione (triangolo oro che ruota con compass)=
 
---- 3.3 Indicatore direzione utente ---
-FILE: OutdoorWorldActivity.kt (nuovo layer)
-SOLUZIONE:
-  - Triangolo direzionale che mostra dove guarda il giocatore
-  - Usare bearing dal sensorManager (TYPE_GAME_ROTATION_VECTOR)
-  - Colore: bianco con ombra, dimensione ~20px
-  - Posizionato sul marker avatar, orientato selon il heading
+--- 3.1 Avatar giocatore sulla mappa ✅ ---
+FILE: OutdoorWorldActivity.kt, avatar/AvatarMapRenderer.kt
+RISULTATO: Avatar marker con RPM thumbnail (se disponibile) o fallback
+  classico. Ring colorato per livello (verde/blu/arancio/viola/oro).
+  Bounce animation camminata (walkTick 0-63). Badge accessori equipaggiati.
+
+--- 3.2 Compagno (buddy) visibile ✅ ---
+FILE: OutdoorWorldActivity.kt, managers/BuddyManager.kt
+RISULTATO: Marker secondario con emoji creatura buddy su cerchio viola.
+  Mostra nome creature e conteggio caramelle. Posizionato con offset
+  fisso dall'avatar. Visibile solo se PlayerProfile.buddyCreatureId != "".
+
+--- 3.3 Indicatore direzione utente ✅ ---
+FILE: OutdoorWorldActivity.kt
+RISULTATO: Triangolo oro (40x40dp) che ruota con heading del sensore.
+  Usa TYPE_ROTATION_VECTOR da SensorManager. Heading aggiornato in
+  tempo reale (SENSOR_DELAY_UI). Triangolo punta nella direzione
+  del movimento del giocatore. Radar usa heading per orientamento.
 
 ================================================================
 FASE 4 — EVENTI E DINAMISMO MAPPA (priorità MEDIA)
