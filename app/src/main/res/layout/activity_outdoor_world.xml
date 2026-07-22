@@ -4,37 +4,268 @@
     android:layout_height="match_parent"
     android:background="#0D0620">
 
-    <!-- Fullscreen OSMDroid map -->
-    <org.osmdroid.views.MapView
+    <!-- Fullscreen MapLibre 3D map -->
+    <org.maplibre.android.maps.MapView
         android:id="@+id/mapView"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Floating top bar: weather + status -->
-    <LinearLayout
-        android:id="@+id/floatingTopBar"
+    <!-- Weather particle overlay (pioggia/neve/nebbia) -->
+    <View
+        android:id="@+id/weatherOverlay"
         android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="false"
+        android:focusable="false" />
+
+    <!-- Floating HUD: top-left column -->
+    <LinearLayout
+        android:id="@+id/hudColumn"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:background="#CC0D0620"
-        android:padding="10dp"
-        android:layout_gravity="top">
+        android:layout_gravity="top|start"
+        android:layout_marginTop="48dp"
+        android:layout_marginStart="12dp"
+        android:gravity="center_horizontal">
 
-        <TextView
-            android:id="@+id/tvWeather"
-            android:layout_width="match_parent"
+        <!-- Player level + EXP bar -->
+        <LinearLayout
+            android:id="@+id/playerLevelBar"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="#B0BEC5"
-            android:layout_marginBottom="2dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/badge_chip"
+            android:paddingStart="8dp"
+            android:paddingEnd="10dp"
+            android:layout_marginBottom="6dp">
 
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#A78BFA" />
+            <TextView
+                android:id="@+id/tvPlayerLevel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Lv.1"
+                android:textSize="11sp"
+                android:textColor="#FFD700"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="60dp"
+                android:layout_height="8dp"
+                android:layout_marginStart="6dp">
+
+                <View
+                    android:layout_width="60dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/exp_bar_bg" />
+
+                <View
+                    android:id="@+id/expBarFill"
+                    android:layout_width="0dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/exp_bar_fill" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/tvPlayerXp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0/150"
+                android:textSize="9sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+
+        <!-- Weather badge -->
+        <FrameLayout
+            android:id="@+id/badgeWeather"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginBottom="10dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:gravity="center"
+                android:textSize="26sp"
+                android:id="@+id/tvWeatherEmoji"
+                android:background="@drawable/badge_circle_dark" />
+
+            <!-- Weather tooltip (hidden by default) -->
+            <LinearLayout
+                android:id="@+id/weatherTooltip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/badge_tooltip"
+                android:padding="8dp"
+                android:layout_marginStart="60dp"
+                android:layout_marginTop="-4dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tvWeatherName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvWeatherBonus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="10sp"
+                    android:textColor="#B0BEC5"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Egg count badge -->
+        <FrameLayout
+            android:id="@+id/badgeEggs"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginBottom="6dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/badge_chip"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="\uD83E\uDD5A"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvEggCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Gym/POI count badge -->
+        <FrameLayout
+            android:id="@+id/badgeGyms"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginBottom="6dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/badge_chip"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="\uD83C\uDFDF\uFE0F"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvGymCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- MVC currency badge -->
+        <FrameLayout
+            android:id="@+id/badgeMvc"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginBottom="6dp">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/badge_chip"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="\uD83D\uDCB0"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvMvcCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#FFD700"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Live event badge (shown when event is active) -->
+        <FrameLayout
+            android:id="@+id/badgeEvent"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/badge_event"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp">
+
+                <TextView
+                    android:id="@+id/tvEventEmoji"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvEventTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="11sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+            </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
+
+    <!-- Radar view (bottom-left) -->
+    <com.intelligame.huntix.ui.OutdoorRadarView
+        android:id="@+id/radarView"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="100dp"
+        android:visibility="gone" />
 
     <!-- Bottom sheet: egg/poi info on tap -->
     <LinearLayout
@@ -64,7 +295,50 @@
             android:textColor="#B0BEC5"
             android:layout_marginBottom="10dp" />
 
-        <!-- Two side-by-side buttons -->
+        <!-- Egg incubation progress (shown for eggs in incubator) -->
+        <LinearLayout
+            android:id="@+id/incubationProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="\uD83E\uDD5A"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tvIncubationKm"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0.0 / 5.0 km"
+                android:textSize="11sp"
+                android:textColor="#B0BEC5"
+                android:layout_marginStart="6dp" />
+
+            <FrameLayout
+                android:layout_width="0dp"
+                android:layout_height="6dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp">
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:background="@drawable/exp_bar_bg" />
+
+                <View
+                    android:id="@+id/incubationBarFill"
+                    android:layout_width="0dp"
+                    android:layout_height="6dp"
+                    android:background="@drawable/exp_bar_fill" />
+            </FrameLayout>
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -118,30 +392,109 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Floating settings gear (top-right) -->
-    <TextView
-        android:id="@+id/btnSettings"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
+    <!-- Right side buttons column -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
         android:layout_gravity="top|end"
-        android:layout_marginTop="56dp"
+        android:layout_marginTop="48dp"
         android:layout_marginEnd="12dp"
-        android:gravity="center"
-        android:text="\u2699\uFE0F"
-        android:textSize="22sp"
-        android:background="@drawable/btn_accent" />
+        android:gravity="center_horizontal">
 
-    <!-- Center-location button -->
+        <!-- Settings gear (top-right) -->
+        <TextView
+            android:id="@+id/btnSettings"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:text="\u2699\uFE0F"
+            android:textSize="22sp"
+            android:background="@drawable/btn_accent" />
+
+        <!-- Calendar event button -->
+        <TextView
+            android:id="@+id/btnCalendar"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:text="\uD83D\uDCC5"
+            android:textSize="20sp"
+            android:background="@drawable/btn_purple"
+            android:visibility="gone" />
+
+        <!-- Photo/snapshot button -->
+        <TextView
+            android:id="@+id/btnPhoto"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:gravity="center"
+            android:text="\uD83D\uDCF7"
+            android:textSize="20sp"
+            android:background="@drawable/btn_accent" />
+    </LinearLayout>
+
+    <!-- Center-location button (bottom-right) -->
     <TextView
         android:id="@+id/btnCenter"
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="bottom|end"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="100dp"
         android:layout_marginEnd="12dp"
         android:gravity="center"
         android:text="\uD83D\uDCCD"
         android:textSize="20sp"
         android:background="@drawable/btn_purple" />
+
+    <!-- Compass / North reset button (bottom-right, below center) -->
+    <TextView
+        android:id="@+id/btnCompass"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="52dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:text="\uD83E\uDDED"
+        android:textSize="20sp"
+        android:background="@drawable/btn_accent" />
+
+    <!-- Central catch button (bottom-center) -->
+    <FrameLayout
+        android:id="@+id/btnCatch"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <View
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/btn_catch_bg" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="\uD83E\uDD5A"
+            android:textSize="28sp" />
+    </FrameLayout>
+
+    <!-- Catch tooltip (shown when near an egg) -->
+    <TextView
+        android:id="@+id/tvCatchHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="92dp"
+        android:text="Tocca per catturare!"
+        android:textSize="11sp"
+        android:textColor="#B0BEC5"
+        android:visibility="gone" />
 
 </FrameLayout>

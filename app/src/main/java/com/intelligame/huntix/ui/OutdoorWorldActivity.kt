@@ -7,11 +7,12 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -20,27 +21,44 @@ import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.OutdoorSetupActivity
+import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.R
+import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.manager.OutdoorManager
+import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.WeatherZoneManager
-import org.osmdroid.config.Configuration
-import org.osmdroid.events.MapListener
-import org.osmdroid.events.ScrollEvent
-import org.osmdroid.events.ZoomEvent
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polygon
+import org.maplibre.android.MapLibre
+import org.maplibre.android.annotations.IconFactory
+import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.PolygonOptions
+import org.maplibre.android.camera.CameraPosition.Builder
+import org.maplibre.android.camera.CameraUpdateFactory
+import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.Style
+import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.FillExtrusionLayer
+import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.sources.VectorSource
+import java.util.Calendar
+import java.util.Locale
 
 class OutdoorWorldActivity : BaseNavActivity() {
 
     override fun activeTab() = ""
 
     private val mgr = OutdoorManager.get()
-    private var map: MapView? = null
-    private lateinit var tvWeather: TextView
-    private lateinit var tvStatus: TextView
+    private var mapView: MapView? = null
+    private var mapLibre: MapLibreMap? = null
+    private lateinit var tvWeatherEmoji: TextView
+    private lateinit var weatherTooltip: LinearLayout
+    private lateinit var tvWeatherName: TextView
+    private lateinit var tvWeatherBonus: TextView
+    private lateinit var badgeWeather: FrameLayout
+    private lateinit var tvEggCount: TextView
+    private lateinit var tvGymCount: TextView
+    private lateinit var weatherOverlay: View
     private lateinit var bottomSheet: LinearLayout
     private lateinit var tvSheetTitle: TextView
     private lateinit var tvSheetInfo: TextView
@@ -55,11 +73,28 @@ class OutdoorWorldActivity : BaseNavActivity() {
         override fun run() { refreshUi(); refresh.postDelayed(this, 3000) }
     }
 
+    // ── Phase 1: new HUD elements ─────────────────────────────
+    private lateinit var tvPlayerLevel: TextView
+    private lateinit var expBarFill: View
+    private lateinit var tvPlayerXp: TextView
+    private lateinit var tvMvcCount: TextView
+    private lateinit var badgeEvent: FrameLayout
+    private lateinit var tvEventEmoji: TextView
+    private lateinit var tvEventTimer: TextView
+    private lateinit var radarView: OutdoorRadarView
+    private lateinit var btnCatch: FrameLayout
+    private lateinit var tvCatchHint: TextView
+    private lateinit var btnCompass: TextView
+    private lateinit var btnPhoto: TextView
+    private lateinit var btnCalendar: TextView
+    private lateinit var incubationProgress: LinearLayout
+    private lateinit var tvIncubationKm: TextView
+    private lateinit var incubationBarFill: View
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Configuration.getInstance().load(this, getSharedPreferences("osmdroid", MODE_PRIVATE))
-        Configuration.getInstance().userAgentValue = packageName
+        MapLibre.getInstance(this)
 
         setContentView(R.layout.activity_outdoor_world)
 
@@ -69,8 +104,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 101)
         }
 
-        tvWeather = findViewById(R.id.tvWeather)
-        tvStatus = findViewById(R.id.tvStatus)
+        tvWeatherEmoji = findViewById(R.id.tvWeatherEmoji)
+        weatherTooltip = findViewById(R.id.weatherTooltip)
+        tvWeatherName = findViewById(R.id.tvWeatherName)
+        tvWeatherBonus = findViewById(R.id.tvWeatherBonus)
+        badgeWeather = findViewById(R.id.badgeWeather)
+        tvEggCount = findViewById(R.id.tvEggCount)
+        tvGymCount = findViewById(R.id.tvGymCount)
+        weatherOverlay = findViewById(R.id.weatherOverlay)
         bottomSheet = findViewById(R.id.bottomSheet)
         tvSheetTitle = findViewById(R.id.tvSheetTitle)
         tvSheetInfo = findViewById(R.id.tvSheetInfo)
@@ -79,21 +120,105 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnSheetAr = findViewById(R.id.btnSheetAr)
         tvSheetAr = findViewById(R.id.tvSheetAr)
 
-        map = findViewById(R.id.mapView)
-        map?.setTileSource(TileSourceFactory.MAPNIK)
-        map?.setMultiTouchControls(true)
-        map?.controller?.setZoom(17.0)
+        // Phase 1 bindings
+        tvPlayerLevel = findViewById(R.id.tvPlayerLevel)
+        expBarFill = findViewById(R.id.expBarFill)
+        tvPlayerXp = findViewById(R.id.tvPlayerXp)
+        tvMvcCount = findViewById(R.id.tvMvcCount)
+        badgeEvent = findViewById(R.id.badgeEvent)
+        tvEventEmoji = findViewById(R.id.tvEventEmoji)
+        tvEventTimer = findViewById(R.id.tvEventTimer)
+        radarView = findViewById(R.id.radarView)
+        btnCatch = findViewById(R.id.btnCatch)
+        tvCatchHint = findViewById(R.id.tvCatchHint)
+        btnCompass = findViewById(R.id.btnCompass)
+        btnPhoto = findViewById(R.id.btnPhoto)
+        btnCalendar = findViewById(R.id.btnCalendar)
+        incubationProgress = findViewById(R.id.incubationProgress)
+        tvIncubationKm = findViewById(R.id.tvIncubationKm)
+        incubationBarFill = findViewById(R.id.incubationBarFill)
 
-        map?.addMapListener(object : MapListener {
-            override fun onScroll(event: ScrollEvent?): Boolean = true
-            override fun onZoom(event: ZoomEvent?): Boolean = true
-        })
+        mapView = findViewById(R.id.mapView)
+        mapView?.onCreate(savedInstanceState)
 
+        mapView?.getMapAsync { map ->
+            mapLibre = map
+
+            map.setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
+                val loc = mgr.currentLocation
+                val initPos = if (loc != null) {
+                    LatLng(loc.latitude, loc.longitude)
+                } else {
+                    LatLng(41.9028, 12.4964)
+                }
+
+                map.cameraPosition = Builder()
+                    .target(initPos)
+                    .zoom(17.0)
+                    .tilt(60.0)
+                    .bearing(0.0)
+                    .build()
+
+                addBuildingLayer(style)
+            }
+
+            map.addOnMapClickListener {
+                hideBottomSheet()
+                true
+            }
+
+            map.setOnMarkerClickListener { marker ->
+                val title = marker.title ?: return@setOnMarkerClickListener false
+                val egg = mgr.getEggs().firstOrNull { it.displayLabel == title && !it.found }
+                val poi = mgr.getPois().firstOrNull { it.name == title }
+                if (egg != null) showEggSheet(egg)
+                else if (poi != null) showPoiSheet(poi)
+                true
+            }
+        }
+
+        // Navigation buttons
         findViewById<View>(R.id.btnCenter).setOnClickListener { centerOnUser() }
         findViewById<View>(R.id.btnSettings).setOnClickListener {
             startActivity(Intent(this, OutdoorSetupActivity::class.java))
         }
 
+        // Phase 1: Compass — reset bearing to north
+        btnCompass.setOnClickListener {
+            val cur = mapLibre?.cameraPosition ?: return@setOnClickListener
+            mapLibre?.animateCamera(
+                CameraUpdateFactory.newLatLngZoom(cur.target!!, 17.0)
+            )
+            // Reset bearing to 0 (north)
+            mapLibre?.cameraPosition = Builder()
+                .target(cur.target)
+                .zoom(cur.zoom)
+                .tilt(cur.tilt)
+                .bearing(0.0)
+                .build()
+        }
+
+        // Phase 1: Photo — screenshot
+        btnPhoto.setOnClickListener { takeScreenshot() }
+
+        // Phase 1: Calendar — open events
+        btnCalendar.setOnClickListener {
+            startActivity(Intent(this, com.intelligame.huntix.ui.LiveEventsActivity::class.java))
+        }
+
+        // Phase 1: Central catch button
+        btnCatch.setOnClickListener {
+            val nearestEgg = mgr.getEggs()
+                .filter { !it.found }
+                .minByOrNull { mgr.distanceMeters(it) }
+            if (nearestEgg != null && mgr.distanceMeters(nearestEgg) <= mgr.getCatchRadiusM(nearestEgg)) {
+                showEggSheet(nearestEgg)
+            } else {
+                Toast.makeText(this, "Nessuna uova in raggio", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Bottom sheet buttons
         btnSheetHunt.setOnClickListener {
             activeEggId?.let { doHunt(it) }
             activePoiId?.let { openPoi(it) }
@@ -103,28 +228,50 @@ class OutdoorWorldActivity : BaseNavActivity() {
             activeEggId?.let { doArNavigation(it) }
         }
 
+        badgeWeather.setOnClickListener {
+            weatherTooltip.visibility =
+                if (weatherTooltip.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
         refresh.post(tick)
     }
 
     override fun onResume() {
         super.onResume()
         mgr.start(this)
-        map?.onResume()
+        mapView?.onResume()
         if (!refresh.hasCallbacks(tick)) refresh.post(tick)
         centerOnUser()
+        updateSkyColor()
     }
 
     override fun onPause() {
         super.onPause()
         refresh.removeCallbacks(tick)
-        map?.onPause()
+        mapView?.onPause()
         mgr.stop()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        mapView?.onStop()
     }
 
     override fun onDestroy() {
         refresh.removeCallbacks(tick)
+        mapView?.onDestroy()
         mgr.stop()
         super.onDestroy()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        mapView?.onLowMemory()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        mapView?.onSaveInstanceState(outState)
     }
 
     override fun onRequestPermissionsResult(
@@ -140,69 +287,311 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     private fun centerOnUser() {
         val loc = mgr.currentLocation ?: return
-        val gp = GeoPoint(loc.latitude, loc.longitude)
-        map?.controller?.animateTo(gp)
-        map?.controller?.setZoom(17.0)
+        val latLng = LatLng(loc.latitude, loc.longitude)
+        mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
     }
+
+    // ─── Main UI refresh ───────────────────────────────────────
 
     private fun refreshUi() {
         val w = WeatherZoneManager.currentWeather
-        val boostDesc = w.rarityBoost.entries.joinToString(", ") { (r, b) -> "$r x${"%.1f".format(b)}" }
-        tvWeather.text = "${w.emoji} ${w.displayName} — Bonus: $boostDesc"
+
+        tvWeatherEmoji.text = w.emoji
+        tvWeatherName.text = w.displayName
+        val boostDesc = w.rarityBoost.entries.joinToString("\n") { (r, b) -> "$r  x${"%.1f".format(b)}" }
+        tvWeatherBonus.text = "Bonus rarita:\n$boostDesc"
 
         val eggCount = mgr.getEggs().count { !it.found }
-        tvStatus.text = "\uD83E\uDD5A $eggCount uova  ·  \uD83C\uDFDF\uFE0F ${mgr.getPois().size} palestre"
+        tvEggCount.text = "$eggCount"
+        tvGymCount.text = "${mgr.getPois().size}"
 
-        map?.overlays?.clear()
+        // Phase 1.1: Player level + EXP bar
+        refreshPlayerHud()
 
-        mgr.getEggs().forEach { egg ->
-            if (!egg.found) {
-                val gp = GeoPoint(egg.lat, egg.lng)
-                val circle = Polygon().apply {
-                    points = createCirclePoints(gp, mgr.getCatchRadiusM(egg).toDouble())
-                    outlinePaint.color = rarityColor(egg.rarity)
-                    outlinePaint.strokeWidth = 4f
-                    fillPaint.color = Color.argb(35, Color.red(rarityColor(egg.rarity)),
-                        Color.green(rarityColor(egg.rarity)), Color.blue(rarityColor(egg.rarity)))
-                }
-                map?.overlays?.add(circle)
-            }
-        }
+        // Phase 1.1: MVC currency
+        val mvc = SavedManager.getMvcBalance(this)
+        tvMvcCount.text = "${mvc.toLong()}"
 
-        mgr.getEggs().forEach { egg ->
-            if (!egg.found) {
-                val gp = GeoPoint(egg.lat, egg.lng)
-                val marker = Marker(map).apply {
-                    position = gp
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    icon = BitmapDrawable(resources, makeMarkerBitmap(egg.rarity))
-                    title = egg.displayLabel
-                    setOnMarkerClickListener { _, _ ->
-                        showEggSheet(egg)
-                        true
-                    }
-                }
-                map?.overlays?.add(marker)
-            }
-        }
+        // Phase 1.6: Live event badge
+        refreshEventBadge()
 
-        mgr.getPois().forEach { poi ->
-            val gp = GeoPoint(poi.lat, poi.lng)
-            val marker = Marker(map).apply {
-                position = gp
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                icon = BitmapDrawable(resources, makePoiBitmap())
-                title = poi.name
-                setOnMarkerClickListener { _, _ ->
-                    showPoiSheet(poi)
-                    true
+        // Phase 1.5: Radar view
+        refreshRadar()
+
+        // Phase 1.4: Catch button state
+        refreshCatchButton()
+
+        // Incubation progress in bottom sheet
+        refreshIncubationProgress()
+
+        updateWeatherParticles(w)
+
+        mapLibre?.let { map ->
+            map.clear()
+
+            mgr.getEggs().forEach { egg ->
+                if (!egg.found) {
+                    val color = rarityColor(egg.rarity)
+                    val center = LatLng(egg.lat, egg.lng)
+                    val points = createCirclePoints(center, mgr.getCatchRadiusM(egg).toDouble())
+                    map.addPolygon(PolygonOptions()
+                        .addAll(points)
+                        .strokeColor(color)
+                        .fillColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)))
+                    )
                 }
             }
-            map?.overlays?.add(marker)
-        }
 
-        map?.invalidate()
+            val iconFactory = IconFactory.getInstance(this)
+
+            mgr.getEggs().forEach { egg ->
+                if (!egg.found) {
+                    val latLng = LatLng(egg.lat, egg.lng)
+                    map.addMarker(MarkerOptions()
+                        .position(latLng)
+                        .icon(iconFactory.fromBitmap(makeMarkerBitmap(egg.rarity)))
+                        .title(egg.displayLabel)
+                        .snippet("${egg.rarity.displayName} — ${egg.element.name}")
+                    )
+                }
+            }
+
+            mgr.getPois().forEach { poi ->
+                val latLng = LatLng(poi.lat, poi.lng)
+                val bitmap = if (mgr.isPoiOnCooldown(poi)) {
+                    makePoiBitmapGray(poi.type)
+                } else {
+                    makePoiBitmap(poi.type)
+                }
+                map.addMarker(MarkerOptions()
+                    .position(latLng)
+                    .icon(iconFactory.fromBitmap(bitmap))
+                    .title(poi.name)
+                    .snippet(poi.type)
+                )
+            }
+
+        // Phase 1.7: Player avatar marker
+        val currentLoc = mgr.currentLocation
+        if (currentLoc != null) {
+            map.addMarker(MarkerOptions()
+                .position(LatLng(currentLoc.latitude, currentLoc.longitude))
+                .icon(iconFactory.fromBitmap(makePlayerBitmap()))
+                .title("Io")
+                .snippet("La tua posizione")
+            )
+            }
+        }
     }
+
+    // ─── Phase 1.1: Player HUD ────────────────────────────────
+
+    private fun refreshPlayerHud() {
+        val profile = PlayerProfileManager.myProfile
+        if (profile != null) {
+            tvPlayerLevel.text = "Lv.${profile.level}"
+            val progress = profile.levelProgressPercent
+            val lp = expBarFill.layoutParams
+            lp.width = (60 * resources.displayMetrics.density * progress / 100).toInt()
+            expBarFill.layoutParams = lp
+            tvPlayerXp.text = "${profile.xpProgressInLevel}/${profile.xpNeededForNextLevel}"
+        } else {
+            tvPlayerLevel.text = "Lv.1"
+            tvPlayerXp.text = "0/150"
+        }
+    }
+
+    // ─── Phase 1.5: Radar ─────────────────────────────────────
+
+    private fun refreshRadar() {
+        val eggs = mgr.getEggs().filter { !it.found }
+        val pois = mgr.getPois()
+        val loc = mgr.currentLocation
+
+        if (loc == null || (eggs.isEmpty() && pois.isEmpty())) {
+            radarView.visibility = View.GONE
+            return
+        }
+
+        radarView.visibility = View.VISIBLE
+
+        val blips = mutableListOf<OutdoorRadarView.Blip>()
+
+        for (egg in eggs) {
+            val d = mgr.distanceMeters(egg)
+            if (d > 500) continue
+            val bearing = mgr.bearingTo(egg.lat, egg.lng)
+            blips.add(OutdoorRadarView.Blip(
+                bearingDeg = bearing,
+                distanceM = d,
+                color = rarityColor(egg.rarity),
+                label = egg.rarity.emoji
+            ))
+        }
+
+        for (poi in pois) {
+            val d = mgr.distanceMeters(poi)
+            if (d > 500) continue
+            val bearing = mgr.bearingTo(poi.lat, poi.lng)
+            blips.add(OutdoorRadarView.Blip(
+                bearingDeg = bearing,
+                distanceM = d,
+                color = 0xFF42A5F5.toInt(),
+                label = "\uD83C\uDFDF"
+            ))
+        }
+
+        radarView.blips = blips.sortedBy { it.distanceM }
+        radarView.maxRangeM = 500f
+        radarView.headingDeg = 0f
+        radarView.invalidate()
+    }
+
+    // ─── Phase 1.4: Catch button ──────────────────────────────
+
+    private fun refreshCatchButton() {
+        val loc = mgr.currentLocation ?: return
+        val nearestEgg = mgr.getEggs()
+            .filter { !it.found }
+            .minByOrNull { mgr.distanceMeters(it) }
+
+        if (nearestEgg != null && mgr.distanceMeters(nearestEgg) <= mgr.getCatchRadiusM(nearestEgg)) {
+            btnCatch.visibility = View.VISIBLE
+            tvCatchHint.visibility = View.VISIBLE
+            tvCatchHint.text = "${nearestEgg.rarity.emoji} ${nearestEgg.displayLabel} a ${mgr.distanceMeters(nearestEgg).toInt()}m"
+        } else if (nearestEgg != null && mgr.distanceMeters(nearestEgg) <= 200) {
+            btnCatch.visibility = View.VISIBLE
+            tvCatchHint.visibility = View.VISIBLE
+            tvCatchHint.text = "Avvicinati per catturare (${mgr.distanceMeters(nearestEgg).toInt()}m)"
+        } else {
+            btnCatch.visibility = View.GONE
+            tvCatchHint.visibility = View.GONE
+        }
+    }
+
+    // ─── Phase 1.6: Event badge ───────────────────────────────
+
+    private fun refreshEventBadge() {
+        val activeEvent = LiveEventManager.getCurrentEvent()
+        if (activeEvent != null && activeEvent.isActive) {
+            badgeEvent.visibility = View.VISIBLE
+            tvEventEmoji.text = activeEvent.emoji
+            val mins = activeEvent.remainingMinutes
+            tvEventTimer.text = if (mins >= 60) {
+                "${mins / 60}h ${mins % 60}m"
+            } else {
+                "${mins}m"
+            }
+            btnCalendar.visibility = View.VISIBLE
+        } else {
+            badgeEvent.visibility = View.GONE
+            val upcoming = LiveEventManager.getUpcomingEvent()
+            if (upcoming != null) {
+                btnCalendar.visibility = View.VISIBLE
+            } else {
+                btnCalendar.visibility = View.GONE
+            }
+        }
+    }
+
+    // ─── Incubation progress ───────────────────────────────────
+
+    private fun refreshIncubationProgress() {
+        // Show incubation info if there are eggs being incubated
+        // This is shown in the bottom sheet when an egg is selected
+        // For now, hide it (will be populated when an incubating egg is tapped)
+        incubationProgress.visibility = View.GONE
+    }
+
+    // ─── Phase 1.3: Screenshot ────────────────────────────────
+
+    private fun takeScreenshot() {
+        try {
+            val rootView = window.decorView.rootView
+            val bitmap = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            rootView.draw(canvas)
+
+            val path = android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_PICTURES
+            )
+            val file = java.io.File(path, "huntix_${System.currentTimeMillis()}.png")
+            java.io.FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this, "$packageName.fileprovider", file
+            )
+            val share = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(share, "Condividi screenshot"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Screenshot non disponibile", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ─── Map helpers ───────────────────────────────────────────
+
+    private fun createCirclePoints(center: LatLng, radiusMeters: Double, numPoints: Int = 64): List<LatLng> {
+        val points = mutableListOf<LatLng>()
+        val latRad = Math.toRadians(center.latitude)
+        val dLat = radiusMeters / 111320.0
+        val dLng = radiusMeters / (111320.0 * Math.cos(latRad))
+        for (i in 0..numPoints) {
+            val angle = 2.0 * Math.PI * i / numPoints
+            points.add(LatLng(
+                center.latitude + dLat * Math.cos(angle),
+                center.longitude + dLng * Math.sin(angle)
+            ))
+        }
+        return points
+    }
+
+    private fun addBuildingLayer(style: Style) {
+        try {
+            val sourceId = "openmaptiles"
+            if (style.getSource(sourceId) == null) {
+                val source = VectorSource(sourceId, "https://tiles.openfreemap.org/planet")
+                style.addSource(source)
+            }
+
+            if (style.getLayer("buildings-3d") != null) return
+
+            val buildings = FillExtrusionLayer("buildings-3d", sourceId).apply {
+                sourceLayer = "building"
+                setProperties(
+                    PropertyFactory.fillExtrusionColor(Expression.literal("#1A1040")),
+                    PropertyFactory.fillExtrusionHeight(Expression.get("render_height")),
+                    PropertyFactory.fillExtrusionBase(Expression.get("render_min_height")),
+                    PropertyFactory.fillExtrusionOpacity(0.6f)
+                )
+            }
+            style.addLayer(buildings)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun updateSkyColor() {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val skyColor = when {
+            hour in 5..6   -> Color.parseColor("#FF8A65")
+            hour in 7..16  -> Color.parseColor("#4A90D9")
+            hour in 17..18 -> Color.parseColor("#FF6F00")
+            hour in 19..20 -> Color.parseColor("#1A237E")
+            else           -> Color.parseColor("#0D0620")
+        }
+        mapView?.setBackgroundColor(skyColor)
+        refresh.postDelayed({
+            mapView?.setBackgroundColor(Color.TRANSPARENT)
+        }, 100)
+    }
+
+    // ─── Bottom sheet ──────────────────────────────────────────
 
     private fun showEggSheet(egg: com.intelligame.huntix.WorldEgg) {
         val d = mgr.distanceMeters(egg)
@@ -211,7 +600,6 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetTitle.text = "${egg.rarity.emoji} ${egg.displayLabel}"
         tvSheetInfo.text = "${egg.rarity.displayName} — ${d.toInt()} m — ${egg.element.name}"
         tvSheetHunt.text = "\uD83C\uDFAF Cattura"
-        tvSheetAr.text = "\uD83D\uDCF1 Caccia AR"
         btnSheetHunt.visibility = View.VISIBLE
         btnSheetAr.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
@@ -234,6 +622,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activeEggId = null
         activePoiId = null
     }
+
+    // ─── Actions ───────────────────────────────────────────────
 
     private fun doHunt(eggId: String) {
         val egg = mgr.getEgg(eggId) ?: return
@@ -267,6 +657,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         })
         hideBottomSheet()
     }
+
+    // ─── Bitmap generators ─────────────────────────────────────
 
     private fun makeMarkerBitmap(rarity: EggRarity): Bitmap {
         val w = 80; val h = 100
@@ -305,12 +697,20 @@ class OutdoorWorldActivity : BaseNavActivity() {
         return bmp
     }
 
-    private fun makePoiBitmap(): Bitmap {
+    private fun makePoiBitmap(type: String = "gym"): Bitmap {
         val w = 80; val h = 100
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        val color = 0xFF42A5F5.toInt()
+
+        // Color based on type
+        val color = when (type) {
+            "pokestop" -> 0xFF42A5F5.toInt()  // blue
+            "sponsor" -> 0xFFFFD700.toInt()   // gold
+            "arena" -> 0xFFFF5722.toInt()     // red-orange
+            else -> 0xFF42A5F5.toInt()         // default blue (gym)
+        }
+
         val headR = 26f
         val headY = h - 52f
 
@@ -327,33 +727,129 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         p.color = Color.WHITE
         p.style = Paint.Style.FILL
+
+        when (type) {
+            "gym" -> {
+                // Gym: shield shape
+                val bx = w / 2f; val by = headY
+                val bw = 14f; val bh = 16f
+                val bld = android.graphics.Path()
+                bld.addRect(bx - bw, by - bh, bx + bw, by + bh, android.graphics.Path.Direction.CW)
+                c.drawPath(bld, p)
+                p.color = color
+                c.drawRect(bx - 4f, by - 5f, bx + 4f, by + 5f, p)
+                c.drawRect(bx - bw + 3f, by - bh + 3f, bx - bw + 7f, by - 3f, p)
+                c.drawRect(bx + bw - 7f, by - bh + 3f, bx + bw - 3f, by - 3f, p)
+            }
+            "pokestop" -> {
+                // Pokestop: cube/box shape
+                val bx = w / 2f; val by = headY
+                val bs = 12f
+                c.drawRect(bx - bs, by - bs, bx + bs, by + bs, p)
+                p.color = color
+                c.drawRect(bx - 3f, by - bs, bx + 3f, by - bs + 6f, p)
+            }
+            "sponsor" -> {
+                // Sponsor: star shape
+                val cx = w / 2f; val cy = headY
+                val outerR = 14f; val innerR = 6f
+                val star = android.graphics.Path()
+                for (i in 0 until 5) {
+                    val angle = Math.toRadians((i * 72 - 90).toDouble())
+                    val innerAngle = Math.toRadians((i * 72 + 36 - 90).toDouble())
+                    val ox = cx + outerR * Math.cos(angle).toFloat()
+                    val oy = cy + outerR * Math.sin(angle).toFloat()
+                    val ix = cx + innerR * Math.cos(innerAngle).toFloat()
+                    val iy = cy + innerR * Math.sin(innerAngle).toFloat()
+                    if (i == 0) star.moveTo(ox, oy) else star.lineTo(ox, oy)
+                    star.lineTo(ix, iy)
+                }
+                star.close()
+                c.drawPath(star, p)
+            }
+            "arena" -> {
+                // Arena: circle with border
+                val cx = w / 2f; val cy = headY
+                c.drawCircle(cx, cy, 14f, p)
+                p.color = color
+                c.drawCircle(cx, cy, 10f, p)
+                p.color = Color.WHITE
+                c.drawCircle(cx, cy, 6f, p)
+            }
+            else -> {
+                // Default (same as gym)
+                val bx = w / 2f; val by = headY
+                val bw = 14f; val bh = 16f
+                val bld = android.graphics.Path()
+                bld.addRect(bx - bw, by - bh, bx + bw, by + bh, android.graphics.Path.Direction.CW)
+                c.drawPath(bld, p)
+                p.color = color
+                c.drawRect(bx - 4f, by - 5f, bx + 4f, by + 5f, p)
+            }
+        }
+
+        return bmp
+    }
+
+    private fun makePoiBitmapGray(@Suppress("UNUSED_PARAMETER") type: String = "gym"): Bitmap {
+        val w = 80; val h = 100
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        val color = 0xFF616161.toInt()  // gray
+        val headR = 26f
+        val headY = h - 52f
+
+        val pin = android.graphics.Path()
+        pin.moveTo(w / 2f, h.toFloat())
+        pin.quadTo(w / 2f - 8f, h - 28f, w / 2f - headR, headY)
+        pin.arcTo(w / 2f - headR, headY - headR, w / 2f + headR, headY + headR, 180f, -180f, false)
+        pin.quadTo(w / 2f + 8f, h - 28f, w / 2f, h.toFloat())
+        pin.close()
+
+        p.color = color
+        p.style = Paint.Style.FILL
+        c.drawPath(pin, p)
+
+        p.color = Color.parseColor("#9E9E9E")
+        p.style = Paint.Style.FILL
         val bx = w / 2f; val by = headY
         val bw = 14f; val bh = 16f
         val bld = android.graphics.Path()
         bld.addRect(bx - bw, by - bh, bx + bw, by + bh, android.graphics.Path.Direction.CW)
         c.drawPath(bld, p)
 
-        p.color = color
-        c.drawRect(bx - 4f, by - 5f, bx + 4f, by + 5f, p)
-        c.drawRect(bx - bw + 3f, by - bh + 3f, bx - bw + 7f, by - 3f, p)
-        c.drawRect(bx + bw - 7f, by - bh + 3f, bx + bw - 3f, by - 3f, p)
-
         return bmp
     }
 
-    private fun createCirclePoints(center: GeoPoint, radiusMeters: Double, numPoints: Int = 64): List<GeoPoint> {
-        val points = mutableListOf<GeoPoint>()
-        val latRad = Math.toRadians(center.latitude)
-        val dLat = radiusMeters / 111320.0
-        val dLng = radiusMeters / (111320.0 * Math.cos(latRad))
-        for (i in 0..numPoints) {
-            val angle = 2.0 * Math.PI * i / numPoints
-            points.add(GeoPoint(
-                center.latitude + dLat * Math.cos(angle),
-                center.longitude + dLng * Math.sin(angle)
-            ))
-        }
-        return points
+    private fun makePlayerBitmap(): Bitmap {
+        val w = 48; val h = 48
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Outer circle
+        p.color = Color.parseColor("#FF00E5FF")
+        p.style = Paint.Style.FILL
+        c.drawCircle(w / 2f, h / 2f, 22f, p)
+
+        // Inner circle
+        p.color = Color.parseColor("#FF1A1030")
+        c.drawCircle(w / 2f, h / 2f, 16f, p)
+
+        // Player icon (person silhouette)
+        p.color = Color.WHITE
+        c.drawCircle(w / 2f, h / 2f - 6f, 5f, p)  // head
+
+        val bodyPath = android.graphics.Path()
+        bodyPath.addRoundRect(
+            w / 2f - 6f, h / 2f + 0f, w / 2f + 6f, h / 2f + 14f,
+            4f, 4f, android.graphics.Path.Direction.CW
+        )
+        c.drawPath(bodyPath, p)
+
+        return bmp
     }
 
     private fun rarityColor(r: EggRarity): Int = when (r) {
@@ -362,5 +858,28 @@ class OutdoorWorldActivity : BaseNavActivity() {
         EggRarity.RARE -> 0xFF2196F3.toInt()
         EggRarity.EPIC -> 0xFF9C27B0.toInt()
         EggRarity.LEGENDARY -> 0xFFFFC107.toInt()
+    }
+
+    private var currentWeatherType: com.intelligame.huntix.WeatherType? = null
+
+    private fun updateWeatherParticles(weather: com.intelligame.huntix.WeatherType) {
+        if (weather == currentWeatherType) return
+        currentWeatherType = weather
+
+        if (weatherOverlay is WeatherParticleOverlay) {
+            (weatherOverlay as WeatherParticleOverlay).setWeatherType(weather)
+        } else {
+            val parent = weatherOverlay.parent as? ViewGroup ?: return
+            val idx = parent.indexOfChild(weatherOverlay)
+            parent.removeView(weatherOverlay)
+            val overlay = WeatherParticleOverlay(this)
+            overlay.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            overlay.setWeatherType(weather)
+            parent.addView(overlay, idx)
+            weatherOverlay = overlay
+        }
     }
 }

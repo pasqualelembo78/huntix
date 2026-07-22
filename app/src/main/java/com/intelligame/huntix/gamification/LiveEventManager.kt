@@ -115,6 +115,10 @@ object LiveEventManager {
 
     fun getActiveEvents(): List<LiveEvent> = getCurrentAndUpcomingEvents().filter { it.isActive }
 
+    fun getCurrentEvent(): LiveEvent? = getCurrentAndUpcomingEvents().firstOrNull { it.isActive }
+
+    fun getUpcomingEvent(): LiveEvent? = getCurrentAndUpcomingEvents().firstOrNull { it.isUpcoming }
+
     fun getActiveXpMultiplier(): Float = getActiveEvents()
         .maxOfOrNull { it.xpMultiplier } ?: 1f
 

@@ -29,7 +29,8 @@ class OutdoorManager private constructor() : SensorEventListener {
         val lat: Double,
         val lng: Double,
         val type: String = "gym",
-        var spun: Boolean = false
+        var spun: Boolean = false,
+        var spunAt: Long = 0L
     )
 
     data class CatchResult(
@@ -46,6 +47,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         private const val DEFAULT_LAT = 41.9028
         private const val DEFAULT_LNG = 12.4964
         private const val RESPAWN_THRESHOLD_M = 150f
+        const val POI_COOLDOWN_MS = 5 * 60 * 1000L  // 5 minutes
     }
 
     private var locationManager: LocationManager? = null
@@ -389,12 +391,30 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     fun spinPoi(ctx: Context, poiId: String): String {
         val poi = pois.firstOrNull { it.id == poiId } ?: return "POI non trovato"
-        if (poi.spun) return "Gia' visitato: torna piu' tardi"
+        val now = System.currentTimeMillis()
+        if (poi.spun && (now - poi.spunAt) < POI_COOLDOWN_MS) {
+            val remaining = POI_COOLDOWN_MS - (now - poi.spunAt)
+            val mins = (remaining / 60000).toInt()
+            val secs = ((remaining % 60000) / 1000).toInt()
+            return "Gia visitato: torna tra ${mins}m ${secs}s"
+        }
         poi.spun = true
+        poi.spunAt = now
         val gemReward = 5 + (Math.random() * 10).toInt()
         val xpReward = 50 + (Math.random() * 150).toInt()
         SavedManager.addMvc(ctx, gemReward.toDouble())
         PlayerProfileManager.recordTraining(0, xpReward.toLong()) { }
-        return "Palestra spinnata! +$gemReward 💎 +${xpReward} XP"
+        return "Palestra spinnata! +$gemReward +${xpReward} XP"
+    }
+
+    fun isPoiOnCooldown(poi: Poi): Boolean {
+        if (!poi.spun) return false
+        return (System.currentTimeMillis() - poi.spunAt) < POI_COOLDOWN_MS
+    }
+
+    fun getPoiCooldownRemaining(poi: Poi): Long {
+        if (!poi.spun) return 0L
+        val elapsed = System.currentTimeMillis() - poi.spunAt
+        return maxOf(0L, POI_COOLDOWN_MS - elapsed)
     }
 }

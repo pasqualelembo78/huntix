@@ -1,0 +1,563 @@
+===============================================================
+MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
+===============================================================
+
+STATUS: Step 1-5 completati + Fase 1 (HUD) + Fase 2 (POI) completate
+DATA:   2026-07-22
+REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
+
+===============================================================
+PARTE A — STATO ATTUALE (completato)
+===============================================================
+
+✅ MapLibre 3D con tilt 60°
+✅ Edifici 3D estrusi (FillExtrusionLayer su openfreemap tiles)
+✅ Sky dinamico (5 fasce orarie: alba/giorno/tramonto/sera/notte)
+✅ Marker uova colorati per rarità (makeMarkerBitmap)
+✅ Marker POI con pin blu (makePoiBitmap)
+✅ Cerchi raggio cattura (PolygonOptions con creaCirclePoints)
+✅ Bottom sheet interazione (titolo + info + bottoni Caccia/AR)
+✅ Overlay particelle meteo (WeatherParticleOverlay: pioggia/nebbia/neve)
+✅ Badge meteo con tooltip (emoji + nome + bonus rarità)
+✅ Badge conteggi (uova + palestre)
+✅ Lifecycle MapLibre completo (onResume/onPause/onStop/onDestroy/onLowMemory)
+✅ Centratura utente con bottone
+✅ Listener click mappa/marker
+
+===============================================================
+PARTE B — MANCA ANCORA (roadmap completa)
+===============================================================
+
+================================================================
+FASE 1 — HUD E UI MAPPA (priorità ALTA) ✅ COMPLETATA
+===============================================================
+
+Data completamento: 2026-07-22
+File modificati:
+  - app/src/main/res/layout/activity_outdoor_world.xml (riscritto)
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (aggiornato)
+  - gamification/LiveEventManager.kt (aggiunti getCurrentEvent/getUpcomingEvent)
+  - Nuovi drawable: exp_bar_bg.xml, exp_bar_fill.xml, badge_event.xml, btn_catch_bg.xml
+
+Risultati:
+  ✅ 1.1 Etichette contatori con emoji (uova, palestre, MVC)
+  ✅ 1.1 Barra EXP giocatore (Lv.X, progress bar, XP numeric)
+  ✅ 1.1 Badge MVC valuta (icona moneta + saldo)
+  ✅ 1.2 Bussola (btnCompass reset bearing a nord)
+  ✅ 1.3 Pulsante foto (screenshot + share intent)
+  ✅ 1.4 Pulsante cattura centrale (mostra uova in raggio)
+  ✅ 1.5 Radar/tracker (OutdoorRadarView con blip uova/POI)
+  ✅ 1.6 Badge eventi live (emoji + timer countdown)
+  ✅ 1.7 Avatar marker giocatore sulla mappa=
+
+--- 1.1 Etichette contatori in alto a sinistra ✅ ---
+FILE: activity_outdoor_world.xml, OutdoorWorldActivity.kt
+RISULTATO: Badge con emoji + etichette. Barra EXP Lv.X con progress bar.
+  Badge MVC con icona moneta + saldo aggiornato ogni tick.
+
+--- 1.2 Bussola/orientamento visuale AR ✅ ---
+FILE: OutdoorWorldActivity.kt
+RISULTATO: btnCompass reset bearing a 0 (nord). Posizionato sotto btnCenter.
+
+--- 1.3 Pulsante foto/snapshot ✅ ---
+FILE: OutdoorWorldActivity.kt
+RISULTATO: btnPhoto cattura screenshot, salva in Pictures, share via Intent.
+SOLUZIONE:
+  - Bottone 📷 in basso a sinistra
+  - Salva screenshot corrente della mappa:
+    val bitmap = Bitmap.createBitmap(mapView.width, mapView.height, ...)
+    mapView.draw(canvas)
+  - Share via Intent.ACTION_SEND con Bitmap
+  - Aggiungere watermark opzionale "Huntix"
+
+--- 1.4 Pulsante cattura rapida centrale ✅ ---
+FILE: activity_outdoor_world.xml, OutdoorWorldActivity.kt
+RISULTATO: btnCatch circolare (64dp) con icona uova. Mostra uova in raggio
+  con nome/distanza. Al tap apre bottom sheet con opzioni cattura.
+
+--- 1.5 Radar/tracker elementi vicini ✅ ---
+FILE: ui/OutdoorRadarView.kt (già esistente), activity_outdoor_world.xml
+RISULTATO: OutdoorRadarView in basso a sinistra (120x120dp). Mostra uova
+  (colori rarità) e POI (blu) come blip con emoji. Max range 500m.
+  Ordinati per distanza crescente. Nascosto se nessun elemento vicino.
+
+--- 1.6 Icona calendario eventi ✅ ---
+FILE: activity_outdoor_world.xml, OutdoorWorldActivity.kt, LiveEventManager.kt
+RISULTATO: Badge evento live con emoji + timer countdown (es. "2h 15m").
+  Bottone calendario (📅) in alto a destra, visibile se c'è evento
+  attivo o prossimo. Aggiunti getCurrentEvent() e getUpcomingEvent()
+  a LiveEventManager.
+
+--- 1.7 Nomi giocatori visibili sulla mappa ✅ (parziale) ---
+FILE: OutdoorWorldActivity.kt
+RISULTATO: Marker avatar giocatore alla posizione GPS corrente.
+  Bitmap personalizzata: cerchio cyan + silhouette persona.
+  Titolo "Io". Query Firestore per giocatori vicini: NON implementata
+  (richiede geohash query, futuro).
+
+================================================================
+FASE 2 — INTERAZIONE POI / STOP (priorità ALTA) ✅ COMPLETATA
+===============================================================
+
+Data completamento: 2026-07-22
+File modificati:
+  - app/src/main/res/layout/activity_poi_interaction.xml (nuovo)
+  - app/src/main/java/.../ui/POIInteractionActivity.kt (riscritto)
+  - app/src/main/java/.../manager/OutdoorManager.kt (cooldown + tipi POI)
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (bitmap per tipo)
+  - Nuovo drawable: poi_circle_bg.xml
+
+Risultati:
+  ✅ 2.1 Animazione "giro" stop (rotazione 360° + reward popup stagger)
+  ✅ 2.2 Distinzione visiva POI tipo (pokestop/gym/sponsor/arena)
+  ✅ 2.3 Popup ricompense strutturato (MVC + XP + item + egg drop 20%)
+  ✅ 2.4 Cooldown visivo stop (5 minuti, marker grigio, timer countdown)=
+
+--- 2.1 Animazione "giro" stop ✅ ---
+FILE: POIInteractionActivity.kt (riscritto), activity_poi_interaction.xml
+RISULTATO: Rotazione 360° icona POI (600ms). Popup ricompense con
+  stagger animation: MVC → XP → Item (random) → Egg (20% chance).
+  Bottone "Raccogli" per chiudere. Layout grafico completo.
+
+--- 2.2 Distinzione visiva POI tipo ✅ ---
+FILE: OutdoorWorldActivity.kt (makePoiBitmap + makePoiBitmapGray)
+RISULTATO: 4 tipi di pin con colori/forme diverse:
+  - pokestop: pin blu + cubo bianco
+  - gym: pin blu + scudo con dettagli
+  - sponsor: pin oro + stella bianca
+  - arena: pin arancione + cerchio concentrico
+  POI in cooldown: pin grigio unificato.
+  Campo type già esistente in OutdoorManager.Poi.
+
+--- 2.3 Popup ricompense strutturato ✅ ---
+FILE: activity_poi_interaction.xml, POIInteractionActivity.kt
+RISULTATO: Overlay semitrasparente con card centrale. Titolo oro
+  "Ricompense!". Righe con icone: MVC (moneta), XP (lampo),
+  Item (random: carne/cacciavite/miele/stella), Egg (20% chance).
+  Ogni riga appare con fade-in staggerato (300ms each).
+  Bottone "Raccogli" chiude il popup.
+
+--- 2.4 Cooldown visivo stop ✅ ---
+FILE: OutdoorManager.kt, POIInteractionActivity.kt, OutdoorWorldActivity.kt
+RISULTATO: Cooldown 5 minuti (POI_COOLDOWN_MS). Campo spunAt: Long
+  aggiunto a Poi. Timer countdown "Disponibile tra 4:32" nell'interazione.
+  Marker grigio in mappa per POI in cooldown (makePoiBitmapGray).
+  Helper: isPoiOnCooldown(), getPoiCooldownRemaining().
+
+================================================================
+FASE 3 — AVATAR E COMPAGNO SULLA MAPPA (priorità ALTA)
+================================================================
+
+--- 3.1 Avatar giocatore sulla mappa ---
+FILE: OutdoorWorldActivity.kt (nuovo marker), avatar/AvatarMapRenderer.kt
+SOLUZIONE:
+  - Usare AvatarMapRenderer (già esistente) per posizionare
+    l'avatar del giocatore alla posizione GPS corrente
+  - Marker non rimovibile (a differenza di uova/POI)
+  - Thumbnail ReadyPlayerMe o fallback silhouette gender-based
+  - Aggiornare posizione ogni tick (se loc è cambiata)
+  - Animazione idle leggera (leggero bounce o breathing)
+  - Se buddy è attivo: creatura piccola accanto all'avatar
+
+--- 3.2 Compagno (buddy) visibile ---
+FILE: BuddyManager.kt (32 righe, base), avatar/CreatureModelHelper.kt
+SOLUZIONE:
+  - Se PlayerProfile.buddyCreatureId != null:
+    - Marker secondario accanto all'avatar (offset pixel)
+    - Icona creatura a 32x32px
+    - Barra vita/energia miniatura sotto la creatura
+  - BuddyManagerKM: ogni N km camminati → +1 candy
+  - Aggiungere animazione bob al compagno quando l'utente si muove
+
+--- 3.3 Indicatore direzione utente ---
+FILE: OutdoorWorldActivity.kt (nuovo layer)
+SOLUZIONE:
+  - Triangolo direzionale che mostra dove guarda il giocatore
+  - Usare bearing dal sensorManager (TYPE_GAME_ROTATION_VECTOR)
+  - Colore: bianco con ombra, dimensione ~20px
+  - Posizionato sul marker avatar, orientato selon il heading
+
+================================================================
+FASE 4 — EVENTI E DINAMISMO MAPPA (priorità MEDIA)
+================================================================
+
+--- 4.1 Boss/eventi a tempo con countdown ---
+FILE: nuovo componente TimeEventOverlay.kt
+SOLUZIONE:
+  - LiveEventManager già gestisce eventi settimanali
+  - Aggiungere marker speciale sulla mappa per eventi attivi:
+    Icona evento (uovo dorato / lightning / etc)
+    Timer countdown sovrapposto: "02:45:33"
+    Raggio di influenza visibile (cerchio grande semitrasparente)
+  - Quando evento scade: rimuovi marker, respawn con nuovi bonus
+
+--- 4.2 Meteo reale (già funzionante, da perfezionare) ---
+FILE: WeatherZoneManager.kt, WeatherParticleOverlay.kt
+SOLUZIONE:
+  - Il sistema meteo è già implementato con OpenWeatherMap
+  - Mancanza: transizioni fluide tra meteore
+  - Aggiungere transizione colore overlay (fade 2 secondi)
+  - Aggiungere effetto lampo per tempesta (flash schermo 50ms)
+  - Aggiungere nebbia a strati (diversi layer alpha)
+  - Collegare meteo a spawn creature (WeatherType.rarityBoost già fatto)
+
+--- 4.3 Palloni/eventi speciali in cielo ---
+FILE: nuovo componente SkyEventOverlay.kt
+SOLUZIONE:
+  - Classe che disegna su Canvas sovrapposto alla mappa:
+    - Palloni colorati che attraversano il cielo (durante eventi)
+    - Uova giganti che fluttuano (durante Egg Rush)
+    - Fulmini (durante Double XP)
+  - Movimento: interpolazione lineare da sinistra a destra
+  - Durata: 10-15 secondi, ripetizione ogni 2 minuti durante evento
+  - Aggiungere al FrameLayout del layout
+
+--- 4.4 Spawn points persistenti / biomi ---
+FILE: OutdoorManager.kt
+SOLUZIONE:
+  - Attualmente: spawn ogni volta che ci si muove 150m
+  - Pokémon GO: biome geografici (acqua → water type, parco → grass)
+  - Aggiungere:
+    - Query Overpass API per biome (water, park, urban, rural)
+    - Salvare biome in cache locale (SharedPreferences o Room)
+    - Filtrare elementi in base al biome:
+      WATER → acqua/laghi/mari
+      EARTH → zone urbane
+      AIR → parchi/aperto
+      FIRE → zone commerciali
+      NORMAL → overworld
+  - Aggiornare biom cada 500m di spostamento
+
+================================================================
+FASE 5 — PROGRESSIONE VISIBILE (priorità MEDIA)
+================================================================
+
+--- 5.1 Barra progresso uova in incubatrice ---
+FILE: HatchingActivity.kt (già funzionante), layout
+SOLUZIONE:
+  - Aggiungere mini-barra visibile sulla mappa per ogni uovo
+    in incubatrice attiva
+  - Posizione: bottom sheet quando l'uovo è selezionato
+  - Formato: [🥚] [2.4 / 5.0 km] [══════░░░░] [62%]
+  - Aggiornare ogni tick con DistanceTracker.lastDistance
+  - Animazione fill progressivo
+
+--- 5.2 Livello e EXP giocatore in mappa ---
+FILE: OutdoorWorldActivity.kt (nuovo componente)
+SOLUZIONE:
+  - Header fisso in alto (sotto i badge):
+    [Avatar 32x32] [Lv.14] [████████░░] [4200/6000 XP]
+  - Dati da PlayerProfileManager.getProfile()
+  - Aggiornare ogni tick (o ogni 5 tick per performance)
+  - Mostrare titolo sbloccato (es. "Cercatore di Uova")
+
+--- 5.3 Notifiche proximità ---
+FILE: nuovo componente ProximityNotifier.kt
+SOLUZIONE:
+  - Quando un uovo o POI entro 100m:
+    - Vibrazione leggera (100ms)
+    - Notification channel "Prossimità"
+    - Se RadarView è attivo: suono radar blip
+  - Limitare a 1 notifica ogni 30 secondi
+  - Disattivabile nelle impostazioni
+
+================================================================
+FASE 6 — GAMEPLAY CORE (priorità ALTA)
+================================================================
+
+--- 6.1 Lancio Pokéball (meccanica di lancio) ---
+FILE: OutdoorHuntActivity.kt (133 righe, attualmente radar-based)
+PROBLEMA: Attualmente si cattura avvicinandosi e premendo un bottone.
+  Pokémon GO ha il lancio fisico della Pokéball con gesture swipe.
+SOLUZIONE:
+  - Nuovo componente SwipeToCatchView.kt (già esistente nel package)
+  - Implementare:
+    1. L'uovo/creatura al centro schermo in 3D (SceneView)
+    2. Swipe dal basso verso l'alto = lancio
+    3. Angolo e velocità determinano la traiettoria
+    4. Se colpisce: animazione cattura + shake + successo/fallimento
+    5. Se manca: creatura fugge (dopo 3 tentativi)
+  - Distanza dalla creatura influenza difficoltà
+  - Cibo come "berry": riduce difficoltà prossimo lancio
+
+--- 6.2 Sistema cibo/berry ---
+FILE: nuovo manager FoodManager.kt
+SOLUZIONE:
+  - 4 tipi di cibo (EggFoodManager ha già base):
+    🍖 Carne base: +10% catch rate (gratuito, crafting)
+    🍯 Miele: +20% catch rate (comprabile)
+    ⭐ Stella: +30% catch rate (raffinato raro)
+    💎 Diamante: +50% catch rate (premium/leggendario)
+  - Selezionabile PRIMA del lancio
+  - Effetto visivo: aura colorata intorno alla creatura
+  - Durata: 1 lancio solo
+
+--- 6.3 Sistema evoluzione creature ---
+FILE: SurpriseManager.kt, SurpriseCreature.kt
+SOLUZIONE:
+  - Attualmente: fusione 3→stessa = level up (fino a lv4)
+  - Pokémon GO style:
+    - Creature hanno linee evoluzione (es. DragoBase → DragoMid → DragoFinal)
+    - Costo candele in base alla specie
+    - Animazione evoluzione (flash + trasformazione 3D)
+    - Aggiungere campo `evolvesTo: String?` a SurpriseCreature
+    - La creatura evoluta ha stats migliori + aspetto diverso
+
+--- 6.4 Ricompense raid strutturate ---
+FILE: RaidBattleActivity.kt, RaidManager.kt (già funzionanti)
+SOLUZIONE:
+  - Il sistema raid è già implementato (tier, HP, daily limit)
+  - Mancanza: loot screen post-raid con animazione
+  - Aggiungere:
+    - Screen ricompense con icone che volano verso inventario
+    - Possibilità di catturare il boss se sconfitto (mini-game)
+    - Badge raid completati visibili nel profilo
+
+================================================================
+FASE 7 — SOCIAL E MULTIPLAYER (priorità MEDIA)
+================================================================
+
+--- 7.1 Giocatori visibili sulla mappa ---
+FILE: OutdoorWorldActivity.kt (come descritto in 1.7)
+SOLUZIONE:
+  - Marker per ogni amico online (raggio 500m)
+  - Icona: thumbnail avatar ridimensionato
+  - Nome sotto il marker
+  - Tap: apre profilo amico o chat rapida
+  - Solo amici con "visibleOnMap=true"
+
+--- 7.2 Sistema squadre/territorio ---
+FILE: gamification/TeamManager.kt (246 righe, già implementato)
+SOLUZIONE:
+  - TeamManager gestisce già squadre Firestore
+  - Mancanza: ownership territoriale dei POI
+  - Aggiungere:
+    - Campo `teamId: String?` a OutdoorManager.Poi
+    - POI controllati: bordo colorato (Rosso/Blu/Giallo = team)
+    - Timer controllo: ogni N ore il team deve "difendere"
+    - Bonus XP per team su POI proprietario
+    - Visualizzazione: icona squadra sovrapposta al POI
+
+--- 7.3 Regali dagli amici ---
+FILE: nuovo component GiftManager.kt
+SOLUZIONE:
+  - Regalo = item che contiene:
+    - 1-3 candele casuali
+    - 50-200 MVC casuali
+    - 1 uovo rara (possibile)
+  - Invio: seleziona amico → "Invia Regalo"
+  - Ricezione: tap su regalo nella lista amici → apertura animata
+  - Limite: 1 regalo/giorno per amico
+  - Dati: Firestore collection "gifts"
+
+--- 7.4 Livelli amicizia ---
+FILE: social/FriendsManager.kt (55 righe)
+SOLUZIONE:
+  - 4 livelli: Conoscente → Buon Amico → Grande Amico → Mejor Amico
+  - Progressione basata su:
+    - Giorni consecutivi di interazione (regali, scambi, raid)
+    - XP condivisa in raid insieme
+  - Sblocco benefici per livello:
+    - Buon Amico: +5% XP raid insieme
+    - Grande Amico: possibilità scambiare leggendarie
+    - Mejor Amico: egg lucky trade guarantee
+  - Badge livello amicizia visibile nel profilo
+
+================================================================
+FASE 8 — MAPPA E GEOSPATIAL (priorità MEDIA)
+================================================================
+
+--- 8.1 Mappe tematiche ---
+FILE: CustomizationManager.kt (già esiste), OutdoorWorldActivity.kt
+SOLUZIONE:
+  - PlayerProfile.mapTheme selezionabile
+  - 3-4 stili mappa:
+    - "Liberty" (attuale, default)
+    - "Dark" (sfondo scuro, edifici luminosi)
+    - "Satellite" (mapbox satellite tiles)
+    - "Fantasy" (colori caldi, stile illustrato)
+  - Applicare: map.setStyle(themeUrl) nel refreshUi
+  - Costo: 500 MVC o unlock con livello
+
+--- 8.2 Tile satellitari ---
+FILE: OutdoorWorldActivity.kt
+SOLUZIONE:
+  - MapLibre supporta tile stili multipli
+  - Satellite: "https://tiles.openfreemap.org/satellite"
+  - OPPURE Mapbox (richiede token gratuito):
+    "https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/256/{z}/{x}/{y}"
+  - Toggle satellitale dal menu settings mappa
+
+--- 8.3 Navigazione AR migliorata ---
+FILE: ArNavigationActivity.kt (378 righe, già funzionante)
+SOLUZIONE:
+  - Il sistema AR navigation è già implementato
+  - Mancanza: integrazione con MapLibre per ruta ottimale
+  - Aggiungere:
+    - Linea tratteggiata sulla mappa dalla posizione all'uovo
+    - Calcolo percorso tenendo conto di strade (OSRM API)
+    - Aggiornamento in tempo reale della linea quando ci si muove
+    - Estimazione tempo arrivo (minuti)
+
+--- 8.4 Incense / Lure modules ---
+FILE: nuovi manager IncenseManager.kt, LureManager.kt
+SOLUZIONE:
+  - Incense: item che aumenta spawn nella posizione giocatore
+    - Durata: 30 minuti
+    - Effetto: raddoppia spawn rate, +1 tipo raro ogni 5 minuti
+    - Visual: aura viola che circonda l'avatar sulla mappa
+  - Lure: posizionabile su un POI
+    - Attiva il POI per tutti i giocatori vicini (100m)
+    - Durata: 30 minuti
+    - Visual: particelle colorate sul POI
+  - Costo: 200 MVC o premium
+
+================================================================
+FASE 9 — NOTIFICHE E ENGAGEMENT (priorità BASSA)
+================================================================
+
+--- 9.1 Push notifiche smart ---
+FILE: Firebase Cloud Functions (functions/index.js)
+SOLUZIONE:
+  - Funzioni già esistenti: notifyEggReady, notifyLiveEvent, etc
+  - Aggiungere:
+    - "Un uovo raro è apparso vicino a te!" (geo-fence)
+    - "Il tuo amico XYZ è online e vicino!"
+    - "L'evento Double XP sta per iniziare!"
+    - "Il tuo compagno ha fame! Dagli cibo"
+  - Richiede Background Location Permission (Android 12+)
+
+--- 9.2 Adventure Sync (Google Fit) ---
+FILE: managers/DistanceTracker.kt (106 righe, usa step counter)
+SOLUZIONE:
+  - Attualmente usa il sensore accelerometro interno
+  - Pokémon GO si integra con Google Fit per distance tracking
+    anche quando l'app è chiusa
+  - Aggiungere:
+    - Google Fit API (com.google.android.gms:play-services-fitness)
+    - Richiedere Health Connect permission
+    - Sync distance ogni 15 minuti quando app è in background
+    - Aggiornare incubatori anche con app chiusa
+  - Priorità bassa: il step counter attuale funziona
+
+--- 9.3 Achievement / medaglie ---
+FILE: nuovo manager AchievementManager.kt
+SOLUZIONE:
+  - Badge/medaglie sbloccabili:
+    - "Prima Cattura" (1 egg catturato)
+    - "Collezionista" (tutte le 12 creature)
+    - "Maratoneta" (100 km percorsi)
+    - "Socievole" (10 amici)
+    - "Raid Master" (50 raid completati)
+    - "Meteo Expert" (catture in tutti i meteore)
+  - Visibili nel profilo giocatore
+  - Notifica al解锁 con animazione speciale
+
+================================================================
+FASE 10 — PERFORMANCE E STABILITÀ
+================================================================
+
+--- 10.1 Marker pooling ---
+FILE: OutdoorWorldActivity.kt (refreshUi)
+PROBLEMA: Ogni 3 secondi chiama map.clear() + riaggiunge TUTTI i marker
+SOLUZIONE:
+  - Mantenere lista di marker aggiunti
+  - Aggiungere/rimuovere solo quelli cambiati
+  - Differenza: nuovi egg/POI da aggiungere, quelli trovati da rimuovere
+  - Riduce drasticamente i frame drop
+
+--- 10.2 Bitmap caching ---
+FILE: OutdoorWorldActivity.kt (makeMarkerBitmap, makePoiBitmap)
+PROBLEMA: Rigenera le bitmap per ogni marker ad ogni tick
+SOLUZIONE:
+  - Cache: Map<EggRarity, Bitmap> per marker uova
+  - Cache: Bitmap per marker POI
+  - Invalidare solo quando cambia qualcosa (nuova rarità, etc)
+
+--- 10.3 Paginazione marker ---
+FILE: OutdoorWorldActivity.kt
+PROBLEMA: Se ci sono 100+ egg/POI nella zona, la mappa rallenta
+SOLUZIONE:
+  - Mostrare solo marker entro 500m dalla posizione utente
+  - Filtrare nel refreshUi con distance check
+  - Marker oltre 500m: non renderizzare (risparmiare performance)
+
+--- 10.4 Aggiornamento posizione ottimizzato ---
+FILE: OutdoorWorldActivity.kt
+PROBLEMA: Aggiorna posizione ogni 3 secondi indipendentemente
+SOLUZIONE:
+  - Usare LocationManager con listener (non polling)
+  - Aggiornare mappa solo se distanza > 5m dall'ultima posizione
+  - Se fermo: intervallo aggiornamento 10 secondi
+  - Se in movimento: intervallo 2 secondi
+
+================================================================
+FASE 11 — CONTENUTO E MONETIZZAZIONE
+================================================================
+
+--- 11.1 Season Pass con milestone mappa ---
+FILE: SeasonPassManager.kt (già esiste)
+SOLUZIONE:
+  - Ogni livello season pass sblocca reward visibili in mappa
+  - Badge "SEASON" sul profilo
+  - Reward esclusivi: skin mappa, avatar frame, creature rare
+
+--- 11.2 Egg Shop in mappa ---
+FILE: ShopActivity.kt (già esiste), OutdoorWorldActivity.kt
+SOLUZIONE:
+  - Punto vendita speciale sulla mappa (pin oro con 💰)
+  - Tap: apre ShopActivity
+  - Posizionamento: ogni 500m approx
+  - Cooldown: 24 ore
+
+--- 11.3 Advertising integrato ---
+FILE: AdsManager.kt (già esiste), nuovi punti mappa
+SOLUZIONE:
+  - Banner sponsorizzati come POI speciali (panificio, etc)
+  - Tap su POI sponsor: mostra offerta + reward per visita
+  - Non invasivo: massimo 1 sponsor visibile alla volta
+  - Cooldown: 1 sponsor ogni 30 minuti
+
+===============================================================
+PARTE C — STIMA TEMPI DI LAVORO
+===============================================================
+
+FASE 1  (HUD/UI mappa):             2-3 giorni
+FASE 2  (Interazione POI):          2-3 giorni
+FASE 3  (Avatar + Buddy):          2 giorni
+FASE 4  (Eventi dinamici):          2 giorni
+FASE 5  (Progressione visibile):    1-2 giorni
+FASE 6  (Gameplay core):            4-5 giorni (lancio + evoluzione)
+FASE 7  (Social/multiplayer):       3 giorni
+FASE 8  (Mappa/geospatial):         2 giorni
+FASE 9  (Notifiche/engagement):     1-2 giorni
+FASE 10 (Performance):              1-2 giorni
+FASE 11 (Contenuto/monetizzazione): 1-2 giorni
+─────────────────────────────────────────────────────────────
+TOTALE:                             22-30 giorni (3-4 settimane)
+
+Raccomandazione: iniziare da Fase 1+2+6 (HUD, POI, lancio)
+come MVP visibile, poi Fase 3+7 (avatar, social) per retention.
+
+===============================================================
+PARTE D — DIPENDENZE AGGIUNTIVE RICHIESTE
+===============================================================
+
+// build.gradle - Google Fit per Adventure Sync (Fase 9)
+implementation 'com.google.android.gms:play-services-fitness:21.2.0'
+implementation 'com.google.android.gms:play-services-auth:21.1.0'
+
+// build.gradle - Google Maps per tile satellitari (Fase 8, opzionale)
+// implementation 'com.google.android.libraries.maps:maps:18.2.0'
+
+// build.gradle - Room per cache biomi locale (Fase 4)
+implementation 'androidx.room:room-runtime:2.6.1'
+kapt 'androidx.room:room-compiler:2.6.1'
+
+// Nessuna aggiunta necessaria per:
+// - MapLibre (già in build.gradle)
+// - Firebase/Firestore (già in build.gradle)
+// - SceneView (già in build.gradle)
+// - Google Play Billing (già in build.gradle)
+
+===============================================================
