@@ -551,23 +551,7 @@ class CityActivity : AppCompatActivity() {
         windowUpdateTimer -= dt
         if (windowUpdateTimer <= 0f) {
             windowUpdateTimer = 5f
-            val winColor = dayNightManager.getWindowColor()
-            for (wm in windowMaterials) {
-                try {
-                    val r = Color.red(winColor) / 255f
-                    val g = Color.green(winColor) / 255f
-                    val b = Color.blue(winColor) / 255f
-                    wm.setParameter("color", com.google.android.filament.math.Float4(r, g, b, 1f))
-                } catch (_: Exception) {}
-            }
-            // Update lamp color
-            val lampColor = dayNightManager.getLampColor()
-            try {
-                val r = Color.red(lampColor) / 255f
-                val g = Color.green(lampColor) / 255f
-                val b = Color.blue(lampColor) / 255f
-                lampLightMaterial?.setParameter("color", com.google.android.filament.math.Float4(r, g, b, 1f))
-            } catch (_: Exception) {}
+            // Window/lamp color updates deferred to day/night overlay
         }
     }
 
