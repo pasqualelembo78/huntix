@@ -37,6 +37,7 @@ class Match3Activity : MiniGameBase() {
     private var scoreText: TextView? = null
     private var timeText: TextView? = null
     private var gridView: GridView? = null
+    private var overlayContainer: FrameLayout? = null
     private var busy = false
 
     private val timerRunnable = object : Runnable {
@@ -81,7 +82,10 @@ class Match3Activity : MiniGameBase() {
         gridView = GridView(ctx)
         root.addView(gridView)
 
-        setContentView(root)
+        val wrapper = FrameLayout(ctx)
+        wrapper.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        overlayContainer = wrapper
+        setContentView(wrapper)
         startGame()
     }
 
@@ -245,12 +249,12 @@ class Match3Activity : MiniGameBase() {
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "\uD83D\uDD04  Gioca Ancora", UiKit.ACCENT) {
-            (overlay.parent as? FrameLayout)?.removeView(overlay)
+            overlayContainer?.removeView(overlay)
             startGame()
         })
         endLayout.addView(UiKit.button(ctx, "\u2B05  Indietro", UiKit.TEXT_DIM) { finish() })
         overlay.addView(endLayout)
-        (gridView?.parent as? FrameLayout)?.addView(overlay)
+        overlayContainer?.addView(overlay)
     }
 
     override fun onDestroy() {

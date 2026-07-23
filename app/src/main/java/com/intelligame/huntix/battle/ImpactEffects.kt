@@ -103,7 +103,12 @@ class ImpactEffects {
         groundRings.add(GroundRing(x, y, 5f, maxRadius, 0.35f, color))
     }
 
-    fun showStunStars(count: Int = 3) {
+    var stunStarX = 0f
+    var stunStarY = 0f
+
+    fun showStunStars(count: Int = 3, x: Float = 0f, y: Float = 0f) {
+        stunStarX = x
+        stunStarY = y
         stunStars.clear()
         val rng = Random(System.nanoTime())
         repeat(count) {
@@ -215,8 +220,8 @@ class ImpactEffects {
         paint.alpha = 255
 
         for (star in stunStars) {
-            val sx = cos(star.angle) * star.radius * s
-            val sy = sin(star.angle) * star.radius * s * 0.5f - 100f * s
+            val sx = stunStarX + cos(star.angle) * star.radius * s
+            val sy = stunStarY - 90f * s + sin(star.angle) * star.radius * s * 0.5f
             drawStar(canvas, sx, sy, star.size * s, Color.parseColor("#FFD700"))
         }
     }

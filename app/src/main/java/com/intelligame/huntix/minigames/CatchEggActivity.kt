@@ -35,6 +35,7 @@ class CatchEggActivity : MiniGameBase() {
     private var timeText: TextView? = null
     private var livesText: TextView? = null
     private var gameView: GameCanvasView? = null
+    private var overlayContainer: FrameLayout? = null
     private var dragging = false
 
     private val timerRunnable = object : Runnable {
@@ -97,7 +98,10 @@ class CatchEggActivity : MiniGameBase() {
         gameView = GameCanvasView(ctx)
         root.addView(gameView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        setContentView(root)
+        val wrapper = FrameLayout(ctx)
+        wrapper.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        overlayContainer = wrapper
+        setContentView(wrapper)
         startGame()
     }
 
@@ -223,12 +227,12 @@ class CatchEggActivity : MiniGameBase() {
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "\uD83D\uDD04  Gioca Ancora", UiKit.ACCENT) {
-            (overlay.parent as? FrameLayout)?.removeView(overlay)
+            overlayContainer?.removeView(overlay)
             startGame()
         })
         endLayout.addView(UiKit.button(ctx, "\u2B05  Indietro", UiKit.TEXT_DIM) { finish() })
         overlay.addView(endLayout)
-        (gameView?.parent as? FrameLayout)?.addView(overlay)
+        overlayContainer?.addView(overlay)
     }
 
     override fun onDestroy() {

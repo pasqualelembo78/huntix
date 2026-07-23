@@ -26,7 +26,9 @@ object AgeGateManager {
      * Questo blocca ads invasivi fino a quando l'utente non completa il profilo.
      */
     fun currentUserIsChild(): Boolean {
-        val year = PlayerProfileManager.myProfile?.birthYear ?: return true  // Safe default: assume child
+        val profile = PlayerProfileManager.myProfile ?: return true  // Safe default: assume child
+        val year = profile.birthYear
+        if (year <= 0) return profile.isMinor  // fallback su isMinor se birthYear non impostato
         return isChild(year)
     }
 

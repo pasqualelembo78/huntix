@@ -50,137 +50,239 @@ class CharacterRenderer {
 
         private const val HIP_Y = -46f
 
+        private val GUARD = Pose(
+            spine = -3f, head = -2f,
+            lArm1 = 55f, lArm2 = -55f,
+            rArm1 = -55f, rArm2 = 58f,
+            lLeg1 = 6f, lLeg2 = -4f,
+            rLeg1 = -6f, rLeg2 = 4f
+        )
+
         val IDLE = Animation(listOf(
-            KeyFrame(0f, Pose(
-                lArm1 = 15f, lArm2 = -20f,
-                rArm1 = -15f, rArm2 = 20f,
-                lLeg1 = 4f, lLeg2 = -2f,
-                rLeg1 = -4f, rLeg2 = 2f
+            KeyFrame(0f, GUARD),
+            KeyFrame(0.4f, Pose(
+                spine = -2f, head = -3f,
+                lArm1 = 57f, lArm2 = -58f,
+                rArm1 = -57f, rArm2 = 60f,
+                lLeg1 = 6f, lLeg2 = -4f,
+                rLeg1 = -6f, rLeg2 = 4f
             )),
-            KeyFrame(0.5f, Pose(
-                lArm1 = 18f, lArm2 = -25f,
-                rArm1 = -18f, rArm2 = 25f,
-                lLeg1 = 4f, lLeg2 = -2f,
-                rLeg1 = -4f, rLeg2 = 2f,
-                spine = -1f
+            KeyFrame(0.8f, Pose(
+                spine = -4f, head = -1f,
+                lArm1 = 53f, lArm2 = -52f,
+                rArm1 = -53f, rArm2 = 56f,
+                lLeg1 = 7f, lLeg2 = -5f,
+                rLeg1 = -7f, rLeg2 = 5f
             )),
-            KeyFrame(1f, Pose(
-                lArm1 = 15f, lArm2 = -20f,
-                rArm1 = -15f, rArm2 = 20f,
-                lLeg1 = 4f, lLeg2 = -2f,
-                rLeg1 = -4f, rLeg2 = 2f
-            ))
-        ), 1.6f, true)
+            KeyFrame(1f, GUARD)
+        ), 1.2f, true)
 
         val WALK = Animation(listOf(
             KeyFrame(0f, Pose(
+                spine = -3f, head = -2f,
+                lArm1 = 55f, lArm2 = -55f,
+                rArm1 = -55f, rArm2 = 58f,
                 lLeg1 = 28f, lLeg2 = -12f,
-                rLeg1 = -28f, rLeg2 = 8f,
-                rArm1 = 22f, lArm1 = -22f,
-                spine = 2f
+                rLeg1 = -28f, rLeg2 = 8f
             )),
             KeyFrame(0.5f, Pose(
+                spine = -2f, head = -2f,
+                lArm1 = 50f, lArm2 = -50f,
+                rArm1 = -50f, rArm2 = 52f,
                 lLeg1 = -28f, lLeg2 = 8f,
-                rLeg1 = 28f, rLeg2 = -12f,
-                rArm1 = -22f, lArm1 = 22f,
-                spine = -2f
+                rLeg1 = 28f, rLeg2 = -12f
             )),
             KeyFrame(1f, Pose(
+                spine = -3f, head = -2f,
+                lArm1 = 55f, lArm2 = -55f,
+                rArm1 = -55f, rArm2 = 58f,
                 lLeg1 = 28f, lLeg2 = -12f,
-                rLeg1 = -28f, rLeg2 = 8f,
-                rArm1 = 22f, lArm1 = -22f,
-                spine = 2f
+                rLeg1 = -28f, rLeg2 = 8f
             ))
-        ), 0.55f, true)
+        ), 0.5f, true)
 
         val LIGHT_ATTACK = Animation(listOf(
-            KeyFrame(0f, Pose(spine = -5f, rArm1 = -35f, rArm2 = 70f, lArm1 = 10f)),
-            KeyFrame(0.15f, Pose(spine = 8f, rArm1 = 78f, rArm2 = -8f, lArm1 = -10f)),
-            KeyFrame(0.45f, Pose(spine = 8f, rArm1 = 78f, rArm2 = -8f)),
-            KeyFrame(1f, Pose())
-        ), 0.22f, false)
+            KeyFrame(0f, Pose(
+                spine = -6f, head = -3f,
+                lArm1 = 50f, lArm2 = -58f,
+                rArm1 = -58f, rArm2 = 60f,
+                lLeg1 = 6f, lLeg2 = -4f,
+                rLeg1 = -6f, rLeg2 = 4f
+            )),
+            KeyFrame(0.2f, Pose(
+                spine = 8f, head = -1f,
+                lArm1 = 84f, lArm2 = -6f,
+                rArm1 = -52f, rArm2 = 55f,
+                lLeg1 = -4f, lLeg2 = -2f,
+                rLeg1 = -8f, rLeg2 = 6f
+            )),
+            KeyFrame(0.4f, Pose(
+                spine = 8f, head = -1f,
+                lArm1 = 84f, lArm2 = -6f,
+                rArm1 = -52f, rArm2 = 55f
+            )),
+            KeyFrame(0.65f, Pose(
+                spine = 2f, head = -2f,
+                lArm1 = 62f, lArm2 = -50f,
+                rArm1 = -50f, rArm2 = 52f
+            )),
+            KeyFrame(1f, GUARD)
+        ), 0.28f, false)
 
         val HEAVY_ATTACK = Animation(listOf(
-            KeyFrame(0f, Pose(spine = -12f, rArm1 = -45f, rArm2 = 85f, lArm1 = -20f)),
-            KeyFrame(0.3f, Pose(spine = 12f, rArm1 = 85f, rArm2 = 2f, lArm1 = 15f)),
-            KeyFrame(0.55f, Pose(spine = 12f, rArm1 = 85f, rArm2 = 2f)),
-            KeyFrame(1f, Pose())
-        ), 0.42f, false)
+            KeyFrame(0f, Pose(
+                spine = -10f, head = -4f,
+                lArm1 = 55f, lArm2 = -55f,
+                rArm1 = -45f, rArm2 = 50f,
+                lLeg1 = 8f, lLeg2 = -5f,
+                rLeg1 = -8f, rLeg2 = 5f
+            )),
+            KeyFrame(0.2f, Pose(
+                spine = -12f, head = -5f,
+                lArm1 = 50f, lArm2 = -50f,
+                rArm1 = -35f, rArm2 = 45f,
+                lLeg1 = -10f, lLeg2 = 5f,
+                rLeg1 = 65f, rLeg2 = -50f
+            )),
+            KeyFrame(0.4f, Pose(
+                spine = 6f, head = -2f,
+                lArm1 = 40f, lArm2 = -35f,
+                rArm1 = -20f, rArm2 = 50f,
+                lLeg1 = -6f, lLeg2 = 3f,
+                rLeg1 = 75f, rLeg2 = 15f
+            )),
+            KeyFrame(0.55f, Pose(
+                spine = 6f, head = -2f,
+                lArm1 = 40f, lArm2 = -35f,
+                rArm1 = -20f, rArm2 = 50f,
+                lLeg1 = -6f, lLeg2 = 3f,
+                rLeg1 = 75f, rLeg2 = 15f
+            )),
+            KeyFrame(0.75f, Pose(
+                spine = -2f, head = -2f,
+                lArm1 = 55f, lArm2 = -55f,
+                rArm1 = -50f, rArm2 = 52f,
+                lLeg1 = 6f, lLeg2 = -4f,
+                rLeg1 = 20f, rLeg2 = -15f
+            )),
+            KeyFrame(1f, GUARD)
+        ), 0.5f, false)
 
         val SPECIAL_ATTACK = Animation(listOf(
             KeyFrame(0f, Pose(
-                spine = -10f, rArm1 = -50f, rArm2 = 80f,
-                lArm1 = -40f, lArm2 = 70f
+                spine = -14f, head = -4f,
+                lArm1 = -35f, lArm2 = 65f,
+                rArm1 = -50f, rArm2 = 75f,
+                lLeg1 = 10f, lLeg2 = -8f,
+                rLeg1 = -10f, rLeg2 = 8f
             )),
-            KeyFrame(0.25f, Pose(
-                spine = 14f, rArm1 = 82f, rArm2 = -5f,
-                lArm1 = 78f, lArm2 = -8f
+            KeyFrame(0.2f, Pose(
+                spine = -8f, head = -3f,
+                lArm1 = -25f, lArm2 = 55f,
+                rArm1 = -40f, rArm2 = 65f,
+                lLeg1 = -5f, lLeg2 = 3f,
+                rLeg1 = 55f, rLeg2 = -45f
             )),
-            KeyFrame(0.55f, Pose(
-                spine = 14f, rArm1 = 82f, rArm2 = -5f,
-                lArm1 = 78f, lArm2 = -8f
+            KeyFrame(0.4f, Pose(
+                spine = 16f, head = -1f,
+                lArm1 = 82f, lArm2 = -5f,
+                rArm1 = 85f, rArm2 = -8f,
+                lLeg1 = -20f, lLeg2 = 15f,
+                rLeg1 = 25f, rLeg2 = -20f
             )),
-            KeyFrame(1f, Pose())
-        ), 0.5f, false)
+            KeyFrame(0.6f, Pose(
+                spine = 16f, head = -1f,
+                lArm1 = 82f, lArm2 = -5f,
+                rArm1 = 85f, rArm2 = -8f,
+                lLeg1 = -20f, lLeg2 = 15f,
+                rLeg1 = 25f, rLeg2 = -20f
+            )),
+            KeyFrame(0.8f, Pose(
+                spine = 2f, head = -2f,
+                lArm1 = 58f, lArm2 = -52f,
+                rArm1 = -52f, rArm2 = 54f,
+                lLeg1 = 6f, lLeg2 = -4f,
+                rLeg1 = -6f, rLeg2 = 4f
+            )),
+            KeyFrame(1f, GUARD)
+        ), 0.55f, false)
 
         val BLOCK = Animation(listOf(
             KeyFrame(0f, Pose(
-                spine = -4f, lArm1 = 55f, lArm2 = -65f,
-                rArm1 = 60f, rArm2 = -60f, head = -5f
+                spine = -5f, head = -5f,
+                lArm1 = 58f, lArm2 = -65f,
+                rArm1 = -58f, rArm2 = 62f
             ))
         ), 0.2f, false)
 
         val HIT_REACT = Animation(listOf(
             KeyFrame(0f, Pose(
-                spine = 22f, head = 18f,
-                rArm1 = -25f, rArm2 = 35f,
-                lArm1 = -15f, lArm2 = 25f
+                spine = 25f, head = 20f,
+                lArm1 = -20f, lArm2 = 30f,
+                rArm1 = -30f, rArm2 = 40f,
+                lLeg1 = 12f, rLeg1 = -12f
             )),
-            KeyFrame(0.4f, Pose(spine = 10f, head = 6f)),
-            KeyFrame(1f, Pose())
-        ), 0.3f, false)
+            KeyFrame(0.35f, Pose(
+                spine = 12f, head = 8f,
+                lArm1 = 10f, lArm2 = -15f,
+                rArm1 = -20f, rArm2 = 25f
+            )),
+            KeyFrame(0.7f, Pose(
+                spine = 3f, head = 0f,
+                lArm1 = 40f, lArm2 = -40f,
+                rArm1 = -40f, rArm2 = 42f
+            )),
+            KeyFrame(1f, GUARD)
+        ), 0.35f, false)
 
         val KO = Animation(listOf(
-            KeyFrame(0f, Pose(spine = 28f, head = 22f, rArm1 = -20f, rArm2 = 30f)),
-            KeyFrame(0.25f, Pose(
-                spine = 55f, head = 30f,
-                lLeg1 = 30f, rLeg1 = -10f, rLeg2 = 25f,
-                rArm1 = -30f, rArm2 = 20f, lArm1 = -25f, lArm2 = 15f
+            KeyFrame(0f, Pose(
+                spine = 28f, head = 22f,
+                lArm1 = -20f, lArm2 = 30f,
+                rArm1 = -30f, rArm2 = 35f
             )),
-            KeyFrame(0.6f, Pose(
+            KeyFrame(0.2f, Pose(
+                spine = 55f, head = 30f,
+                lLeg1 = 30f, rLeg1 = -15f, rLeg2 = 25f,
+                lArm1 = -30f, lArm2 = 35f,
+                rArm1 = -35f, rArm2 = 30f
+            )),
+            KeyFrame(0.5f, Pose(
                 spine = 80f, head = 25f,
                 lLeg1 = 40f, lLeg2 = 35f,
                 rLeg1 = 20f, rLeg2 = 45f,
-                rArm1 = -40f, rArm2 = 10f, lArm1 = -35f, lArm2 = 5f
+                lArm1 = -35f, lArm2 = 20f,
+                rArm1 = -40f, rArm2 = 15f
             )),
             KeyFrame(1f, Pose(
                 spine = 85f, head = 20f,
                 lLeg1 = 45f, lLeg2 = 40f,
                 rLeg1 = 25f, rLeg2 = 50f,
-                rArm1 = -45f, rArm2 = 5f, lArm1 = -40f, lArm2 = 0f
+                lArm1 = -40f, lArm2 = 10f,
+                rArm1 = -45f, rArm2 = 5f
             ))
         ), 0.9f, false)
 
         val VICTORY = Animation(listOf(
             KeyFrame(0f, Pose(
-                rArm1 = 72f, rArm2 = -75f,
+                spine = -5f, head = -8f,
                 lArm1 = 72f, lArm2 = -75f,
-                spine = -4f, head = -8f
+                rArm1 = 72f, rArm2 = -75f
             )),
             KeyFrame(0.4f, Pose(
-                rArm1 = 78f, rArm2 = -82f,
-                lArm1 = 78f, lArm2 = -82f,
-                spine = -6f, head = -12f
+                spine = -7f, head = -12f,
+                lArm1 = 80f, lArm2 = -85f,
+                rArm1 = 80f, rArm2 = -85f
             )),
             KeyFrame(0.8f, Pose(
-                rArm1 = 72f, rArm2 = -75f,
+                spine = -5f, head = -8f,
                 lArm1 = 72f, lArm2 = -75f,
-                spine = -4f, head = -8f
+                rArm1 = 72f, rArm2 = -75f
             )),
             KeyFrame(1f, Pose(
-                rArm1 = 72f, rArm2 = -75f,
+                spine = -5f, head = -8f,
                 lArm1 = 72f, lArm2 = -75f,
-                spine = -4f, head = -8f
+                rArm1 = 72f, rArm2 = -75f
             ))
         ), 1.2f, true)
 
@@ -227,9 +329,12 @@ class CharacterRenderer {
         drawBody(canvas, pose, scale, facing, bodyColor, outlineColor)
 
         if (flashAlpha > 0f) {
-            paint.color = Color.WHITE
-            paint.alpha = (flashAlpha * 180f).toInt().coerceIn(0, 200)
+            val flashIntensity = (flashAlpha * 255f).toInt().coerceIn(0, 220)
+            paint.color = Color.argb(flashIntensity, 255, 255, 255)
+            paint.style = Paint.Style.FILL
+            paint.strokeWidth = 0f
             drawBody(canvas, pose, scale, facing, Color.WHITE, Color.WHITE)
+            paint.style = Paint.Style.FILL_AND_STROKE
             paint.alpha = 255
         }
 

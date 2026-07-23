@@ -20,12 +20,13 @@ class MiniGamesHubActivity : BaseNavActivity() {
     )
 
     private val games = listOf(
-        GameEntry("battle", "Battaglia", "\u2694\uFE0F", com.intelligame.huntix.ui.BattleActivity::class.java, false, limitPlays = false),
+        GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, false, limitPlays = false),
         GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_CATCH_EGG, "Prendi l'Uovo", "🥚", CatchEggActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_MATCH3, "Match 3", "💎", Match3Activity::class.java, false),
+        GameEntry(MiniGameManager.GAME_THREE_CARD, "Tre Carte", "🎴", ThreeCardActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_AR_SHOOTER, "AR Egg Shooter", "🔫", com.intelligame.huntix.minigames.ar.AREggShooterActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_BOMB, "AR Color Bomb", "💣", com.intelligame.huntix.minigames.ar.ARColorBombActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "AR Egg Radar", "📡", com.intelligame.huntix.minigames.ar.AREggRadarActivity::class.java, true),

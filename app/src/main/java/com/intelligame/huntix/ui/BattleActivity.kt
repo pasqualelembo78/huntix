@@ -110,7 +110,22 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
             else -> Enemy.AIStyle.DEFENSIVE
         }
 
-        pl = PlayerController()
+        pl = PlayerController().apply {
+            val profile = PlayerProfileManager.myProfile
+            creatureData = CreatureData(
+                id = profile?.playerCharacterId ?: "player",
+                name = profile?.name ?: "Tu",
+                rarityId = "rare",
+                power = (profile?.level ?: 1) * 30L
+            )
+            elementType = when (profile?.playerCharacterId) {
+                "warrior" -> ElementType.FIRE
+                "mage" -> ElementType.WATER
+                "archer" -> ElementType.AIR
+                "tank" -> ElementType.EARTH
+                else -> ElementType.NORMAL
+            }
+        }
         en = Enemy(sp.creature, sp.element, st, sp.difficultyScale)
         ai = AIController(sp.element, AIController.fromRarity(sp.creature.rarityId))
         co = ComboSystem()
@@ -221,6 +236,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
 
     private fun onBattleEvent(type: FightingEngine.BattleEventType, msg: String) {
         val eng = eg
+        val hitDamage = msg.removePrefix("-").toIntOrNull() ?: 0
         when (type) {
             FightingEngine.BattleEventType.COUNTDOWN -> {
                 if (msg.isNotEmpty()) av.showBanner(msg)
@@ -228,26 +244,37 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
             FightingEngine.BattleEventType.CRIT -> {
                 an.spawnDamageNumber(
                     en.positionX * av.width, av.height * 0.45f,
-                    eng.totalPlayerDamage, true
+                    hitDamage, true
                 )
+                av.triggerHitFreeze(4)
+                av.triggerDynamicZoom(0.06f)
             }
             FightingEngine.BattleEventType.HIT, FightingEngine.BattleEventType.SPECIAL -> {
                 an.spawnDamageNumber(
                     en.positionX * av.width, av.height * 0.48f,
-                    eng.totalPlayerDamage, false
+                    hitDamage, false
                 )
+                if (type == FightingEngine.BattleEventType.SPECIAL) {
+                    av.triggerHitFreeze(6)
+                }
             }
             FightingEngine.BattleEventType.ENEMY_HIT -> {
                 an.spawnDamageNumber(
                     pl.positionX * av.width, av.height * 0.48f,
-                    0, false
+                    hitDamage, false
                 )
+                av.triggerHitFreeze(3)
+            }
+            FightingEngine.BattleEventType.PLAYER_STUN -> {
+                av.triggerHitFreeze(3)
             }
             FightingEngine.BattleEventType.KO -> {
                 av.showBanner(msg)
+                av.triggerDynamicZoom(0.12f)
             }
             FightingEngine.BattleEventType.SUPER_READY -> {
                 av.showBanner("SUPER!")
+                av.triggerDynamicZoom(0.04f)
             }
             FightingEngine.BattleEventType.ROUND_END -> {
                 if (eng.gameState == FightingEngine.GameState.ENDED) {
@@ -269,6 +296,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
         vh.removeCallbacks(vr)
         vh.removeCallbacks(moveHandler)
 
+        val win = eg.battleResult == FightingEngine.BattleResult.PLAYER_WIN
         val tr = when (eg.battleResult) {
             FightingEngine.BattleResult.PLAYER_WIN -> BattleEngine.TickResult.ENEMY_DEFEATED
             FightingEngine.BattleResult.ENEMY_WIN -> BattleEngine.TickResult.PLAYER_DEFEATED
@@ -280,10 +308,9 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
             sp.event == BattleSpawnManager.SpawnEvent.RARE,
             sp.event == BattleSpawnManager.SpawnEvent.UNSTABLE
         )
-        BattleRewardSystem.applyRewards(this, rw)
+        BattleRewardSystem.applyRewards(this, rw, win)
         AdsManager.onBattleCompleted(this)
 
-        val win = eg.battleResult == FightingEngine.BattleResult.PLAYER_WIN
         val sc = ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0A0A1A")) }
         val r = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

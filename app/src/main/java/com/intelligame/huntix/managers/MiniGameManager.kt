@@ -234,7 +234,6 @@ object MiniGameManager {
 
     // ─── APPLICAZIONE PREMIO — vecchia API con GameReward ──────────
     fun applyReward(ctx: Context, reward: GameReward, gameId: String): GameReward {
-        incrementStreak(ctx)
         val multiplier = getStreakMultiplier(ctx)
 
         val finalMvc  = (reward.mvcCoins * multiplier).toInt()

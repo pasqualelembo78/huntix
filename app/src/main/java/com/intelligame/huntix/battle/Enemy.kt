@@ -10,7 +10,7 @@ class Enemy(
 ) {
     enum class AIStyle { AGGRESSIVE, BALANCED, DEFENSIVE }
 
-    var positionX: Float = 0.75f
+    var positionX: Float = 0.70f
     var hp: Float = 100f * difficultyScale
     val maxHp: Float = hp
     var attackTimer: Float = 0f
@@ -24,6 +24,14 @@ class Enemy(
     var isKO: Boolean = false
     var velocityY: Float = 0f
     var posY: Float = 0f
+
+    var telegraphTimer: Float = 0f
+    var telegraphActive: Boolean = false
+        private set
+    var telegraphType: TelegraphType = TelegraphType.NONE
+        private set
+
+    enum class TelegraphType { NONE, WARNING, HEAVY, SPECIAL }
 
     private var oneShotDone: Boolean = false
 
@@ -60,6 +68,14 @@ class Enemy(
         attackTimer = maxOf(0f, attackTimer - dt)
         hitFlash = maxOf(0f, hitFlash - dt)
 
+        if (telegraphActive) {
+            telegraphTimer -= dt
+            if (telegraphTimer <= 0f) {
+                telegraphActive = false
+                telegraphType = TelegraphType.NONE
+            }
+        }
+
         if (posY > 0f) {
             velocityY -= 1200f * dt
             posY += velocityY * dt
@@ -71,4 +87,16 @@ class Enemy(
     }
 
     fun isStunned(): Boolean = stunTimer > 0f
+
+    fun startTelegraph(type: TelegraphType, durationSec: Float = 0.4f) {
+        telegraphType = type
+        telegraphTimer = durationSec
+        telegraphActive = true
+    }
+
+    fun cancelTelegraph() {
+        telegraphActive = false
+        telegraphTimer = 0f
+        telegraphType = TelegraphType.NONE
+    }
 }

@@ -37,7 +37,7 @@ object BattleRewardSystem {
         }
     }
 
-    fun applyRewards(context: Context, reward: Reward) {
+    fun applyRewards(context: Context, reward: Reward, isWin: Boolean = false) {
         if (reward.xpGained > 0 || reward.gemsGained > 0) {
             val p = PlayerProfileManager.myProfile
             p?.let {
@@ -48,11 +48,11 @@ object BattleRewardSystem {
         }
         if (reward.mvcGained > 0) {
             SavedManager.addMvc(context, reward.mvcGained.toDouble())
-            // Track research tasks
             com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "earn_500_mvc", reward.mvcGained)
         }
-        // Track battle quests
-        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_battle")
-        com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_5_battles")
+        if (isWin) {
+            com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_battle")
+            com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(context, "win_5_battles")
+        }
     }
 }

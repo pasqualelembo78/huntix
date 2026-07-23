@@ -3,10 +3,14 @@ package com.intelligame.huntix.battle
 import com.intelligame.huntix.battle.CharacterRenderer.AnimState
 
 class PlayerController {
-    var positionX: Float = 0.25f
+    var positionX: Float = 0.30f
     var isBlocking: Boolean = false
     var attackTimer: Float = 0f
     var hitFlash: Float = 0f
+    var blockStamina: Float = 1f
+
+    var creatureData: CreatureData? = null
+    var elementType: ElementType = ElementType.NORMAL
 
     var animState: AnimState = AnimState.IDLE
         private set
@@ -38,6 +42,16 @@ class PlayerController {
     fun update(dt: Float) {
         if (stunTimer > 0f) {
             stunTimer -= dt
+        }
+
+        if (isBlocking) {
+            blockStamina = (blockStamina - dt * 0.15f).coerceAtLeast(0f)
+            if (blockStamina <= 0f) {
+                releaseBlock()
+                stunTimer = 0.2f
+            }
+        } else {
+            blockStamina = (blockStamina + dt * 0.08f).coerceAtMost(1f)
         }
 
         val duration = CharacterRenderer.animDuration(animState)

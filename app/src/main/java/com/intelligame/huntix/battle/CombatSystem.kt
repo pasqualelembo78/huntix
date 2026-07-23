@@ -26,12 +26,12 @@ class CombatSystem {
             event.contains("HIT") || event.contains("hit") || event.contains("Colpito") -> hitCount++
             event.contains("MISS") || event.contains("miss") || event.contains("mancato") -> missCount++
             event.contains("DAMAGE") || event.contains("damage") || event.contains("danno") -> {
-                val nums = event.split(" ").filter { it.all { it.isDigit() } }
-                if (nums.isNotEmpty()) totalDamageDealt += nums.last().toLong()
+                val nums = event.split(" ").filter { s -> s.removePrefix("-").all { it.isDigit() } && s.removePrefix("-").isNotEmpty() }
+                if (nums.isNotEmpty()) totalDamageDealt += nums.last().removePrefix("-").toLong()
             }
             event.contains("RECEIVED") || event.contains("received") || event.contains("subìto") -> {
-                val nums = event.split(" ").filter { it.all { it.isDigit() } }
-                if (nums.isNotEmpty()) totalDamageReceived += nums.last().toLong()
+                val nums = event.split(" ").filter { s -> s.removePrefix("-").all { it.isDigit() } && s.removePrefix("-").isNotEmpty() }
+                if (nums.isNotEmpty()) totalDamageReceived += nums.last().removePrefix("-").toLong()
             }
         }
     }
