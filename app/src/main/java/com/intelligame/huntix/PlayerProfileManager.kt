@@ -149,16 +149,30 @@ object PlayerProfileManager {
             isGoogleUser = isGoogleUser,
             firebaseUid  = firebaseUid
         )
+        prefs.edit().putString(KEY_ID, id).putString(KEY_NAME, name).apply()
+        _myProfile = profile
+        if (isGoogleUser && firebaseUid.isNotBlank()) {
+            updateLeaderboard(profile)
+        }
+
+        // Skip Firestore write if not authenticated
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            Log.d(TAG, "Profilo creato (locale): $id")
+            onReady(profile)
+            return
+        }
+
         db.collection(COL_PLAYERS).document(id)
             .set(profile.toFirestore())
             .addOnSuccessListener {
-                prefs.edit().putString(KEY_ID, id).putString(KEY_NAME, name).apply()
-                _myProfile = profile
-                if (isGoogleUser) updateLeaderboard(profile)
                 Log.d(TAG, "Profilo creato: $id")
                 onReady(profile)
             }
-            .addOnFailureListener { e -> onError(e.message ?: "Errore creazione profilo") }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Firestore create failed, proceeding local: ${e.message}")
+                onReady(profile)
+            }
     }
 
     /**
@@ -279,7 +293,16 @@ object PlayerProfileManager {
     }
 
     private fun saveProfile(profile: PlayerProfile, onComplete: (() -> Unit)? = null) {
-        db.collection(COL_PLAYERS).document(profile.playerId)
+        // Skip Firestore write for local-only profiles (no Firebase Auth UID)
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid.isNullOrBlank()) {
+            Log.d(TAG, "Skip Firestore save — no authenticated user (local profile)")
+            onComplete?.invoke()
+            return
+        }
+        // Ensure we only write under the authenticated user's document
+        val docId = profile.firebaseUid.ifBlank { uid }
+        db.collection(COL_PLAYERS).document(docId)
             .set(profile.toFirestore(), SetOptions.merge())
             .addOnSuccessListener {
                 if (profile.isGoogleUser) updateLeaderboard(profile)
@@ -291,6 +314,8 @@ object PlayerProfileManager {
     private fun updateLeaderboard(profile: PlayerProfile) {
         // Solo utenti Google vengono inseriti in classifica mondiale
         if (!profile.isGoogleUser) return
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        if (uid.isNullOrBlank()) return
         db.collection(COL_LEADER).document(profile.playerId).set(
             mapOf(
                 "playerId"         to profile.playerId,

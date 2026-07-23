@@ -24,9 +24,16 @@ class EggHuntApplication : Application() {
 
         // Sentry (crash reporting) — DSN from manifest meta-data
         try {
-            Sentry.init { options ->
-                options.isEnableAutoSessionTracking = true
-                options.tracesSampleRate = 0.1
+            val manifestDsn = packageManager.getApplicationInfo(packageName,
+                android.content.pm.PackageManager.GET_META_DATA)
+                .metaData?.getString("io.sentry.dsn") ?: ""
+            if (manifestDsn.isBlank()) {
+                Log.w("HuntixApp", "Sentry DSN not configured — crash reporting disabled")
+            } else {
+                Sentry.init { options ->
+                    options.isEnableAutoSessionTracking = true
+                    options.tracesSampleRate = 0.1
+                }
             }
         } catch (e: Exception) {
             Log.e("HuntixApp", "Sentry init failed: ${e.message}")

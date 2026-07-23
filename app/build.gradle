@@ -52,11 +52,16 @@ android {
         def admobBannerId    = resolve('admobBannerId',    'ADMOB_BANNER_ID',    'ca-app-pub-2572171530354182/7280538494')
         def admobRewardedId  = resolve('admobRewardedId',  'ADMOB_REWARDED_ID',  'ca-app-pub-2572171530354182/4905656590')
         def admobInterId     = resolve('admobInterstitialId','ADMOB_INTERSTITIAL_ID','')
+        // Facebook — vuoto = login disabilitato, inserire i veri valori in keystore.properties
+        def facebookAppId        = resolve('facebookAppId',        'FACEBOOK_APP_ID',        '')
+        def facebookClientToken  = resolve('facebookClientToken',  'FACEBOOK_CLIENT_TOKEN',  '')
 
         manifestPlaceholders = [
             sentryDsn:        sentryDsn,
             admobAppId:       admobAppId,
             arcoreApiKey:     arcoreApiKey,
+            facebookAppId:    facebookAppId,
+            facebookClientToken: facebookClientToken,
         ]
         buildConfigField "String", "SENTRY_DSN",            "\"${sentryDsn}\""
         buildConfigField "String", "ADMOB_APP_ID",          "\"${admobAppId}\""
@@ -66,6 +71,9 @@ android {
         buildConfigField "String", "ADMOB_BANNER_ID",       "\"${admobBannerId}\""
         buildConfigField "String", "ADMOB_REWARDED_ID",     "\"${admobRewardedId}\""
         buildConfigField "String", "ADMOB_INTERSTITIAL_ID", "\"${admobInterId}\""
+        buildConfigField "String", "FACEBOOK_APP_ID",       "\"${facebookAppId}\""
+        buildConfigField "String", "FACEBOOK_CLIENT_TOKEN", "\"${facebookClientToken}\""
+        buildConfigField "boolean", "FACEBOOK_ENABLED",     "${!facebookAppId.isEmpty()}"
 
         // ── Riduzione dimensione APK ──────────────────────────────
         // Le lib native (.so) pesano ~111MB su 4 ABI. x86/x86_64 servono
@@ -148,6 +156,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-database-ktx'
     implementation 'com.google.firebase:firebase-firestore-ktx'
     implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
 
     implementation 'com.google.android.gms:play-services-auth:21.2.0'
     implementation "androidx.credentials:credentials:1.3.0"
@@ -216,13 +225,21 @@ afterEvaluate {
                 dependsOn mergeTask
                 doLast {
                     def ak = resolve('arcoreApiKey', 'ARCORE_API_KEY', '')
-                    if (ak.isEmpty()) {
-                        def mf = file("${buildDir}/intermediates/merged_manifests/${variant.dirName}/AndroidManifest.xml")
-                        if (mf.exists()) {
-                            def text = mf.getText("UTF-8")
+                    def fbId = resolve('facebookAppId', 'FACEBOOK_APP_ID', '')
+                    def mf = file("${buildDir}/intermediates/merged_manifests/${variant.dirName}/AndroidManifest.xml")
+                    if (mf.exists()) {
+                        var text = mf.getText("UTF-8")
+                        // Rimuove ARCore API_KEY se vuota
+                        if (ak.isEmpty()) {
                             text = text.replaceAll(~/<meta-data\s+android:name="com\.google\.android\.ar\.API_KEY"[^>]*\/>/, "")
-                            mf.write(text, "UTF-8")
                         }
+                        // Rimuove Facebook meta-data e CustomTabActivity se vuote
+                        if (fbId.isEmpty()) {
+                            text = text.replaceAll(~/<meta-data\s+android:name="com\.facebook\.sdk\.ApplicationId"[^>]*\/>/, "")
+                            text = text.replaceAll(~/<meta-data\s+android:name="com\.facebook\.sdk\.ClientToken"[^>]*\/>/, "")
+                            text = text.replaceAll(~/<activity\s+android:name="com\.facebook\.CustomTabActivity"[\s\S]*?<\/activity>/, "")
+                        }
+                        mf.write(text, "UTF-8")
                     }
                 }
             }

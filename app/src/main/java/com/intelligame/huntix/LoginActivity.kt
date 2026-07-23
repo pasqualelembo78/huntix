@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.intelligame.huntix.BuildConfig
 
 /**
  * LoginActivity — schermata di accesso.
@@ -52,10 +53,15 @@ class LoginActivity : AppCompatActivity() {
             signInWithGoogle(c)
         })
         root.addView(spacer())
-        root.addView(UiKit.button(c, "\uD83D\uDCAC  Continua con Facebook", "#4267B2") {
-            signInWithFacebook(c)
-        })
-        root.addView(spacer())
+
+        // Facebook: nascosto se non configurato, altrimenti bottone normale
+        if (BuildConfig.FACEBOOK_ENABLED) {
+            root.addView(UiKit.button(c, "\uD83D\uDCAC  Continua con Facebook", "#4267B2") {
+                signInWithFacebook(c)
+            })
+            root.addView(spacer())
+        }
+
         root.addView(UiKit.button(c, "🐙  Continua con GitHub", "#24292e") {
             signInWithGitHub(c)
         })
@@ -117,10 +123,12 @@ class LoginActivity : AppCompatActivity() {
 
     // ── Facebook ────────────────────────────────────────────
     private fun signInWithFacebook(context: android.content.Context) {
-        // Se i valori in strings.xml sono ancora placeholder,Facebook non è configurato: avvisa e non tentare.
-        val fbAppId = getString(R.string.facebook_app_id)
-        if (fbAppId.isBlank() || fbAppId == "123456789012345" ||
-            getString(R.string.facebook_client_token).let { it.isBlank() || it == "placeholder_token_replace_me" }) {
+        if (!BuildConfig.FACEBOOK_ENABLED) {
+            Toast.makeText(context, "Login Facebook non ancora configurato", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val fbAppId = BuildConfig.FACEBOOK_APP_ID
+        if (fbAppId.isBlank()) {
             Toast.makeText(context, "Login Facebook non ancora configurato", Toast.LENGTH_SHORT).show()
             return
         }
