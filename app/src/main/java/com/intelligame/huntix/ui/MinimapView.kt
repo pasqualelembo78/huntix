@@ -43,6 +43,10 @@ class MinimapView(context: Context) : View(context) {
         cityHalf = halfCity
     }
 
+    fun setPlayerColor(color: Int) {
+        playerPaint.color = color
+    }
+
     fun update(px: Float, pz: Float, npcs: List<Triple<Float, Float, Int>>) {
         playerX = px; playerZ = pz
         npcDots.clear()

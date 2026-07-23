@@ -2,17 +2,25 @@ package com.intelligame.huntix.ui
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.filament.Skybox
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.reallife.AvatarConfig
+import com.intelligame.huntix.reallife.BuildingDefs
+import com.intelligame.huntix.reallife.BuildingType
+import com.intelligame.huntix.reallife.DayNightManager
 import com.intelligame.huntix.reallife.MapNode
+import com.intelligame.huntix.reallife.Pets
 import com.intelligame.huntix.reallife.RealLifeClient
 import com.intelligame.huntix.reallife.WorldState
 import io.github.sceneview.SceneView
@@ -37,19 +45,54 @@ class CityActivity : AppCompatActivity() {
     private lateinit var joystickView: JoystickView
     private lateinit var npcNameLabel: TextView
     private lateinit var speechBubble: TextView
+    private lateinit var buildingLabel: TextView
+    private lateinit var enterBtn: LinearLayout
     private lateinit var minimap: MinimapView
     private var playerNode: SphereNode? = null
+    private var playerBody: CubeNode? = null
+    private var playerHead: SphereNode? = null
+    private var playerLegL: CubeNode? = null
+    private var playerLegR: CubeNode? = null
+    private var playerArmL: CubeNode? = null
+    private var playerArmR: CubeNode? = null
+    private var playerRoot: Node? = null
     private var playerX = 0f
     private var playerZ = 0f
+    private lateinit var avatarConfig: AvatarConfig
     private var lastFrameNs = 0L
     private var speechBubbleNpc: NpcData? = null
     private var speechBubbleTimer = 0f
 
+    // Weather
+    private lateinit var weatherOverlay: WeatherOverlay
+    private var currentWeather = "Soleggiato"
+    private var weatherCycleTimer = 0f
+    private val WEATHER_CYCLE_INTERVAL = 300f // 5 minuti virtuali
+
+    // Emote
+    private lateinit var emoteBtn: TextView
+    private lateinit var emoteBubble: TextView
+    private var emoteTimer = 0f
+    private var emotePlayerScale = 1f
+    private var emoteAnimating = false
+
+    // Pet
+    private var petNode: PetNode? = null
+
+    // Day/Night cycle
+    private lateinit var dayNightManager: DayNightManager
+    private lateinit var dayNightOverlay: DayNightOverlay
+    private var skyboxUpdateTimer = 0f
+    private var windowUpdateTimer = 0f
+    private var windowMaterial: com.google.android.filament.utils.MaterialLoader.MaterialInstance? = null
+    private val windowMaterials = mutableListOf<com.google.android.filament.utils.MaterialLoader.MaterialInstance>()
+    private var lampLightMaterial: com.google.android.filament.utils.MaterialLoader.MaterialInstance? = null
+    private var timeLabel: TextView? = null
+
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
 
-    private data class AABB(val minX: Float, val maxX: Float, val minZ: Float, val maxZ: Float)
-    private val buildingAABBs = mutableListOf<AABB>()
+    private val buildingAABBs = mutableListOf<com.intelligame.huntix.reallife.AABB>()
     private val roadCenters = mutableListOf<Float>()
 
     private data class NpcData(
@@ -107,6 +150,8 @@ class CityActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        avatarConfig = AvatarConfig.load(this)
+
         sceneView = SceneView(this).apply { cameraManipulator = null }
         sceneView.lifecycle = lifecycle
 
@@ -116,6 +161,39 @@ class CityActivity : AppCompatActivity() {
         buildCity()
         buildDetails()
         placePlayer()
+
+        // Day/Night cycle
+        dayNightManager = DayNightManager()
+        dayNightOverlay = DayNightOverlay(this)
+
+        // Weather overlay
+        weatherOverlay = WeatherOverlay(this)
+
+        // Emote bubble
+        emoteBubble = TextView(this).apply {
+            textSize = 24f; alpha = 0f
+            setPadding(UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 4),
+                UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 4))
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 12).toFloat()
+                setColor(0xDD1A1030.toInt())
+                setStroke(1, 0x44FFFFFF)
+            }
+        }
+
+        // Emote button (next to joystick)
+        emoteBtn = TextView(this).apply {
+            text = "🎭"; textSize = 22f; gravity = Gravity.CENTER
+            isClickable = true; isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 24).toFloat()
+                setColor(0xDD1A1030.toInt())
+                setStroke(1, 0x44FFFFFF)
+            }
+            setPadding(UiKit.dp(this@CityActivity, 12), UiKit.dp(this@CityActivity, 10),
+                UiKit.dp(this@CityActivity, 12), UiKit.dp(this@CityActivity, 10))
+            setOnClickListener { showEmotePopup() }
+        }
 
         joystickView = JoystickView(this)
 
@@ -134,15 +212,62 @@ class CityActivity : AppCompatActivity() {
             }
         }
 
+        buildingLabel = TextView(this).apply {
+            setTextColor(Color.WHITE); textSize = 15f; alpha = 0f
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            setShadowLayer(4f, 1f, 1f, Color.BLACK)
+        }
+
+        enterBtn = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 12).toFloat()
+                setColor(Color.parseColor(UiKit.ACCENT))
+            }
+            setPadding(UiKit.dp(this@CityActivity, 16), UiKit.dp(this@CityActivity, 8),
+                UiKit.dp(this@CityActivity, 16), UiKit.dp(this@CityActivity, 8))
+            isClickable = true; isFocusable = true
+            alpha = 0f
+            addView(TextView(this@CityActivity).apply {
+                text = "Entra"; textSize = 14f; setTextColor(Color.WHITE)
+                typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            })
+        }
+
         minimap = MinimapView(this)
+        minimap.setPlayerColor(avatarConfig.shirtColor)
 
         val hud = TextView(this).apply {
-            text = "  Joystick · avvicinati a un personaggio per parlarci"
+            text = "  Joystick · avvicinati a un NPC o edificio"
             setTextColor(Color.WHITE); textSize = 11f; alpha = 0.5f
+        }
+
+        val backBtn = TextView(this).apply {
+            text = "← "; textSize = 20f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            isClickable = true; setOnClickListener { finish() }
+            setPadding(UiKit.dp(this@CityActivity, 12), UiKit.dp(this@CityActivity, 8), 0, 0)
+        }
+
+        timeLabel = TextView(this).apply {
+            textSize = 11f; setTextColor(Color.parseColor("#FFD86B"))
+            setShadowLayer(3f, 1f, 1f, Color.BLACK)
+            setPadding(UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 4),
+                UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 4))
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 6).toFloat()
+                setColor(0x55000000)
+            }
         }
 
         val root = FrameLayout(this).apply {
             addView(sceneView)
+            addView(dayNightOverlay, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            addView(backBtn, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8); marginStart = UiKit.dp(this@CityActivity, 4) })
             addView(npcNameLabel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 48) })
@@ -151,17 +276,41 @@ class CityActivity : AppCompatActivity() {
             ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 72) })
             addView(hud, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8) })
+            ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 38) })
             addView(minimap, FrameLayout.LayoutParams(
                 UiKit.dp(this@CityActivity, 110), UiKit.dp(this@CityActivity, 110)
             ).apply { gravity = Gravity.TOP or Gravity.END; topMargin = UiKit.dp(this@CityActivity, 12); marginEnd = UiKit.dp(this@CityActivity, 12) })
+            addView(timeLabel, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.TOP or Gravity.END; topMargin = UiKit.dp(this@CityActivity, 128); marginEnd = UiKit.dp(this@CityActivity, 12) })
             addView(joystickView, FrameLayout.LayoutParams(
                 UiKit.dp(this@CityActivity, 160), UiKit.dp(this@CityActivity, 160)
             ).apply { gravity = Gravity.BOTTOM or Gravity.START; marginStart = UiKit.dp(this@CityActivity, 24); bottomMargin = UiKit.dp(this@CityActivity, 32) })
+            addView(buildingLabel, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 96) })
+            addView(enterBtn, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.CENTER or Gravity.BOTTOM; bottomMargin = UiKit.dp(this@CityActivity, 200) })
+            addView(weatherOverlay, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            addView(emoteBubble, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 116) })
+            addView(emoteBtn, FrameLayout.LayoutParams(
+                UiKit.dp(this@CityActivity, 48), UiKit.dp(this@CityActivity, 48)
+            ).apply { gravity = Gravity.BOTTOM or Gravity.END; marginEnd = UiKit.dp(this@CityActivity, 20); bottomMargin = UiKit.dp(this@CityActivity, 40) })
         }
         sceneView.onTouchEvent = { event, _ ->
             if (event.action == MotionEvent.ACTION_UP) {
-                findNearestNpc()?.let { openChat(it.mapNode) }
+                val nearNpc = findNearestNpc()
+                if (nearNpc != null) {
+                    openChat(nearNpc.mapNode)
+                } else {
+                    val nearB = BuildingDefs.findNearest(playerX, playerZ)
+                    if (nearB != null) openBuilding(nearB.first)
+                }
             }
             true
         }
@@ -193,8 +342,13 @@ class CityActivity : AppCompatActivity() {
                     updatePlayer(dt)
                     updateNpcs(dt)
                     updateNpcLabel()
+                    updateBuildingLabel()
                     updateSpeechBubble(dt)
                     updateMinimap()
+                    updateDayNight(dt)
+                    updateWeather(dt)
+                    updateEmote(dt)
+                    updatePet(dt)
                 }
             } catch (_: Exception) {}
             lastFrameNs = frameTimeNanos
@@ -225,7 +379,7 @@ class CityActivity : AppCompatActivity() {
 
         playerX = playerX.coerceIn(-HALF + 1f, HALF - 1f)
         playerZ = playerZ.coerceIn(-HALF + 1f, HALF - 1f)
-        playerNode?.position = Position(playerX, P_Y, playerZ)
+        playerRoot?.position = Position(playerX, 0f, playerZ)
         syncCamera()
     }
 
@@ -319,6 +473,26 @@ class CityActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateBuildingLabel() {
+        val nearB = BuildingDefs.findNearest(playerX, playerZ)
+        if (nearB != null) {
+            val (b, dist) = nearB
+            buildingLabel.text = "${b.emoji}  ${b.name}"
+            buildingLabel.alpha = (1f - (dist / BuildingDefs.NEAR_DISTANCE).coerceIn(0f, 1f))
+            enterBtn.alpha = 1f
+            enterBtn.setOnClickListener { openBuilding(b) }
+        } else {
+            buildingLabel.alpha = 0f
+            enterBtn.alpha = 0f
+        }
+    }
+
+    private fun openBuilding(b: com.intelligame.huntix.reallife.BuildingDef) {
+        val intent = Intent(this, BuildingInteriorActivity::class.java)
+        intent.putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, b.type.ordinal)
+        startActivity(intent)
+    }
+
     private fun updateMinimap() {
         val npcDots = npcs.map {
             val cat = it.mapNode.category
@@ -328,12 +502,122 @@ class CityActivity : AppCompatActivity() {
         minimap.update(playerX, playerZ, npcDots)
     }
 
+    private fun updateDayNight(dt: Float) {
+        dayNightManager.advance(dt)
+        dayNightOverlay.update(dayNightManager)
+
+        // Update time label
+        timeLabel?.text = "🕐 ${dayNightManager.getTimeString()} · ${dayNightManager.getPeriodLabel()}"
+
+        // Rebuild skybox every 2 seconds (expensive operation)
+        skyboxUpdateTimer -= dt
+        if (skyboxUpdateTimer <= 0f) {
+            skyboxUpdateTimer = 2f
+            try {
+                val sc = dayNightManager.getSkyColors()
+                val skyR = Color.red(sc.topColor) / 255f
+                val skyG = Color.green(sc.topColor) / 255f
+                val skyB = Color.blue(sc.topColor) / 255f
+                sceneView.skybox = Skybox.Builder().color(floatArrayOf(skyR, skyG, skyB, 1f)).build(engine)
+                sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
+            } catch (_: Exception) {}
+        }
+
+        // Update window/lamp colors every 5 seconds
+        windowUpdateTimer -= dt
+        if (windowUpdateTimer <= 0f) {
+            windowUpdateTimer = 5f
+            val winColor = dayNightManager.getWindowColor()
+            for (wm in windowMaterials) {
+                try { wm.color = winColor } catch (_: Exception) {}
+            }
+            // Update lamp color
+            val lampColor = dayNightManager.getLampColor()
+            try { lampLightMaterial?.color = lampColor } catch (_: Exception) {}
+        }
+    }
+
     private fun collides(x: Float, z: Float): Boolean {
         for (b in buildingAABBs) {
             if (x + PLAYER_R > b.minX && x - PLAYER_R < b.maxX &&
                 z + PLAYER_R > b.minZ && z - PLAYER_R < b.maxZ) return true
         }
         return false
+    }
+
+    private fun updateWeather(dt: Float) {
+        weatherCycleTimer -= dt
+        if (weatherCycleTimer <= 0f) {
+            weatherCycleTimer = WEATHER_CYCLE_INTERVAL
+            val weathers = arrayOf("Soleggiato", "Soleggiato", "Soleggiato", "Nuvoloso", "Pioggia", "Temporale", "Nebbia")
+            currentWeather = weathers.random()
+        }
+        weatherOverlay.setWeather(currentWeather)
+        weatherOverlay.invalidate()
+
+        // Temporale: flash periodico
+        if (currentWeather == "Temporale") {
+            if (Math.random() < 0.002f) {
+                weatherOverlay.triggerFlash()
+            }
+        }
+
+        // Regola luminosità in base al meteo
+        val weatherBrightness = when (currentWeather) {
+            "Nuvoloso" -> 0.7f
+            "Pioggia" -> 0.6f
+            "Temporale" -> 0.4f
+            "Nebbia" -> 0.5f
+            else -> 1f
+        }
+        sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity() * weatherBrightness
+    }
+
+    private fun showEmotePopup() {
+        val popup = EmotePopup(this) { emoji, name ->
+            emoteBubble.text = "$emoji $name"
+            emoteBubble.alpha = 1f
+            emoteTimer = 3f
+            emoteAnimating = true
+        }
+        popup.show(emoteBtn)
+    }
+
+    private fun updateEmote(dt: Float) {
+        if (emoteTimer > 0f) {
+            emoteTimer -= dt
+            val fadeIn = ((3f - emoteTimer) / 0.3f).coerceAtMost(1f)
+            val fadeOut = (emoteTimer / 0.5f).coerceAtMost(1f)
+            emoteBubble.alpha = fadeIn.coerceAtMost(fadeOut)
+
+            // Player bounce animation
+            if (emoteAnimating && playerRoot != null) {
+                val t = 3f - emoteTimer
+                val bounce = kotlin.math.sin(t * 8.0).toFloat() * 0.15f
+                val scaleY = 1f + bounce.coerceIn(-0.15f, 0.15f)
+                playerRoot?.scale = Position(1f, scaleY, 1f)
+            }
+        } else {
+            emoteBubble.alpha = 0f
+            if (emoteAnimating) {
+                emoteAnimating = false
+                playerRoot?.scale = Position(1f, 1f, 1f)
+            }
+        }
+    }
+
+    private fun updatePet(dt: Float) {
+        val pet = petNode ?: return
+        val stopped = joystickView.dx == 0f && joystickView.dy == 0f
+        pet.updatePet(playerX, playerZ, dt, stopped)
+    }
+
+    private fun spawnPet() {
+        val def = Pets.AVAILABLE.random()
+        val pet = PetNode(def)
+        pet.worldPosition = Position(playerX + 2f, 0f, playerZ)
+        sceneView.addChildNode(pet)
+        petNode = pet
     }
 
     private fun loadNpcs() {
@@ -371,65 +655,55 @@ class CityActivity : AppCompatActivity() {
     private fun loadWorldState() {
         lifecycleScope.launch {
             val ws = withContext(Dispatchers.IO) { RealLifeClient.getWorldState() }.getOrNull() ?: return@launch
-            applyTimeOfDay(ws)
-        }
-    }
-
-    private fun applyTimeOfDay(ws: WorldState) {
-        try {
-            val parts = ws.time.split(":")
-            if (parts.size != 2) return
-            val hour = parts[0].toIntOrNull() ?: 12
-            val minute = parts[1].toIntOrNull() ?: 0
-            val t = hour + minute / 60f
-
-            val (skyR, skyG, skyB, lightR, lightG, lightB, intensity) = when {
-                t in 5f..7f -> TimeColors(0.6f, 0.5f, 0.6f, 1.0f, 0.7f, 0.5f, 40_000f)
-                t in 7f..10f -> TimeColors(0.5f, 0.7f, 1.0f, 1.0f, 0.95f, 0.9f, 80_000f)
-                t in 10f..16f -> TimeColors(0.5f, 0.7f, 1.0f, 1.0f, 1.0f, 0.95f, 100_000f)
-                t in 16f..19f -> TimeColors(0.9f, 0.5f, 0.3f, 1.0f, 0.7f, 0.4f, 60_000f)
-                t in 19f..21f -> TimeColors(0.2f, 0.2f, 0.4f, 0.5f, 0.4f, 0.6f, 20_000f)
-                else -> TimeColors(0.05f, 0.05f, 0.15f, 0.2f, 0.2f, 0.4f, 5_000f)
-            }
-
+            // Sync day/night manager with server time
             try {
-                val skybox = Skybox.Builder().color(floatArrayOf(skyR, skyG, skyB, 1f)).build(engine)
-                sceneView.skybox = skybox
-            } catch (_: Exception) {}
-
-            try {
-                sceneView.mainLightNode?.let { light ->
-                    light.intensity = intensity
+                val parts = ws.time.split(":")
+                if (parts.size == 2) {
+                    val hour = parts[0].toIntOrNull() ?: 10
+                    val minute = parts[1].toIntOrNull() ?: 0
+                    dayNightManager.setHour(hour + minute / 60f)
                 }
             } catch (_: Exception) {}
 
-            when (ws.weather) {
-                "Pioggia", "Temporale" -> try { sceneView.mainLightNode?.let { it.intensity *= 0.6f } } catch (_: Exception) {}
-                "Nuvoloso" -> try { sceneView.mainLightNode?.let { it.intensity *= 0.75f } } catch (_: Exception) {}
-                "Nebbia" -> try { sceneView.mainLightNode?.let { it.intensity *= 0.5f } } catch (_: Exception) {}
-            }
-        } catch (_: Exception) {}
-    }
+            // Set weather from server
+            currentWeather = ws.weather
+            weatherOverlay.setWeather(ws.weather)
 
-    private data class TimeColors(
-        val skyR: Float, val skyG: Float, val skyB: Float,
-        val lightR: Float, val lightG: Float, val lightB: Float,
-        val intensity: Float
-    )
+            // Spawn pet after world is loaded
+            withContext(Dispatchers.Main) { spawnPet() }
+        }
+    }
 
     private fun buildDetails() {
         val poleMat = ml.createColorInstance(color = Color.rgb(0x55, 0x55, 0x55))
         val lightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xEE, 0xAA))
+        lampLightMaterial = lightMat  // capture for day/night
         val benchMat = ml.createColorInstance(color = Color.rgb(0x8B, 0x5E, 0x3C))
         val trunkMat = ml.createColorInstance(color = Color.rgb(0x6B, 0x42, 0x26))
         val leafMat = ml.createColorInstance(color = Color.rgb(0x2E, 0x7D, 0x32))
+        val leafLightMat = ml.createColorInstance(color = Color.rgb(0x43, 0xA0, 0x47))
+        val bushMat = ml.createColorInstance(color = Color.rgb(0x38, 0x8E, 0x3C))
+        val flowerColors = intArrayOf(
+            0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
+            0xFF9C27B0.toInt(), 0xFFFF9800.toInt(), 0xFF2196F3.toInt()
+        )
+        val carColors = intArrayOf(
+            Color.rgb(0xE5, 0x39, 0x35), // rosso
+            Color.rgb(0x1E, 0x88, 0xE5), // blu
+            Color.rgb(0xEC, 0xEF, 0xF1), // bianco
+            Color.rgb(0xFF, 0xCA, 0x28)  // giallo
+        )
+        val wheelMat = ml.createColorInstance(color = Color.rgb(0x21, 0x21, 0x21))
+        val windshieldMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
 
+        // ── LAMPIONI + BANCHE + AUTO + ALBERI sulle strade ──
         for (i in roadCenters.indices) {
             for (j in roadCenters.indices) {
                 val rx = roadCenters[i]
                 val rz = roadCenters[j]
                 val sd = ((rx * 173 + rz * 311).toInt().let { if (it < 0) -it else it }) % 1000
 
+                // Lampione
                 if (sd % 3 == 0) {
                     val lx = rx + ROAD / 2f + 0.8f
                     sceneView.addChildNode(CubeNode(engine, Size(0.08f, 2.5f, 0.08f), materialInstance = poleMat).apply {
@@ -440,6 +714,7 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
+                // Panchina
                 if (sd % 4 == 1) {
                     val bx = rx - ROAD / 2f - 0.6f
                     sceneView.addChildNode(CubeNode(engine, Size(0.8f, 0.35f, 0.35f), materialInstance = benchMat).apply {
@@ -447,16 +722,121 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                if (sd % 5 == 2) {
-                    val tx = rx - ROAD / 2f - 1.2f
-                    sceneView.addChildNode(CubeNode(engine, Size(0.2f, 1.8f, 0.2f), materialInstance = trunkMat).apply {
-                        position = Position(tx, 0.9f, rz + 2f)
+                // Auto parcheggiata
+                if (sd % 6 == 3) {
+                    val carMat = ml.createColorInstance(color = carColors[sd % carColors.size])
+                    val cx = rx + ROAD / 2f + 1.5f
+                    val cz = rz + (if (sd % 2 == 0) 1.5f else -1.5f)
+                    // Corpo auto
+                    sceneView.addChildNode(CubeNode(engine, Size(1.2f, 0.35f, 0.6f), materialInstance = carMat).apply {
+                        position = Position(cx, 0.25f, cz)
                     })
-                    sceneView.addChildNode(SphereNode(engine, 0.8f, materialInstance = leafMat).apply {
-                        position = Position(tx, 2.2f, rz + 2f)
+                    // Abitacolo
+                    sceneView.addChildNode(CubeNode(engine, Size(0.7f, 0.25f, 0.5f), materialInstance = windshieldMat).apply {
+                        position = Position(cx, 0.55f, cz)
+                    })
+                    // Ruote
+                    for (wx in floatArrayOf(-0.4f, 0.4f)) {
+                        for (wz in floatArrayOf(-0.25f, 0.25f)) {
+                            sceneView.addChildNode(SphereNode(engine, 0.12f, materialInstance = wheelMat).apply {
+                                position = Position(cx + wx, 0.12f, cz + wz)
+                            })
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── ALBERI, CESPUGLI, FIORI nei blocchi ──
+        val occupied = BuildingDefs.occupiedBlocks().toSet()
+        val s = 0.4f
+        for (i in 0 until roadCenters.size - 1) {
+            for (j in 0 until roadCenters.size - 1) {
+                val x1 = roadCenters[i] + ROAD / 2f + s + 0.3f
+                val x2 = roadCenters[i + 1] - ROAD / 2f - s - 0.3f
+                val z1 = roadCenters[j] + ROAD / 2f + s + 0.3f
+                val z2 = roadCenters[j + 1] - ROAD / 2f - s - 0.3f
+                val bw = x2 - x1; val bh = z2 - z1
+                if (bw < 1f || bh < 1f) continue
+
+                val cx = (x1 + x2) / 2f; val cz = (z1 + z2) / 2f
+                val bx = Math.round(cx / 10f) * 10f; val bz = Math.round(cz / 10f) * 10f
+                if (occupied.contains(Pair(bx, bz))) continue
+
+                val seed = ((cx * 197 + cz * 337).toInt().let { if (it < 0) -it else it }) % 10000
+
+                // 2-4 alberi
+                val treeCount = 2 + seed % 3
+                for (t in 0 until treeCount) {
+                    val ts = seed * 7 + t * 41
+                    val tx = x1 + ((ts % 100).toFloat() / 100f) * bw
+                    val tz = z1 + (((ts / 10) % 100).toFloat() / 100f) * bh
+                    val treeMat = if (t % 2 == 0) leafMat else leafLightMat
+                    sceneView.addChildNode(CubeNode(engine, Size(0.2f, 1.8f, 0.2f), materialInstance = trunkMat).apply {
+                        position = Position(tx, 0.9f, tz)
+                    })
+                    sceneView.addChildNode(SphereNode(engine, 0.7f + (ts % 3).toFloat() * 0.1f, materialInstance = treeMat).apply {
+                        position = Position(tx, 2.1f, tz)
+                    })
+                }
+
+                // 3-5 cespugli
+                val bushCount = 3 + (seed % 3)
+                for (b in 0 until bushCount) {
+                    val bs = seed * 13 + b * 29
+                    val bx2 = x1 + ((bs % 100).toFloat() / 100f) * bw
+                    val bz2 = z1 + (((bs / 10) % 100).toFloat() / 100f) * bh
+                    sceneView.addChildNode(SphereNode(engine, 0.25f + (bs % 20).toFloat() / 100f, materialInstance = bushMat).apply {
+                        position = Position(bx2, 0.25f, bz2)
+                    })
+                }
+
+                // 5-8 fiori
+                val flowerCount = 5 + (seed % 4)
+                for (f in 0 until flowerCount) {
+                    val fs = seed * 11 + f * 37
+                    val fx = x1 + ((fs % 100).toFloat() / 100f) * bw
+                    val fz = z1 + (((fs / 10) % 100).toFloat() / 100f) * bh
+                    val fMat = ml.createColorInstance(color = flowerColors[fs % flowerColors.size])
+                    sceneView.addChildNode(SphereNode(engine, 0.08f + (fs % 5).toFloat() / 100f, materialInstance = fMat).apply {
+                        position = Position(fx, 0.12f, fz)
                     })
                 }
             }
+        }
+
+        // ── PISCINA (blocco [3][4] ≈ x=5, z=15) ──
+        val poolX = 5f; val poolZ = 15f
+        val waterMat = ml.createColorInstance(color = Color.rgb(0x42, 0xA5, 0xF5))
+        val poolEdgeMat = ml.createColorInstance(color = Color.rgb(0xEC, 0xEF, 0xF1))
+        val loungeMat = ml.createColorInstance(color = Color.rgb(0xFF, 0x98, 0x00))
+        val loungeSeatMat = ml.createColorInstance(color = Color.rgb(0x8D, 0x6E, 0x63))
+
+        // Acqua
+        sceneView.addChildNode(CubeNode(engine, Size(3.5f, 0.1f, 2.5f), materialInstance = waterMat).apply {
+            position = Position(poolX, 0.05f, poolZ)
+        })
+        // Muretto
+        for (side in 0..3) {
+            val (sx, sz, sw, sd2) = when (side) {
+                0 -> floatArrayOf(poolX - 1.85f, poolZ, 0.15f, 2.6f)
+                1 -> floatArrayOf(poolX + 1.85f, poolZ, 0.15f, 2.6f)
+                2 -> floatArrayOf(poolX, poolZ - 1.35f, 3.7f, 0.15f)
+                else -> floatArrayOf(poolX, poolZ + 1.35f, 3.7f, 0.15f)
+            }
+            sceneView.addChildNode(CubeNode(engine, Size(sw, 0.35f, sd2), materialInstance = poolEdgeMat).apply {
+                position = Position(sx, 0.18f, sz)
+            })
+        }
+        // Sdraio
+        for (l in 0..2) {
+            val lx = poolX + 2.5f + l * 1.2f
+            sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.1f, 0.35f), materialInstance = loungeMat).apply {
+                position = Position(lx, 0.15f, poolZ)
+            })
+            sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.35f, 0.06f), materialInstance = loungeSeatMat).apply {
+                position = Position(lx, 0.32f, poolZ - 0.15f)
+            })
         }
     }
 
@@ -486,12 +866,60 @@ class CityActivity : AppCompatActivity() {
             sceneView.addChildNode(CubeNode(engine, Size(CITY, 0.08f, s), materialInstance = swMat).apply { position = Position(0f, 0.04f, rc + o) })
         }
 
+        // ── Named buildings (edifici speciali) ──
+        for (bd in BuildingDefs.BUILDINGS) {
+            val bMat = ml.createColorInstance(color = bd.color3D)
+            val rMat = ml.createColorInstance(color = bd.roofColor)
+
+            // Main building body
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
+                    position = Position(bd.x, bd.height / 2f, bd.z)
+                }
+            )
+            // Roof slab
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width + 0.3f, 0.3f, bd.depth + 0.3f), materialInstance = rMat).apply {
+                    position = Position(bd.x, bd.height + 0.15f, bd.z)
+                }
+            )
+            // Door (small dark cube)
+            val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.6f, 1f, 0.1f), materialInstance = doorMat).apply {
+                    position = Position(bd.x, 0.5f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+            // Windows (small lighter cubes)
+            val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
+            windowMaterials.add(winMat)
+            val wxOff = bd.width * 0.3f
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.4f, 0.4f, 0.1f), materialInstance = winMat).apply {
+                    position = Position(bd.x - wxOff, bd.height * 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.4f, 0.4f, 0.1f), materialInstance = winMat).apply {
+                    position = Position(bd.x + wxOff, bd.height * 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+
+            buildingAABBs.add(bd.aabb())
+        }
+
+        // ── Procedural buildings (fill remaining blocks) ──
         val colors = intArrayOf(
-            Color.rgb(0x8B, 0x8B, 0x8B), Color.rgb(0xA0, 0x90, 0x70),
-            Color.rgb(0x70, 0x80, 0x90), Color.rgb(0x90, 0x60, 0x50),
-            Color.rgb(0x60, 0x70, 0x80), Color.rgb(0x80, 0x70, 0x60),
-            Color.rgb(0x75, 0x75, 0x95), Color.rgb(0x8A, 0x7A, 0x6A)
+            0xFFB3D9FF.toInt(), // azzurro chiaro
+            0xFFFFCDD2.toInt(), // rosa chiaro
+            0xFFC8E6C9.toInt(), // verde mint
+            0xFFFFF9C4.toInt(), // giallo pastello
+            0xFFD1C4E9.toInt(), // lavanda
+            0xFFFFE0B2.toInt(), // pesca
+            0xFFB2DFDB.toInt(), // turchese
+            0xFFF0F4C3.toInt()  // lime
         )
+        val occupied = BuildingDefs.occupiedBlocks().toSet()
 
         for (i in 0 until roadCenters.size - 1) {
             for (j in 0 until roadCenters.size - 1) {
@@ -503,6 +931,9 @@ class CityActivity : AppCompatActivity() {
                 if (bw < 0.8f || bh < 0.8f) continue
 
                 val cx = (x1 + x2) / 2f; val cz = (z1 + z2) / 2f
+                val bx = Math.round(cx / 10f) * 10f; val bz = Math.round(cz / 10f) * 10f
+                if (occupied.contains(Pair(bx, bz))) continue
+
                 val seed = ((cx * 137f + cz * 251f).toInt().let { if (it < 0) -it else it }) % 10000
                 val n = 1 + (seed % 3)
 
@@ -522,17 +953,71 @@ class CityActivity : AppCompatActivity() {
                             position = Position(bcx, h / 2f, bcz)
                         }
                     )
-                    buildingAABBs.add(AABB(bcx - w / 2f, bcx + w / 2f, bcz - d / 2f, bcz + d / 2f))
+                    buildingAABBs.add(com.intelligame.huntix.reallife.AABB(bcx - w / 2f, bcx + w / 2f, bcz - d / 2f, bcz + d / 2f))
                 }
             }
         }
     }
 
     private fun placePlayer() {
-        playerNode = SphereNode(engine, PLAYER_R, materialInstance = ml.createColorInstance(color = Color.rgb(0xFF, 0x6D, 0x00))).apply {
-            position = Position(0f, P_Y, 0f)
+        val root = Node(engine).apply { position = Position(0f, 0f, 0f) }
+
+        val skinMat = ml.createColorInstance(color = avatarConfig.skinColor)
+        val shirtMat = ml.createColorInstance(color = avatarConfig.shirtColor)
+        val pantsMat = ml.createColorInstance(color = avatarConfig.pantsColor)
+        val shoeMat = ml.createColorInstance(color = avatarConfig.shoeColor)
+        val hairMat = ml.createColorInstance(color = avatarConfig.hairColor)
+
+        // Corpo (maglia)
+        playerBody = CubeNode(engine, Size(0.35f, 0.4f, 0.2f), materialInstance = shirtMat).apply {
+            position = Position(0f, 0.55f, 0f)
         }
-        sceneView.addChildNode(playerNode!!)
+        root.addChildNode(playerBody!!)
+
+        // Testa
+        playerHead = SphereNode(engine, 0.17f, materialInstance = skinMat).apply {
+            position = Position(0f, 0.95f, 0f)
+        }
+        root.addChildNode(playerHead!!)
+
+        // Capelli (sopra la testa)
+        val hairNode = CubeNode(engine, Size(0.32f, 0.08f, 0.22f), materialInstance = hairMat).apply {
+            position = Position(0f, 1.12f, 0f)
+        }
+        root.addChildNode(hairNode)
+
+        // Braccia
+        playerArmL = CubeNode(engine, Size(0.1f, 0.35f, 0.1f), materialInstance = skinMat).apply {
+            position = Position(-0.28f, 0.52f, 0f)
+        }
+        root.addChildNode(playerArmL!!)
+        playerArmR = CubeNode(engine, Size(0.1f, 0.35f, 0.1f), materialInstance = skinMat).apply {
+            position = Position(0.28f, 0.52f, 0f)
+        }
+        root.addChildNode(playerArmR!!)
+
+        // Gambe
+        playerLegL = CubeNode(engine, Size(0.12f, 0.35f, 0.12f), materialInstance = pantsMat).apply {
+            position = Position(-0.1f, 0.18f, 0f)
+        }
+        root.addChildNode(playerLegL!!)
+        playerLegR = CubeNode(engine, Size(0.12f, 0.35f, 0.12f), materialInstance = pantsMat).apply {
+            position = Position(0.1f, 0.18f, 0f)
+        }
+        root.addChildNode(playerLegR!!)
+
+        // Scarpe
+        val shoeL = CubeNode(engine, Size(0.14f, 0.06f, 0.18f), materialInstance = shoeMat).apply {
+            position = Position(-0.1f, 0.0f, 0.02f)
+        }
+        root.addChildNode(shoeL)
+        val shoeR = CubeNode(engine, Size(0.14f, 0.06f, 0.18f), materialInstance = shoeMat).apply {
+            position = Position(0.1f, 0.0f, 0.02f)
+        }
+        root.addChildNode(shoeR)
+
+        playerRoot = root
+        sceneView.addChildNode(root)
     }
 
     private fun findNearestNpc(): NpcData? {
@@ -564,6 +1049,8 @@ class CityActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        petNode?.destroy()
+        playerRoot?.destroy()
         sceneView.destroy()
         super.onDestroy()
     }

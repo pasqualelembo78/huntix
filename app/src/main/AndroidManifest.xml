@@ -284,7 +284,15 @@
         <activity android:name=".ui.BattleActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.RealLifeActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.BuildingInteriorActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name=".ui.AvatarCustomizeActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.NpcListActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.JobsActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.ShopActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.DeliveryMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.CookMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.TaxiMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.Character3DActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.FighterSelectActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.FightingGame3DActivity" android:screenOrientation="portrait" android:exported="false"/>
