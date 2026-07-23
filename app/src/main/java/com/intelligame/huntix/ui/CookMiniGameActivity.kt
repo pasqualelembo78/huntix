@@ -1,6 +1,7 @@
 package com.intelligame.huntix.ui
 
 import android.graphics.*
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout

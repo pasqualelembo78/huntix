@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.*
 import android.view.View
 import com.intelligame.huntix.reallife.DayNightManager
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
@@ -119,7 +120,7 @@ class DayNightOverlay(ctx: Context) : View(ctx) {
             if (starAlpha > 0.05f) {
                 for (star in stars) {
                     val twinkle = (sin(time * 2f + star.twinkleOffset) * 0.3f + 0.7f).coerceIn(0f, 1f)
-                    starPaint.alpha = (starAlpha * twinkle * 255).toInt()
+                    starPaint.alpha = (starAlpha * twinkle * 255f).toInt()
                     canvas.drawCircle(star.x * w, star.y * h, star.size, starPaint)
                 }
             }

@@ -1,6 +1,8 @@
 package com.intelligame.huntix.ui
 
+import android.content.Context
 import android.graphics.*
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -179,7 +181,7 @@ class BuildingInteriorActivity : AppCompatActivity() {
     }
 
     private fun performAction(action: com.intelligame.huntix.reallife.BuildingAction) {
-        needs = LocalNeeds.applyAction(this, action.needKey, action.gain).toMutableUI()
+        needs = LocalNeeds.applyAction(this, action.needKey, action.gain).toMutableMap()
         refreshNeedsUI()
         val (label, _) = needsLabels[action.needKey] ?: return
         Toast.makeText(this, "${action.emoji} ${action.label}: +${action.gain.toInt()} $label",
@@ -194,8 +196,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
             txt.text = "${needs[key]?.toInt() ?: 60}%"
         }
     }
-
-    private fun MutableMap<String, Float>.toMutableUI() = this
 
     private fun needsColor(key: String): Int = when (key) {
         "hunger" -> 0xFFFF7043.toInt()

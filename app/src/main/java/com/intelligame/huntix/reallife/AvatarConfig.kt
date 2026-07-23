@@ -16,13 +16,13 @@ import android.graphics.Shader
  */
 data class AvatarConfig(
     val gender: String = "male",         // "male" | "female"
-    val skinColor: Int = 0xFFDBA97A,     // colore pelle
-    val hairColor: Int = 0xFF3B2314,     // colore capelli
+    val skinColor: Int = 0xFFDBA97A.toInt(),     // colore pelle
+    val hairColor: Int = 0xFF3B2314.toInt(),     // colore capelli
     val hairStyle: String = "short",     // "short" | "long" | "bald" | "mohawk" | "ponytail"
-    val shirtColor: Int = 0xFFE53935,    // colore maglia
-    val pantsColor: Int = 0xFF1A237E,    // colore pantaloni
-    val shoeColor: Int = 0xFF424242,     // colore scarpe
-    val eyeColor: Int = 0xFF1B5E20       // colore occhi
+    val shirtColor: Int = 0xFFE53935.toInt(),    // colore maglia
+    val pantsColor: Int = 0xFF1A237E.toInt(),    // colore pantaloni
+    val shoeColor: Int = 0xFF424242.toInt(),     // colore scarpe
+    val eyeColor: Int = 0xFF1B5E20.toInt()       // colore occhi
 ) {
     companion object {
         private const val PREFS = "rl_avatar"

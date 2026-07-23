@@ -1,8 +1,10 @@
 package com.intelligame.huntix.ui
 
-import com.google.android.filament.EntityManager
+import com.google.android.filament.Engine
+import com.google.android.filament.MaterialInstance
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
+import io.github.sceneview.math.Size
 import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
@@ -13,7 +15,15 @@ import com.intelligame.huntix.reallife.PetDef
  * Composto da: corpo (cubo), testa (sfera), coda (cubo), 2 occhi (sfere), 4 zampe (cubi).
  * IA: segue il player se distanza > followDist, si siede se vicino.
  */
-class PetNode(def: PetDef) : Node() {
+class PetNode(
+    engine: Engine,
+    def: PetDef,
+    private val bodyMat: MaterialInstance,
+    private val headMat: MaterialInstance,
+    private val eyeMat: MaterialInstance,
+    private val tailMat: MaterialInstance,
+    private val heartMat: MaterialInstance
+) : Node() {
 
     private val followDist = 1.8f
     private val stopDist = 0.8f
@@ -48,18 +58,18 @@ class PetNode(def: PetDef) : Node() {
     init {
         // Body
         bodyNode = CubeNode(
-            size = io.github.sceneview.math.Size(bodyW, bodyH, bodyD),
+            engine = engine,
+            size = Size(bodyW, bodyH, bodyD),
             center = Position(0f, bodyH / 2 + limbH, 0f),
-            colorInstance = ColorInstance(def.bodyColor),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = bodyMat
         ).apply { parent = this@PetNode }
 
         // Head
         headNode = SphereNode(
+            engine = engine,
             radius = headR,
             center = Position(0f, bodyH / 2 + limbH + bodyH / 2 + headR * 0.6f, bodyD / 2 + headR * 0.4f),
-            colorInstance = ColorInstance(def.headColor),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = headMat
         ).apply { parent = this@PetNode }
 
         // Eyes
@@ -67,48 +77,50 @@ class PetNode(def: PetDef) : Node() {
         val eyeR2 = headR * 0.18f
         val eyeY = bodyH / 2 + limbH + bodyH / 2 + headR * 0.6f + headR * 0.15f
         val eyeZ = bodyD / 2 + headR * 0.4f + headR * 0.7f
-        eyeL = SphereNode(radius = eyeR2,
+        eyeL = SphereNode(
+            engine = engine,
+            radius = eyeR2,
             center = Position(-eyeOff, eyeY, eyeZ),
-            colorInstance = ColorInstance(0xFF1A1A1A.toInt()),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = eyeMat
         ).apply { parent = this@PetNode }
-        eyeR = SphereNode(radius = eyeR2,
+        eyeR = SphereNode(
+            engine = engine,
+            radius = eyeR2,
             center = Position(eyeOff, eyeY, eyeZ),
-            colorInstance = ColorInstance(0xFF1A1A1A.toInt()),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = eyeMat
         ).apply { parent = this@PetNode }
 
         // Tail
         tailNode = CubeNode(
-            size = io.github.sceneview.math.Size(tailW, tailH, tailW),
+            engine = engine,
+            size = Size(tailW, tailH, tailW),
             center = Position(0f, bodyH / 2 + limbH + bodyH / 2, -bodyD / 2 - tailW),
-            colorInstance = ColorInstance(def.headColor),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = tailMat
         ).apply { parent = this@PetNode }
 
         // Legs
         val legData = listOf(
-            Pair("FL", -bodyW / 2 + limbW / 2, bodyD / 2 - limbW),
-            Pair("FR", bodyW / 2 - limbW / 2, bodyD / 2 - limbW),
-            Pair("BL", -bodyW / 2 + limbW / 2, -bodyD / 2 + limbW),
-            Pair("BR", bodyW / 2 - limbW / 2, -bodyD / 2 + limbW)
+            Pair(-bodyW / 2 + limbW / 2, bodyD / 2 - limbW),
+            Pair(bodyW / 2 - limbW / 2, bodyD / 2 - limbW),
+            Pair(-bodyW / 2 + limbW / 2, -bodyD / 2 + limbW),
+            Pair(bodyW / 2 - limbW / 2, -bodyD / 2 + limbW)
         )
-        val legNodes = legData.map { (name, lx, lz) ->
+        val legNodes = legData.map { (lx, lz) ->
             CubeNode(
-                size = io.github.sceneview.math.Size(limbW, limbH, limbW),
+                engine = engine,
+                size = Size(limbW, limbH, limbW),
                 center = Position(lx, limbH / 2, lz),
-                colorInstance = ColorInstance(def.bodyColor),
-                engine = null, entity = EntityManager.get().create()
+                materialInstance = bodyMat
             ).apply { parent = this@PetNode }
         }
         legFL = legNodes[0]; legFR = legNodes[1]; legBL = legNodes[2]; legBR = legNodes[3]
 
         // Love heart (hidden by default)
         loveHeart = SphereNode(
+            engine = engine,
             radius = headR * 0.5f,
             center = Position(0f, bodyH / 2 + limbH + bodyH / 2 + headR * 2f, bodyD / 2),
-            colorInstance = ColorInstance(0xFFE91E63.toInt()),
-            engine = null, entity = EntityManager.get().create()
+            materialInstance = heartMat
         ).apply { parent = this@PetNode; isVisible = false }
     }
 
@@ -187,15 +199,4 @@ class PetNode(def: PetDef) : Node() {
             }
         }
     }
-
-    /**
-     * ColorInstance helper — crea un color instance per i node.
-     */
-    class ColorInstance(color: Int) : io.github.sceneview.material.ColorInstance(
-        color = io.github.sceneview.math.Color(
-            android.graphics.Color.red(color) / 255f,
-            android.graphics.Color.green(color) / 255f,
-            android.graphics.Color.blue(color) / 255f
-        )
-    )
 }

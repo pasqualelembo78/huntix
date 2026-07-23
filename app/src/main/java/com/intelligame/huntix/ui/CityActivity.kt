@@ -87,9 +87,9 @@ class CityActivity : AppCompatActivity() {
     private lateinit var dayNightOverlay: DayNightOverlay
     private var skyboxUpdateTimer = 0f
     private var windowUpdateTimer = 0f
-    private var windowMaterial: com.google.android.filament.utils.MaterialLoader.MaterialInstance? = null
-    private val windowMaterials = mutableListOf<com.google.android.filament.utils.MaterialLoader.MaterialInstance>()
-    private var lampLightMaterial: com.google.android.filament.utils.MaterialLoader.MaterialInstance? = null
+    private var windowMaterial: com.google.android.filament.MaterialInstance? = null
+    private val windowMaterials = mutableListOf<com.google.android.filament.MaterialInstance>()
+    private var lampLightMaterial: com.google.android.filament.MaterialInstance? = null
     private var timeLabel: TextView? = null
 
     private val engine get() = sceneView.engine
@@ -553,11 +553,21 @@ class CityActivity : AppCompatActivity() {
             windowUpdateTimer = 5f
             val winColor = dayNightManager.getWindowColor()
             for (wm in windowMaterials) {
-                try { wm.color = winColor } catch (_: Exception) {}
+                try {
+                    val r = Color.red(winColor) / 255f
+                    val g = Color.green(winColor) / 255f
+                    val b = Color.blue(winColor) / 255f
+                    wm.setParameter("color", com.google.android.filament.Color4f(r, g, b, 1f))
+                } catch (_: Exception) {}
             }
             // Update lamp color
             val lampColor = dayNightManager.getLampColor()
-            try { lampLightMaterial?.color = lampColor } catch (_: Exception) {}
+            try {
+                val r = Color.red(lampColor) / 255f
+                val g = Color.green(lampColor) / 255f
+                val b = Color.blue(lampColor) / 255f
+                lampLightMaterial?.setParameter("color", com.google.android.filament.Color4f(r, g, b, 1f))
+            } catch (_: Exception) {}
         }
     }
 
@@ -638,17 +648,22 @@ class CityActivity : AppCompatActivity() {
 
     private fun spawnPet() {
         val def = Pets.AVAILABLE.random()
-        val pet = PetNode(def)
+        val bodyMat = ml.createColorInstance(color = def.bodyColor)
+        val headMat = ml.createColorInstance(color = def.headColor)
+        val eyeMat = ml.createColorInstance(color = 0xFF1A1A1A.toInt())
+        val tailMat = ml.createColorInstance(color = def.headColor)
+        val heartMat = ml.createColorInstance(color = 0xFFE91E63.toInt())
+        val pet = PetNode(engine, def, bodyMat, headMat, eyeMat, tailMat, heartMat)
         pet.worldPosition = Position(playerX + 2f, 0f, playerZ)
         sceneView.addChildNode(pet)
         petNode = pet
     }
 
     private fun spawnProceduralTree(tx: Float, tz: Float, seed: Int,
-        trunkMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        leafMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        leafLightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        leafDarkMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance
+        trunkMat: com.google.android.filament.MaterialInstance,
+        leafMat: com.google.android.filament.MaterialInstance,
+        leafLightMat: com.google.android.filament.MaterialInstance,
+        leafDarkMat: com.google.android.filament.MaterialInstance
     ) {
         val treeMat = when (seed % 3) { 0 -> leafMat; 1 -> leafLightMat; else -> leafDarkMat }
         val treeH = 1.6f + (seed % 5).toFloat() * 0.15f
@@ -674,11 +689,11 @@ class CityActivity : AppCompatActivity() {
 
     private fun spawnProceduralCar(cx: Float, cz: Float, seed: Int,
         carColors: IntArray,
-        carMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance?,
-        windshieldMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        wheelMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        headlightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
-        tailLightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance
+        carMat: com.google.android.filament.MaterialInstance?,
+        windshieldMat: com.google.android.filament.MaterialInstance,
+        wheelMat: com.google.android.filament.MaterialInstance,
+        headlightMat: com.google.android.filament.MaterialInstance,
+        tailLightMat: com.google.android.filament.MaterialInstance
     ) {
         val mat = carMat ?: ml.createColorInstance(color = carColors[seed % carColors.size])
         sceneView.addChildNode(CubeNode(engine, Size(1.4f, 0.3f, 0.7f), materialInstance = mat).apply {
@@ -1040,6 +1055,7 @@ class CityActivity : AppCompatActivity() {
         )
         val chimneyMat = ml.createColorInstance(color = Color.rgb(0x79, 0x55, 0x48))
         val balconyMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
+        val poleMat = ml.createColorInstance(color = Color.rgb(0x55, 0x55, 0x55))
 
         for (bd in BuildingDefs.BUILDINGS) {
             // Try loading GLB model first

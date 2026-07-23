@@ -2,13 +2,14 @@ package com.intelligame.huntix.ui
 
 import android.content.Intent
 import android.graphics.*
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.UiKit
-import com.intelligame.huntix.reallife.JobDefs
+import com.intelligame.huntix.reallife.JobDef
 import com.intelligame.huntix.reallife.JobType
 import com.intelligame.huntix.reallife.Jobs
 import com.intelligame.huntix.reallife.MoneyManager
@@ -76,7 +77,7 @@ class JobsActivity : AppCompatActivity() {
         setContentView(scroll)
     }
 
-    private fun jobCard(c: android.content.Context, job: JobDefs): LinearLayout {
+    private fun jobCard(c: android.content.Context, job: JobDef): LinearLayout {
         val card = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
