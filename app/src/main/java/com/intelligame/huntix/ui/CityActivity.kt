@@ -557,7 +557,7 @@ class CityActivity : AppCompatActivity() {
                     val r = Color.red(winColor) / 255f
                     val g = Color.green(winColor) / 255f
                     val b = Color.blue(winColor) / 255f
-                    wm.setParameter("color", com.google.android.filament.Color4f(r, g, b, 1f))
+                    wm.setParameter("color", com.google.android.filament.math.Float4(r, g, b, 1f))
                 } catch (_: Exception) {}
             }
             // Update lamp color
@@ -566,7 +566,7 @@ class CityActivity : AppCompatActivity() {
                 val r = Color.red(lampColor) / 255f
                 val g = Color.green(lampColor) / 255f
                 val b = Color.blue(lampColor) / 255f
-                lampLightMaterial?.setParameter("color", com.google.android.filament.Color4f(r, g, b, 1f))
+                lampLightMaterial?.setParameter("color", com.google.android.filament.math.Float4(r, g, b, 1f))
             } catch (_: Exception) {}
         }
     }

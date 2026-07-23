@@ -23,7 +23,7 @@ class PetNode(
     private val eyeMat: MaterialInstance,
     private val tailMat: MaterialInstance,
     private val heartMat: MaterialInstance
-) : Node() {
+) : Node(engine) {
 
     private val followDist = 1.8f
     private val stopDist = 0.8f
@@ -172,12 +172,12 @@ class PetNode(
         // Walking bob
         if (!isSitting) {
             val bob = kotlin.math.sin(bobPhase.toDouble()).toFloat() * 0.03f
-            bodyNode.center = Position(0f, bodyH / 2 + limbH + bob, 0f)
-            headNode.center = Position(0f, bodyH / 2 + limbH + bodyH / 2 + headR * 0.6f + bob, bodyD / 2 + headR * 0.4f)
+            bodyNode.position = Position(0f, bodyH / 2 + limbH + bob, 0f)
+            headNode.position = Position(0f, bodyH / 2 + limbH + bodyH / 2 + headR * 0.6f + bob, bodyD / 2 + headR * 0.4f)
         } else {
             // Sitting pose — lower body
-            bodyNode.center = Position(0f, bodyH / 2 + limbH * 0.5f, 0f)
-            headNode.center = Position(0f, bodyH / 2 + limbH * 0.5f + bodyH / 2 + headR * 0.6f, bodyD / 2 + headR * 0.4f)
+            bodyNode.position = Position(0f, bodyH / 2 + limbH * 0.5f, 0f)
+            headNode.position = Position(0f, bodyH / 2 + limbH * 0.5f + bodyH / 2 + headR * 0.6f, bodyD / 2 + headR * 0.4f)
         }
 
         // Tail wag
