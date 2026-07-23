@@ -699,9 +699,11 @@ class CityActivity : AppCompatActivity() {
         val lightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xEE, 0xAA))
         lampLightMaterial = lightMat  // capture for day/night
         val benchMat = ml.createColorInstance(color = Color.rgb(0x8B, 0x5E, 0x3C))
+        val benchDarkMat = ml.createColorInstance(color = Color.rgb(0x6D, 0x4C, 0x30))
         val trunkMat = ml.createColorInstance(color = Color.rgb(0x6B, 0x42, 0x26))
         val leafMat = ml.createColorInstance(color = Color.rgb(0x2E, 0x7D, 0x32))
         val leafLightMat = ml.createColorInstance(color = Color.rgb(0x43, 0xA0, 0x47))
+        val leafDarkMat = ml.createColorInstance(color = Color.rgb(0x1B, 0x5E, 0x20))
         val bushMat = ml.createColorInstance(color = Color.rgb(0x38, 0x8E, 0x3C))
         val flowerColors = intArrayOf(
             0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
@@ -711,55 +713,125 @@ class CityActivity : AppCompatActivity() {
             Color.rgb(0xE5, 0x39, 0x35), // rosso
             Color.rgb(0x1E, 0x88, 0xE5), // blu
             Color.rgb(0xEC, 0xEF, 0xF1), // bianco
-            Color.rgb(0xFF, 0xCA, 0x28)  // giallo
+            Color.rgb(0xFF, 0xCA, 0x28), // giallo
+            Color.rgb(0x21, 0x21, 0x21), // nero
+            Color.rgb(0x4C, 0xAF, 0x50)  // verde
         )
         val wheelMat = ml.createColorInstance(color = Color.rgb(0x21, 0x21, 0x21))
         val windshieldMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
+        val headlightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xFF, 0xE0))
+        val tailLightMat = ml.createColorInstance(color = Color.rgb(0xEF, 0x53, 0x50))
+        val shadeMat = ml.createColorInstance(color = Color.rgb(0x75, 0x75, 0x75))
+        val grassDetailMat = ml.createColorInstance(color = Color.rgb(0x66, 0xBB, 0x6A))
 
-        // ── LAMPIONI + BANCHE + AUTO + ALBERI sulle strade ──
+        // ── LAMPIONI MIGLIORATI + BANCHE MIGLIORATE + AUTO DETTAGLIATE ──
         for (i in roadCenters.indices) {
             for (j in roadCenters.indices) {
                 val rx = roadCenters[i]
                 val rz = roadCenters[j]
                 val sd = ((rx * 173 + rz * 311).toInt().let { if (it < 0) -it else it }) % 1000
 
-                // Lampione
+                // Lampione migliorato: palo + braccio + ombra + luce
                 if (sd % 3 == 0) {
                     val lx = rx + ROAD / 2f + 0.8f
-                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 2.5f, 0.08f), materialInstance = poleMat).apply {
-                        position = Position(lx, 1.25f, rz)
+                    // Palo principale
+                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 2.8f, 0.08f), materialInstance = poleMat).apply {
+                        position = Position(lx, 1.4f, rz)
                     })
-                    sceneView.addChildNode(SphereNode(engine, 0.15f, materialInstance = lightMat).apply {
-                        position = Position(lx, 2.6f, rz)
+                    // Braccio orizzontale
+                    sceneView.addChildNode(CubeNode(engine, Size(0.5f, 0.06f, 0.06f), materialInstance = poleMat).apply {
+                        position = Position(lx - 0.25f, 2.8f, rz)
+                    })
+                    // Ombra lampione (disco piatto)
+                    sceneView.addChildNode(CubeNode(engine, Size(0.35f, 0.04f, 0.35f), materialInstance = shadeMat).apply {
+                        position = Position(lx - 0.25f, 2.75f, rz)
+                    })
+                    // Luce
+                    sceneView.addChildNode(SphereNode(engine, 0.12f, materialInstance = lightMat).apply {
+                        position = Position(lx - 0.25f, 2.65f, rz)
+                    })
+                    // Base
+                    sceneView.addChildNode(CubeNode(engine, Size(0.2f, 0.15f, 0.2f), materialInstance = poleMat).apply {
+                        position = Position(lx, 0.08f, rz)
                     })
                 }
 
-                // Panchina
+                // Panchina migliorata: seduta + schienale + 4 gambe
                 if (sd % 4 == 1) {
                     val bx = rx - ROAD / 2f - 0.6f
-                    sceneView.addChildNode(CubeNode(engine, Size(0.8f, 0.35f, 0.35f), materialInstance = benchMat).apply {
-                        position = Position(bx, 0.18f, rz)
+                    // Seduta
+                    sceneView.addChildNode(CubeNode(engine, Size(0.9f, 0.06f, 0.35f), materialInstance = benchMat).apply {
+                        position = Position(bx, 0.35f, rz)
                     })
+                    // Schienale
+                    sceneView.addChildNode(CubeNode(engine, Size(0.9f, 0.3f, 0.06f), materialInstance = benchMat).apply {
+                        position = Position(bx, 0.55f, rz - 0.15f)
+                    })
+                    // Gambe
+                    for (gx in floatArrayOf(-0.35f, 0.35f)) {
+                        sceneView.addChildNode(CubeNode(engine, Size(0.06f, 0.35f, 0.06f), materialInstance = benchDarkMat).apply {
+                            position = Position(bx + gx, 0.18f, rz - 0.12f)
+                        })
+                        sceneView.addChildNode(CubeNode(engine, Size(0.06f, 0.35f, 0.06f), materialInstance = benchDarkMat).apply {
+                            position = Position(bx + gx, 0.18f, rz + 0.12f)
+                        })
+                    }
                 }
 
-                // Auto parcheggiata
+                // Auto DETTAGLIATA: corpo + cofano + portabagagli + finestrini + paraurti + fari
                 if (sd % 6 == 3) {
                     val carMat = ml.createColorInstance(color = carColors[sd % carColors.size])
                     val cx = rx + ROAD / 2f + 1.5f
                     val cz = rz + (if (sd % 2 == 0) 1.5f else -1.5f)
-                    // Corpo auto
-                    sceneView.addChildNode(CubeNode(engine, Size(1.2f, 0.35f, 0.6f), materialInstance = carMat).apply {
-                        position = Position(cx, 0.25f, cz)
+                    val carRot = if (sd % 2 == 0) 0f else 90f
+                    // Corpo principale (più basso e largo)
+                    sceneView.addChildNode(CubeNode(engine, Size(1.4f, 0.3f, 0.7f), materialInstance = carMat).apply {
+                        position = Position(cx, 0.22f, cz)
                     })
-                    // Abitacolo
-                    sceneView.addChildNode(CubeNode(engine, Size(0.7f, 0.25f, 0.5f), materialInstance = windshieldMat).apply {
-                        position = Position(cx, 0.55f, cz)
+                    // Cofano (anteriore, leggermente più basso)
+                    sceneView.addChildNode(CubeNode(engine, Size(0.4f, 0.15f, 0.65f), materialInstance = carMat).apply {
+                        position = Position(cx + 0.5f, 0.38f, cz)
                     })
-                    // Ruote
-                    for (wx in floatArrayOf(-0.4f, 0.4f)) {
-                        for (wz in floatArrayOf(-0.25f, 0.25f)) {
-                            sceneView.addChildNode(SphereNode(engine, 0.12f, materialInstance = wheelMat).apply {
-                                position = Position(cx + wx, 0.12f, cz + wz)
+                    // Portabagagli (posteriore)
+                    sceneView.addChildNode(CubeNode(engine, Size(0.35f, 0.2f, 0.65f), materialInstance = carMat).apply {
+                        position = Position(cx - 0.5f, 0.4f, cz)
+                    })
+                    // Abitacolo (finestrini)
+                    sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.25f, 0.6f), materialInstance = windshieldMat).apply {
+                        position = Position(cx, 0.5f, cz)
+                    })
+                    // Pparaurti anteriore
+                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
+                        position = Position(cx + 0.72f, 0.18f, cz)
+                    })
+                    // Pparaurti posteriore
+                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
+                        position = Position(cx - 0.72f, 0.18f, cz)
+                    })
+                    // Fari anteriori
+                    sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
+                        position = Position(cx + 0.72f, 0.22f, cz - 0.25f)
+                    })
+                    sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
+                        position = Position(cx + 0.72f, 0.22f, cz + 0.25f)
+                    })
+                    // Fari posteriori (stop)
+                    sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
+                        position = Position(cx - 0.72f, 0.22f, cz - 0.25f)
+                    })
+                    sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
+                        position = Position(cx - 0.72f, 0.22f, cz + 0.25f)
+                    })
+                    // Ruote (4 ruote dettagliate)
+                    for (wx in floatArrayOf(-0.45f, 0.45f)) {
+                        for (wz in floatArrayOf(-0.3f, 0.3f)) {
+                            sceneView.addChildNode(SphereNode(engine, 0.1f, materialInstance = wheelMat).apply {
+                                position = Position(cx + wx, 0.1f, cz + wz)
+                            })
+                            // Cerchio (anello argento)
+                            val hubMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
+                            sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = hubMat).apply {
+                                position = Position(cx + wx, 0.1f, cz + wz + (if (wz > 0) 0.06f else -0.06f))
                             })
                         }
                     }
@@ -767,7 +839,7 @@ class CityActivity : AppCompatActivity() {
             }
         }
 
-        // ── ALBERI, CESPUGLI, FIORI nei blocchi ──
+        // ── ALBERI MIGLIORATI (3 sfere sovrapposte per chioma) + CESPUGLI + FIORI ──
         val occupied = BuildingDefs.occupiedBlocks().toSet()
         val s = 0.4f
         for (i in 0 until roadCenters.size - 1) {
@@ -785,41 +857,66 @@ class CityActivity : AppCompatActivity() {
 
                 val seed = ((cx * 197 + cz * 337).toInt().let { if (it < 0) -it else it }) % 10000
 
-                // 2-4 alberi
+                // 2-4 alberi DETTAGLIATI: tronco + 3 sfere chioma + ramo
                 val treeCount = 2 + seed % 3
                 for (t in 0 until treeCount) {
                     val ts = seed * 7 + t * 41
                     val tx = x1 + ((ts % 100).toFloat() / 100f) * bw
                     val tz = z1 + (((ts / 10) % 100).toFloat() / 100f) * bh
-                    val treeMat = if (t % 2 == 0) leafMat else leafLightMat
-                    sceneView.addChildNode(CubeNode(engine, Size(0.2f, 1.8f, 0.2f), materialInstance = trunkMat).apply {
-                        position = Position(tx, 0.9f, tz)
+                    val treeMat = when (t % 3) { 0 -> leafMat; 1 -> leafLightMat; else -> leafDarkMat }
+                    val treeH = 1.6f + (ts % 5).toFloat() * 0.15f
+                    // Tronco (cilindro sottile)
+                    sceneView.addChildNode(CubeNode(engine, Size(0.18f, treeH, 0.18f), materialInstance = trunkMat).apply {
+                        position = Position(tx, treeH / 2f, tz)
                     })
-                    sceneView.addChildNode(SphereNode(engine, 0.7f + (ts % 3).toFloat() * 0.1f, materialInstance = treeMat).apply {
-                        position = Position(tx, 2.1f, tz)
+                    // Chioma (3 sfere sovrapposte per volume)
+                    val canopyBase = treeH + 0.1f
+                    sceneView.addChildNode(SphereNode(engine, 0.55f + (ts % 3).toFloat() * 0.08f, materialInstance = treeMat).apply {
+                        position = Position(tx, canopyBase + 0.3f, tz)
                     })
+                    sceneView.addChildNode(SphereNode(engine, 0.4f + (ts % 2).toFloat() * 0.1f, materialInstance = treeMat).apply {
+                        position = Position(tx + 0.2f, canopyBase + 0.15f, tz + 0.15f)
+                    })
+                    sceneView.addChildNode(SphereNode(engine, 0.35f + (ts % 2).toFloat() * 0.05f, materialInstance = leafLightMat).apply {
+                        position = Position(tx - 0.15f, canopyBase + 0.4f, tz - 0.1f)
+                    })
+                    // Piccolo ramo
+                    if (ts % 3 == 0) {
+                        sceneView.addChildNode(CubeNode(engine, Size(0.3f, 0.06f, 0.06f), materialInstance = trunkMat).apply {
+                            position = Position(tx + 0.2f, treeH * 0.65f, tz)
+                        })
+                    }
                 }
 
-                // 3-5 cespugli
+                // 3-5 cespugli (2 sfere sovrapposte)
                 val bushCount = 3 + (seed % 3)
                 for (b in 0 until bushCount) {
                     val bs = seed * 13 + b * 29
                     val bx2 = x1 + ((bs % 100).toFloat() / 100f) * bw
                     val bz2 = z1 + (((bs / 10) % 100).toFloat() / 100f) * bh
-                    sceneView.addChildNode(SphereNode(engine, 0.25f + (bs % 20).toFloat() / 100f, materialInstance = bushMat).apply {
-                        position = Position(bx2, 0.25f, bz2)
+                    val bushSize = 0.22f + (bs % 20).toFloat() / 100f
+                    sceneView.addChildNode(SphereNode(engine, bushSize, materialInstance = bushMat).apply {
+                        position = Position(bx2, bushSize, bz2)
+                    })
+                    sceneView.addChildNode(SphereNode(engine, bushSize * 0.7f, materialInstance = leafLightMat).apply {
+                        position = Position(bx2 + bushSize * 0.4f, bushSize * 0.8f, bz2 + bushSize * 0.3f)
                     })
                 }
 
-                // 5-8 fiori
+                // 5-8 fiori (con gambo)
                 val flowerCount = 5 + (seed % 4)
                 for (f in 0 until flowerCount) {
                     val fs = seed * 11 + f * 37
                     val fx = x1 + ((fs % 100).toFloat() / 100f) * bw
                     val fz = z1 + (((fs / 10) % 100).toFloat() / 100f) * bh
                     val fMat = ml.createColorInstance(color = flowerColors[fs % flowerColors.size])
-                    sceneView.addChildNode(SphereNode(engine, 0.08f + (fs % 5).toFloat() / 100f, materialInstance = fMat).apply {
-                        position = Position(fx, 0.12f, fz)
+                    // Gambo
+                    sceneView.addChildNode(CubeNode(engine, Size(0.02f, 0.15f, 0.02f), materialInstance = grassDetailMat).apply {
+                        position = Position(fx, 0.08f, fz)
+                    })
+                    // Testa fiore
+                    sceneView.addChildNode(SphereNode(engine, 0.06f + (fs % 5).toFloat() / 100f, materialInstance = fMat).apply {
+                        position = Position(fx, 0.18f, fz)
                     })
                 }
             }
@@ -886,7 +983,15 @@ class CityActivity : AppCompatActivity() {
             sceneView.addChildNode(CubeNode(engine, Size(CITY, 0.08f, s), materialInstance = swMat).apply { position = Position(0f, 0.04f, rc + o) })
         }
 
-        // ── Named buildings (edifici speciali) ──
+        // ── Named buildings (edifici speciali DETTAGLIATI) ──
+        val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
+        val awningColors = intArrayOf(
+            Color.rgb(0xE5, 0x39, 0x35), Color.rgb(0x1E, 0x88, 0xE5),
+            Color.rgb(0xFF, 0xCA, 0x28), Color.rgb(0x4C, 0xAF, 0x50)
+        )
+        val chimneyMat = ml.createColorInstance(color = Color.rgb(0x79, 0x55, 0x48))
+        val balconyMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
+
         for (bd in BuildingDefs.BUILDINGS) {
             val bMat = ml.createColorInstance(color = bd.color3D)
             val rMat = ml.createColorInstance(color = bd.roofColor)
@@ -897,38 +1002,99 @@ class CityActivity : AppCompatActivity() {
                     position = Position(bd.x, bd.height / 2f, bd.z)
                 }
             )
-            // Roof slab
+            // Roof slab (con leggero overhang)
             sceneView.addChildNode(
-                CubeNode(engine, Size(bd.width + 0.3f, 0.3f, bd.depth + 0.3f), materialInstance = rMat).apply {
-                    position = Position(bd.x, bd.height + 0.15f, bd.z)
+                CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
+                    position = Position(bd.x, bd.height + 0.18f, bd.z)
                 }
             )
-            // Door (small dark cube)
-            val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
+            // Second roof layer (pyramid effect)
             sceneView.addChildNode(
-                CubeNode(engine, Size(0.6f, 1f, 0.1f), materialInstance = doorMat).apply {
-                    position = Position(bd.x, 0.5f, bd.z + bd.depth / 2f + 0.05f)
+                CubeNode(engine, Size(bd.width * 0.6f, 0.2f, bd.depth * 0.6f), materialInstance = rMat).apply {
+                    position = Position(bd.x, bd.height + 0.45f, bd.z)
                 }
             )
-            // Windows (small lighter cubes)
+            // Door (grande, con cornice)
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
+                    position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+            // Porta handle (piccola sfera)
+            val handleMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xD5, 0x4F))
+            sceneView.addChildNode(SphereNode(engine, 0.04f, materialInstance = handleMat).apply {
+                position = Position(bd.x + 0.2f, 0.6f, bd.z + bd.depth / 2f + 0.12f)
+            })
+            // Windows (2 per lato frontale)
             val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
             windowMaterials.add(winMat)
-            val wxOff = bd.width * 0.3f
+            val winFrameMat = ml.createColorInstance(color = Color.rgb(0xE0, 0xE0, 0xE0))
+            val wxOff = bd.width * 0.28f
+            val wyBase = bd.height * 0.55f
+            for (wy in floatArrayOf(wyBase, wyBase + 0.6f)) {
+                for (wx in floatArrayOf(-wxOff, wxOff)) {
+                    // Finestra
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                            position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.04f)
+                        }
+                    )
+                    // Cornice finestra
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(0.42f, 0.42f, 0.04f), materialInstance = winFrameMat).apply {
+                            position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.02f)
+                        }
+                    )
+                }
+            }
+            // Balconi (2 piccole piastre)
             sceneView.addChildNode(
-                CubeNode(engine, Size(0.4f, 0.4f, 0.1f), materialInstance = winMat).apply {
-                    position = Position(bd.x - wxOff, bd.height * 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                CubeNode(engine, Size(0.6f, 0.06f, 0.3f), materialInstance = balconyMat).apply {
+                    position = Position(bd.x - wxOff, bd.height * 0.55f - 0.22f, bd.z + bd.depth / 2f + 0.2f)
                 }
             )
             sceneView.addChildNode(
-                CubeNode(engine, Size(0.4f, 0.4f, 0.1f), materialInstance = winMat).apply {
-                    position = Position(bd.x + wxOff, bd.height * 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                CubeNode(engine, Size(0.6f, 0.06f, 0.3f), materialInstance = balconyMat).apply {
+                    position = Position(bd.x + wxOff, bd.height * 0.55f - 0.22f, bd.z + bd.depth / 2f + 0.2f)
                 }
             )
+            // Ringhiere balconi
+            for (bx2 in floatArrayOf(-wxOff, wxOff)) {
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(0.6f, 0.2f, 0.03f), materialInstance = balconyMat).apply {
+                        position = Position(bd.x + bx2, bd.height * 0.55f - 0.12f, bd.z + bd.depth / 2f + 0.35f)
+                    }
+                )
+            }
+            // Chimney
+            if (bd.height > 2f) {
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(0.3f, 0.6f, 0.3f), materialInstance = chimneyMat).apply {
+                        position = Position(bd.x + bd.width * 0.3f, bd.height + 0.65f, bd.z - bd.depth * 0.2f)
+                    }
+                )
+            }
+            // Awning (tenda) per negozi e ristoranti
+            val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
+            val awningMat = ml.createColorInstance(color = awningColor)
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
+                    position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
+                }
+            )
+            // Awning support poles
+            for (px in floatArrayOf(-bd.width * 0.35f, bd.width * 0.35f)) {
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(0.04f, 1.5f, 0.04f), materialInstance = poleMat).apply {
+                        position = Position(bd.x + px, 0.75f, bd.z + bd.depth / 2f + 0.5f)
+                    }
+                )
+            }
 
             buildingAABBs.add(bd.aabb())
         }
 
-        // ── Procedural buildings (fill remaining blocks) ──
+        // ── Procedural buildings (fill remaining blocks) DETTAGLIATI ──
         val colors = intArrayOf(
             0xFFB3D9FF.toInt(), // azzurro chiaro
             0xFFFFCDD2.toInt(), // rosa chiaro
@@ -939,7 +1105,16 @@ class CityActivity : AppCompatActivity() {
             0xFFB2DFDB.toInt(), // turchese
             0xFFF0F4C3.toInt()  // lime
         )
+        val roofColors = intArrayOf(
+            0xFF8D6E63.toInt(), 0xFF78909C.toInt(), 0xFFA1887F.toInt(),
+            0xFF90A4AE.toInt(), 0xFFBCAAA4.toInt(), 0xFFB0BEC5.toInt(),
+            0xFF80CBC4.toInt(), 0xFFC5E1A5.toInt()
+        )
         val occupied = BuildingDefs.occupiedBlocks().toSet()
+        val proceduralWindowMat = ml.createColorInstance(color = Color.rgb(0xBB, 0xDE, 0xFB))
+        windowMaterials.add(proceduralWindowMat)
+        val proceduralDoorMat = ml.createColorInstance(color = Color.rgb(0x5D, 0x40, 0x37))
+        val proceduralRoofMat = ml.createColorInstance(color = Color.rgb(0x79, 0x55, 0x48))
 
         for (i in 0 until roadCenters.size - 1) {
             for (j in 0 until roadCenters.size - 1) {
@@ -968,11 +1143,43 @@ class CityActivity : AppCompatActivity() {
                     val bcx = x1 + ox + w / 2f
                     val bcz = z1 + oz + d / 2f
 
+                    // Main body
                     sceneView.addChildNode(
                         CubeNode(engine, Size(w, h, d), materialInstance = ml.createColorInstance(color = colors[ci])).apply {
                             position = Position(bcx, h / 2f, bcz)
                         }
                     )
+                    // Roof
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(w + 0.2f, 0.2f, d + 0.2f), materialInstance = ml.createColorInstance(color = roofColors[ci])).apply {
+                            position = Position(bcx, h + 0.1f, bcz)
+                        }
+                    )
+                    // Door (front)
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(0.4f, 0.8f, 0.08f), materialInstance = proceduralDoorMat).apply {
+                            position = Position(bcx, 0.4f, bcz + d / 2f + 0.04f)
+                        }
+                    )
+                    // Windows (1-2 per lato frontale)
+                    val pwxOff = w * 0.25f
+                    val pWinCount = if (w > 1.5f) 2 else 1
+                    for (pw in 0 until pWinCount) {
+                        val pwx = if (pWinCount == 1) 0f else (pw * 2 - 1) * pwxOff
+                        sceneView.addChildNode(
+                            CubeNode(engine, Size(0.25f, 0.25f, 0.06f), materialInstance = proceduralWindowMat).apply {
+                                position = Position(bcx + pwx, h * 0.55f, bcz + d / 2f + 0.03f)
+                            }
+                        )
+                    }
+                    // Balcony (per edifici alti)
+                    if (h > 2.5f && sd % 3 == 0) {
+                        sceneView.addChildNode(
+                            CubeNode(engine, Size(w * 0.5f, 0.05f, 0.25f), materialInstance = balconyMat).apply {
+                                position = Position(bcx, h * 0.45f, bcz + d / 2f + 0.15f)
+                            }
+                        )
+                    }
                     buildingAABBs.add(com.intelligame.huntix.reallife.AABB(bcx - w / 2f, bcx + w / 2f, bcz - d / 2f, bcz + d / 2f))
                 }
             }
