@@ -249,6 +249,23 @@ class CityActivity : AppCompatActivity() {
             setPadding(UiKit.dp(this@CityActivity, 12), UiKit.dp(this@CityActivity, 8), 0, 0)
         }
 
+        val mapBtn = TextView(this).apply {
+            text = "\uD83D\uDDFA\uFE0F"; textSize = 20f; setTextColor(Color.WHITE)
+            isClickable = true; isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 20).toFloat()
+                setColor(0xDD1A1030.toInt()); setStroke(1, 0x44FFFFFF)
+            }
+            setPadding(UiKit.dp(this@CityActivity, 10), UiKit.dp(this@CityActivity, 8),
+                UiKit.dp(this@CityActivity, 10), UiKit.dp(this@CityActivity, 8))
+            setOnClickListener {
+                val intent = Intent(this@CityActivity, CityMapActivity::class.java)
+                intent.putExtra("PLAYER_X", playerX)
+                intent.putExtra("PLAYER_Z", playerZ)
+                startActivity(intent)
+            }
+        }
+
         timeLabel = TextView(this).apply {
             textSize = 11f; setTextColor(Color.parseColor("#FFD86B"))
             setShadowLayer(3f, 1f, 1f, Color.BLACK)
@@ -268,6 +285,9 @@ class CityActivity : AppCompatActivity() {
             addView(backBtn, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8); marginStart = UiKit.dp(this@CityActivity, 4) })
+            addView(mapBtn, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8); marginStart = UiKit.dp(this@CityActivity, 52) })
             addView(npcNameLabel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 48) })
