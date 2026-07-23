@@ -31,7 +31,9 @@ data class BuildingDef(
     val width: Float,
     val depth: Float,
     val height: Float,
-    val actions: List<BuildingAction>
+    val actions: List<BuildingAction>,
+    val glbModel: String? = null,    // path in assets/city_models/ (null = always procedural)
+    val modelScale: Float = 1f       // scale when loading GLB
 ) {
     /** AABB per rilevamento collisione/prossimità */
     fun aabb() = AABB(
@@ -61,7 +63,9 @@ object BuildingDefs {
                 BuildingAction("\uD83D\uDCA4", "Dormi", "sleep", 25f),
                 BuildingAction("\uD83D\uDEFC", "Guarda TV", "fun", 15f),
                 BuildingAction("\uD83C\uDF73", "Cucina", "hunger", 15f)
-            )
+            ),
+            glbModel = "city_models/house_small.glb",
+            modelScale = 0.02f
         ),
         BuildingDef(
             type = BuildingType.RESTAURANT,
@@ -75,7 +79,9 @@ object BuildingDefs {
                 BuildingAction("\uD83C\uDF5D", "Pasta", "hunger", 30f),
                 BuildingAction("\uD83C\uDF54", "Hamburger", "hunger", 20f),
                 BuildingAction("\uD83C\uDF7A", "Bevi", "thirst", 25f)
-            )
+            ),
+            glbModel = "city_models/shop.glb",
+            modelScale = 0.03f
         ),
         BuildingDef(
             type = BuildingType.SUPERMARKET,
@@ -89,7 +95,9 @@ object BuildingDefs {
                 BuildingAction("\uD83C\uDF4E", "Frutta", "hunger", 15f),
                 BuildingAction("\uD83E\uDDC2", "Acqua", "thirst", 20f),
                 BuildingAction("\uD83D\uDCE6", "Spesa", "fun", 10f)
-            )
+            ),
+            glbModel = "city_models/shop.glb",
+            modelScale = 0.035f
         ),
         BuildingDef(
             type = BuildingType.HOSPITAL,
@@ -102,7 +110,9 @@ object BuildingDefs {
             actions = listOf(
                 BuildingAction("\uD83D\uDC8A", "Medico", "hygiene", 30f),
                 BuildingAction("\uD83D\uDEE1\uFE0F", "Controllo", "fun", 10f)
-            )
+            ),
+            glbModel = "city_models/hospital.glb",
+            modelScale = 0.04f
         ),
         BuildingDef(
             type = BuildingType.GYM,
@@ -116,7 +126,9 @@ object BuildingDefs {
                 BuildingAction("\uD83C\uDFC3", "Corri", "fun", 20f),
                 BuildingAction("\uD83C\uDFCB\uFE0F", "Peschi", "fun", 25f),
                 BuildingAction("\uD83E\uDDD8", "Yoga", "sleep", 10f)
-            )
+            ),
+            glbModel = "city_models/gym.glb",
+            modelScale = 0.03f
         )
     )
 

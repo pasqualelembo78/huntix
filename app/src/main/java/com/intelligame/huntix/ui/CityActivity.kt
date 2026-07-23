@@ -24,12 +24,15 @@ import com.intelligame.huntix.reallife.Pets
 import com.intelligame.huntix.reallife.RealLifeClient
 import com.intelligame.huntix.reallife.WorldState
 import io.github.sceneview.SceneView
+import io.github.sceneview.loaders.ModelLoader
 import io.github.sceneview.math.Position
+import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Size
 import io.github.sceneview.node.CameraNode
 import io.github.sceneview.collision.Box
 import io.github.sceneview.collision.Vector3
 import io.github.sceneview.node.CubeNode
+import io.github.sceneview.node.ModelNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import kotlinx.coroutines.Dispatchers
@@ -91,6 +94,7 @@ class CityActivity : AppCompatActivity() {
 
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
+    private val modelLoader get() = sceneView.modelLoader
 
     private val buildingAABBs = mutableListOf<com.intelligame.huntix.reallife.AABB>()
     private val roadCenters = mutableListOf<Float>()
@@ -640,6 +644,86 @@ class CityActivity : AppCompatActivity() {
         petNode = pet
     }
 
+    private fun spawnProceduralTree(tx: Float, tz: Float, seed: Int,
+        trunkMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        leafMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        leafLightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        leafDarkMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance
+    ) {
+        val treeMat = when (seed % 3) { 0 -> leafMat; 1 -> leafLightMat; else -> leafDarkMat }
+        val treeH = 1.6f + (seed % 5).toFloat() * 0.15f
+        sceneView.addChildNode(CubeNode(engine, Size(0.18f, treeH, 0.18f), materialInstance = trunkMat).apply {
+            position = Position(tx, treeH / 2f, tz)
+        })
+        val canopyBase = treeH + 0.1f
+        sceneView.addChildNode(SphereNode(engine, 0.55f + (seed % 3).toFloat() * 0.08f, materialInstance = treeMat).apply {
+            position = Position(tx, canopyBase + 0.3f, tz)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.4f + (seed % 2).toFloat() * 0.1f, materialInstance = treeMat).apply {
+            position = Position(tx + 0.2f, canopyBase + 0.15f, tz + 0.15f)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.35f + (seed % 2).toFloat() * 0.05f, materialInstance = leafLightMat).apply {
+            position = Position(tx - 0.15f, canopyBase + 0.4f, tz - 0.1f)
+        })
+        if (seed % 3 == 0) {
+            sceneView.addChildNode(CubeNode(engine, Size(0.3f, 0.06f, 0.06f), materialInstance = trunkMat).apply {
+                position = Position(tx + 0.2f, treeH * 0.65f, tz)
+            })
+        }
+    }
+
+    private fun spawnProceduralCar(cx: Float, cz: Float, seed: Int,
+        carColors: IntArray,
+        carMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance?,
+        windshieldMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        wheelMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        headlightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance,
+        tailLightMat: com.google.android.filament.utils.MaterialLoader.MaterialInstance
+    ) {
+        val mat = carMat ?: ml.createColorInstance(color = carColors[seed % carColors.size])
+        sceneView.addChildNode(CubeNode(engine, Size(1.4f, 0.3f, 0.7f), materialInstance = mat).apply {
+            position = Position(cx, 0.22f, cz)
+        })
+        sceneView.addChildNode(CubeNode(engine, Size(0.4f, 0.15f, 0.65f), materialInstance = mat).apply {
+            position = Position(cx + 0.5f, 0.38f, cz)
+        })
+        sceneView.addChildNode(CubeNode(engine, Size(0.35f, 0.2f, 0.65f), materialInstance = mat).apply {
+            position = Position(cx - 0.5f, 0.4f, cz)
+        })
+        sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.25f, 0.6f), materialInstance = windshieldMat).apply {
+            position = Position(cx, 0.5f, cz)
+        })
+        sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
+            position = Position(cx + 0.72f, 0.18f, cz)
+        })
+        sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
+            position = Position(cx - 0.72f, 0.18f, cz)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
+            position = Position(cx + 0.72f, 0.22f, cz - 0.25f)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
+            position = Position(cx + 0.72f, 0.22f, cz + 0.25f)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
+            position = Position(cx - 0.72f, 0.22f, cz - 0.25f)
+        })
+        sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
+            position = Position(cx - 0.72f, 0.22f, cz + 0.25f)
+        })
+        for (wx in floatArrayOf(-0.45f, 0.45f)) {
+            for (wz in floatArrayOf(-0.3f, 0.3f)) {
+                sceneView.addChildNode(SphereNode(engine, 0.1f, materialInstance = wheelMat).apply {
+                    position = Position(cx + wx, 0.1f, cz + wz)
+                })
+                val hubMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
+                sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = hubMat).apply {
+                    position = Position(cx + wx, 0.1f, cz + wz + (if (wz > 0) 0.06f else -0.06f))
+                })
+            }
+        }
+    }
+
     private fun loadNpcs() {
         lifecycleScope.launch {
             val state = withContext(Dispatchers.IO) { RealLifeClient.getMap() }.getOrNull() ?: return@launch
@@ -778,62 +862,29 @@ class CityActivity : AppCompatActivity() {
                     }
                 }
 
-                // Auto DETTAGLIATA: corpo + cofano + portabagagli + finestrini + paraurti + fari
+                // Auto — GLB con fallback procedurale
                 if (sd % 6 == 3) {
-                    val carMat = ml.createColorInstance(color = carColors[sd % carColors.size])
                     val cx = rx + ROAD / 2f + 1.5f
                     val cz = rz + (if (sd % 2 == 0) 1.5f else -1.5f)
                     val carRot = if (sd % 2 == 0) 0f else 90f
-                    // Corpo principale (più basso e largo)
-                    sceneView.addChildNode(CubeNode(engine, Size(1.4f, 0.3f, 0.7f), materialInstance = carMat).apply {
-                        position = Position(cx, 0.22f, cz)
-                    })
-                    // Cofano (anteriore, leggermente più basso)
-                    sceneView.addChildNode(CubeNode(engine, Size(0.4f, 0.15f, 0.65f), materialInstance = carMat).apply {
-                        position = Position(cx + 0.5f, 0.38f, cz)
-                    })
-                    // Portabagagli (posteriore)
-                    sceneView.addChildNode(CubeNode(engine, Size(0.35f, 0.2f, 0.65f), materialInstance = carMat).apply {
-                        position = Position(cx - 0.5f, 0.4f, cz)
-                    })
-                    // Abitacolo (finestrini)
-                    sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.25f, 0.6f), materialInstance = windshieldMat).apply {
-                        position = Position(cx, 0.5f, cz)
-                    })
-                    // Pparaurti anteriore
-                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
-                        position = Position(cx + 0.72f, 0.18f, cz)
-                    })
-                    // Pparaurti posteriore
-                    sceneView.addChildNode(CubeNode(engine, Size(0.08f, 0.12f, 0.68f), materialInstance = wheelMat).apply {
-                        position = Position(cx - 0.72f, 0.18f, cz)
-                    })
-                    // Fari anteriori
-                    sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
-                        position = Position(cx + 0.72f, 0.22f, cz - 0.25f)
-                    })
-                    sceneView.addChildNode(SphereNode(engine, 0.06f, materialInstance = headlightMat).apply {
-                        position = Position(cx + 0.72f, 0.22f, cz + 0.25f)
-                    })
-                    // Fari posteriori (stop)
-                    sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
-                        position = Position(cx - 0.72f, 0.22f, cz - 0.25f)
-                    })
-                    sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = tailLightMat).apply {
-                        position = Position(cx - 0.72f, 0.22f, cz + 0.25f)
-                    })
-                    // Ruote (4 ruote dettagliate)
-                    for (wx in floatArrayOf(-0.45f, 0.45f)) {
-                        for (wz in floatArrayOf(-0.3f, 0.3f)) {
-                            sceneView.addChildNode(SphereNode(engine, 0.1f, materialInstance = wheelMat).apply {
-                                position = Position(cx + wx, 0.1f, cz + wz)
-                            })
-                            // Cerchio (anello argento)
-                            val hubMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
-                            sceneView.addChildNode(SphereNode(engine, 0.05f, materialInstance = hubMat).apply {
-                                position = Position(cx + wx, 0.1f, cz + wz + (if (wz > 0) 0.06f else -0.06f))
-                            })
+                    val useCarGlb = try { assets.open("city_models/car.glb").close(); true } catch (_: Exception) { false }
+                    if (useCarGlb) {
+                        try {
+                            modelLoader.loadModelInstanceAsync("city_models/car.glb") { instance ->
+                                if (instance != null) {
+                                    val node = ModelNode(instance).apply {
+                                        position = Position(cx, 0f, cz)
+                                        rotation = Rotation(y = carRot)
+                                        scale = Position(0.005f, 0.005f, 0.005f)
+                                    }
+                                    sceneView.addChildNode(node)
+                                }
+                            }
+                        } catch (_: Exception) {
+                            spawnProceduralCar(cx, cz, sd, carColors, carMat = null, windshieldMat, wheelMat, headlightMat, tailLightMat)
                         }
+                    } else {
+                        spawnProceduralCar(cx, cz, sd, carColors, null, windshieldMat, wheelMat, headlightMat, tailLightMat)
                     }
                 }
             }
@@ -857,34 +908,32 @@ class CityActivity : AppCompatActivity() {
 
                 val seed = ((cx * 197 + cz * 337).toInt().let { if (it < 0) -it else it }) % 10000
 
-                // 2-4 alberi DETTAGLIATI: tronco + 3 sfere chioma + ramo
+                // 2-4 alberi — GLB con fallback procedurale
                 val treeCount = 2 + seed % 3
+                val useTreeGlb = try { assets.open("city_models/tree.glb").close(); true } catch (_: Exception) { false }
                 for (t in 0 until treeCount) {
                     val ts = seed * 7 + t * 41
                     val tx = x1 + ((ts % 100).toFloat() / 100f) * bw
                     val tz = z1 + (((ts / 10) % 100).toFloat() / 100f) * bh
-                    val treeMat = when (t % 3) { 0 -> leafMat; 1 -> leafLightMat; else -> leafDarkMat }
-                    val treeH = 1.6f + (ts % 5).toFloat() * 0.15f
-                    // Tronco (cilindro sottile)
-                    sceneView.addChildNode(CubeNode(engine, Size(0.18f, treeH, 0.18f), materialInstance = trunkMat).apply {
-                        position = Position(tx, treeH / 2f, tz)
-                    })
-                    // Chioma (3 sfere sovrapposte per volume)
-                    val canopyBase = treeH + 0.1f
-                    sceneView.addChildNode(SphereNode(engine, 0.55f + (ts % 3).toFloat() * 0.08f, materialInstance = treeMat).apply {
-                        position = Position(tx, canopyBase + 0.3f, tz)
-                    })
-                    sceneView.addChildNode(SphereNode(engine, 0.4f + (ts % 2).toFloat() * 0.1f, materialInstance = treeMat).apply {
-                        position = Position(tx + 0.2f, canopyBase + 0.15f, tz + 0.15f)
-                    })
-                    sceneView.addChildNode(SphereNode(engine, 0.35f + (ts % 2).toFloat() * 0.05f, materialInstance = leafLightMat).apply {
-                        position = Position(tx - 0.15f, canopyBase + 0.4f, tz - 0.1f)
-                    })
-                    // Piccolo ramo
-                    if (ts % 3 == 0) {
-                        sceneView.addChildNode(CubeNode(engine, Size(0.3f, 0.06f, 0.06f), materialInstance = trunkMat).apply {
-                            position = Position(tx + 0.2f, treeH * 0.65f, tz)
-                        })
+                    if (useTreeGlb) {
+                        // GLB tree
+                        try {
+                            modelLoader.loadModelInstanceAsync("city_models/tree.glb") { instance ->
+                                if (instance != null) {
+                                    val scale = 0.008f + (ts % 3).toFloat() * 0.002f
+                                    val node = ModelNode(instance).apply {
+                                        position = Position(tx, 0f, tz)
+                                        this.scale = Position(scale, scale, scale)
+                                    }
+                                    sceneView.addChildNode(node)
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // Fallback to procedural
+                            spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
+                        }
+                    } else {
+                        spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
                     }
                 }
 
@@ -983,7 +1032,7 @@ class CityActivity : AppCompatActivity() {
             sceneView.addChildNode(CubeNode(engine, Size(CITY, 0.08f, s), materialInstance = swMat).apply { position = Position(0f, 0.04f, rc + o) })
         }
 
-        // ── Named buildings (edifici speciali DETTAGLIATI) ──
+        // ── Named buildings (edifici speciali) — GLB con fallback procedurale ──
         val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
         val awningColors = intArrayOf(
             Color.rgb(0xE5, 0x39, 0x35), Color.rgb(0x1E, 0x88, 0xE5),
@@ -993,102 +1042,104 @@ class CityActivity : AppCompatActivity() {
         val balconyMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
 
         for (bd in BuildingDefs.BUILDINGS) {
-            val bMat = ml.createColorInstance(color = bd.color3D)
-            val rMat = ml.createColorInstance(color = bd.roofColor)
+            // Try loading GLB model first
+            val glbPath = bd.glbModel
+            val glbLoaded = if (glbPath != null) {
+                try {
+                    modelLoader.loadModelInstanceAsync(glbPath) { instance ->
+                        if (instance != null) {
+                            val modelNode = ModelNode(instance).apply {
+                                position = Position(bd.x, 0f, bd.z)
+                                scale = Position(bd.modelScale, bd.modelScale, bd.modelScale)
+                            }
+                            sceneView.addChildNode(modelNode)
+                        }
+                    }
+                    true
+                } catch (_: Exception) { false }
+            } else false
 
-            // Main building body
-            sceneView.addChildNode(
-                CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
-                    position = Position(bd.x, bd.height / 2f, bd.z)
+            if (!glbLoaded) {
+                // Fallback: enhanced procedural building
+                val bMat = ml.createColorInstance(color = bd.color3D)
+                val rMat = ml.createColorInstance(color = bd.roofColor)
+
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
+                        position = Position(bd.x, bd.height / 2f, bd.z)
+                    }
+                )
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
+                        position = Position(bd.x, bd.height + 0.18f, bd.z)
+                    }
+                )
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(bd.width * 0.6f, 0.2f, bd.depth * 0.6f), materialInstance = rMat).apply {
+                        position = Position(bd.x, bd.height + 0.45f, bd.z)
+                    }
+                )
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
+                        position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                    }
+                )
+                val handleMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xD5, 0x4F))
+                sceneView.addChildNode(SphereNode(engine, 0.04f, materialInstance = handleMat).apply {
+                    position = Position(bd.x + 0.2f, 0.6f, bd.z + bd.depth / 2f + 0.12f)
+                })
+                val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
+                windowMaterials.add(winMat)
+                val winFrameMat = ml.createColorInstance(color = Color.rgb(0xE0, 0xE0, 0xE0))
+                val wxOff = bd.width * 0.28f
+                val wyBase = bd.height * 0.55f
+                for (wy in floatArrayOf(wyBase, wyBase + 0.6f)) {
+                    for (wx in floatArrayOf(-wxOff, wxOff)) {
+                        sceneView.addChildNode(
+                            CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                                position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.04f)
+                            }
+                        )
+                        sceneView.addChildNode(
+                            CubeNode(engine, Size(0.42f, 0.42f, 0.04f), materialInstance = winFrameMat).apply {
+                                position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.02f)
+                            }
+                        )
+                    }
                 }
-            )
-            // Roof slab (con leggero overhang)
-            sceneView.addChildNode(
-                CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
-                    position = Position(bd.x, bd.height + 0.18f, bd.z)
-                }
-            )
-            // Second roof layer (pyramid effect)
-            sceneView.addChildNode(
-                CubeNode(engine, Size(bd.width * 0.6f, 0.2f, bd.depth * 0.6f), materialInstance = rMat).apply {
-                    position = Position(bd.x, bd.height + 0.45f, bd.z)
-                }
-            )
-            // Door (grande, con cornice)
-            sceneView.addChildNode(
-                CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
-                    position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
-                }
-            )
-            // Porta handle (piccola sfera)
-            val handleMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xD5, 0x4F))
-            sceneView.addChildNode(SphereNode(engine, 0.04f, materialInstance = handleMat).apply {
-                position = Position(bd.x + 0.2f, 0.6f, bd.z + bd.depth / 2f + 0.12f)
-            })
-            // Windows (2 per lato frontale)
-            val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
-            windowMaterials.add(winMat)
-            val winFrameMat = ml.createColorInstance(color = Color.rgb(0xE0, 0xE0, 0xE0))
-            val wxOff = bd.width * 0.28f
-            val wyBase = bd.height * 0.55f
-            for (wy in floatArrayOf(wyBase, wyBase + 0.6f)) {
-                for (wx in floatArrayOf(-wxOff, wxOff)) {
-                    // Finestra
+                for (bx in floatArrayOf(-wxOff, wxOff)) {
                     sceneView.addChildNode(
-                        CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
-                            position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.04f)
+                        CubeNode(engine, Size(0.6f, 0.06f, 0.3f), materialInstance = balconyMat).apply {
+                            position = Position(bd.x + bx, bd.height * 0.55f - 0.22f, bd.z + bd.depth / 2f + 0.2f)
                         }
                     )
-                    // Cornice finestra
                     sceneView.addChildNode(
-                        CubeNode(engine, Size(0.42f, 0.42f, 0.04f), materialInstance = winFrameMat).apply {
-                            position = Position(bd.x + wx, wy, bd.z + bd.depth / 2f + 0.02f)
+                        CubeNode(engine, Size(0.6f, 0.2f, 0.03f), materialInstance = balconyMat).apply {
+                            position = Position(bd.x + bx, bd.height * 0.55f - 0.12f, bd.z + bd.depth / 2f + 0.35f)
                         }
                     )
                 }
-            }
-            // Balconi (2 piccole piastre)
-            sceneView.addChildNode(
-                CubeNode(engine, Size(0.6f, 0.06f, 0.3f), materialInstance = balconyMat).apply {
-                    position = Position(bd.x - wxOff, bd.height * 0.55f - 0.22f, bd.z + bd.depth / 2f + 0.2f)
+                if (bd.height > 2f) {
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(0.3f, 0.6f, 0.3f), materialInstance = chimneyMat).apply {
+                            position = Position(bd.x + bd.width * 0.3f, bd.height + 0.65f, bd.z - bd.depth * 0.2f)
+                        }
+                    )
                 }
-            )
-            sceneView.addChildNode(
-                CubeNode(engine, Size(0.6f, 0.06f, 0.3f), materialInstance = balconyMat).apply {
-                    position = Position(bd.x + wxOff, bd.height * 0.55f - 0.22f, bd.z + bd.depth / 2f + 0.2f)
-                }
-            )
-            // Ringhiere balconi
-            for (bx2 in floatArrayOf(-wxOff, wxOff)) {
+                val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
+                val awningMat = ml.createColorInstance(color = awningColor)
                 sceneView.addChildNode(
-                    CubeNode(engine, Size(0.6f, 0.2f, 0.03f), materialInstance = balconyMat).apply {
-                        position = Position(bd.x + bx2, bd.height * 0.55f - 0.12f, bd.z + bd.depth / 2f + 0.35f)
+                    CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
+                        position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
                     }
                 )
-            }
-            // Chimney
-            if (bd.height > 2f) {
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(0.3f, 0.6f, 0.3f), materialInstance = chimneyMat).apply {
-                        position = Position(bd.x + bd.width * 0.3f, bd.height + 0.65f, bd.z - bd.depth * 0.2f)
-                    }
-                )
-            }
-            // Awning (tenda) per negozi e ristoranti
-            val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
-            val awningMat = ml.createColorInstance(color = awningColor)
-            sceneView.addChildNode(
-                CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
-                    position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
+                for (px in floatArrayOf(-bd.width * 0.35f, bd.width * 0.35f)) {
+                    sceneView.addChildNode(
+                        CubeNode(engine, Size(0.04f, 1.5f, 0.04f), materialInstance = poleMat).apply {
+                            position = Position(bd.x + px, 0.75f, bd.z + bd.depth / 2f + 0.5f)
+                        }
+                    )
                 }
-            )
-            // Awning support poles
-            for (px in floatArrayOf(-bd.width * 0.35f, bd.width * 0.35f)) {
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(0.04f, 1.5f, 0.04f), materialInstance = poleMat).apply {
-                        position = Position(bd.x + px, 0.75f, bd.z + bd.depth / 2f + 0.5f)
-                    }
-                )
             }
 
             buildingAABBs.add(bd.aabb())
