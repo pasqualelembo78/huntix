@@ -161,9 +161,9 @@ class CityActivity : AppCompatActivity() {
     )
 
     companion object {
-        private const val CITY = 1000f
-        private const val BLOCK = 10f
-        private const val ROAD = 2f
+        private const val CITY = 8000f
+        private const val BLOCK = 80f
+        private const val ROAD = 6f
         private const val HALF = CITY / 2f
         private const val P_Y = 0.35f
         private const val CAM_H = 80f
@@ -182,7 +182,7 @@ class CityActivity : AppCompatActivity() {
         // Roma — Colosseo
         private const val OSM_CENTER_LAT = 41.8902
         private const val OSM_CENTER_LON = 12.4922
-        private const val OSM_RADIUS_METERS = 1000
+        private const val OSM_RADIUS_METERS = 4000
         private const val CAM_D_MIN = 15f
         private const val CAM_D_MAX = 200f
     }
@@ -1130,7 +1130,7 @@ class CityActivity : AppCompatActivity() {
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
             // Phase 1: terrain + roads (immediate)
-            osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, 1000f)
+            osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
 
             // Phase 2: after 500ms — colosseum + buildings
             Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
@@ -1142,7 +1142,7 @@ class CityActivity : AppCompatActivity() {
                     Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
                         override fun doFrame(frameTimeNanos: Long) {
                             if (destroyed) return
-                            osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, 1000f)
+                            osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
                             osmPhase = 3
                             // Phase 4: after 500ms — furniture + cars
                             Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {

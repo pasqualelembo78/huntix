@@ -70,7 +70,7 @@ class OsmCityBuilder(
     val buildingAABBs = mutableListOf<AABB>()
 
     private var currentNodeCount = 0
-    private val MAX_NODES = 1400
+    private val MAX_NODES = 12000
 
     private fun addNode(node: CubeNode) {
         if (currentNodeCount >= MAX_NODES) return
@@ -162,90 +162,281 @@ class OsmCityBuilder(
 
     // ══════════════════════════════════════════════════════════════════════
     // FASE 3 — EDIFICI DA OSM
-    // ══════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════
+// FASE 3 — EDIFICI DA OSM (dettagliati stile Roma)
+// ══════════════════════════════════════════════════════════════════════
 
-    fun buildBuildings(osmData: OsmData) {
-        val buildings = osmData.buildings
-            .filter { it.nodes.size >= 3 }
-            .sortedByDescending { it.height }
-            .take(100)
+fun buildBuildings(osmData: OsmData) {
+    val buildings = osmData.buildings
+        .filter { it.nodes.size >= 3 }
+        .sortedByDescending { it.height }
+        .take(500)
 
-        var buildingIndex = 0
-        for (way in buildings) {
-            if (currentNodeCount >= MAX_NODES - 10) break
+    var buildingIndex = 0
+    for (way in buildings) {
+        if (currentNodeCount >= MAX_NODES - 50) break
 
-            val fp = way.calculateFootprint() ?: continue
-            val h = way.height.toFloat()
-            val w = fp.width.coerceIn(1f, 30f)
-            val d = fp.depth.coerceIn(1f, 30f)
-            if (w < 1f || d < 1f || h < 2f) continue
+        val fp = way.calculateFootprint() ?: continue
+        val h = way.height.toFloat()
+        val w = fp.width.coerceIn(3f, 40f)
+        val d = fp.depth.coerceIn(3f, 40f)
+        if (w < 3f || d < 3f || h < 3f) continue
 
-            val ci = buildingIndex % bodyColors.size
-            val bodyColor = way.facadeColor ?: bodyColors[ci]
-            val roofColorVal = way.roofColor ?: roofColorsArr[ci]
-            val bodyMatInst = ml.createColorInstance(color = bodyColor)
-            val roofMatInst = ml.createColorInstance(color = roofColorVal)
+        val isLandmark = way.name.isNotEmpty() && (way.name.lowercase().contains("colosseo") || way.name.lowercase().contains("basilica") || way.name.lowercase().contains("pantheon") || way.name.lowercase().contains("castel") || way.name.lowercase().contains("vatican") || way.name.lowercase().contains("san pietro") || way.name.lowercase().contains("piazza"))
+        val levels = maxOf(1, (h / 3.2f).toInt())
+        val floorHeight = h / levels
 
-            addNode(CubeNode(engine, Size(w, h, d), materialInstance = bodyMatInst).apply {
-                position = Position(fp.centerX, h / 2f, fp.centerZ)
+        val ci = buildingIndex % bodyColors.size
+        val bodyColor = way.facadeColor ?: bodyColors[ci]
+        val roofColorVal = way.roofColor ?: roofColorsArr[ci]
+        val bodyMatInst = ml.createColorInstance(color = bodyColor)
+        val roofMatInst = ml.createColorInstance(color = roofColorVal)
+        val darkBodyMatInst = ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt())
+        val windowGlassMat = ml.createColorInstance(color = 0xFF88CCEE.toInt())
+        val windowFrameMat = ml.createColorInstance(color = 0xFF443322.toInt())
+        val shutterMat = ml.createColorInstance(color = 0xFF553311.toInt())
+        val corniceMat = ml.createColorInstance(color = 0xFFDDCCAA.toInt())
+        val storefrontMat = ml.createColorInstance(color = 0xFF222233.toInt())
+        val balconyMat = ml.createColorInstance(color = 0xFF775533.toInt())
+
+        // ── CORPO EDIFICIO: per piano ──
+        for (floor in 0 until levels) {
+            val floorY = floor * floorHeight + floorHeight / 2f
+            val floorH = floorHeight * 0.92f
+            val floorW = w * 0.98f
+            val floorD = d * 0.98f
+
+            // Muro piano
+            addNode(CubeNode(engine, Size(floorW, floorH, floorD), materialInstance = if (floor == 0) darkBodyMatInst else bodyMatInst).apply {
+                position = Position(fp.centerX, floorY, fp.centerZ)
                 rotation = Position(0f, -fp.rotation, 0f)
             })
-            addNode(CubeNode(engine, Size(w + 0.3f, 0.2f, d + 0.3f), materialInstance = roofMatInst).apply {
-                position = Position(fp.centerX, h + 0.1f, fp.centerZ)
-                rotation = Position(0f, -fp.rotation, 0f)
-            })
-            addNode(CubeNode(engine, Size(w + 0.5f, 0.08f, d + 0.5f), materialInstance = grassLightMat).apply {
-                position = Position(fp.centerX, h + 0.24f, fp.centerZ)
-                rotation = Position(0f, -fp.rotation, 0f)
-            })
-            addNode(CubeNode(engine, Size(0.6f, 1.2f, 0.08f), materialInstance = doorMatInst).apply {
-                position = Position(fp.centerX, 0.6f, fp.centerZ + d / 2f + 0.04f)
-                rotation = Position(0f, -fp.rotation, 0f)
-            })
 
-            if (w >= 2f && h >= 3f) {
-                windowMaterials.add(windowMatInst)
-                val nWinFront = ((w / 2f).toInt()).coerceIn(1, 3)
-                val stepW = w / (nWinFront + 1).toFloat()
-                val winY = h * 0.55f
-                for (i in 1..nWinFront) {
-                    val wx = fp.centerX - w / 2f + i * stepW
-                    addNode(CubeNode(engine, Size(0.3f, 0.3f, 0.08f), materialInstance = windowMatInst).apply {
-                        position = Position(wx, winY, fp.centerZ + d / 2f + 0.04f)
+            // Cornice tra i piani (sopra piano terra e ultimo)
+            if (floor == 0 || floor == levels - 1) {
+                addNode(CubeNode(engine, Size(floorW + 0.15f, 0.12f, floorD + 0.15f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX, (floor + 1) * floorHeight - 0.06f, fp.centerZ)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+            }
+
+            // ── FINESTRE PER PIANO ──
+            val windowsPerSide = ((w / 2.2f).toInt()).coerceIn(1, 6)
+            val windowsPerDepth = ((d / 2.2f).toInt()).coerceIn(1, 5)
+            val winW = 0.7f; val winH = floorHeight * 0.55f; val winD = 0.08f
+
+            // Facciata frontale (Z+)
+            for (i in 1..windowsPerSide) {
+                val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
+                val winY = floorY
+                // Cornice finestra
+                addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
+                    position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Vetro
+                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = windowGlassMat).apply {
+                    position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Persiane (a volte aperte)
+                if ((buildingIndex + floor + i) % 3 == 0) {
+                    addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
+                        position = Position(wx + winW * 0.35f, winY, fp.centerZ + d / 2f + 0.07f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
+                        position = Position(wx - winW * 0.35f, winY, fp.centerZ + d / 2f + 0.07f)
                         rotation = Position(0f, -fp.rotation, 0f)
                     })
                 }
-                if (d >= 3f) {
-                    val nWinSide = ((d / 3f).toInt()).coerceIn(1, 2)
-                    val stepD = d / (nWinSide + 1).toFloat()
-                    for (i in 1..nWinSide) {
-                        val wz = fp.centerZ - d / 2f + i * stepD
-                        addNode(CubeNode(engine, Size(0.08f, 0.3f, 0.3f), materialInstance = windowMatInst).apply {
-                            position = Position(fp.centerX - w / 2f - 0.04f, winY, wz)
+                // Balcone (piano nobile e ultimo)
+                if (floor == 1 || floor == levels - 1) {
+                    addNode(CubeNode(engine, Size(winW + 0.2f, 0.06f, 0.35f), materialInstance = balconyMat).apply {
+                        position = Position(wx, winY - winH / 2f - 0.03f, fp.centerZ + d / 2f + 0.175f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    // Ringhiera
+                    addNode(CubeNode(engine, Size(winW + 0.2f, 0.4f, 0.02f), materialInstance = corniceMat).apply {
+                        position = Position(wx, winY - winH / 2f + 0.15f, fp.centerZ + d / 2f + 0.36f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                }
+            }
+
+            // Facciata posteriore (Z-)
+            for (i in 1..windowsPerSide) {
+                val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
+                val winY = floorY
+                addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
+                    position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = windowGlassMat).apply {
+                    position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+            }
+
+            // Lati (X+ e X-)
+            for (i in 1..windowsPerDepth) {
+                val wz = fp.centerZ - d / 2f + i * d / (windowsPerDepth + 1).toFloat()
+                val winY = floorY
+                // Lato destro (X+)
+                addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
+                    position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = windowGlassMat).apply {
+                    position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Lato sinistro (X-)
+                addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
+                    position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = windowGlassMat).apply {
+                    position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+            }
+
+            // ── PIANO TERRA: VETRINE / PORTONI ──
+            if (floor == 0) {
+                val entranceW = (w * 0.6f).coerceIn(1.5f, 4f)
+                // Portone centrale
+                addNode(CubeNode(engine, Size(1.2f, 2.4f, 0.1f), materialInstance = doorMatInst).apply {
+                    position = Position(fp.centerX, 1.2f, fp.centerZ + d / 2f + 0.05f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Vetrine ai lati
+                for (side in listOf(-1, 1)) {
+                    val sx = fp.centerX + side * (entranceW / 2f + 1.5f)
+                    addNode(CubeNode(engine, Size(2.5f, 2.4f, 0.08f), materialInstance = windowGlassMat).apply {
+                        position = Position(sx, 1.2f, fp.centerZ + d / 2f + 0.05f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    addNode(CubeNode(engine, Size(2.5f, 0.2f, 0.1f), materialInstance = windowFrameMat).apply {
+                        position = Position(sx, 2.5f, fp.centerZ + d / 2f + 0.05f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    // Tenda negozio
+                    if ((buildingIndex + side + 1) % 4 == 0) {
+                        val awningColor = awningColors[(buildingIndex + side + 1) % awningColors.size]
+                        val awningMat = ml.createColorInstance(color = awningColor)
+                        addNode(CubeNode(engine, Size(2.5f, 0.04f, 0.5f), materialInstance = awningMat).apply {
+                            position = Position(sx, 2.6f, fp.centerZ + d / 2f + 0.25f)
                             rotation = Position(0f, -fp.rotation, 0f)
                         })
                     }
                 }
             }
+        }
 
-            if (h > 3f) {
-                val awningMatInst = ml.createColorInstance(color = awningColors[buildingIndex % awningColors.size])
-                addNode(CubeNode(engine, Size(w * 0.6f, 0.05f, 0.35f), materialInstance = awningMatInst).apply {
-                    position = Position(fp.centerX, minOf(2.5f, h * 0.3f), fp.centerZ + d / 2f + 0.2f)
+        // ── TETTO ──
+        val roofType = if (isLandmark) "dome" else when (way.roofShape) {
+            "flat" -> "flat"
+            "gabled", "hipped" -> "gabled"
+            "domed" -> "dome"
+            else -> if (h > 15f && (buildingIndex % 5 == 0)) "gabled" else "flat"
+        }
+
+        when (roofType) {
+            "flat" -> {
+                // Tetto piano con parapetto
+                addNode(CubeNode(engine, Size(w + 0.4f, 0.25f, d + 0.4f), materialInstance = roofMatInst).apply {
+                    position = Position(fp.centerX, h + 0.125f, fp.centerZ)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Parapetto
+                addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX, h + 0.55f, fp.centerZ + d / 2f + 0.075f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX, h + 0.55f, fp.centerZ - d / 2f - 0.075f)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX + w / 2f + 0.075f, h + 0.55f, fp.centerZ)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX - w / 2f - 0.075f, h + 0.55f, fp.centerZ)
+                    rotation = Position(0f, -fp.rotation, 0f)
+                })
+                // Elementi tetto: comignoli, AC, torri acqua
+                if (levels >= 3) {
+                    addNode(CubeNode(engine, Size(0.6f, 1.5f, 0.6f), materialInstance = roofMatInst).apply {
+                        position = Position(fp.centerX - w * 0.3f, h + 1.0f, fp.centerZ - d * 0.3f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    addNode(CubeNode(engine, Size(1.2f, 0.8f, 1.2f), materialInstance = ml.createColorInstance(color = 0xFF888888.toInt())).apply {
+                        position = Position(fp.centerX + w * 0.2f, h + 0.4f, fp.centerZ + d * 0.2f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                }
+            }
+            "gabled" -> {
+                // Tetto a due falde
+                val ridgeH = h + w * 0.35f
+                val roofDepth = d + 0.6f
+                val roofW = w + 0.6f
+                // Falda 1
+                addNode(CubeNode(engine, Size(roofW, w * 0.35f, roofDepth), materialInstance = roofMatInst).apply {
+                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ)
+                    rotation = Position(-0.6f, -fp.rotation, 0f) // inclinazione
+                })
+                // Falda 2 (speculare - semplificato come box inclinato opposto)
+                addNode(CubeNode(engine, Size(roofW, w * 0.35f, roofDepth), materialInstance = roofMatInst).apply {
+                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ)
+                    rotation = Position(0.6f, -fp.rotation, 0f)
+                })
+                // Frontoni triangolari (semplificati)
+                addNode(CubeNode(engine, Size(roofW, 0.1f, w * 0.35f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX, ridgeH, fp.centerZ + d / 2f + w * 0.175f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
             }
-
-            val halfW = w / 2f; val halfD = d / 2f
-            if (fp.rotation == 0f) {
-                buildingAABBs.add(AABB(fp.centerX - halfW, fp.centerX + halfW, fp.centerZ - halfD, fp.centerZ + halfD))
-            } else {
-                val maxDim = maxOf(halfW, halfD) * 1.5f
-                buildingAABBs.add(AABB(fp.centerX - maxDim, fp.centerX + maxDim, fp.centerZ - maxDim, fp.centerZ + maxDim))
+            "dome" -> {
+                // Cupola per landmark
+                val domeR = minOf(w, d) * 0.45f
+                val domeH = domeR * 0.7f
+                addNode(SphereNode(engine, domeR, materialInstance = roofMatInst).apply {
+                    position = Position(fp.centerX, h + domeH * 0.5f, fp.centerZ)
+                })
+                // Lanternino
+                addNode(CubeNode(engine, Size(domeR * 0.3f, domeR * 0.4f, domeR * 0.3f), materialInstance = corniceMat).apply {
+                    position = Position(fp.centerX, h + domeH + domeR * 0.2f, fp.centerZ)
+                })
             }
-            buildingIndex++
         }
+
+        // ── DETTAGLI AGGIUNTIVI ──
+        // Pilastri angolari
+        if (w > 10f && d > 10f) {
+            val pilasterMat = ml.createColorInstance(color = 0xFFBBBBAA.toInt())
+            for (cornerX in listOf(-1f, 1f)) {
+                for (cornerZ in listOf(-1f, 1f)) {
+                    addNode(CubeNode(engine, Size(0.3f, h, 0.3f), materialInstance = pilasterMat).apply {
+                        position = Position(fp.centerX + cornerX * w / 2f, h / 2f, fp.centerZ + cornerZ * d / 2f)
+                        rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                }
+            }
+        }
+
+        val halfW = w / 2f; val halfD = d / 2f
+        if (fp.rotation == 0f) {
+            buildingAABBs.add(AABB(fp.centerX - halfW, fp.centerX + halfW, fp.centerZ - halfD, fp.centerZ + halfD))
+        } else {
+            val maxDim = maxOf(halfW, halfD) * 1.5f
+            buildingAABBs.add(AABB(fp.centerX - maxDim, fp.centerX + maxDim, fp.centerZ - maxDim, fp.centerZ + maxDim))
+        }
+        buildingIndex++
     }
+}
 
     // ══════════════════════════════════════════════════════════════════════
     // FASE 4 — ALBERI DA OSM + PROCEDURALI

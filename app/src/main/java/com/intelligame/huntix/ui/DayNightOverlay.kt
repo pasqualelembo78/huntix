@@ -176,14 +176,19 @@ class DayNightOverlay(ctx: Context) : View(ctx) {
                 })
         }
 
-        // 5. Night overlay (darkens the whole scene)
+        // 5. Night overlay (darkens the whole scene) — DISABLED FOR TESTING
+        /*
         skyColors?.let { sc ->
             if (sc.overlayAlpha > 0.01f) {
                 overlayPaint.color = sc.overlayColor
-                overlayPaint.alpha = (sc.overlayAlpha * 255).toInt()
+                // Limit max alpha and use MULTIPLY to darken instead of replace
+                overlayPaint.alpha = (sc.overlayAlpha * 255).toInt().coerceAtMost(160)
+                overlayPaint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.MULTIPLY)
                 canvas.drawRect(0f, 0f, w, h, overlayPaint)
+                overlayPaint.xfermode = null
             }
         }
+        */
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
