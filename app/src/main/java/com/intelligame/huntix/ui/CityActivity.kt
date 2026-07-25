@@ -195,6 +195,10 @@ class CityActivity : AppCompatActivity() {
 
     private var sceneReady = false
 
+    // Target city coordinates (from intent or default Foggia)
+    private var targetLat = OSM_CENTER_LAT
+    private var targetLon = OSM_CENTER_LON
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -217,6 +221,10 @@ class CityActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        // Read target city from intent (for city search/teleport)
+        targetLat = intent.getDoubleExtra("TARGET_LAT", OSM_CENTER_LAT)
+        targetLon = intent.getDoubleExtra("TARGET_LON", OSM_CENTER_LON)
 
         // Day/Night cycle
         dayNightManager = DayNightManager()
@@ -323,6 +331,22 @@ class CityActivity : AppCompatActivity() {
             }
         }
 
+        val searchBtn = TextView(this).apply {
+            text = "🔍"; textSize = 20f; setTextColor(Color.WHITE)
+            isClickable = true; isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 20).toFloat()
+                setColor(0xDD1A1030.toInt()); setStroke(1, 0x44FFFFFF)
+            }
+            setPadding(UiKit.dp(this@CityActivity, 10), UiKit.dp(this@CityActivity, 8),
+                UiKit.dp(this@CityActivity, 10), UiKit.dp(this@CityActivity, 8))
+            setOnClickListener {
+                val intent = Intent(this@CityActivity, CitySearchActivity::class.java)
+                startActivity(intent)
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+            }
+        }
+
         timeLabel = TextView(this).apply {
             textSize = 11f; setTextColor(Color.parseColor("#FFD86B"))
             setShadowLayer(3f, 1f, 1f, Color.BLACK)
@@ -357,6 +381,9 @@ class CityActivity : AppCompatActivity() {
             addView(mapBtn, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8); marginStart = UiKit.dp(this@CityActivity, 52) })
+            addView(searchBtn, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.TOP or Gravity.START; topMargin = UiKit.dp(this@CityActivity, 8); marginStart = UiKit.dp(this@CityActivity, 100) })
             addView(npcNameLabel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP; topMargin = UiKit.dp(this@CityActivity, 48) })
@@ -1104,10 +1131,10 @@ class CityActivity : AppCompatActivity() {
         if (osmLoading || osmLoaded) return
         osmLoading = true
 
-        // Initialize coordinate converter
-        CoordinateConverter.init(OSM_CENTER_LAT, OSM_CENTER_LON)
+        // Initialize coordinate converter for target city
+        CoordinateConverter.init(targetLat, targetLon)
 
-        // 1. Load mini-chunk from assets immediately (200m around Colosseum)
+        // 1. Load mini-chunk from assets immediately
         val miniData = OsmClient.loadMiniChunk()
         val hasEnoughOsmData = miniData?.let { it.roads.size >= 5 && it.buildings.size >= 3 } == true
         if (hasEnoughOsmData) {
@@ -1130,7 +1157,7 @@ class CityActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val data = withContext(Dispatchers.IO) {
-                    OsmClient.fetchAreaCached(OSM_CENTER_LAT, OSM_CENTER_LON, OSM_RADIUS_METERS)
+                    OsmClient.fetchAreaCached(targetLat, targetLon, OSM_RADIUS_METERS)
                 }
                 if (destroyed) return@launch
                 osmData = data

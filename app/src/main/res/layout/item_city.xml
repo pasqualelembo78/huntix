@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="16dp"
+    android:background="@drawable/item_city_bg"
+    android:layout_marginBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingEnd="16dp">
+
+        <TextView
+            android:id="@+id/cityNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Roma"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:id="@+id/cityRegionText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Lazio • CAP 00100"
+            android:textSize="13sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginTop="2dp"/>
+
+        <TextView
+            android:id="@+id/cityPopText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pop. 2.8M"
+            android:textSize="12sp"
+            android:textColor="#88CCFF"
+            android:layout_marginTop="2dp"/>
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_arrow_right"
+        android:contentDescription="Vai"
+        android:layout_gravity="center_vertical"/>
+
+</LinearLayout>
