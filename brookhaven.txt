@@ -1,0 +1,828 @@
+================================================================================
+   PROCEDURA CREAZIONE MONDO 3D — LAYOUT OpenStreetMap + VISUAL BROOKHAVEN
+================================================================================
+
+Indice
+------
+  1. Obiettivo generale
+  2. Concetto: OSM Layout + Brookhaven Visual
+  3. Vincoli tecnici (NON negoziabili)
+  4. Analisi dello stato attuale
+  5. Area di test: Roma — 1 km² dal Colosseo
+  6. FASE 0 — Download e parsing dati OSM
+  7. FASE 1 — Terreno e strade reali
+  8. FASE 2 — Edifici da OSM (footprint + altezza)
+  9. FASE 3 — Dettagli Brookhaven sugli edifici
+  10. FASE 4 — Alberi, cespugli, fiori (da OSM parks + procedurali)
+  11. FASE 5 — Arredo urbano (lampioni, panchine, cassonetti, etc.)
+  12. FASE 6 — Auto e veicoli
+  13. FASE 7 — Punti di interesse (POI) speciali
+  14. FASE 8 — Limiti di nodi e performance
+  15. Checklist di verifica
+
+
+================================================================================
+1. OBIETTIVO GENERALE
+================================================================================
+
+Creare un mondo 3D esplorabile basato su dati REALI di OpenStreetMap, con
+visual in stile Brookhaven (Roblox): edifici colorati e dettagliatissimi,
+strade con segnazioni, alberi con chiome realistiche, arredo urbano vario,
+illuminazione notturna.
+
+Il layout della città segue fedelmente la geometria reale (strade, edifici,
+parchi), mentre lo stile visivo è cartoon/colorato tipo Brookhaven.
+
+AREA DI TEST INIZIALE: Roma — raggio di 1 km attorno al Colosseo.
+
+Il risultato deve essere VISIVAMENTE RICCO ma senza superare i ~1500 nodi
+Filament (vedi sezione 14).
+
+
+================================================================================
+2. CONCETTO: OSM LAYOUT + BROOKHAVEN VISUAL
+================================================================================
+
+  OSM LAYOUT = DOVE mettere le cose
+  ─────────────────────────────────
+  - Le strade seguono il percorso reale della città
+  - Gli edifici si posizionano dove sono realmente (footprint)
+  - I parchi, le piazze, i laghi sono nei punti giusti
+  - Le altezze degli edifici vengono da tag "height" o "building:levels"
+  - I nomi delle strade e degli edifici sono reali
+  - I punti di interesse (ristoranti, negozi, ospedali) sono reali
+
+  BROOKHAVEN VISUAL = COME apparire le cose
+  ──────────────────────────────────────────
+  - Gli edifici sono cubi colorati con finestre, tetti, tende
+  - Le strade hanno strisce gialle e marciapiedi
+  - Ci sono lampioni, panchine, alberi dettagliati
+  - Colori pastello, stile cartoon/carino
+  - Illuminazione notturna sulle finestre e lampioni
+
+  FLUSSO DATI:
+  ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐
+  │ Overpass API │───▶│ Parser OSM   │───▶│ Generatore 3D   │
+  │ (download)   │    │ (parsing)    │    │ (SceneView)     │
+  └─────────────┘    └──────────────┘    └─────────────────┘
+                           │                      │
+                    ┌──────┴──────┐        ┌──────┴──────┐
+                    │ Strade      │        │ CubeNode    │
+                    │ Edifici     │        │ SphereNode  │
+                    │ Parchi      │        │ Colori      │
+                    │ POI         │        │ Materiali   │
+                    │ Alberi      │        │ Finestre    │
+                    └─────────────┘        └─────────────┘
+
+
+================================================================================
+3. VINCOLI TECNICI (NON negoziabili)
+================================================================================
+
+a) SOLO CubeNode e SphereNode — nessun loadModelAsync (causa SIGSEGV cross-thread)
+b) Tutte le operazioni su sceneView devono avvenire nel thread GL (Choreographer)
+c) Nessun destroy() manuale — solo nullare riferimenti e sceneView.destroy()
+d) SceneView 2.2.1: API sono addChildNode(), CubeNode(), SphereNode(),
+   CameraNode(), materialLoader.createColorInstance()
+e) Engine: sceneView.engine
+f) Skybox: engine.safeDestroySkybox() via import io.github.sceneview.safeDestroySkybox
+g) La build avviene con: cd /root/giochi/huntix && bash build_release.sh
+h) NON eseguire gradlew build direttamente
+i) I dati OSM vengono scaricati da Overpass API (HTTP GET, JSON response)
+j) Il parsing OSM deve avvenirefuori dal thread GL (in background coroutine)
+k) La generazione 3D deve avvenire SOLO nel thread GL (Choreographer callback)
+l) Le coordinate OSM (lat/lon) vanno convertite in coordinate locali (metri)
+   usando il centro della mappa come origine (0,0,0)
+
+
+================================================================================
+4. ANALISI DELLO STATO ATTUALE
+================================================================================
+
+4.1 Nodi attuali per categoria
+-------------------------------
+
+  Terreno:                 1 nodo  (verde piatto #4A8C3F)
+  Strade:                 16 nodi (8 grigi piatti #555565)
+  Marciapiedi:            32 nodi (8 grigio chiaro #AAAABB)
+  Edifici speciali:       30 nodi (5 edifici x 6 nodi)
+  Edifici procedurali: ~100-150 nodi (1-2 per blocco x ~49 blocchi)
+  Lampioni:              ~26 nodi (palo + sfera luce)
+  Panchine:              ~22 nodi (seduta + schienale)
+  Auto:                  ~84 nodi (6 auto x 14 nodi)
+  Alberi:              ~180-220 nodi (tronco + 3 chiome)
+  Cespugli:             ~88 nodi (2 sfere)
+  Fiori:               ~176 nodi (gambo + testa)
+  Piscina:               11 nodi
+
+  TOTALE STIMATO:      ~750-900 nodi
+
+4.2 Problemi visivi attuali
+-----------------------------
+
+  - Terreno: solo un cubo verde piatto, nessuna variazione
+  - Strade: cubi grigi piatti, zero segnazioni
+  - Edifici: cubi con tetto piatto, poche finestre
+  - Nessuna variazione architettonica
+  - Nessun riferimento al mondo reale
+
+
+================================================================================
+5. AREA DI TEST: ROMA — 1 KM² DAL COLOSSEO
+================================================================================
+
+5.1 Centro della mappa
+-----------------------
+
+  Coordinate del Colosseo:
+    Lat: 41.8902
+    Lon: 12.4922
+
+  Raggio di copertura: 1 km in ogni direzione
+  Bounding box OSM:
+    South: 41.8812  (41.8902 - 0.0090)
+    North: 41.8992  (41.8902 + 0.0090)
+    West:  12.4812  (12.4922 - 0.0110)
+    East:  12.5032  (12.4922 + 0.0110)
+
+  Nota: 0.009° lat ≈ 1 km, 0.011° lon ≈ 1 km (a latitudine Roma)
+
+5.2 Cosa contiene quest'area
+------------------------------
+
+  - Colosseo (edificio speciale, ~2000 anni)
+  - Anfiteatro Flavio
+  - Arco di Costantino
+  - Parte del Palatino
+  - Parte del Celio
+  - Via dei Fori Imperiali
+  - Via di San Gregorio
+  - Via del Colosseo
+  - Piazza del Colosseo
+  - Case e palazzi residenziali (edifici procedurali)
+  - Parchi: giardini del Colosseo, area archeologica
+  - Ristoranti, bar, negozi (POI)
+  - Strade principali e secondarie
+
+5.3 Coordinate locali
+----------------------
+
+  Origine (0,0,0) = Centro del Colosseo (41.8902, 12.4922)
+  Asse X = Est/Ovest (1 unità = 1 metro)
+  Asse Z = Nord/Sud (1 unità = 1 metro)
+  Asse Y = Altezza (1 unità = 1 metro)
+
+  Conversione da lat/lon a metri:
+    x = (lon - lon_center) * 111320 * cos(lat_center)
+    z = (lat - lat_center) * 110540
+
+  A latitudine 41.89°:
+    1° lon = 111320 * cos(41.89°) = 111320 * 0.7443 = 82,855 m
+    1° lat = 110540 m
+
+  Quindi:
+    x = (lon - 12.4922) * 82855
+    z = (lat - 41.8902) * 110540
+
+
+================================================================================
+6. FASE 0 — DOWNLOAD E PARSING DATI OSM
+================================================================================
+
+6.1 Overpass API query
+-----------------------
+
+  Endpoint: https://overpass-api.de/api/interpreter
+
+  Query Overpass QL per area 1 km² dal Colosseo:
+
+  [out:json][timeout:60];
+  (
+    // Strade
+    way["highway"]({{south}},{{west}},{{north}},{{east}});
+    // Edifici
+    way["building"]({{south}},{{west}},{{north}},{{east}});
+    // Parchi e verde
+    way["leisure"="park"]({{south}},{{west}},{{north}},{{east}});
+    relation["leisure"="park"]({{south}},{{west}},{{north}},{{east}});
+    // Alberi
+    node["natural"="tree"]({{south}},{{west}},{{north}},{{east}});
+    // Punti di interesse
+    node["amenity"]({{south}},{{west}},{{north}},{{east}});
+    node["shop"]({{south}},{{west}},{{north}},{{east}});
+  );
+  out body;
+  >;
+  out skel qt;
+
+  Questa query scarica:
+  - TUTTE le strade dell'area (highway=*)
+  - TUTTI gli edifici con footprint (building=*)
+  - Parchi (leisure=park)
+  - Alberi (natural=tree)
+  - POI: ristoranti, bar, negozi, ospedali, ecc.
+
+6.2 Parsing dei dati
+---------------------
+
+  Strutture dati da estrarre:
+
+  a) Nodi OSM (nodes):
+     - id, lat, lon
+     - Tags: natural=tree, amenity, shop, ecc.
+
+  b) Ways OSM (ways):
+     - id, lista di nodi (perimetri)
+     - Tags: highway, building, name, height, building:levels, amenity, ecc.
+
+  c) Relazioni OSM:
+     - Per aree complesse (parchi con buchi, ecc.)
+
+  Campi chiave da estrarre per ogni edificio:
+    - building=yes → è un edificio
+    - name → nome dell'edificio
+    - height → altezza in metri (es. "15")
+    - building:levels → numero piani (es. "5", stima 3m/piano)
+    - building:colour → colore facciata (es. "#FFCCAA")
+    - building:roof:colour → colore tetto
+    - building:roof:shape → forma tetto (flat, gabled, hipped)
+    - addr:housenumber → numero civico
+    - addr:street → via
+
+  Campi chiave per le strade:
+    - highway → tipo (primary, secondary, residential, footway, ecc.)
+    - name → nome della via
+    - lanes → numero corsie
+    - surface → tipo superficie (asphalt, cobblestone, ecc.)
+    - maxspeed → limite velocità
+
+6.3 Conversione coordinate
+---------------------------
+
+  Per ogni nodo OSM:
+    localX = (node.lon - centerLon) * 82855
+    localZ = (node.lat - centerLat) * 110540
+    localY = 0 (terreno, poi altezza edificio)
+
+  Centro della mappa:
+    centerLat = 41.8902
+    centerLon = 12.4922
+
+6.4 Costruzione footprint edifici
+-----------------------------------
+
+  Ogni way "building" ha una lista di nodi che formano il perimetro.
+  Il footprint è il poligono chiuso definito da questi nodi.
+
+  Per SceneView (solo cubi), semplifichiamo ogni footprint in un rettangolo
+  oriented bounding box (OBB):
+    - Calcolare centroid del poligono
+    - Calcolare width e depth (lati del rettangolo)
+    - Calcolare angolo di rotazione (se necessario)
+    - Altezza: da tag "height" o stima da "building:levels" (3m/piano)
+      Se mancano entrambi: default 10m (3 piani)
+
+6.5 Filtro e ottimizzazione
+-----------------------------
+
+  NON renderizzare:
+  - Edifici con footprint < 4 m² (troppi piccoli)
+  - Edifici con altezza < 2m (botole, shed, ecc.)
+  - Strade footway/ciclabili troppo strette (< 1.5m)
+  - Alberi con coordinate incomplete
+
+  LIMITE NODI: massimo 1500 nodi totali.
+  Se il numero di edifici supera il budget:
+    - Priorità: edifici con nome > edifici alti > edifici grandi
+    - Ridurre dettagli finestre sugli edifici piccoli
+
+
+================================================================================
+7. FASE 1 — TERRENO E STRADE REALI
+================================================================================
+
+7.1 Terreno base
+-----------------
+
+  Il terreno copre l'intera area 1km x 1km.
+
+  a) Strato inferiore (erba scura):
+     CubeNode(Size(1000, 0.3, 1000))
+     Posizione: (0, -0.15, 0)
+     Colore: rgb(0x3D, 0x7A, 0x33)  (#3D7A33 erba scura)
+     NOTA: Il terreno è FOLTO 1000x1000 ma il terreno visibile
+     è solo l'area dove non ci sono strade/edifici.
+
+  b) Strato superiore (erba chiara):
+     CubeNode(Size(1000, 0.02, 1000))
+     Posizione: (0, 0.01, 0)
+     Colore: rgb(0x5C, 0x9E, 0x4A)  (#5C9E4A erba chiara)
+
+  c) Asfalto ( piano base per tutta l'area):
+     CubeNode(Size(1000, 0.04, 1000))
+     Posizione: (0, 0.02, 0)
+     Colore: rgb(0x55, 0x55, 0x65)  (#555565 grigio asfalto)
+     NOTA: Questo piano è SOTTO gli edifici e SOTTO le strade.
+     Gli edifici e le strade vengono posizionati SOPRA.
+
+  Totale: 3 nodi per il terreno
+
+7.2 Strade da OSM
+------------------
+
+  Per ogni way "highway" nell'OpenStreetMap data:
+
+  a) Carreggiata:
+     - Estrarre i nodi della way
+     - Per ogni segmento (nodo[i] → nodo[i+1]):
+       Calcolare:
+         - Lunghezza segmento = distanza tra i 2 nodi (in metri)
+         - Angolo segmento = atan2(dx, dz)
+         - Centro segmento = midpoint dei 2 nodi
+       Cubo orientato:
+         Size(lunghezza, 0.06, larghezzaStrada)
+         Posizione: (centroX, 0.03, centroZ)
+         Rotazione: angolo attorno all'asse Y
+
+  b) Larghezza strada (da tag highway):
+     | Tipo          | Larghezza default |
+     |---------------|-------------------|
+     | motorway      | 12m               |
+     | primary       | 10m               |
+     | secondary     | 8m                |
+     | tertiary      | 7m                |
+     | residential   | 6m                |
+     | service       | 4m                |
+     | footway       | 2m                |
+     | pedestrian    | 3m                |
+
+  c) Striscia centrale gialla (solo per primary/secondary/tertiary):
+     - Stesso segmento, ma CubeNode molto sottile:
+       Size(lunghezza, 0.07, 0.12)
+       Posizione: (centroX, 0.04, centroZ)
+       Colore: rgb(0xFF, 0xC1, 0x07)
+
+  d) Marciapiede (solo per primary/secondary/residential):
+     - 2 marciapiedi per lato, offset di ±(larghezza/2 + 0.4):
+       CubeNode(Size(lunghezza, 0.1, 0.5))
+       Colore: rgb(0xBD, 0xBD, 0xBD)
+
+  COSTI NODI STRADE:
+    - Roma ha ~200-300 segmenti stradali in 1km²
+    - Ogni segmento: 1 carreggiata + (opzionale) striscia + 2 marciapiedi
+    - Budget strade: ~200 nodi massimo
+    - OTTIMIZZAZIONE: Unire segmenti collineari nella stessa strada
+      (stesso nome → stesso cubo lungo)
+
+  *** ATTENZIONE: 200 nodi solo per le strade è TANTO ***
+  Per risparmiare:
+    - NO strisce gialle sulle strade residenziali
+    - NO marciapiedi sulle strade piccole (service, footway)
+    - Strade principali: solo carreggiata + striscia (2 nodi/strada)
+    - Strade secondarie: solo carreggiata (1 nodo/strada)
+    - Strade piccole: NON renderizzare (usare il piano asfalto base)
+
+
+================================================================================
+8. FASE 2 — EDIFICI DA OSM (FOOTPRINT + ALTEZZA)
+================================================================================
+
+8.1 Dati disponibili per ogni edificio
+----------------------------------------
+
+  Da OSM, ogni way "building" ha:
+    - Perimetro (lista di coordinate lat/lon)
+    - Tag opzionali: height, building:levels, name, building:colour,
+      building:roof:colour, building:roof:shape, amenity
+
+  Se mancano height e building:levels:
+    - Stima: 3 metri per piano
+    - Default: 3 piani = 9m
+
+8.2 Semplificazione footprint
+-------------------------------
+
+  SceneView supporta solo cubi. Ogni edificio diventa un CUBO ORIENTATO.
+
+  a) Calcolare bounding box del poligono:
+     - Trovare minX, maxX, minZ, maxZ dei vertici
+     - Larghezza = maxX - minX
+     - Profondità = maxZ - minZ
+     - Centro = ((minX+maxX)/2, 0, (minZ+maxZ)/2)
+
+  b) Angolo di rotazione:
+     - Per poligoni rettangolari: angolo del primo lato rispetto all'asse X
+     - Per poligoni complessi: usare l'asse del bounding box principale
+     - Rotazione Y dell'edificio
+
+  c) Dimensioni finali del cubo:
+     Size(larghezza, altezza, profondità)
+     Posizione: (centroX, altezza/2, centroZ)
+     Rotazione: angolo Y
+
+8.3 Palette colori Brookhaven per edifici
+------------------------------------------
+
+  Se l'edificio ha building:colour da OSM → usare quel colore
+  Se NON ha colore → assegnare dalla palette Brookhaven in base all'indice:
+
+  | Indice | Colore    | Hex       |
+  |--------|-----------|-----------|
+  | 0      | Azzurro   | #B3D9FF   |
+  | 1      | Rosa      | #FFCDD2   |
+  | 2      | Mint      | #C8E6C9   |
+  | 3      | Giallo    | #FFF9C4   |
+  | 4      | Lavanda   | #D1C4E9   |
+  | 5      | Pesca     | #FFE0B2   |
+  | 6      | Turchese  | #B2DFDB   |
+  | 7      | Lime      | #F0F4C3   |
+  | 8      | Salvia    | #DCEDC8   |
+  | 9      | Corallo   | #FFAB91   |
+  | 10     | Azzurro2  | #B3E5FC   |
+  | 11     | Viola     | #E1BEE7   |
+
+  Indice = hashCode(edificio.id) % 12
+
+  COLORI TETTI (corrispondenti):
+
+  | Indice | Colore    | Hex       |
+  |--------|-----------|-----------|
+  | 0      | Marrone   | #8D6E63   |
+  | 1      | Grigio    | #78909C   |
+  | 2      | Beige     | #A1887F   |
+  | 3      | Grigio2   | #90A4AE   |
+  | 4      | Beige2    | #BCAAA4   |
+  | 5      | Grigio3   | #B0BEC5   |
+  | 6      | Turchese  | #80CBC4   |
+  | 7      | Verde     | #C5E1A5   |
+  | 8      | Oliva     | #AED581   |
+  | 9      | Terracotta| #D4937A   |
+  | 10     | Azzurro   | #81D4FA   |
+  | 11     | Lilac     | #CE93D8   |
+
+8.4 Ordine di rendering
+-------------------------
+
+  Per rispettare il budget nodi, gli edifici vengono renderizzati
+  in ordine di priorità:
+
+  PRIORITÀ 1 — Edifici con nome (POI importanti):
+    - Hanno nome riconoscibile (es. "Colosseo", "Ospedale")
+    - Budget: massimo 20 edifici → 20 nodi corpo
+
+  PRIORITÀ 2 — Edifici alti (h > 15m):
+    - Palazzi, grattacieli
+    - Budget: massimo 30 edifici → 30 nodi corpo
+
+  PRIORITÀ 3 — Edifici medi (8m < h <= 15m):
+    - Case, uffici
+    - Budget: massimo 50 edifici → 50 nodi corpo
+
+  PRIORITÀ 4 — Edifici piccoli (h <= 8m):
+    - Garage, annessi
+    - Budget: NESSUNO (non renderizzati)
+
+  TOTALE EDIFICI: ~100 massimo → ~100 nodi corpo
+
+
+================================================================================
+9. FASE 3 — DETTAGLI BROOKHAVEN SUGLI EDIFICI
+================================================================================
+
+Ogni edificio ha il suo footprint e altezza da OSM.
+I dettagli visivi vengono aggiunti in stile Brookhaven.
+
+9.1 Struttura base per ogni edificio
+--------------------------------------
+
+  a) Corpo principale (1 nodo):
+     CubeNode(Size(w, h, d))
+     Posizione: (cx, h/2, cz)
+     Rotazione: angolo OSM
+     Colore: da OSM o da palette Brookhaven
+
+  b) Tetto (2 nodi):
+     - Tetto piano:
+       CubeNode(Size(w + 0.3, 0.2, d + 0.3))
+       Posizione: (cx, h + 0.1, cz)
+       Colore: da tag building:roof:colour o da palette tetti
+     - Cornice tetto:
+       CubeNode(Size(w + 0.5, 0.08, d + 0.5))
+       Posizione: (cx, h + 0.24, cz)
+       Colore: rgb(0xF5, 0xF5, 0xF5)  (bianco)
+
+  c) Porta (1 nodo):
+     CubeNode(Size(0.6, 1.2, 0.08))
+     Posizione: (cx, 0.6, cz + d/2 + 0.04)
+     Colore: rgb(0x5D, 0x40, 0x37)  (marrone legno)
+
+  d) Finestre (2-8 nodi, dipende da w e h):
+     Se w >= 2.5: 2 finestre frontali
+     Se w >= 3.5: 3 finestre frontali
+     Se d >= 2.5: 2 finestre laterali (1 per lato)
+     Dimensione: Size(0.3, 0.3, 0.08)
+     Altezza: h * 0.55
+     Colore: rgb(0xBB, 0xDE, 0xFB)  (azzurro vetro)
+
+     TUTTE le finestre vanno aggiunte a windowMaterials per il day/night.
+
+  e) Tenda (1 nodo, opzionale se h > 3):
+     CubeNode(Size(w * 0.6, 0.05, 0.35))
+     Posizione: (cx, min(2.5, h * 0.3), cz + d/2 + 0.2)
+     Colore: awningColors[seed % 4]
+
+  TOTALE PER EDIFICIO: 6-12 nodi (media ~8)
+
+9.2 Varianti per tipo (da tag OSM)
+-------------------------------------
+
+  Se l'edificio ha tag "amenity":
+    - amenity=restaurant: 3 finestre frontali, insegna rossa
+    - amenity=hospital: croce rossa, finestre multiple
+    - amenity=school: finestre grandi, colore giallo
+    - amenity=police: blu scuro
+
+  Se l'edificio ha tag "shop":
+    - shop=supermarket: vetrina grande, tenda gialla
+    - shop=clothes: vetrina colorata
+    - shop=convenience: insegna "APERTO"
+
+  Se l'edificio ha tag "building" specifico:
+    - building=garage: piccolo, nessun dettaglio
+    - building=apartments: 4-6 finestre, balcone
+    - building=commercial: vetrina grande
+
+9.3 Edificio speciale: Colosseo
+---------------------------------
+
+  Il Colosseo merita un trattamento speciale:
+
+  a) Corpo principale (1 nodo):
+     CubeNode(Size(180, 15, 155))  ← dimensioni reali semplificate
+     Posizione: (0, 7.5, 0)
+     Colore: rgb(0xD4, 0xC5, 0xA9)  (travertino)
+
+  b) Archi (8 nodi simulati):
+     - 8 CubeNode sottili sul perimetro
+     - Colore: rgb(0xC4, 0xB5, 0x99)  (travertino scuro)
+     - Simulano le arcate esterne
+
+  c) Arena interna (1 nodo):
+     CubeNode(Size(140, 0.5, 120))
+     Posizione: (0, 0.25, 0)
+     Colore: rgb(0x8B, 0x73, 0x55)  (arena sabbia)
+
+  d) Tetto/struttura superiore (2 nodi):
+     - Anello esterno: CubeNode(Size(190, 2, 165)) forato (simulato con 4 archi)
+
+  TOTALE COLOSSEO: ~12 nodi
+
+
+================================================================================
+10. FASE 4 — ALBERI, CESPUGLI, FIORI
+================================================================================
+
+10.1 Alberi da OSM
+-------------------
+
+  Ogni nodo OSM "natural=tree" diventa un albero Brookhaven.
+
+  a) Tronco (1 nodo):
+     CubeNode(Size(0.2, 3.0, 0.2))
+     Posizione: (tx, 1.5, tz)
+     Colore: rgb(0x6B, 0x42, 0x26)
+
+  b) Chioma principale (1 nodo):
+     SphereNode(raggio 0.6)
+     Posizione: (tx, 3.4, tz)
+     Colore: leafMat
+
+  c) Chioma secondaria (2 nodi):
+     SphereNode(raggio 0.45)
+     Posizione: (tx + 0.25, 3.2, tz + 0.2)
+     SphereNode(raggio 0.35)
+     Posizione: (tx - 0.2, 3.5, tz - 0.15)
+
+  TOTALE: 4 nodi per albero
+
+  LIMITE: massimo 50 alberi (budget 200 nodi)
+  Priorità: alberi dentro i parchi > alberi lungo le strade > altri
+
+10.2 Alberi procedurali (dove mancano)
+-----------------------------------------
+
+  Aggiungere alberi nei parchi identificati da OSM (leisure=park).
+  Per ogni area parco:
+    - 3-5 alberi posizionati casualmente dentro il perimetro
+    - Usa gli stessi 4 nodi per albero
+
+10.3 Cespugli (procedurali lungo le strade)
+---------------------------------------------
+
+  2 nodi per cespuglio, posizionati lungo le strade principali:
+    - SphereNode(raggio bushSize) verde scuro
+    - SphereNode(raggio bushSize*0.7) verde chiaro
+
+  ~30 cespugli = ~60 nodi
+
+10.4 Fiori (procedurali nei parchi)
+-------------------------------------
+
+  2 nodi per fiore (gambo + testa), nei parchi:
+    - ~20 fiori = ~40 nodi
+
+
+================================================================================
+11. FASE 5 — ARREDO URBANO
+================================================================================
+
+11.1 Lampioni lungo le strade principali
+------------------------------------------
+
+  Per ogni strada "primary" o "secondary":
+    - Lampione ogni 30 metri lungo il marciapiede destro
+    - 3 nodi per lampione (palo + braccio + lampada)
+
+  ~30 lampioni = ~90 nodi
+
+11.2 Panchine nei parchi
+--------------------------
+
+  Per ogni parco (leisure=park):
+    - 2-3 panchine lungo i bordi
+    - 2 nodi per panchina (seduta + schienale)
+
+  ~10 panchine = ~20 nodi
+
+11.3 Cassonetti (procedurali)
+-------------------------------
+
+  1 nodo ciascuno, lungo le strade principali:
+    ~8 cassonetti = ~8 nodi
+
+11.4 Segnali stradali
+-----------------------
+
+  Dove OSM ha tag "name" sulla strada:
+    - Cartello con nome via (1 nodo: CubeNode sottile alto)
+    ~20 cartelli = ~20 nodi
+
+
+================================================================================
+12. FASE 6 — AUTO E VEICOLI
+================================================================================
+
+  Auto posizionate lungo le strade principali:
+  - 10 auto, 8 nodi ciascuna = ~80 nodi
+  - Posizionate casualmente sui segmenti stradali
+  - Colori vari (6 colori Brookhaven)
+
+  Struttura auto (8 nodi):
+    a) Corpo (1): CubeNode(Size(1.4, 0.35, 0.7))
+    b) Parabrezza (1): CubeNode(Size(0.6, 0.28, 0.6)) azzurro
+    c) Ruote (4): SphereNode(raggio 0.12) nero
+    d) Fari (2): SphereNode(raggio 0.06) giallo chiaro
+
+
+================================================================================
+13. FASE 7 — PUNTI DI INTERESSE (POI) SPECIALI
+================================================================================
+
+I POI da OSM con tag amenity/shop vengono evidenziati con dettagli extra:
+
+13.1 Ristoranti (amenity=restaurant)
+--------------------------------------
+
+  - Insegna colorata (1 CubeNode rosso sulla facciata)
+  - Tenda a strisce (2 CubeNode)
+  - Tavolini fuori (2 CubeNode + 4 SphereNode sedie) [se spazio]
+
+13.2 Negozi (shop=*)
+----------------------
+
+  - Insegna con nome (1 CubeNode)
+  - Vetrina grande (1 CubeNode azzurro trasparente simulato)
+
+13.3 Fontane (amenity=fountain o man-made=fountain)
+-----------------------------------------------------
+
+  - Base (1 CubeNode grigio)
+  - Acqua (1 SphereNode azzurro)
+  - Palo acqua (1 CubeNode sottile)
+
+  ~3 fontane = ~9 nodi
+
+13.4 Chiese (amenity=place_of_worship)
+-----------------------------------------
+
+  - Corpo (1 CubeNode bianco)
+  - Campanile (1 CubeNode alto sottile)
+  - Croce (2 CubeNode incrociati)
+
+
+================================================================================
+14. FASE 8 — LIMITI DI NODI E PERFORMANCE
+================================================================================
+
+14.1 Limite massimo nodi
+---------------------------
+
+  SceneView/Filament: ~1500-2000 nodi prima di cali significativi.
+  Target: ~1400 nodi (più generoso della griglia fissa per OSM).
+
+14.2 Budget nodi per categoria
+--------------------------------
+
+  | Categoria            | Budget    | Note                          |
+  |----------------------|-----------|-------------------------------|
+  | Terreno              | 3         | erba + asfalto base           |
+  | Strade               | ~200      | carreggiate da OSM            |
+  | Marciapiedi          | ~100      | solo strade principali        |
+  | Strisce gialle       | ~50       | solo primary/secondary        |
+  | Edifici (corpo)      | ~100      | footprint OSM, max 100        |
+  | Tetti                | ~100      | 1 per edificio                |
+  | Finestre             | ~300      | 2-8 per edificio              |
+  | Porte                | ~80       | 1 per edificio                |
+  | Tende                | ~40       | solo edifici alti             |
+  | Alberi (OSM)         | ~200      | 4 nodi x 50 alberi           |
+  | Cespugli             | ~60       | 2 nodi x 30 cespugli         |
+  | Fiori                | ~40       | 2 nodi x 20 fiori            |
+  | Lampioni             | ~90       | 3 nodi x 30 lampioni         |
+  | Panchine             | ~20       | 2 nodi x 10 panchine         |
+  | Cassonetti           | ~8        | 1 nodo x 8 cassonetti        |
+  | Cartelli stradali    | ~20       | 1 nodo x 20 cartelli         |
+  | Auto                 | ~80       | 8 nodi x 10 auto             |
+  | Fontane              | ~9        | 3 nodi x 3 fontane           |
+  | Colosseo (speciale)  | ~12       | dettagliato                   |
+  | **TOTALE**           | **~1412** | **entro limite 1400-1500**   |
+
+14.3 Strategie di riduzione nodi
+----------------------------------
+
+  Se il totale supera 1400:
+    a) Ridurre finestre: solo 2 finestre frontali (no laterali)
+    b) Ridurre alberi: max 30 (da 50)
+    c) Ridurre auto: max 6 (da 10)
+    d) Nessuna tenda sugli edifici piccoli
+    e) Nessun marciapiede sulle strade residenziali
+    f) Lampioni: solo sulle strade primary (no secondary)
+
+14.4 Caricamento incrementale
+-------------------------------
+
+  Per evitare lag all'avvio, caricare la città in blocchi:
+
+  1. Terreno + strade (subito)
+  2. Colosseum + edifici (dopo ~500ms)
+  3. Alberi + vegetazione (dopo ~1s)
+  4. Arredo urbano + auto (dopo ~1.5s)
+  5. POI + cartelli + ristoranti + negozi (dopo ~2s)
+
+  Ogni fase viene eseguita nel callback Choreographer (thread GL).
+  Metodo: OsmCityBuilder.buildPhase1-5 + rebuildCityWithOsm()
+
+
+================================================================================
+15. CHECKLIST DI VERIFICA
+================================================================================
+
+Prima di considerare completata la procedura, verificare:
+
+  [x] Overpass API scarica correttamente i dati dell'area 1km²
+  [x] Parsing OSM estrae correttamente: strade, edifici, alberi, POI
+  [x] Coordinate lat/lon vengono convertite in coordinate locali (metri)
+  [x] Footprint degli edifici viene semplificato in rettangoli orientati
+  [x] Terreno ha 3 strati (erba scura + chiara + asfalto base)
+  [x] Strade seguono il percorso reale di Roma
+  [x] Strade hanno striscia gialla (solo primary/secondary)
+  [x] Marciapiedi sono posizionati correttamente ai lati delle strade
+  [x] Edifici hanno colore da OSM o da palette Brookhaven
+  [x] Edifici hanno tetto con cornice
+  [x] Edifici hanno finestre (2-8 per edificio)
+  [x] Edifici hanno porta
+  [x] Edifici hanno tenda (se alti)
+  [x] Colosseo ha dettagli speciali (travertino, archi, arena)
+  [x] Alberi posizionati da dati OSM natural=tree
+  [x] Cespugli e fiori nei parchi OSM
+  [x] Lampioni lungo le strade principali
+  [x] Panchine nei parchi
+  [x] Cassonetti lungo le strade
+  [x] Cartelli con nomi delle vie
+  [x] Auto lungo le strade principali
+  [x] Fontane dove OSM indica amenity=fountain
+  [x] Ristoranti/negozi con insegne e dettagli
+  [x] Tutte le finestre sono in windowMaterials per day/night
+  [x] lampLightMaterial è salvato per day/night cycle
+  [x] I materiali non vengono creati più volte
+  [x] buildingAABBs contiene tutti gli AABB corretti per collisioni
+  [x] Il totale nodi è < 1400
+  [x] Nessun SIGSEGV (nessuna chiamata loadModelAsync)
+  [x] Nessun doppio destroy() in onDestroy()
+  [x] La build compila: cd /root/giochi/huntix && bash build_release.sh
+  [x] Cache persistente su disco (prima volta scarica, dopo carica da file)
+  [x] Rimossi modelli GLB inutilizzati da assets/city_models/ (~14MB risparmiati)
+  [x] Mini-chunk pre-inserito (~200m Colosseo) per avvio immediato senza griglia grigia
+
+================================================================================
+                          FINE PROCEDURA
+================================================================================

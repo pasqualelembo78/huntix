@@ -7,6 +7,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.util.Log
+import io.sentry.Sentry
 
 object DistanceTracker : SensorEventListener {
 
@@ -81,13 +82,15 @@ object DistanceTracker : SensorEventListener {
         initialSteps = totalSteps
 
         if (deltaKm > 0.001f) {
-            val readyEggs = IncubatorManager.addDistanceToIncubators(context, deltaKm)
-            if (readyEggs.isNotEmpty()) {
-                Log.d("DistanceTracker", "Eggs ready to hatch: $readyEggs")
-            }
+            try {
+                val readyEggs = IncubatorManager.addDistanceToIncubators(context, deltaKm)
+                if (readyEggs.isNotEmpty()) {
+                    Log.d("DistanceTracker", "Eggs ready to hatch: $readyEggs")
+                }
+            } catch (e: Exception) { Sentry.captureException(e) }
             try {
                 BuddyManager.addWalkingDistance(context, deltaKm)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
             val totalKm = p.getFloat(KEY_TOTAL_KM, 0f)
             if (totalKm >= 2f) ResearchTaskManager.trackProgress(context, "walk_2km")
             if (totalKm >= 10f) ResearchTaskManager.trackProgress(context, "walk_10km")

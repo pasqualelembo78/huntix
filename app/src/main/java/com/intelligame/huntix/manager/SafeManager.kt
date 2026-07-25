@@ -94,20 +94,32 @@ class SafeManager(internal val activity: MainActivity) {
         val anchor = hit.trackable.createAnchor(leveledPose)
         buildSafeAtAnchor(anchor, viewModel.selectedSafeType)
 
+        val safeObj = activity.safeObject
+        if (safeObj == null) {
+            android.util.Log.e("SafeManager", "safeObject is null after buildSafeAtAnchor — cannot restore")
+            activity.gamePhase = GamePhase.SETUP_EGGS
+            activity.runOnUiThread {
+                binding.tvStatus.text = "Errore: cassaforte non creata"
+                binding.btnStart.visibility = View.VISIBLE
+                activity.updateUI()
+            }
+            return
+        }
+
         if (activity.pendingCloudRestore && viewModel.isIndoorMp && viewModel.indoorRoomCode.isNotEmpty()) {
             activity.pendingCloudRestore = false
             val cached = activity.pendingRoomSnapshot
             if (cached != null) {
                 activity.pendingRoomSnapshot = null
-                activity.eggPlacementManager.restoreEggsWithSafeAnchor(cached, activity.safeObject!!.anchorNode.anchor)
+                activity.eggPlacementManager.restoreEggsWithSafeAnchor(cached, safeObj.anchorNode.anchor)
             } else {
-                activity.eggPlacementManager.restoreEggsFromCloud(activity.safeObject!!.anchorNode)
+                activity.eggPlacementManager.restoreEggsFromCloud(safeObj.anchorNode)
             }
         } else if (viewModel.isRestoreMode) {
             if (activity.localAnchorSessionId.isNotEmpty()) {
-                activity.eggPlacementManager.restoreFromLocalStore(activity.safeObject!!.anchorNode)
+                activity.eggPlacementManager.restoreFromLocalStore(safeObj.anchorNode)
             } else {
-                activity.eggPlacementManager.restoreEggsFromSession(activity.safeObject!!.anchorNode)
+                activity.eggPlacementManager.restoreEggsFromSession(safeObj.anchorNode)
             }
             viewModel.isRestoreMode = false
             activity.gamePhase = GamePhase.SETUP_EGGS
@@ -160,9 +172,9 @@ class SafeManager(internal val activity: MainActivity) {
 
     fun insertKeyInSafe() {
         val held = activity.bucketHeld
-        if (!activity.keyInPocket || activity.safeObject == null || held <= 0) return
+        val safe = activity.safeObject
+        if (!activity.keyInPocket || safe == null || held <= 0) return
         SoundManager.playKeyInsert()
-        val safe = activity.safeObject!!
         val sv = binding.sceneView
         // Aggiunge un "chio" colorato sulla cassaforte per ogni uovo del secchiello
         val startColorIdx = activity.realEggsCaught - held

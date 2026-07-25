@@ -1,5 +1,6 @@
 package com.intelligame.huntix.ui
 
+import android.app.ActivityManager
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -14,17 +15,22 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.filament.Skybox
+import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
 import com.intelligame.huntix.reallife.BuildingDefs
 import com.intelligame.huntix.reallife.BuildingType
+import com.intelligame.huntix.reallife.CoordinateConverter
 import com.intelligame.huntix.reallife.DayNightManager
 import com.intelligame.huntix.reallife.MapNode
+import com.intelligame.huntix.reallife.OsmCityBuilder
+import com.intelligame.huntix.reallife.OsmClient
+import com.intelligame.huntix.reallife.OsmData
 import com.intelligame.huntix.reallife.Pets
 import com.intelligame.huntix.reallife.RealLifeClient
 import com.intelligame.huntix.reallife.WorldState
 import io.github.sceneview.SceneView
-import io.github.sceneview.loaders.ModelLoader
+import io.github.sceneview.safeDestroySkybox
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Size
@@ -32,9 +38,9 @@ import io.github.sceneview.node.CameraNode
 import io.github.sceneview.collision.Box
 import io.github.sceneview.collision.Vector3
 import io.github.sceneview.node.CubeNode
-import io.github.sceneview.node.ModelNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
+import io.sentry.Sentry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,6 +69,7 @@ class CityActivity : AppCompatActivity() {
     private var playerZ = 0f
     private lateinit var avatarConfig: AvatarConfig
     private var lastFrameNs = 0L
+    @Volatile private var destroyed = false
     private var speechBubbleNpc: NpcData? = null
     private var speechBubbleTimer = 0f
 
@@ -87,17 +94,26 @@ class CityActivity : AppCompatActivity() {
     private lateinit var dayNightOverlay: DayNightOverlay
     private var skyboxUpdateTimer = 0f
     private var windowUpdateTimer = 0f
+    private var memoryCheckTimer = 0f
+    private val MEMORY_CHECK_INTERVAL = 2f
     private var windowMaterial: com.google.android.filament.MaterialInstance? = null
     private val windowMaterials = mutableListOf<com.google.android.filament.MaterialInstance>()
     private var lampLightMaterial: com.google.android.filament.MaterialInstance? = null
+    private var currentSkybox: Skybox? = null
     private var timeLabel: TextView? = null
 
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
-    private val modelLoader get() = sceneView.modelLoader
 
     private val buildingAABBs = mutableListOf<com.intelligame.huntix.reallife.AABB>()
     private val roadCenters = mutableListOf<Float>()
+
+    // OSM data
+    private var osmData: OsmData? = null
+    private var osmCityBuilder: OsmCityBuilder? = null
+    private var osmLoading = false
+    private var osmLoaded = false
+    private var osmPhase = 0
 
     private data class NpcData(
         val rootNode: Node,
@@ -134,14 +150,14 @@ class CityActivity : AppCompatActivity() {
     )
 
     companion object {
-        private const val CITY = 80f
+        private const val CITY = 1000f
         private const val BLOCK = 10f
         private const val ROAD = 2f
         private const val HALF = CITY / 2f
         private const val P_Y = 0.35f
-        private const val CAM_H = 35f
-        private const val CAM_D = 25f
-        private const val SPEED = 4f
+        private const val CAM_H = 80f
+        private const val CAM_D = 60f
+        private const val SPEED = 12f
         private const val PLAYER_R = 0.3f
         private const val NPC_SPEED = 2.5f
         private const val NPC_BODY_R = 0.2f
@@ -149,22 +165,33 @@ class CityActivity : AppCompatActivity() {
         private const val NPC_HEIGHT = 0.8f
         private const val NPC_INTERACT_DIST = 4f
         private const val SPEECH_DURATION = 4f
+        private const val MAX_NPCS = 30
+
+        // Roma — Colosseo
+        private const val OSM_CENTER_LAT = 41.8902
+        private const val OSM_CENTER_LON = 12.4922
+        private const val OSM_RADIUS_METERS = 1000
     }
+
+    private var sceneReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         avatarConfig = AvatarConfig.load(this)
+        OsmClient.init(this)
 
-        sceneView = SceneView(this).apply { cameraManipulator = null }
-        sceneView.lifecycle = lifecycle
+        try {
+            sceneView = SceneView(this).apply { cameraManipulator = null }
+            sceneView.lifecycle = lifecycle
 
-        cameraNode = CameraNode(engine).apply { far = 500f; near = 0.1f }
-        sceneView.setCameraNode(cameraNode)
-
-        buildCity()
-        buildDetails()
-        placePlayer()
+            cameraNode = CameraNode(engine).apply { far = 500f; near = 0.1f }
+            sceneView.setCameraNode(cameraNode)
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            finish()
+            return
+        }
 
         // Day/Night cycle
         dayNightManager = DayNightManager()
@@ -267,6 +294,7 @@ class CityActivity : AppCompatActivity() {
                 intent.putExtra("PLAYER_X", playerX)
                 intent.putExtra("PLAYER_Z", playerZ)
                 startActivity(intent)
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
             }
         }
 
@@ -341,10 +369,6 @@ class CityActivity : AppCompatActivity() {
 
         setContentView(root)
         joystickView.bringToFront()
-        syncCamera()
-        minimap.setRoads(roadCenters, HALF)
-        loadNpcs()
-        loadWorldState()
     }
 
     override fun onResume() {
@@ -360,6 +384,14 @@ class CityActivity : AppCompatActivity() {
 
     private val frameCb = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
+            if (destroyed) return
+
+            if (!sceneReady) {
+                sceneReady = true
+                // Load OSM data in background, then build city
+                loadOsmData()
+            }
+
             try {
                 if (lastFrameNs != 0L) {
                     val dt = ((frameTimeNanos - lastFrameNs) / 1_000_000_000f).coerceAtMost(0.05f)
@@ -373,10 +405,11 @@ class CityActivity : AppCompatActivity() {
                     updateWeather(dt)
                     updateEmote(dt)
                     updatePet(dt)
+                    checkMemoryPressure(dt)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
             lastFrameNs = frameTimeNanos
-            Choreographer.getInstance().postFrameCallback(this)
+            if (!destroyed) Choreographer.getInstance().postFrameCallback(this)
         }
     }
 
@@ -515,6 +548,7 @@ class CityActivity : AppCompatActivity() {
         val intent = Intent(this, BuildingInteriorActivity::class.java)
         intent.putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, b.type.ordinal)
         startActivity(intent)
+        overridePendingTransition(R.anim.scale_in, R.anim.scale_out)
     }
 
     private fun updateMinimap() {
@@ -533,20 +567,20 @@ class CityActivity : AppCompatActivity() {
         // Update time label
         timeLabel?.text = "🕐 ${dayNightManager.getTimeString()} · ${dayNightManager.getPeriodLabel()}"
 
-        // Rebuild skybox every 10 seconds (was 2s — too expensive, caused native memory leak)
         skyboxUpdateTimer -= dt
-        if (skyboxUpdateTimer <= 0f) {
+        if (skyboxUpdateTimer <= 0f && !destroyed) {
             skyboxUpdateTimer = 10f
             try {
-                val oldSkybox = sceneView.skybox
                 val sc = dayNightManager.getSkyColors()
                 val skyR = Color.red(sc.topColor) / 255f
                 val skyG = Color.green(sc.topColor) / 255f
                 val skyB = Color.blue(sc.topColor) / 255f
-                sceneView.skybox = Skybox.Builder().color(floatArrayOf(skyR, skyG, skyB, 1f)).build(engine)
-                oldSkybox?.destroy()
+                currentSkybox?.let { engine.safeDestroySkybox(it) }
+                val newSkybox = Skybox.Builder().color(floatArrayOf(skyR, skyG, skyB, 1f)).build(engine)
+                sceneView.skybox = newSkybox
+                currentSkybox = newSkybox
                 sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
         }
 
         // Update window/lamp colors every 5 seconds
@@ -724,38 +758,47 @@ class CityActivity : AppCompatActivity() {
     private fun loadNpcs() {
         lifecycleScope.launch {
             val state = withContext(Dispatchers.IO) { RealLifeClient.getMap() }.getOrNull() ?: return@launch
+            if (destroyed) return@launch
             val grid = state.width.toFloat()
 
+            val maxNpcs = MAX_NPCS
+            var loaded = 0
             for (mn in state.nodes) {
-                val cx = ((mn.x / grid) * CITY - HALF).toFloat()
-                val cz = ((mn.y / grid) * CITY - HALF).toFloat()
-                val snapX = roadCenters.minByOrNull { abs(it - cx) } ?: cx
-                val snapZ = roadCenters.minByOrNull { abs(it - cz) } ?: cz
-                val col = CATEGORY_COLORS[mn.category] ?: 0xFF9090A0.toInt()
+                if (destroyed || loaded >= maxNpcs) return@launch
+                try {
+                    val cx = ((mn.x / grid) * CITY - HALF).toFloat()
+                    val cz = ((mn.y / grid) * CITY - HALF).toFloat()
+                    val snapX = roadCenters.minByOrNull { abs(it - cx) } ?: cx
+                    val snapZ = roadCenters.minByOrNull { abs(it - cz) } ?: cz
+                    val col = CATEGORY_COLORS[mn.category] ?: 0xFF9090A0.toInt()
 
-                val bodyMat = ml.createColorInstance(color = col)
-                val headMat = ml.createColorInstance(color = col)
+                    val bodyMat = ml.createColorInstance(color = col)
+                    val headMat = ml.createColorInstance(color = col)
 
-                val body = CubeNode(engine, Size(NPC_BODY_R * 2f, NPC_HEIGHT, NPC_BODY_R * 2f), materialInstance = bodyMat)
-                    .apply { position = Position(0f, NPC_HEIGHT / 2f, 0f) }
-                val head = SphereNode(engine, NPC_HEAD_R, materialInstance = headMat)
-                    .apply { position = Position(0f, NPC_HEIGHT + NPC_HEAD_R + 0.05f, 0f) }
+                    val body = CubeNode(engine, Size(NPC_BODY_R * 2f, NPC_HEIGHT, NPC_BODY_R * 2f), materialInstance = bodyMat)
+                        .apply { position = Position(0f, NPC_HEIGHT / 2f, 0f) }
+                    val head = SphereNode(engine, NPC_HEAD_R, materialInstance = headMat)
+                        .apply { position = Position(0f, NPC_HEIGHT + NPC_HEAD_R + 0.05f, 0f) }
 
-                val root = Node(engine).apply { position = Position(snapX, 0f, snapZ) }
-                root.addChildNode(body)
-                root.addChildNode(head)
-                sceneView.addChildNode(root)
+                    val root = Node(engine).apply { position = Position(snapX, 0f, snapZ) }
+                    root.addChildNode(body)
+                    root.addChildNode(head)
+                    sceneView.addChildNode(root)
 
-                val npc = NpcData(root, mn, snapX, snapZ, snapX, snapZ)
-                pickNextTarget(npc)
-                npcs.add(npc)
+                    val npc = NpcData(root, mn, snapX, snapZ, snapX, snapZ)
+                    pickNextTarget(npc)
+                    npcs.add(npc)
+                    loaded++
+                } catch (e: Exception) { Sentry.captureException(e) }
             }
         }
     }
 
     private fun loadWorldState() {
         lifecycleScope.launch {
+            if (destroyed) return@launch
             val ws = withContext(Dispatchers.IO) { RealLifeClient.getWorldState() }.getOrNull() ?: return@launch
+            if (destroyed) return@launch
             // Sync day/night manager with server time
             try {
                 val parts = ws.time.split(":")
@@ -764,14 +807,14 @@ class CityActivity : AppCompatActivity() {
                     val minute = parts[1].toIntOrNull() ?: 0
                     dayNightManager.setHour(hour + minute / 60f)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
 
             // Set weather from server
             currentWeather = ws.weather
             weatherOverlay.setWeather(ws.weather)
 
             // Spawn pet after world is loaded
-            withContext(Dispatchers.Main) { spawnPet() }
+            if (!destroyed) withContext(Dispatchers.Main) { spawnPet() }
         }
     }
 
@@ -780,7 +823,6 @@ class CityActivity : AppCompatActivity() {
         val lightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xEE, 0xAA))
         lampLightMaterial = lightMat  // capture for day/night
         val benchMat = ml.createColorInstance(color = Color.rgb(0x8B, 0x5E, 0x3C))
-        val benchDarkMat = ml.createColorInstance(color = Color.rgb(0x6D, 0x4C, 0x30))
         val trunkMat = ml.createColorInstance(color = Color.rgb(0x6B, 0x42, 0x26))
         val leafMat = ml.createColorInstance(color = Color.rgb(0x2E, 0x7D, 0x32))
         val leafLightMat = ml.createColorInstance(color = Color.rgb(0x43, 0xA0, 0x47))
@@ -802,7 +844,6 @@ class CityActivity : AppCompatActivity() {
         val windshieldMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
         val headlightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xFF, 0xE0))
         val tailLightMat = ml.createColorInstance(color = Color.rgb(0xEF, 0x53, 0x50))
-        val shadeMat = ml.createColorInstance(color = Color.rgb(0x75, 0x75, 0x75))
         val grassDetailMat = ml.createColorInstance(color = Color.rgb(0x66, 0xBB, 0x6A))
 
         // ── LAMPIONI MIGLIORATI + BANCHE MIGLIORATE + AUTO DETTAGLIATE ──
@@ -813,7 +854,7 @@ class CityActivity : AppCompatActivity() {
                 val sd = ((rx * 173 + rz * 311).toInt().let { if (it < 0) -it else it }) % 1000
 
                 // Lampione: palo + luce (2 nodes instead of 5)
-                if (sd % 3 == 0) {
+                if (sd % 5 == 0) {
                     val lx = rx + ROAD / 2f + 0.8f
                     sceneView.addChildNode(CubeNode(engine, Size(0.08f, 2.8f, 0.08f), materialInstance = poleMat).apply {
                         position = Position(lx, 1.4f, rz)
@@ -824,7 +865,7 @@ class CityActivity : AppCompatActivity() {
                 }
 
                 // Panchina: seduta + schienale (2 nodes instead of 6)
-                if (sd % 4 == 1) {
+                if (sd % 6 == 1) {
                     val bx = rx - ROAD / 2f - 0.6f
                     sceneView.addChildNode(CubeNode(engine, Size(0.9f, 0.06f, 0.35f), materialInstance = benchMat).apply {
                         position = Position(bx, 0.35f, rz)
@@ -834,30 +875,11 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                // Auto — GLB con fallback procedurale
-                if (sd % 6 == 3) {
+                // Auto — solo procedurale (loadModelInstanceAsync causa SIGSEGV cross-thread)
+                if (sd % 10 == 3) {
                     val cx = rx + ROAD / 2f + 1.5f
                     val cz = rz + (if (sd % 2 == 0) 1.5f else -1.5f)
-                    val carRot = if (sd % 2 == 0) 0f else 90f
-                    val useCarGlb = try { assets.open("city_models/car.glb").close(); true } catch (_: Exception) { false }
-                    if (useCarGlb) {
-                        try {
-                            modelLoader.loadModelInstanceAsync("city_models/car.glb") { instance ->
-                                if (instance != null) {
-                                    val node = ModelNode(instance).apply {
-                                        position = Position(cx, 0f, cz)
-                                        rotation = Rotation(y = carRot)
-                                        scale = Position(0.005f, 0.005f, 0.005f)
-                                    }
-                                    sceneView.addChildNode(node)
-                                }
-                            }
-                        } catch (_: Exception) {
-                            spawnProceduralCar(cx, cz, sd, carColors, carMat = null, windshieldMat, wheelMat, headlightMat, tailLightMat)
-                        }
-                    } else {
-                        spawnProceduralCar(cx, cz, sd, carColors, null, windshieldMat, wheelMat, headlightMat, tailLightMat)
-                    }
+                    spawnProceduralCar(cx, cz, sd, carColors, null, windshieldMat, wheelMat, headlightMat, tailLightMat)
                 }
             }
         }
@@ -880,37 +902,17 @@ class CityActivity : AppCompatActivity() {
 
                 val seed = ((cx * 197 + cz * 337).toInt().let { if (it < 0) -it else it }) % 10000
 
-                // 1-2 alberi — GLB con fallback procedurale
-                val treeCount = 1 + seed % 2
-                val useTreeGlb = try { assets.open("city_models/tree.glb").close(); true } catch (_: Exception) { false }
+                // 1 albero — solo procedurale
+                val treeCount = 1
                 for (t in 0 until treeCount) {
                     val ts = seed * 7 + t * 41
                     val tx = x1 + ((ts % 100).toFloat() / 100f) * bw
                     val tz = z1 + (((ts / 10) % 100).toFloat() / 100f) * bh
-                    if (useTreeGlb) {
-                        // GLB tree
-                        try {
-                            modelLoader.loadModelInstanceAsync("city_models/tree.glb") { instance ->
-                                if (instance != null) {
-                                    val scale = 0.008f + (ts % 3).toFloat() * 0.002f
-                                    val node = ModelNode(instance).apply {
-                                        position = Position(tx, 0f, tz)
-                                        this.scale = Position(scale, scale, scale)
-                                    }
-                                    sceneView.addChildNode(node)
-                                }
-                            }
-                        } catch (_: Exception) {
-                            // Fallback to procedural
-                            spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
-                        }
-                    } else {
-                        spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
-                    }
+                    spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
                 }
 
-                // 1-2 cespugli (2 sfere sovrapposte)
-                val bushCount = 1 + (seed % 2)
+                // 1 cespuglio (2 sfere sovrapposte)
+                val bushCount = 1
                 for (b in 0 until bushCount) {
                     val bs = seed * 13 + b * 29
                     val bx2 = x1 + ((bs % 100).toFloat() / 100f) * bw
@@ -924,8 +926,8 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                // 2-3 fiori (con gambo)
-                val flowerCount = 2 + (seed % 2)
+                // 2 fiori (con gambo)
+                val flowerCount = 2
                 for (f in 0 until flowerCount) {
                     val fs = seed * 11 + f * 37
                     val fx = x1 + ((fs % 100).toFloat() / 100f) * bw
@@ -978,6 +980,106 @@ class CityActivity : AppCompatActivity() {
         }
     }
 
+    private fun loadOsmData() {
+        if (osmLoading || osmLoaded) return
+        osmLoading = true
+
+        // Initialize coordinate converter
+        CoordinateConverter.init(OSM_CENTER_LAT, OSM_CENTER_LON)
+
+        // 1. Load mini-chunk from assets immediately (200m around Colosseum)
+        val miniData = OsmClient.loadMiniChunk()
+        if (miniData != null) {
+            // Build immediately with mini-chunk on GL thread
+            rebuildCityWithOsm(miniData)
+        } else {
+            // Fallback: build grid city
+            try { buildCity() } catch (e: Exception) { Sentry.captureException(e) }
+            try { buildDetails() } catch (e: Exception) { Sentry.captureException(e) }
+        }
+        try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
+        syncCamera()
+        minimap.setRoads(roadCenters, HALF)
+        loadNpcs()
+        loadWorldState()
+
+        // 2. Download full km² data in background
+        lifecycleScope.launch {
+            try {
+                val data = withContext(Dispatchers.IO) {
+                    OsmClient.fetchAreaCached(OSM_CENTER_LAT, OSM_CENTER_LON, OSM_RADIUS_METERS)
+                }
+                if (destroyed) return@launch
+                osmData = data
+                osmLoaded = true
+                osmLoading = false
+
+                // Rebuild city with full OSM data on GL thread
+                withContext(Dispatchers.Main) {
+                    if (!destroyed) {
+                        rebuildCityWithOsm(data)
+                    }
+                }
+            } catch (e: Exception) {
+                Sentry.captureException(e)
+                osmLoading = false
+                // Keep the mini-chunk or grid city
+            }
+        }
+    }
+
+    private fun rebuildCityWithOsm(data: OsmData) {
+        try {
+            osmCityBuilder = OsmCityBuilder(sceneView)
+            osmPhase = 0
+            // Phase 1: terrain + roads (immediate)
+            osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, 1000f)
+
+            // Phase 2: after 500ms — colosseum + buildings
+            Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                override fun doFrame(frameTimeNanos: Long) {
+                    if (destroyed) return
+                    osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
+                    osmPhase = 2
+                    // Phase 3: after 500ms — trees + vegetation
+                    Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                        override fun doFrame(frameTimeNanos: Long) {
+                            if (destroyed) return
+                            osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, 1000f)
+                            osmPhase = 3
+                            // Phase 4: after 500ms — furniture + cars
+                            Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                                override fun doFrame(frameTimeNanos: Long) {
+                                    if (destroyed) return
+                                    osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
+                                    osmPhase = 4
+                                    // Phase 5: after 500ms — POI details + signs + restaurants + shops
+                                    Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                                        override fun doFrame(frameTimeNanos: Long) {
+                                            if (destroyed) return
+                                            osmCityBuilder!!.buildPhase5_Details(data)
+                                            osmPhase = 5
+
+                                            // Copy collision data
+                                            buildingAABBs.clear()
+                                            buildingAABBs.addAll(osmCityBuilder!!.buildingAABBs)
+                                            windowMaterials.clear()
+                                            windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
+                                            lampLightMaterial = osmCityBuilder!!.lampLightMaterial
+                                            minimap.invalidate()
+                                        }
+                                    })
+                                }
+                            })
+                        }
+                    })
+                }
+            })
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+        }
+    }
+
     private fun buildCity() {
         sceneView.addChildNode(
             CubeNode(engine, Size(CITY, 0.3f, CITY), materialInstance = ml.createColorInstance(color = Color.rgb(0x4A, 0x8C, 0x3F))).apply {
@@ -1010,70 +1112,48 @@ class CityActivity : AppCompatActivity() {
             Color.rgb(0xE5, 0x39, 0x35), Color.rgb(0x1E, 0x88, 0xE5),
             Color.rgb(0xFF, 0xCA, 0x28), Color.rgb(0x4C, 0xAF, 0x50)
         )
-        val chimneyMat = ml.createColorInstance(color = Color.rgb(0x79, 0x55, 0x48))
-        val balconyMat = ml.createColorInstance(color = Color.rgb(0xBD, 0xBD, 0xBD))
-        val poleMat = ml.createColorInstance(color = Color.rgb(0x55, 0x55, 0x55))
 
         for (bd in BuildingDefs.BUILDINGS) {
-            // Try loading GLB model first
-            val glbPath = bd.glbModel
-            val glbLoaded = if (glbPath != null) {
-                try {
-                    modelLoader.loadModelInstanceAsync(glbPath) { instance ->
-                        if (instance != null) {
-                            val modelNode = ModelNode(instance).apply {
-                                position = Position(bd.x, 0f, bd.z)
-                                scale = Position(bd.modelScale, bd.modelScale, bd.modelScale)
-                            }
-                            sceneView.addChildNode(modelNode)
-                        }
-                    }
-                    true
-                } catch (_: Exception) { false }
-            } else false
+            // Sempre procedurale (loadModelInstanceAsync causa SIGSEGV cross-thread)
+            val bMat = ml.createColorInstance(color = bd.color3D)
+            val rMat = ml.createColorInstance(color = bd.roofColor)
 
-                if (!glbLoaded) {
-                // Fallback: simplified procedural building
-                val bMat = ml.createColorInstance(color = bd.color3D)
-                val rMat = ml.createColorInstance(color = bd.roofColor)
-
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
-                        position = Position(bd.x, bd.height / 2f, bd.z)
-                    }
-                )
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
-                        position = Position(bd.x, bd.height + 0.18f, bd.z)
-                    }
-                )
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
-                        position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
-                    }
-                )
-                val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
-                windowMaterials.add(winMat)
-                val wxOff = bd.width * 0.28f
-                val wyBase = bd.height * 0.55f
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
-                        position = Position(bd.x - wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
-                    }
-                )
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
-                        position = Position(bd.x + wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
-                    }
-                )
-                val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
-                val awningMat = ml.createColorInstance(color = awningColor)
-                sceneView.addChildNode(
-                    CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
-                        position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
-                    }
-                )
-            }
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
+                    position = Position(bd.x, bd.height / 2f, bd.z)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
+                    position = Position(bd.x, bd.height + 0.18f, bd.z)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
+                    position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+            val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
+            windowMaterials.add(winMat)
+            val wxOff = bd.width * 0.28f
+            val wyBase = bd.height * 0.55f
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                    position = Position(bd.x - wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                    position = Position(bd.x + wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
+                }
+            )
+            val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
+            val awningMat = ml.createColorInstance(color = awningColor)
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
+                    position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
+                }
+            )
 
             buildingAABBs.add(bd.aabb())
         }
@@ -1098,7 +1178,6 @@ class CityActivity : AppCompatActivity() {
         val proceduralWindowMat = ml.createColorInstance(color = Color.rgb(0xBB, 0xDE, 0xFB))
         windowMaterials.add(proceduralWindowMat)
         val proceduralDoorMat = ml.createColorInstance(color = Color.rgb(0x5D, 0x40, 0x37))
-        val proceduralRoofMat = ml.createColorInstance(color = Color.rgb(0x79, 0x55, 0x48))
 
         for (i in 0 until roadCenters.size - 1) {
             for (j in 0 until roadCenters.size - 1) {
@@ -1114,7 +1193,7 @@ class CityActivity : AppCompatActivity() {
                 if (occupied.contains(Pair(bx, bz))) continue
 
                 val seed = ((cx * 137f + cz * 251f).toInt().let { if (it < 0) -it else it }) % 10000
-                val n = 1 + (seed % 3)
+                val n = 1 + (seed % 2)
 
                 for (k in 0 until n) {
                     val sd = seed * 7 + k * 31
@@ -1238,9 +1317,27 @@ class CityActivity : AppCompatActivity() {
         cameraNode.lookAt(Position(playerX, 0f, playerZ))
     }
 
+    private fun checkMemoryPressure(dt: Float) {
+        memoryCheckTimer -= dt
+        if (memoryCheckTimer > 0f) return
+        memoryCheckTimer = MEMORY_CHECK_INTERVAL
+
+        val am = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return
+        val memInfo = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        val availMb = memInfo.availMem / (1024 * 1024)
+        val thresholdMb = memInfo.threshold / (1024 * 1024)
+
+        if (availMb < thresholdMb + 80L) {
+            Sentry.captureMessage("CityActivity: low memory (${availMb}MB avail, threshold ${thresholdMb}MB) — finishing")
+            finish()
+        }
+    }
+
     override fun onDestroy() {
-        petNode?.destroy()
-        playerRoot?.destroy()
+        destroyed = true
+        Choreographer.getInstance().removeFrameCallback(frameCb)
+        currentSkybox = null
         sceneView.destroy()
         super.onDestroy()
     }

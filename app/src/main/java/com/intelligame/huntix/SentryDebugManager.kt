@@ -1,6 +1,7 @@
 package com.intelligame.huntix
 
 import io.sentry.Sentry
+import io.sentry.SentryLevel
 import io.sentry.Breadcrumb
 import io.sentry.protocol.User
 
@@ -65,7 +66,7 @@ object SentryDebugManager {
         Sentry.captureException(e)
     }
 
-    fun captureMessage(message: String, level: io.sentry.SentryLevel = io.sentry.SentryLevel.INFO) {
+    fun captureMessage(message: String, level: SentryLevel = SentryLevel.INFO) {
         Sentry.captureMessage(message, level)
     }
 }

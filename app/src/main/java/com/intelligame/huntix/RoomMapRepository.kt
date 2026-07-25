@@ -4,9 +4,11 @@ import com.google.ar.core.Plane
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import io.sentry.Sentry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 data class RadarTarget(
@@ -109,8 +111,10 @@ class RoomMapRepository private constructor() {
     suspend fun saveRoomMap(roomMap: RoomMap): Result<String> = withContext(Dispatchers.IO) {
         try {
             val docRef = firestore.collection(COLLECTION).document(roomMap.roomId)
-            docRef.set(roomMap.toFirestore(), SetOptions.merge()).await()
-            realtimeDb.child(roomMap.roomId).setValue(roomMap.toFirestore()).await()
+            withTimeoutOrNull(30_000L) {
+                docRef.set(roomMap.toFirestore(), SetOptions.merge()).await()
+                realtimeDb.child(roomMap.roomId).setValue(roomMap.toFirestore()).await()
+            } ?: return@withContext Result.failure(Exception("Firestore save timeout"))
             Result.success(roomMap.roomId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -121,7 +125,7 @@ class RoomMapRepository private constructor() {
         try {
             val doc = firestore.collection(COLLECTION).document(roomId).get().await()
             if (!doc.exists()) return@withContext Result.failure(IllegalStateException("Room map non trovato: $roomId"))
-            val data = doc.data!!
+            val data = doc.data ?: return@withContext Result.failure(IllegalStateException("Room map dati vuoti: $roomId"))
             Result.success(parseRoomMap(data))
         } catch (e: Exception) {
             Result.failure(e)
@@ -131,48 +135,52 @@ class RoomMapRepository private constructor() {
     suspend fun listUserRooms(userId: String): Result<List<RoomMap>> = withContext(Dispatchers.IO) {
         try {
             val query = firestore.collection(COLLECTION).whereEqualTo("ownerId", userId).get().await()
-            Result.success(query.documents.map { doc -> parseRoomMap(doc.data!!) })
+            Result.success(query.documents.mapNotNull { doc -> doc.data?.let { parseRoomMap(it) } })
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     private fun parseRoomMap(data: Map<String, Any>): RoomMap {
-        val planes = (data["semanticPlanes"] as? List<Map<String, Any>> ?: emptyList()).map { p ->
-            SemanticPlane(
-                planeId = p["planeId"] as String,
-                semanticLabel = p["semanticLabel"] as String,
-                centerPose = (p["centerPose"] as List<Double>).map { it.toFloat() }.toFloatArray(),
-                extentX = (p["extentX"] as Number).toFloat(),
-                extentZ = (p["extentZ"] as Number).toFloat(),
-                polygon = (p["polygon"] as List<List<Double>>).map { it.map { v -> v.toFloat() }.toFloatArray() }
-            )
+        val planes = (data["semanticPlanes"] as? List<Map<String, Any>> ?: emptyList()).mapNotNull { p ->
+            try {
+                SemanticPlane(
+                    planeId = p["planeId"] as? String ?: return@mapNotNull null,
+                    semanticLabel = p["semanticLabel"] as? String ?: "UNKNOWN",
+                    centerPose = (p["centerPose"] as? List<Number> ?: emptyList()).map { it.toFloat() }.toFloatArray(),
+                    extentX = (p["extentX"] as? Number)?.toFloat() ?: 0f,
+                    extentZ = (p["extentZ"] as? Number)?.toFloat() ?: 0f,
+                    polygon = (p["polygon"] as? List<List<Number>> ?: emptyList()).map { it.map { v -> v.toFloat() }.toFloatArray() }
+                )
+            } catch (e: Exception) { null }
         }
-        val anchors = (data["anchors"] as? List<Map<String, Any>> ?: emptyList()).map { a ->
-            PersistentAnchor(
-                anchorId = a["anchorId"] as String,
-                cloudAnchorId = a["cloudAnchorId"] as? String,
-                anchorType = a["anchorType"] as String,
-                semanticLabel = a["semanticLabel"] as String,
-                customName = a["customName"] as String,
-                roomName = a["roomName"] as String,
-                worldPose = (a["worldPose"] as List<Double>).map { it.toFloat() }.toFloatArray(),
-                relativeToSafe = (a["relativeToSafe"] as List<Double>).map { it.toFloat() }.toFloatArray(),
-                metadata = (a["metadata"] as? Map<String, String>) ?: emptyMap(),
-                createdAt = (a["createdAt"] as Number).toLong(),
-                ttlDays = (a["ttlDays"] as Number).toInt()
-            )
+        val anchors = (data["anchors"] as? List<Map<String, Any>> ?: emptyList()).mapNotNull { a ->
+            try {
+                PersistentAnchor(
+                    anchorId = a["anchorId"] as? String ?: return@mapNotNull null,
+                    cloudAnchorId = a["cloudAnchorId"] as? String,
+                    anchorType = a["anchorType"] as? String ?: "unknown",
+                    semanticLabel = a["semanticLabel"] as? String ?: "UNKNOWN",
+                    customName = a["customName"] as? String ?: "",
+                    roomName = a["roomName"] as? String ?: "",
+                    worldPose = (a["worldPose"] as? List<Double> ?: emptyList()).map { it.toFloat() }.toFloatArray(),
+                    relativeToSafe = (a["relativeToSafe"] as? List<Double> ?: emptyList()).map { it.toFloat() }.toFloatArray(),
+                    metadata = (a["metadata"] as? Map<String, String>) ?: emptyMap(),
+                    createdAt = (a["createdAt"] as? Number)?.toLong() ?: 0L,
+                    ttlDays = (a["ttlDays"] as? Number)?.toInt() ?: 365
+                )
+            } catch (e: Exception) { null }
         }
         return RoomMap(
-            roomId = data["roomId"] as String,
-            name = data["name"] as String,
+            roomId = data["roomId"] as? String ?: "",
+            name = data["name"] as? String ?: "Stanza",
             floorPlanImage = data["floorPlanImage"] as? String,
             semanticPlanes = planes,
             anchors = anchors,
             safeAnchorId = data["safeAnchorId"] as? String,
-            createdAt = (data["createdAt"] as Number).toLong(),
-            updatedAt = (data["updatedAt"] as Number).toLong(),
-            version = (data["version"] as Number).toInt(),
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: 0L,
+            version = (data["version"] as? Number)?.toInt() ?: 1,
             sceneAnchorFile = data["sceneAnchorFile"] as? String
         )
     }
@@ -242,7 +250,7 @@ fun Plane.toSemanticPlane(planeId: String): RoomMapRepository.SemanticPlane {
                 i += 3
             }
         }
-    } catch (_: Exception) {}
+    } catch (e: Exception) { Sentry.captureException(e) }
 
     val label = when (this.type) {
         Plane.Type.HORIZONTAL_UPWARD_FACING -> "FLOOR"

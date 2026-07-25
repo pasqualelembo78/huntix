@@ -13,6 +13,7 @@ import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
+import io.sentry.Sentry
 import io.github.sceneview.math.Scale
 import io.github.sceneview.math.Size
 import io.github.sceneview.node.CubeNode
@@ -52,6 +53,7 @@ internal fun EggPlacementManager.restoreEggsFromCloud(safeAnchorNode: AnchorNode
                     return@getRoomSnapshot
                 } catch (e: Exception) {
                     android.util.Log.e("EggPlacement", "resolveSafeAnchor exception: ${e.message}")
+                    Sentry.captureException(e)
                 }
             }
             restoreEggsWithSafeAnchor(snap, safeAnchorNode.anchor)
@@ -118,6 +120,7 @@ internal fun EggPlacementManager.restoreEggsWithSafeAnchor(
             advance()
         } catch (e: Exception) {
             android.util.Log.e("EggPlacement", "restoreEggsWithSafeAnchor egg[${egg.idx}]: ${e.message}")
+            Sentry.captureException(e)
             placeEggByOffset(sv, safeTrans, egg)
             advance()
         }
@@ -147,7 +150,7 @@ internal fun EggPlacementManager.placeEggByOffset(
             Pose(floatArrayOf(wx, wy, wz), floatArrayOf(0f, 0f, 0f, 1f))
         ) ?: return
         placeEggAtAnchorDirect(anchor, egg.colorIdx, egg.shape, egg.isTrap)
-    } catch (_: Exception) {}
+    } catch (e: Exception) { Sentry.captureException(e) }
 }
 
 /**
@@ -188,6 +191,7 @@ internal fun EggPlacementManager.restoreFromLocalStore(safeAnchorNode: AnchorNod
             restored++
         } catch (e: Exception) {
             android.util.Log.e("EggPlacement", "restoreFromLocalStore egg[$i]: ${e.message}")
+            Sentry.captureException(e)
         }
     }
 
@@ -225,6 +229,6 @@ internal fun EggPlacementManager.restoreEggsFromSession(safeAnchorNode: AnchorNo
             an.isVisible = true
             sv.addChildNode(an)
             activity.eggs.add(EggObject(i, colorIdx, shape, an, eggNode, isTrap))
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

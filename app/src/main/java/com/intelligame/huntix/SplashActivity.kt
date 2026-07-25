@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.auth.FirebaseAuth
+import io.sentry.Sentry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -45,20 +46,20 @@ class SplashActivity : AppCompatActivity() {
             delay(1200)
             if (isFinishing || isDestroyed) return@launch
 
-            val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
-            val target = if (login != null && tryAutoLogin(login)) {
-                val tutorialDone = getSharedPreferences("app_prefs", MODE_PRIVATE)
-                    .getBoolean("tutorial_done", false)
-                if (tutorialDone) HomeActivity::class.java else TutorialActivity::class.java
-            } else {
-                LoginActivity::class.java
-            }
             try {
+                val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
+                val target = if (login != null && tryAutoLogin(login)) {
+                    val tutorialDone = getSharedPreferences("app_prefs", MODE_PRIVATE)
+                        .getBoolean("tutorial_done", false)
+                    if (tutorialDone) HomeActivity::class.java else TutorialActivity::class.java
+                } else {
+                    LoginActivity::class.java
+                }
                 startActivity(Intent(this@SplashActivity, target).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 })
                 finish()
-            } catch (_: Exception) { finish() }
+            } catch (e: Exception) { Sentry.captureException(e); finish() }
         }
     }
 
@@ -72,27 +73,39 @@ class SplashActivity : AppCompatActivity() {
      */
     private suspend fun tryAutoLogin(login: Triple<String, String, String>): Boolean {
         val (method, name, uid) = login
-        return if (method == "local") {
-            kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-                PlayerProfileManager.initLocalProfile(this@SplashActivity, name) { cont.resume(true) {} }
-            }
-        } else {
-            val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-            if (currentUid.isNullOrBlank()) {
-                false
+        return try {
+            if (method == "local") {
+                kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                    kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                        PlayerProfileManager.initLocalProfile(this@SplashActivity, name) {
+                            if (cont.isActive) cont.resumeWith(Result.success(true))
+                        }
+                    }
+                } ?: false
             } else {
-                val isGoogle = PlayerProfileManager.isGoogleLogin(this@SplashActivity)
-                kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-                    PlayerProfileManager.initMyProfile(
-                        context = this@SplashActivity,
-                        name = name,
-                        firebaseUid = uid.ifBlank { currentUid },
-                        isGoogleUser = isGoogle,
-                        onReady = { cont.resume(true) {} },
-                        onError = { cont.resume(false) {} }
-                    )
+                val currentUid = FirebaseAuth.getInstance().currentUser?.uid
+                if (currentUid.isNullOrBlank()) {
+                    false
+                } else {
+                    val isGoogle = PlayerProfileManager.isGoogleLogin(this@SplashActivity)
+                    kotlinx.coroutines.withTimeoutOrNull(10_000L) {
+                        kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                            PlayerProfileManager.initMyProfile(
+                                context = this@SplashActivity,
+                                name = name,
+                                firebaseUid = uid.ifBlank { currentUid },
+                                isGoogleUser = isGoogle,
+                                onReady = { if (cont.isActive) cont.resumeWith(Result.success(true)) },
+                                onError = { if (cont.isActive) cont.resumeWith(Result.success(false)) }
+                            )
+                        }
+                    } ?: false
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("SplashActivity", "tryAutoLogin failed: ${e.message}")
+            Sentry.captureException(e)
+            false
         }
     }
 }

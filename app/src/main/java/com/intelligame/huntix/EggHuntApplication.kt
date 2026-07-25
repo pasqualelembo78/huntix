@@ -3,6 +3,7 @@ package com.intelligame.huntix
 import android.app.Application
 import android.util.Log
 import com.google.firebase.FirebaseApp
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import io.sentry.Sentry
 import com.intelligame.huntix.billing.BillingManager
 import com.intelligame.huntix.billing.VipManager
@@ -20,6 +21,13 @@ class EggHuntApplication : Application() {
             Log.e("HuntixApp", "Firebase init failed: ${e.message}")
         }
 
+        // Crashlytics (native + Java/Kotlin crash reporting)
+        try {
+            FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "Crashlytics init failed: ${e.message}")
+        }
+
         // MapLibre non richiede init globale (init in MapView.onCreate)
 
         // Sentry (crash reporting) — DSN from manifest meta-data
@@ -31,6 +39,7 @@ class EggHuntApplication : Application() {
                 Log.w("HuntixApp", "Sentry DSN not configured — crash reporting disabled")
             } else {
                 Sentry.init { options ->
+                    options.dsn = manifestDsn
                     options.isEnableAutoSessionTracking = true
                     options.tracesSampleRate = 0.1
                 }

@@ -201,7 +201,9 @@ internal fun MainActivity.finishGame() {
                         ))
                     }
                     eggPlacementManager.saveCurrentSession()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivityGame", "Failed to save game run: ${e.message}")
+                }
                 withContext(Dispatchers.Main) { SoundManager.playVictory(); showFinalStats() }
             }
         }
@@ -221,7 +223,9 @@ internal fun MainActivity.finishGame() {
                         totalMs = snapTotal
                     ))
                     eggPlacementManager.saveCurrentSession()
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivityGame", "Failed to save sequential game run: ${e.message}")
+                }
                 withContext(Dispatchers.Main) {
                     if (nextIdx < activePlayers.size) {
                         SoundManager.playVictory()
@@ -318,8 +322,8 @@ internal fun MainActivity.renderStats() {
                 sb.append("  Totale: ${fmtMs(total)}\n\n")
             }
             if (playerTotals.size >= 2) {
-                val winner = playerTotals.minByOrNull { it.second }!!
-                sb.append("🏆 VINCITORE: ${winner.first} (${fmtMs(winner.second)})")
+                val winner = playerTotals.minByOrNull { it.second }
+                if (winner != null) sb.append("🏆 VINCITORE: ${winner.first} (${fmtMs(winner.second)})")
             }
         }
         else -> {
@@ -338,8 +342,8 @@ internal fun MainActivity.renderStats() {
                     dm.getRunsForPlayer(p).lastOrNull()?.let { p to it.totalMs }
                 }
                 if (bests.size >= 2) {
-                    val winner = bests.minByOrNull { it.second }!!
-                    sb.append("🏆 Vincitore: ${winner.first} (${fmtMs(winner.second)})")
+                    val winner = bests.minByOrNull { it.second }
+                    if (winner != null) sb.append("🏆 Vincitore: ${winner.first} (${fmtMs(winner.second)})")
                 }
             }
         }

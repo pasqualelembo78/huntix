@@ -9,6 +9,7 @@ buildscript {
         classpath 'com.android.tools.build:gradle:8.2.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         classpath 'com.google.gms:google-services:4.4.1'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
         // Sentry Gradle Plugin — carica source maps/ProGuard mapping automaticamente
         classpath 'io.sentry:sentry-android-gradle-plugin:4.11.0'
     }

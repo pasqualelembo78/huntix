@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.intelligame.huntix.BaseNavActivity
+import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
 import com.intelligame.huntix.reallife.CharacterItem
@@ -150,20 +151,20 @@ class RealLifeActivity : BaseNavActivity() {
 
         // ── Bisogni ──
         val needsHeader = TextView(c).apply {
-            text = "📊  Bisogni"; textSize = 14f; setTextColor(Color.WHITE)
+            text = "  Bisogni"; textSize = 14f; setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 10), UiKit.dp(c, 14), UiKit.dp(c, 4))
+            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 6))
         }
         needsContainer = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(UiKit.dp(c, 14), 0, UiKit.dp(c, 14), 0)
+            setPadding(UiKit.dp(c, 12), 0, UiKit.dp(c, 12), 0)
         }
 
         // ── Azioni rapide ──
         val actionsHeader = TextView(c).apply {
-            text = "⚡  Azioni"; textSize = 14f; setTextColor(Color.WHITE)
+            text = "  Azioni"; textSize = 14f; setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 4))
+            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 14), UiKit.dp(c, 14), UiKit.dp(c, 6))
         }
         val actionsGrid = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -172,6 +173,7 @@ class RealLifeActivity : BaseNavActivity() {
         }
         actionsGrid.addView(actionButton(c, "🏙️", "Città 3D", "#FF6D00") {
             startActivity(Intent(c, CityActivity::class.java))
+            (c as? android.app.Activity)?.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
         })
         actionsGrid.addView(actionSpacer(c))
         actionsGrid.addView(actionButton(c, "💬", "Chat NPC", "#42A5F5") {
@@ -192,9 +194,9 @@ class RealLifeActivity : BaseNavActivity() {
 
         // ── NPC Section ──
         val npcHeader = TextView(c).apply {
-            text = "👥  Personaggi del Mondo"; textSize = 14f; setTextColor(Color.WHITE)
+            text = "  Personaggi del Mondo"; textSize = 14f; setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 4))
+            setPadding(UiKit.dp(c, 14), UiKit.dp(c, 14), UiKit.dp(c, 14), UiKit.dp(c, 6))
         }
         npcContainer = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
@@ -306,44 +308,14 @@ class RealLifeActivity : BaseNavActivity() {
         }
     }
 
-    private fun makeNeedBar(label: String, value: Float, color: String): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+    private fun makeNeedBar(label: String, value: Float, color: String): NeedBarView {
+        val icon = label.substringBefore(" ")
+        val labelText = label.substringAfter(" ")
+        return NeedBarView(this).apply {
+            setData(icon, labelText, value, color)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = UiKit.dp(this@RealLifeActivity, 4) }
-
-            addView(TextView(this@RealLifeActivity).apply {
-                text = label; textSize = 11f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
-                layoutParams = LinearLayout.LayoutParams(UiKit.dp(this@RealLifeActivity, 110), LinearLayout.LayoutParams.WRAP_CONTENT)
-            })
-
-            val track = LinearLayout(this@RealLifeActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    cornerRadius = UiKit.dp(this@RealLifeActivity, 6).toFloat()
-                    setColor(Color.parseColor("#221838"))
-                }
-                layoutParams = LinearLayout.LayoutParams(0, UiKit.dp(this@RealLifeActivity, 12), 1f)
-            }
-            val fill = View(this@RealLifeActivity).apply {
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    cornerRadius = UiKit.dp(this@RealLifeActivity, 6).toFloat()
-                    setColor(Color.parseColor(color))
-                }
-                layoutParams = LinearLayout.LayoutParams(
-                    (UiKit.dp(this@RealLifeActivity, 200) * (value / 100f)).toInt().coerceAtLeast(2),
-                    LinearLayout.LayoutParams.MATCH_PARENT
-                )
-            }
-            track.addView(fill)
-            addView(track)
-
-            addView(TextView(this@RealLifeActivity).apply {
-                text = "${value.toInt()}%"; textSize = 11f; setTextColor(Color.WHITE)
-                setPadding(UiKit.dp(this@RealLifeActivity, 6), 0, 0, 0)
-            })
+            ).apply { bottomMargin = UiKit.dp(this@RealLifeActivity, 6) }
         }
     }
 
@@ -396,15 +368,17 @@ class RealLifeActivity : BaseNavActivity() {
     private fun npcCard(char: CharacterItem): LinearLayout {
         val c = this
         val emoji = (char.avatar ?: "🙂").takeIf { it.length <= 2 } ?: "🙂"
+        val s = c.resources.displayMetrics.density
         return LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = UiKit.dp(c, 12).toFloat()
-                setColor(Color.parseColor(UiKit.BG_CARD))
-                setStroke(1, Color.parseColor("#2A2240"))
+                cornerRadius = UiKit.dp(c, 16).toFloat()
+                colors = intArrayOf(Color.parseColor("#1E1640"), Color.parseColor(UiKit.BG_CARD))
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                setStroke((1 * s).toInt(), Color.parseColor("#2E2550"))
             }
-            setPadding(UiKit.dp(c, 10), UiKit.dp(c, 10), UiKit.dp(c, 10), UiKit.dp(c, 10))
+            setPadding(UiKit.dp(c, 10), UiKit.dp(c, 12), UiKit.dp(c, 10), UiKit.dp(c, 10))
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             isClickable = true; isFocusable = true
             setOnClickListener {
@@ -417,7 +391,8 @@ class RealLifeActivity : BaseNavActivity() {
             }
 
             addView(TextView(c).apply {
-                text = emoji; textSize = 28f; gravity = Gravity.CENTER
+                text = emoji; textSize = 32f; gravity = Gravity.CENTER
+                setShadowLayer(8f, 0f, 2f, 0x66000000)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
                 )
@@ -425,18 +400,20 @@ class RealLifeActivity : BaseNavActivity() {
             addView(TextView(c).apply {
                 text = char.name; textSize = 12f; setTextColor(Color.WHITE)
                 typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-                maxLines = 1; setPadding(0, UiKit.dp(c, 4), 0, 0)
+                maxLines = 1; setPadding(0, UiKit.dp(c, 5), 0, 0)
             })
             char.role?.takeIf { it.isNotBlank() }?.let { role ->
                 addView(TextView(c).apply {
                     text = role; textSize = 10f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
                     gravity = Gravity.CENTER; maxLines = 1
+                    letterSpacing = 0.03f
                 })
             }
             char.intimacyLabel?.takeIf { it.isNotBlank() }?.let { lbl ->
                 addView(TextView(c).apply {
                     text = "💞 $lbl"; textSize = 9f; setTextColor(Color.parseColor(UiKit.GREEN))
                     gravity = Gravity.CENTER
+                    setPadding(0, UiKit.dp(c, 2), 0, 0)
                 })
             }
         }
@@ -445,26 +422,32 @@ class RealLifeActivity : BaseNavActivity() {
     // ── Action Buttons ───────────────────────────────────────────
 
     private fun actionButton(c: android.content.Context, emoji: String, label: String, color: String, onClick: () -> Unit): LinearLayout {
+        val s = c.resources.displayMetrics.density
+        val colorInt = Color.parseColor(color)
+        val darkColor = Color.rgb(Color.red(colorInt) * 60 / 100, Color.green(colorInt) * 60 / 100, Color.blue(colorInt) * 60 / 100)
         return LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = UiKit.dp(c, 14).toFloat()
-                setColor(Color.parseColor(UiKit.BG_CARD))
-                setStroke(1, Color.parseColor(color))
+                cornerRadius = UiKit.dp(c, 16).toFloat()
+                colors = intArrayOf(darkColor, Color.parseColor(UiKit.BG_CARD))
+                orientation = android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM
+                setStroke((1 * s).toInt(), colorInt, (0.3f * s), (1f * s))
             }
-            setPadding(UiKit.dp(c, 8), UiKit.dp(c, 12), UiKit.dp(c, 8), UiKit.dp(c, 10))
+            setPadding(UiKit.dp(c, 6), UiKit.dp(c, 14), UiKit.dp(c, 6), UiKit.dp(c, 12))
             isClickable = true; isFocusable = true
             setOnClickListener { onClick() }
 
             addView(TextView(c).apply {
-                text = emoji; textSize = 26f; gravity = Gravity.CENTER
+                text = emoji; textSize = 28f; gravity = Gravity.CENTER
+                setShadowLayer(12f, 0f, 2f, colorInt and 0x00FFFFFF or 0x44000000)
             })
             addView(TextView(c).apply {
-                text = label; textSize = 10f; setTextColor(Color.parseColor(color))
+                text = label; textSize = 9f; setTextColor(colorInt)
                 typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-                setPadding(0, UiKit.dp(c, 4), 0, 0)
+                setPadding(0, UiKit.dp(c, 5), 0, 0)
+                letterSpacing = 0.05f
             })
         }
     }

@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.intelligame.huntix.managers.SavedManager
 import com.google.firebase.firestore.SetOptions
+import io.sentry.Sentry
 
 /**
  * PlayerProfileManager — gestisce i profili giocatori su Firestore.
@@ -36,8 +37,11 @@ object PlayerProfileManager {
     private val db = FirebaseFirestore.getInstance()
 
     // ─── Profilo locale (cache) ──────────────────────────────────
+    @Volatile
     private var _myProfile: PlayerProfile? = null
     val myProfile: PlayerProfile? get() = _myProfile
+
+    fun clearMyProfile() { _myProfile = null }
 
     // ─── Persistenza metodo di login ────────────────────────────
     private const val LOGIN_PREF_FILE = "login_prefs"
@@ -308,7 +312,11 @@ object PlayerProfileManager {
                 if (profile.isGoogleUser) updateLeaderboard(profile)
                 onComplete?.invoke()
             }
-            .addOnFailureListener { e -> Log.e(TAG, "Errore salvataggio: ${e.message}") }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Errore salvataggio: ${e.message}")
+                Sentry.captureException(e)
+                onComplete?.invoke()
+            }
     }
 
     private fun updateLeaderboard(profile: PlayerProfile) {
@@ -389,9 +397,16 @@ object PlayerProfileManager {
         val id = _myProfile?.playerId ?: run { onError?.invoke("Nessun profilo da eliminare"); return }
         // 1. Elimina da Firestore
         db.collection(COL_PLAYERS).document(id).delete()
+            .addOnFailureListener { e -> Log.w(TAG, "Failed to delete player doc: ${e.message}") }
         db.collection(COL_LEADER).document(id).delete()
-        // 2. Elimina account Firebase Auth
-        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.delete()
+            .addOnFailureListener { e -> Log.w(TAG, "Failed to delete leaderboard doc: ${e.message}") }
+        // 2. Elimina account Firebase Auth (può fallire se token scaduto)
+        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        user?.delete()
+            ?.addOnFailureListener { e ->
+                Log.w(TAG, "Firebase Auth delete failed (may need re-auth): ${e.message}")
+                Sentry.captureException(e)
+            }
         // 3. Pulisci TUTTE le SharedPreferences (lista completa di tutti i file usati nel gioco)
         val allPrefs = listOf(
             // Profilo

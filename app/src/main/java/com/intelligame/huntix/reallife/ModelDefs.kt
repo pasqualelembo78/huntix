@@ -54,11 +54,12 @@ object CityModels {
         CityModelType.BENCH         to CityModelDef(CityModelType.BENCH,         "city_models/bench.glb",         0.6f, "Panchina"),
         CityModelType.LAMP_POST     to CityModelDef(CityModelType.LAMP_POST,     "city_models/lamp_post.glb",     1f, "Lampione"),
         CityModelType.FLOWER        to CityModelDef(CityModelType.FLOWER,        "city_models/flower.glb",        0.3f, "Fiore"),
+        CityModelType.POOL_WATER    to CityModelDef(CityModelType.POOL_WATER,    null,                             1f, "Acqua"),
         CityModelType.PLAYER_MALE   to CityModelDef(CityModelType.PLAYER_MALE,   "city_models/player_male.glb",   1f, "Player maschio"),
         CityModelType.PLAYER_FEMALE to CityModelDef(CityModelType.PLAYER_FEMALE, "city_models/player_female.glb", 1f, "Player femmina")
     )
 
-    fun get(type: CityModelType): CityModelDef = DEFS[type]!!
+    fun get(type: CityModelType): CityModelDef = DEFS[type] ?: CityModelDef(type, null, 1f, type.name)
 
     /**
      * Controlla se un modello GLB è disponibile in assets.

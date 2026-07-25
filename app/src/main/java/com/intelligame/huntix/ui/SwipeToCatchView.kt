@@ -58,7 +58,7 @@ class SwipeToCatchView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
     private val trajectoryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#66FFCC00")
+        color = Color.parseColor("#66FFCC7F")
         style = Paint.Style.STROKE
         strokeWidth = 3f
     }

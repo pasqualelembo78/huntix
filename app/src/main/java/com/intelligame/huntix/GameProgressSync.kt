@@ -8,6 +8,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.intelligame.huntix.managers.SavedManager
+import io.sentry.Sentry
 
 /**
  * GameProgressSync — Sincronizza i dati di progresso su Firestore.
@@ -30,6 +31,7 @@ object GameProgressSync {
     // ── Protezione race condition ────────────────────────────────
     @Volatile
     private var isRestoring = false
+    private val saveLock = Any()
 
     // ── Debounce: salva max 1 volta ogni 10 secondi ─────────────
     private val handler = Handler(Looper.getMainLooper())
@@ -48,10 +50,12 @@ object GameProgressSync {
      */
     fun saveProgress(ctx: Context, onDone: ((Boolean) -> Unit)? = null) {
         // ✅ BLOCK: non sovrascrivere il cloud durante il restore
-        if (isRestoring) {
-            Log.d(TAG, "Save blocked — restore in progress")
-            onDone?.invoke(false)
-            return
+        synchronized(saveLock) {
+            if (isRestoring) {
+                Log.d(TAG, "Save blocked — restore in progress")
+                onDone?.invoke(false)
+                return
+            }
         }
 
         val userId = uid()
@@ -67,7 +71,12 @@ object GameProgressSync {
         val delay = if (now - lastSaveMs < DEBOUNCE_MS) DEBOUNCE_MS else 0L
 
         pendingSave = Runnable {
-            doSave(ctx, userId, onDone)
+            val currentUid = uid()
+            if (currentUid != null) {
+                doSave(ctx, currentUid, onDone)
+            } else {
+                onDone?.invoke(false)
+            }
             lastSaveMs = System.currentTimeMillis()
         }
         handler.postDelayed(pendingSave!!, delay)
@@ -120,6 +129,7 @@ object GameProgressSync {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Save error: ${e.message}")
+            Sentry.captureException(e)
             onDone?.invoke(false)
         }
     }
@@ -143,6 +153,7 @@ object GameProgressSync {
         isRestoring = true
         Log.d(TAG, "Starting restore for $userId...")
 
+        try {
         db.collection(COL).document(userId).get()
             .addOnSuccessListener { doc ->
                 try {
@@ -201,6 +212,7 @@ object GameProgressSync {
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Restore error: ${e.message}")
+                    Sentry.captureException(e)
                     isRestoring = false
                     onDone?.invoke(false)
                 }
@@ -210,6 +222,12 @@ object GameProgressSync {
                 isRestoring = false
                 onDone?.invoke(false)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "restoreProgress init error: ${e.message}")
+            Sentry.captureException(e)
+            isRestoring = false
+            onDone?.invoke(false)
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -223,7 +241,7 @@ object GameProgressSync {
                 val qty = EggFoodManager.getQuantity(ctx, food)
                 if (qty > 0) result[food.name] = qty
             }
-        } catch (e: Exception) { Log.w(TAG, "getFoodInventory: ${e.message}") }
+        } catch (e: Exception) { Log.w(TAG, "getFoodInventory: ${e.message}"); Sentry.captureException(e) }
         return result
     }
 
@@ -235,7 +253,7 @@ object GameProgressSync {
                     EggFoodManager.addQuantity(ctx, food, qty.toInt())
                 }
             }
-        } catch (e: Exception) { Log.w(TAG, "restoreFoodInventory: ${e.message}") }
+        } catch (e: Exception) { Log.w(TAG, "restoreFoodInventory: ${e.message}"); Sentry.captureException(e) }
     }
 
     private fun getToolInventory(ctx: Context): Map<String, Int> {
@@ -245,7 +263,7 @@ object GameProgressSync {
                 val qty = CatchToolManager.getQuantity(ctx, tool)
                 if (qty > 0) result[tool.name] = qty
             }
-        } catch (e: Exception) { Log.w(TAG, "getToolInventory: ${e.message}") }
+        } catch (e: Exception) { Log.w(TAG, "getToolInventory: ${e.message}"); Sentry.captureException(e) }
         return result
     }
 
@@ -257,6 +275,6 @@ object GameProgressSync {
                     CatchToolManager.addQuantity(ctx, tool, qty.toInt())
                 }
             }
-        } catch (e: Exception) { Log.w(TAG, "restoreToolInventory: ${e.message}") }
+        } catch (e: Exception) { Log.w(TAG, "restoreToolInventory: ${e.message}"); Sentry.captureException(e) }
     }
 }

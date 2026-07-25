@@ -112,7 +112,7 @@ class RaidBattleActivity : BaseNavActivity() {
             card.addView(UiKit.button(c, attackText,
                 when {
                     raid.defeated -> UiKit.GREEN
-                    raid.isExpired || teamPower == 0 -> "#444"
+                    raid.isExpired || teamPower == 0 -> "#444444"
                     else -> UiKit.PURPLE
                 }
             ) {

@@ -7,6 +7,7 @@ import com.google.gson.reflect.TypeToken
 import com.intelligame.huntix.*
 import com.intelligame.huntix.ZoneType
 import com.intelligame.huntix.WeatherType
+import io.sentry.Sentry
 
 object SurpriseManager {
     private const val PREFS      = "surprise_inventory_v1"
@@ -24,12 +25,13 @@ object SurpriseManager {
             result?.filter { !it.creatureId.isNullOrBlank() } ?: emptyList()
         } catch (e: Exception) {
             Log.e("SurpriseManager", "ERRORE deserializzazione borsa: ${e.message}", e)
+            Sentry.captureException(e)
             // Pulisci dati corrotti per evitare crash successivi
             try {
                 ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .edit().remove(KEY_LIST).apply()
                 Log.w("SurpriseManager", "Dati corrotti rimossi dalla borsa")
-            } catch (_: Exception) {}
+            } catch (e2: Exception) { Sentry.captureException(e2) }
             emptyList()
         }
     }

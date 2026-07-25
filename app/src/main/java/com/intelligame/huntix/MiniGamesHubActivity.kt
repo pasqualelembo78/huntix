@@ -26,7 +26,6 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_CATCH_EGG, "Prendi l'Uovo", "🥚", CatchEggActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_MATCH3, "Match 3", "💎", Match3Activity::class.java, false),
-        GameEntry(MiniGameManager.GAME_THREE_CARD, "Tre Carte", "🎴", ThreeCardActivity::class.java, false),
         GameEntry(MiniGameManager.GAME_AR_SHOOTER, "AR Egg Shooter", "🔫", com.intelligame.huntix.minigames.ar.AREggShooterActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_BOMB, "AR Color Bomb", "💣", com.intelligame.huntix.minigames.ar.ARColorBombActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "AR Egg Radar", "📡", com.intelligame.huntix.minigames.ar.AREggRadarActivity::class.java, true),
@@ -34,7 +33,6 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_MATCH3, "AR Match 3", "💎", com.intelligame.huntix.minigames.ar.ARMatch3Activity::class.java, true),
         GameEntry(MiniGameManager.GAME_MEMORY, "AR Memory", "🧠", com.intelligame.huntix.minigames.ar.ARMemoryActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_NUMBER_PICK, "AR Numero", "🔢", com.intelligame.huntix.minigames.ar.ARNumberPickActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_THREE_CARD, "AR Tre Carte", "🎴", com.intelligame.huntix.minigames.ar.ARThreeCardActivity::class.java, true),
         GameEntry(MiniGameManager.GAME_CATCH_EGG, "AR Prendi Uovo", "🥚", com.intelligame.huntix.minigames.ar.ARCatchEggActivity::class.java, true)
     )
 

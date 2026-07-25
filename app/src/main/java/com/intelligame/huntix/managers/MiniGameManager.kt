@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.PlayerProfileManager
+import io.sentry.Sentry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +35,6 @@ object MiniGameManager {
         MEMORY("memory_game"),
         NUMBER_PICK("number_pick"),
         HIGH_CARD("high_card"),
-        THREE_CARD("three_card"),
         CATCH_EGG("catch_egg"),
         MATCH3("match3")
     }
@@ -55,7 +55,6 @@ object MiniGameManager {
     const val GAME_MEMORY      = "memory_game"
     const val GAME_NUMBER_PICK = "number_pick"
     const val GAME_HIGH_CARD   = "high_card"
-    const val GAME_THREE_CARD  = "three_card"
     const val GAME_CATCH_EGG   = "catch_egg"
     const val GAME_MATCH3      = "match3"
 
@@ -66,7 +65,7 @@ object MiniGameManager {
 
     val ALL_GAME_IDS = listOf(
         GAME_MEMORY,
-        GAME_NUMBER_PICK, GAME_HIGH_CARD, GAME_THREE_CARD,
+        GAME_NUMBER_PICK, GAME_HIGH_CARD,
         GAME_CATCH_EGG, GAME_MATCH3
     )
 
@@ -78,7 +77,7 @@ object MiniGameManager {
         GAME_MEMORY        to 3,
         GAME_NUMBER_PICK   to 3,
         GAME_HIGH_CARD     to 5,
-        GAME_THREE_CARD    to MAX_DAILY_PLAYS,
+
         GAME_CATCH_EGG     to 3,
         GAME_MATCH3        to 3,
         // AR-Native exclusives
@@ -297,7 +296,7 @@ object MiniGameManager {
         prefs.edit().putBoolean(bonusClaimedKey(day, nth), true).apply()
         Log.d(TAG, "🎁 Daily bonus #$nth! +500 MVC +250 XP +1 Gem")
 
-        try { SavedManager.addMvc(ctx, 500.0) } catch (_: Exception) {}
+        try { SavedManager.addMvc(ctx, 500.0) } catch (e: Exception) { Sentry.captureException(e) }
         try {
             val profile = PlayerProfileManager.myProfile
             if (profile != null) {
@@ -305,7 +304,7 @@ object MiniGameManager {
                 profile.gems  = profile.gems + 1
                 PlayerProfileManager.persistMyProfile()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
 
     // ─── Utilità ──────────────────────────────────────────────────

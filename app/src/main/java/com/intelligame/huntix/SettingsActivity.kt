@@ -49,6 +49,8 @@ class SettingsActivity : BaseNavActivity() {
 
             UiKit.section(c, "Sessione"),
             UiKit.button(c, "🚪  Esci (Ospite)", "#C62828") {
+                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+                PlayerProfileManager.clearMyProfile()
                 prefs.edit().clear().apply()
                 startActivity(Intent(c, LoginActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

@@ -220,7 +220,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
 
         private val floorPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val wallPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val roofPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val objectPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE; textAlign = Paint.Align.CENTER
@@ -232,13 +231,68 @@ class BuildingInteriorActivity : AppCompatActivity() {
             val w = width.toFloat()
             val h = height.toFloat()
 
+            // Wall base
+            wallPaint.color = darken(building.color3D, 0.45f)
+            canvas.drawRect(0f, h * 0.1f, w, h * 0.6f, wallPaint)
+
+            // Wall wainscoting (lower panel)
+            val wainscotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = darken(building.color3D, 0.35f); style = Paint.Style.FILL
+            }
+            canvas.drawRect(0f, h * 0.42f, w, h * 0.6f, wainscotPaint)
+            val wainscotLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = darken(building.color3D, 0.5f); style = Paint.Style.STROKE; strokeWidth = 2f
+            }
+            canvas.drawLine(0f, h * 0.42f, w, h * 0.42f, wainscotLinePaint)
+
+            // Wall trim (top molding)
+            objectPaint.color = darken(building.color3D, 0.55f)
+            canvas.drawRect(0f, h * 0.1f, w, h * 0.14f, objectPaint)
+
+            // Window with light rays
+            val winLeft = w * 0.38f
+            val winRight = w * 0.62f
+            val winTop = h * 0.18f
+            val winBottom = h * 0.38f
+            val windowFramePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8D6E63.toInt(); style = Paint.Style.FILL }
+            canvas.drawRoundRect(winLeft - 4, winTop - 4, winRight + 4, winBottom + 4, 3f, 3f, windowFramePaint)
+            val windowGlassPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF81D4FA.toInt(); style = Paint.Style.FILL }
+            canvas.drawRect(winLeft, winTop, winRight, winBottom, windowGlassPaint)
+            val windowDivPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8D6E63.toInt(); style = Paint.Style.STROKE; strokeWidth = 2f }
+            canvas.drawLine((winLeft + winRight) / 2, winTop, (winLeft + winRight) / 2, winBottom, windowDivPaint)
+            canvas.drawLine(winLeft, (winTop + winBottom) / 2, winRight, (winTop + winBottom) / 2, windowDivPaint)
+            // Light rays from window
+            val rayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x18FFEB3B.toInt(); style = Paint.Style.FILL
+            }
+            val rayPath = Path().apply {
+                moveTo(winLeft, winBottom)
+                lineTo(winLeft - w * 0.1f, h)
+                lineTo(winRight + w * 0.1f, h)
+                lineTo(winRight, winBottom)
+                close()
+            }
+            canvas.drawPath(rayPath, rayPaint)
+
+            // Ceiling light fixture
+            val lightCx = w / 2f
+            objectPaint.color = 0xFF9E9E9E.toInt()
+            canvas.drawRect(lightCx - 15f, h * 0.02f, lightCx + 15f, h * 0.1f, objectPaint)
+            objectPaint.color = 0xFFFFEB3B.toInt()
+            canvas.drawCircle(lightCx, h * 0.12f, 8f, objectPaint)
+            val lightGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x20FFEB3B.toInt(); style = Paint.Style.FILL
+                maskFilter = BlurMaskFilter(20f, BlurMaskFilter.Blur.NORMAL)
+            }
+            canvas.drawCircle(lightCx, h * 0.12f, 25f, lightGlowPaint)
+
             // Floor
             floorPaint.color = darken(building.color3D, 0.25f)
             canvas.drawRect(0f, h * 0.6f, w, h, floorPaint)
 
-            // Floor grid
+            // Floor grid (tiles)
             val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = darken(building.color3D, 0.35f); style = Paint.Style.STROKE; strokeWidth = 1f
+                color = darken(building.color3D, 0.32f); style = Paint.Style.STROKE; strokeWidth = 1f
             }
             val tileSize = w / 8f
             var i = 0f
@@ -252,13 +306,36 @@ class BuildingInteriorActivity : AppCompatActivity() {
                 j += tileSize
             }
 
-            // Back wall
-            wallPaint.color = darken(building.color3D, 0.4f)
-            canvas.drawRect(0f, h * 0.1f, w, h * 0.6f, wallPaint)
+            // Wall decorations (plant, picture frame)
+            // Potted plant on left wall
+            objectPaint.color = 0xFF795548.toInt()
+            canvas.drawRoundRect(w * 0.04f, h * 0.36f, w * 0.1f, h * 0.42f, 3f, 3f, objectPaint)
+            objectPaint.color = 0xFF4CAF50.toInt()
+            canvas.drawCircle(w * 0.07f, h * 0.32f, w * 0.035f, objectPaint)
+            objectPaint.color = 0xFF66BB6A.toInt()
+            canvas.drawCircle(w * 0.05f, h * 0.3f, w * 0.025f, objectPaint)
+            canvas.drawCircle(w * 0.09f, h * 0.31f, w * 0.02f, objectPaint)
 
-            // Wall trim
-            roofPaint.color = darken(building.color3D, 0.5f)
-            canvas.drawRect(0f, h * 0.1f, w, h * 0.15f, roofPaint)
+            // Picture frame on right wall
+            objectPaint.color = 0xFF5D4037.toInt()
+            canvas.drawRect(w * 0.82f, h * 0.2f, w * 0.96f, h * 0.35f, objectPaint)
+            objectPaint.color = darken(building.color3D, 0.6f)
+            canvas.drawRect(w * 0.84f, h * 0.22f, w * 0.94f, h * 0.33f, objectPaint)
+
+            // Carpet/rug on floor center
+            val rugPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            rugPaint.color = darken(building.color3D, 0.5f).let { c ->
+                // Red-shifted variant
+                val r2 = (Color.red(c) + 30).coerceAtMost(255)
+                val g2 = (Color.green(c) - 20).coerceAtLeast(0)
+                Color.rgb(r2, g2, Color.blue(c))
+            }
+            canvas.drawRoundRect(w * 0.25f, h * 0.68f, w * 0.75f, h * 0.88f, 8f, 8f, rugPaint)
+            // Rug border
+            val rugBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = darken(building.color3D, 0.6f); style = Paint.Style.STROKE; strokeWidth = 2f
+            }
+            canvas.drawRoundRect(w * 0.25f, h * 0.68f, w * 0.75f, h * 0.88f, 8f, 8f, rugBorderPaint)
 
             // Building-specific interior objects
             drawObjects(canvas, w, h)
@@ -274,7 +351,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     // Couch
                     objectPaint.color = 0xFF8D6E63.toInt()
                     canvas.drawRoundRect(w * 0.15f, baseY - h * 0.12f, w * 0.45f, baseY, 8f, 8f, objectPaint)
-                    // Cushions
                     objectPaint.color = 0xFFA1887F.toInt()
                     canvas.drawRoundRect(w * 0.17f, baseY - h * 0.1f, w * 0.3f, baseY - h * 0.02f, 6f, 6f, objectPaint)
                     canvas.drawRoundRect(w * 0.31f, baseY - h * 0.1f, w * 0.43f, baseY - h * 0.02f, 6f, 6f, objectPaint)
@@ -283,7 +359,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawRoundRect(w * 0.55f, h * 0.2f, w * 0.85f, h * 0.42f, 4f, 4f, objectPaint)
                     objectPaint.color = 0xFF4FC3F7.toInt()
                     canvas.drawRoundRect(w * 0.57f, h * 0.22f, w * 0.83f, h * 0.4f, 2f, 2f, objectPaint)
-                    // TV stand
                     objectPaint.color = 0xFF5D4037.toInt()
                     canvas.drawRect(w * 0.6f, baseY - h * 0.05f, w * 0.8f, baseY, objectPaint)
                     // Lamp
@@ -291,6 +366,9 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawCircle(w * 0.12f, h * 0.18f, 8f, objectPaint)
                     objectPaint.color = 0xFF795548.toInt()
                     canvas.drawRect(w * 0.11f, h * 0.2f, w * 0.13f, baseY, objectPaint)
+                    // Coffee table
+                    objectPaint.color = 0xFF5D4037.toInt()
+                    canvas.drawRoundRect(w * 0.2f, baseY + h * 0.05f, w * 0.4f, baseY + h * 0.1f, 4f, 4f, objectPaint)
                     textPaint.textSize = w * 0.04f
                     canvas.drawText("🏠", cx, h * 0.08f, textPaint)
                 }
@@ -300,17 +378,17 @@ class BuildingInteriorActivity : AppCompatActivity() {
                         val tx = w * (0.2f + t * 0.4f)
                         objectPaint.color = 0xFF6D4C41.toInt()
                         canvas.drawRect(tx - w * 0.08f, baseY - h * 0.02f, tx + w * 0.08f, baseY, objectPaint)
-                        // Table top
                         objectPaint.color = 0xFF8D6E63.toInt()
                         canvas.drawRoundRect(tx - w * 0.1f, baseY - h * 0.08f, tx + w * 0.1f, baseY - h * 0.02f, 4f, 4f, objectPaint)
-                        // Plate
                         objectPaint.color = 0xFFECEFF1.toInt()
                         canvas.drawCircle(tx, baseY - h * 0.05f, w * 0.03f, objectPaint)
+                        // Tablecloth drape
+                        objectPaint.color = 0xFFE53935.toInt()
+                        canvas.drawRect(tx - w * 0.1f, baseY - h * 0.08f, tx + w * 0.1f, baseY - h * 0.06f, objectPaint)
                     }
                     // Counter
                     objectPaint.color = 0xFF4E342E.toInt()
                     canvas.drawRect(w * 0.02f, h * 0.15f, w * 0.98f, h * 0.22f, objectPaint)
-                    // Bottles on counter
                     objectPaint.color = 0xFF4CAF50.toInt()
                     canvas.drawRect(w * 0.1f, h * 0.1f, w * 0.12f, h * 0.15f, objectPaint)
                     objectPaint.color = 0xFFF44336.toInt()
@@ -319,29 +397,22 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawText("🍕", cx, h * 0.08f, textPaint)
                 }
                 BuildingType.SUPERMARKET -> {
-                    // Shelves
                     for (s in 0..2) {
                         val sx = w * (0.15f + s * 0.3f)
                         objectPaint.color = 0xFFBDBDBD.toInt()
                         canvas.drawRect(sx - w * 0.06f, h * 0.2f, sx + w * 0.06f, baseY, objectPaint)
-                        // Items on shelves
                         for (r in 0..2) {
                             val ry = h * (0.22f + r * 0.1f)
                             objectPaint.color = when (s * 3 + r) {
-                                0 -> 0xFFE53935.toInt()
-                                1 -> 0xFF43A047.toInt()
-                                2 -> 0xFFFF9800.toInt()
-                                3 -> 0xFF1E88E5.toInt()
-                                4 -> 0xFF8E24AA.toInt()
-                                5 -> 0xFFD81B60.toInt()
-                                6 -> 0xFF00897B.toInt()
-                                7 -> 0xFF546E7A.toInt()
+                                0 -> 0xFFE53935.toInt(); 1 -> 0xFF43A047.toInt()
+                                2 -> 0xFFFF9800.toInt(); 3 -> 0xFF1E88E5.toInt()
+                                4 -> 0xFF8E24AA.toInt(); 5 -> 0xFFD81B60.toInt()
+                                6 -> 0xFF00897B.toInt(); 7 -> 0xFF546E7A.toInt()
                                 else -> 0xFF757575.toInt()
                             }
                             canvas.drawRect(sx - w * 0.04f, ry, sx + w * 0.04f, ry + 6f, objectPaint)
                         }
                     }
-                    // Cart
                     objectPaint.color = 0xFF9E9E9E.toInt()
                     canvas.drawRoundRect(w * 0.7f, baseY - h * 0.06f, w * 0.85f, baseY, 4f, 4f, objectPaint)
                     objectPaint.color = 0xFF616161.toInt()
@@ -351,20 +422,16 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawText("🛒", cx, h * 0.08f, textPaint)
                 }
                 BuildingType.HOSPITAL -> {
-                    // Bed
                     objectPaint.color = 0xFFECEFF1.toInt()
                     canvas.drawRoundRect(w * 0.1f, baseY - h * 0.1f, w * 0.5f, baseY, 4f, 4f, objectPaint)
                     objectPaint.color = 0xFFBBDEFB.toInt()
                     canvas.drawRoundRect(w * 0.12f, baseY - h * 0.08f, w * 0.3f, baseY - h * 0.02f, 4f, 4f, objectPaint)
-                    // Pillow
                     objectPaint.color = 0xFFFFFFFF.toInt()
                     canvas.drawRoundRect(w * 0.12f, baseY - h * 0.08f, w * 0.22f, baseY - h * 0.04f, 4f, 4f, objectPaint)
-                    // Heart monitor
                     objectPaint.color = 0xFF263238.toInt()
                     canvas.drawRoundRect(w * 0.6f, h * 0.18f, w * 0.82f, h * 0.35f, 4f, 4f, objectPaint)
                     objectPaint.color = 0xFF4CAF50.toInt()
                     canvas.drawRect(w * 0.62f, h * 0.2f, w * 0.8f, h * 0.33f, objectPaint)
-                    // Heart line
                     val heartPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = 0xFF00E676.toInt(); style = Paint.Style.STROKE; strokeWidth = 2f
                     }
@@ -377,7 +444,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
                         lineTo(w * 0.79f, h * 0.25f)
                     }
                     canvas.drawPath(path, heartPaint)
-                    // Red cross
                     objectPaint.color = 0xFFE53935.toInt()
                     canvas.drawRect(cx - 3f, h * 0.12f, cx + 3f, h * 0.2f, objectPaint)
                     canvas.drawRect(cx - 8f, h * 0.15f, cx + 8f, h * 0.17f, objectPaint)
@@ -385,15 +451,12 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawText("🏥", cx, h * 0.08f, textPaint)
                 }
                 BuildingType.GYM -> {
-                    // Treadmill
                     objectPaint.color = 0xFF424242.toInt()
                     canvas.drawRoundRect(w * 0.05f, baseY - h * 0.15f, w * 0.25f, baseY, 4f, 4f, objectPaint)
                     objectPaint.color = 0xFF616161.toInt()
                     canvas.drawRect(w * 0.07f, baseY - h * 0.12f, w * 0.23f, baseY - h * 0.02f, objectPaint)
-                    // Belt
                     objectPaint.color = 0xFF212121.toInt()
                     canvas.drawRect(w * 0.08f, baseY - h * 0.1f, w * 0.22f, baseY - h * 0.03f, objectPaint)
-                    // Dumbbells
                     for (d in 0..1) {
                         val dx = w * (0.45f + d * 0.15f)
                         objectPaint.color = 0xFF212121.toInt()
@@ -401,7 +464,6 @@ class BuildingInteriorActivity : AppCompatActivity() {
                         objectPaint.color = 0xFF616161.toInt()
                         canvas.drawRect(dx - 8f, baseY - h * 0.03f, dx + 8f, baseY - h * 0.01f, objectPaint)
                     }
-                    // Bench
                     objectPaint.color = 0xFF37474F.toInt()
                     canvas.drawRect(w * 0.7f, baseY - h * 0.06f, w * 0.9f, baseY - h * 0.04f, objectPaint)
                     objectPaint.color = 0xFF546E7A.toInt()

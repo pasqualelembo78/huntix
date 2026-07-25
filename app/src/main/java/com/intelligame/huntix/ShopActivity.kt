@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.CatchToolManager
 import com.intelligame.huntix.billing.BillingManager
 import com.intelligame.huntix.managers.SavedManager
+import io.sentry.Sentry
 
 /**
  * ShopActivity — negozio MVC e VIP Pass (Google Play Billing).
@@ -19,7 +20,7 @@ class ShopActivity : BaseNavActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = this
-        try { BillingManager.init(c) } catch (_: Exception) { }
+        try { BillingManager.init(c) } catch (e: Exception) { Sentry.captureException(e) }
 
         val children = mutableListOf<android.view.View>(
             UiKit.title(c, "Negozio", "🛒"),
@@ -31,7 +32,7 @@ class ShopActivity : BaseNavActivity() {
                 BillingManager.purchaseVip(c) { ok, msg ->
                     Toast.makeText(c, if (ok) "Grazie per il VIP!" else msg, Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) { Sentry.captureException(e); Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
         })
         children.add(UiKit.section(c, "🎟️ Pass & Pro"))
         children.add(UiKit.button(c, "🗓️ Season Pass — 90 giorni x2 ricompense", UiKit.ACCENT) {
@@ -39,14 +40,14 @@ class ShopActivity : BaseNavActivity() {
                 BillingManager.purchaseOneTime(c, BillingManager.PRODUCT_SEASON_PASS) { ok, msg ->
                     Toast.makeText(c, if (ok) "Season Pass attivato!" else msg, Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) { Sentry.captureException(e); Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
         })
         children.add(UiKit.button(c, "🎮 Multiplayer Pro — lobby 8 giocatori", UiKit.PURPLE) {
             try {
                 BillingManager.purchaseOneTime(c, BillingManager.PRODUCT_MULTIPLAYER) { ok, msg ->
                     Toast.makeText(c, if (ok) "Multiplayer Pro attivato!" else msg, Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) { Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) { Sentry.captureException(e); Toast.makeText(c, "Billing non disponibile", Toast.LENGTH_SHORT).show() }
         })
         children.add(UiKit.section(c, "🪣 Secchielli (con MVC)"))
         children.add(UiKit.subtitle(c,

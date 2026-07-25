@@ -16,11 +16,15 @@ import com.intelligame.huntix.avatar.AvatarSyncManager
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.intelligame.huntix.gamification.LiveEventManager
+import com.intelligame.huntix.gamification.SpecialEventManager
+import com.intelligame.huntix.gamification.DailyEventManager
+import com.intelligame.huntix.gamification.DailyEventRegistry
 import com.intelligame.huntix.ui.*
 import com.intelligame.huntix.billing.VipManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.DistanceTracker
 import android.widget.Toast
+import io.sentry.Sentry
 
 /**
  * Home Page — Stile Brawl Stars
@@ -44,7 +48,7 @@ class HomeActivity : BaseNavActivity() {
             if (!DistanceTracker.isListening(this)) {
                 DistanceTracker.startListening(this) { /* handled internally */ }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
 
     override fun onPause() {
@@ -60,7 +64,7 @@ class HomeActivity : BaseNavActivity() {
                     try { Toast.makeText(this, "☁️ Progresso ripristinato!", Toast.LENGTH_SHORT).show() } catch (_: Exception) {}
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
 
         val scroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0D0620"))
@@ -133,7 +137,7 @@ class HomeActivity : BaseNavActivity() {
             tag = xpPct
         }
         xpTrack.addView(xpFill)
-        xpTrack.post { xpFill.layoutParams = FrameLayout.LayoutParams((xpTrack.width * (xpFill.tag as Int) / 100), dp(8)) }
+        xpTrack.post { xpFill.layoutParams = FrameLayout.LayoutParams((xpTrack.width * ((xpFill.tag as? Int) ?: 35) / 100), dp(8)) }
         avatarCard.addView(xpTrack)
         avatarCard.addView(TextView(this).apply {
             text = "${profile?.xpProgressInLevel ?: 0}/${profile?.xpNeededForNextLevel ?: 100} XP"
@@ -156,9 +160,122 @@ class HomeActivity : BaseNavActivity() {
                 layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(12) }
                 if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
             })
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
 
-        // ═══ 4. GAME MODES GRID (2x2) ═══
+        // ═══ 3b. SPECIAL EVENT BANNER ═══
+        try {
+            if (SpecialEventManager.hasActiveEvent()) {
+                val activeEvent = SpecialEventManager.getActiveSpecialEvent()
+                if (activeEvent != null) {
+                    val eventCard = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                            intArrayOf(Color.parseColor("#C62828"), Color.parseColor("#1B5E20"))
+                        ).apply { cornerRadius = dp(12).toFloat() }
+                        setPadding(dp(14), dp(10), dp(14), dp(10))
+                        layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also {
+                            it.bottomMargin = dp(12)
+                        }
+                        isClickable = true; isFocusable = true
+                        setOnClickListener {
+                            startActivity(Intent(this@HomeActivity, SpecialEventsActivity::class.java))
+                        }
+                    }
+
+                    eventCard.addView(TextView(this).apply {
+                        text = "\uD83C\uDF84"; textSize = 28f
+                        layoutParams = LinearLayout.LayoutParams(dp(40), LP_WW)
+                    })
+
+                    val eventCol = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = LinearLayout.LayoutParams(0, LP_WW, 1f).also {
+                            it.marginStart = dp(8)
+                        }
+                    }
+                    eventCol.addView(TextView(this).apply {
+                        text = "Caccia dell'Elfo"
+                        textSize = 15f; setTextColor(Color.WHITE)
+                        typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+                    })
+                    eventCol.addView(TextView(this).apply {
+                        text = "Trova il regalo nascosto! \uD83D\uDD0D"
+                        textSize = 11f; setTextColor(Color.argb(200, 255, 255, 255))
+                    })
+                    eventCard.addView(eventCol)
+
+                    eventCard.addView(TextView(this).apply {
+                        text = "\u2192"; textSize = 18f; setTextColor(Color.WHITE)
+                    })
+
+                    root.addView(eventCard)
+                }
+            }
+        } catch (e: Exception) { Sentry.captureException(e) }
+
+        // ═══ 3c. DAILY EVENT BANNER ═══
+        try {
+            if (DailyEventManager.shouldShowDailyEventBanner()) {
+                val dailyEvent = DailyEventRegistry.getTodayEvent()
+                if (dailyEvent != null) {
+                    val isActive = DailyEventManager.isWithinEventWindow(dailyEvent)
+                    val minsLeft = DailyEventManager.minutesLeftInEvent()
+                    val minsUntil = DailyEventManager.minutesUntilEvent()
+
+                    val subtitle = when {
+                        isActive -> "Attivo ora! Mancano $minsLeft min"
+                        minsUntil in 0..30 -> "Inizia tra $minsUntil min!"
+                        else -> "Oggi alle ${dailyEvent.startHour}:${String.format("%02d", dailyEvent.startMinute)}"
+                    }
+
+                    val dailyCard = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                            intArrayOf(dailyEvent.colorInt, dailyEvent.colorInt / 2)
+                        ).apply { cornerRadius = dp(12).toFloat() }
+                        setPadding(dp(14), dp(10), dp(14), dp(10))
+                        layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also {
+                            it.bottomMargin = dp(12)
+                        }
+                        isClickable = true; isFocusable = true
+                        setOnClickListener {
+                            startActivity(Intent(this@HomeActivity, SpecialEventsActivity::class.java))
+                        }
+                    }
+
+                    dailyCard.addView(TextView(this).apply {
+                        text = dailyEvent.emoji; textSize = 28f
+                        layoutParams = LinearLayout.LayoutParams(dp(40), LP_WW)
+                    })
+
+                    val dailyCol = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        layoutParams = LinearLayout.LayoutParams(0, LP_WW, 1f).also {
+                            it.marginStart = dp(8)
+                        }
+                    }
+                    dailyCol.addView(TextView(this).apply {
+                        text = dailyEvent.title
+                        textSize = 15f; setTextColor(Color.WHITE)
+                        typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+                    })
+                    dailyCol.addView(TextView(this).apply {
+                        text = subtitle
+                        textSize = 11f; setTextColor(Color.argb(200, 255, 255, 255))
+                    })
+                    dailyCard.addView(dailyCol)
+
+                    dailyCard.addView(TextView(this).apply {
+                        text = "\u2192"; textSize = 18f; setTextColor(Color.WHITE)
+                    })
+
+                    root.addView(dailyCard)
+                }
+            }
+        } catch (e: Exception) { Sentry.captureException(e) }
+
         val grid = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(10) }
@@ -225,7 +342,7 @@ class HomeActivity : BaseNavActivity() {
             if (VipManager.claimDailyVipBonus(this)) {
                 Toast.makeText(this, "\u2B50 VIP Bonus: +200 MVC!", Toast.LENGTH_SHORT).show()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
 
     // ─── Game Tile (2x2 grid) ────────────────────────────────────

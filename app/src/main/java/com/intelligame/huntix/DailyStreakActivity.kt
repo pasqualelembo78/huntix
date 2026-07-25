@@ -169,7 +169,7 @@ class DailyStreakActivity : BaseNavActivity() {
             })
         }
 
-        children.add(UiKit.button(c, "← Indietro", "#666") { finish() })
+        children.add(UiKit.button(c, "← Indietro", "#666666") { finish() })
 
         setContentView(UiKit.scroll(c, *children.toTypedArray()))
     }

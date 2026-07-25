@@ -16,6 +16,7 @@ import com.intelligame.huntix.updateUI
 import com.intelligame.huntix.model.EggObject
 import com.intelligame.huntix.model.GamePhase
 import io.github.sceneview.ar.node.AnchorNode
+import io.sentry.Sentry
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Scale
@@ -164,7 +165,7 @@ class EggPlacementManager(internal val activity: MainActivity) {
                 val anchor = session.createAnchor(Pose(floatArrayOf(cx, cy, cz), floatArrayOf(0f, 0f, 0f, 1f)))
                 placeEggAtAnchor(anchor, false, viewModel.nextEggShape)
                 placed.add(floatArrayOf(cx, cy, cz))
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
         }
         if (trapCount > 0 && activity.eggs.isNotEmpty()) {
             activity.eggs.shuffled().take(trapCount.coerceAtMost(activity.eggs.size)).forEach { egg ->

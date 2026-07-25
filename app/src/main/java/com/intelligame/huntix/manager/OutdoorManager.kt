@@ -13,6 +13,7 @@ import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.EggElement
 import com.intelligame.huntix.EggInventoryItem
+import io.sentry.Sentry
 import com.intelligame.huntix.EggInventoryManager
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.PlayerProfileManager
@@ -89,10 +90,10 @@ class OutdoorManager private constructor() : SensorEventListener {
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasPerm || locationManager == null) {
             if (currentLocation == null) currentLocation = defaultLocation()
-            ensureSpawns(currentLocation!!)
+            currentLocation?.let { ensureSpawns(it) }
             return
         }
-        val lm = locationManager!!
+        val lm = locationManager ?: return
         val gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
         val netEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         try {
@@ -102,23 +103,25 @@ class OutdoorManager private constructor() : SensorEventListener {
                 currentLocation = lastLoc
                 ensureSpawns(lastLoc)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
         if (currentLocation == null) currentLocation = defaultLocation()
-        ensureSpawns(currentLocation!!)
+        currentLocation?.let { loc -> ensureSpawns(loc) }
         var started = false
         if (gpsEnabled) {
             try {
                 lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 5f, listener)
                 started = true
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
         } else if (netEnabled) {
             try {
                 lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 3000L, 10f, listener)
                 started = true
-            } catch (_: Exception) {}
+            } catch (e: Exception) { Sentry.captureException(e) }
         }
         listening = started
-        WeatherZoneManager.refreshAsync(ctx, currentLocation!!.latitude, currentLocation!!.longitude)
+        currentLocation?.let { loc ->
+            WeatherZoneManager.refreshAsync(ctx, loc.latitude, loc.longitude)
+        }
     }
 
     private fun registerCompass(ctx: Context) {

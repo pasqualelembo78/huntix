@@ -208,94 +208,220 @@ class CityMapActivity : AppCompatActivity() {
             canvas.translate(panX, panY)
             canvas.scale(zoom, zoom)
 
-            // Grass background
+            // Grass background with subtle gradient
+            val grassGradient = LinearGradient(0f, 0f, 0f, h,
+                intArrayOf(0xFF3D7A35.toInt(), 0xFF4A8C3F.toInt(), 0xFF3D7A35.toInt()),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            grassPaint.shader = grassGradient
             canvas.drawRect(0f, 0f, w, h, grassPaint)
 
-            // Grid lines
-            val gridStep = w / 8f
-            for (i in 0..8) {
-                canvas.drawLine(i * gridStep, 0f, i * gridStep, h, gridPaint)
-                canvas.drawLine(0f, i * gridStep, w, i * gridStep, gridPaint)
+            // Grass texture dots
+            val grassDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x302E7D32; style = Paint.Style.FILL }
+            for (i in 0 until 200) {
+                val gx = ((i * 173 + 42) % 1000).toFloat() / 1000f * w
+                val gy = ((i * 311 + 87) % 1000).toFloat() / 1000f * h
+                canvas.drawCircle(gx, gy, 2f + (i % 3).toFloat(), grassDotPaint)
             }
 
-            // Roads (8 roads in each direction)
-            val roadW = w / 80f * 2f  // proportional road width
+            // Roads (8 roads in each direction) with detail
+            val gridStep = w / 8f
+            val roadW = w / 80f * 2f
+            val centerLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x88FFD54F.toInt(); style = Paint.Style.STROKE
+                strokeWidth = 1.5f; pathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+            }
+
             for (i in 0 until 8) {
                 val pos = (i + 0.5f) * gridStep
-                // Vertical road
-                canvas.drawRect(pos - roadW / 2, 0f, pos + roadW / 2, h, roadPaint)
-                // Horizontal road
-                canvas.drawRect(0f, pos - roadW / 2, w, pos + roadW / 2, roadPaint)
-                // Sidewalks
-                canvas.drawRect(pos - roadW / 2 - 4, 0f, pos - roadW / 2, h, sidewalkPaint)
-                canvas.drawRect(pos + roadW / 2, 0f, pos + roadW / 2 + 4, h, sidewalkPaint)
-                canvas.drawRect(0f, pos - roadW / 2 - 4, w, pos - roadW / 2, sidewalkPaint)
-                canvas.drawRect(0f, pos + roadW / 2, w, pos + roadW / 2 + 4, sidewalkPaint)
+                val halfRoad = roadW / 2
+
+                // Road shadow
+                val roadShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0x20000000; style = Paint.Style.FILL
+                }
+                canvas.drawRect(pos - halfRoad + 2, 0f, pos + halfRoad + 2, h, roadShadowPaint)
+                canvas.drawRect(0f, pos - halfRoad + 2, w, pos + halfRoad + 2, roadShadowPaint)
+
+                // Road surface
+                canvas.drawRect(pos - halfRoad, 0f, pos + halfRoad, h, roadPaint)
+                canvas.drawRect(0f, pos - halfRoad, w, pos + halfRoad, roadPaint)
+
+                // Sidewalks (lighter strips)
+                canvas.drawRect(pos - halfRoad - 3, 0f, pos - halfRoad, h, sidewalkPaint)
+                canvas.drawRect(pos + halfRoad, 0f, pos + halfRoad + 3, h, sidewalkPaint)
+                canvas.drawRect(0f, pos - halfRoad - 3, w, pos - halfRoad, sidewalkPaint)
+                canvas.drawRect(0f, pos + halfRoad, w, pos + halfRoad + 3, sidewalkPaint)
+
+                // Center lane divider
+                canvas.drawLine(pos, 0f, pos, h, centerLinePaint)
+                canvas.drawLine(0f, pos, w, pos, centerLinePaint)
             }
 
-            // Special buildings (colored blocks)
+            // Special buildings with roofs and details
             val buildingBlocks = listOf(
-                floatArrayOf(-25f, -15f, 4f, 3f, 0xFFFF7043.toFloat()), // Ristorante
-                floatArrayOf(5f, -25f, 3f, 4f, 0xFF42A5F5.toFloat()),   // Supermercato
-                floatArrayOf(-15f, 5f, 4f, 3f, 0xFFEF5350.toFloat()),   // Ospedale
-                floatArrayOf(15f, 5f, 3f, 4f, 0xFFAB47BC.toFloat()),    // Palestra
-                floatArrayOf(-15f, -25f, 3f, 3f, 0xFF1565C0.toFloat()), // Polizia
-                floatArrayOf(25f, 25f, 3f, 3f, 0xFFC62828.toFloat()),   // Vigili
-                floatArrayOf(5f, 5f, 3f, 3f, 0xFFFFB300.toFloat()),     // Banca
-                floatArrayOf(-5f, 25f, 3f, 3f, 0xFFD4A574.toFloat()),   // Chiesa
-                floatArrayOf(25f, -5f, 5f, 5f, 0xFF81C784.toFloat()),   // Parco
-                floatArrayOf(-25f, 15f, 4f, 4f, 0xFF29B6F6.toFloat()),  // Lago
-                floatArrayOf(15f, -25f, 3f, 3f, 0xFF78909C.toFloat()),  // Benzinaio
-                floatArrayOf(-5f, -15f, 4f, 4f, 0xFFFF8A65.toFloat())   // Negozi
+                floatArrayOf(-25f, -15f, 4f, 3f, 0xFFFF7043.toFloat(), 0xFFD84315.toFloat()), // Ristorante
+                floatArrayOf(5f, -25f, 3f, 4f, 0xFF42A5F5.toFloat(), 0xFF1565C0.toFloat()),   // Supermercato
+                floatArrayOf(-15f, 5f, 4f, 3f, 0xFFEF5350.toFloat(), 0xFFC62828.toFloat()),   // Ospedale
+                floatArrayOf(15f, 5f, 3f, 4f, 0xFFAB47BC.toFloat(), 0xFF6A1B9A.toFloat()),    // Palestra
+                floatArrayOf(-15f, -25f, 3f, 3f, 0xFF1565C0.toFloat(), 0xFF0D47A1.toFloat()), // Polizia
+                floatArrayOf(25f, 25f, 3f, 3f, 0xFFC62828.toFloat(), 0xFF8E0000.toFloat()),   // Vigili
+                floatArrayOf(5f, 5f, 3f, 3f, 0xFFFFB300.toFloat(), 0xFFE65100.toFloat()),     // Banca
+                floatArrayOf(-5f, 25f, 3f, 3f, 0xFFD4A574.toFloat(), 0xFF8D6E63.toFloat()),   // Chiesa
+                floatArrayOf(25f, -5f, 5f, 5f, 0xFF81C784.toFloat(), 0xFF4CAF50.toFloat()),   // Parco
+                floatArrayOf(-25f, 15f, 4f, 4f, 0xFF29B6F6.toFloat(), 0xFF0288D1.toFloat()),  // Lago
+                floatArrayOf(15f, -25f, 3f, 3f, 0xFF78909C.toFloat(), 0xFF455A64.toFloat()),  // Benzinaio
+                floatArrayOf(-5f, -15f, 4f, 4f, 0xFFFF8A65.toFloat(), 0xFFE64A19.toFloat())   // Negozi
             )
             val bPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            val roofPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            val windowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x88E3F2FD.toInt(); style = Paint.Style.FILL
+            }
 
             for (b in buildingBlocks) {
                 val bx = MapLocations.cityToMap(b[0]) * w
                 val bz = MapLocations.cityToMap(b[1]) * h
                 val bw = b[2] / MapLocations.CITY_SIZE * w
                 val bh = b[3] / MapLocations.CITY_SIZE * h
+
+                // Building shadow
+                val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0x30000000; style = Paint.Style.FILL
+                }
+                canvas.drawRoundRect(bx - bw / 2 + 3, bz - bh / 2 + 3, bx + bw / 2 + 3, bz + bh / 2 + 3, 6f, 6f, shadowPaint)
+
+                // Building body
                 bPaint.color = b[4].toInt()
-                canvas.drawRoundRect(bx - bw / 2, bz - bh / 2, bx + bw / 2, bz + bh / 2, 8f, 8f, bPaint)
+                canvas.drawRoundRect(bx - bw / 2, bz - bh / 2, bx + bw / 2, bz + bh / 2, 6f, 6f, bPaint)
+
+                // Roof accent (darker strip at top)
+                roofPaint.color = b[5].toInt()
+                canvas.drawRoundRect(bx - bw / 2, bz - bh / 2, bx + bw / 2, bz - bh / 2 + bh * 0.25f, 6f, 6f, roofPaint)
+
+                // Windows (small dots in a grid)
+                if (b[2] >= 3f) {
+                    val cols = (b[2] / 1.2f).toInt().coerceAtLeast(2)
+                    val rows = (b[3] / 1.2f).toInt().coerceAtLeast(2)
+                    val wSize = 3f
+                    for (wx in 0 until cols) {
+                        for (wy in 0 until rows) {
+                            val wX = bx - bw / 2 + bw * (wx + 1f) / (cols + 1f)
+                            val wY = bz - bh / 2 + bh * (wy + 1.5f) / (rows + 1.5f)
+                            canvas.drawRect(wX - wSize, wY - wSize, wX + wSize, wY + wSize, windowPaint)
+                        }
+                    }
+                }
+
+                // Park trees
+                if (b[0] == 25f && b[1] == -5f) {
+                    val treePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2E7D32.toInt(); style = Paint.Style.FILL }
+                    val trunkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF5D4037.toInt(); style = Paint.Style.FILL }
+                    for (t in 0 until 8) {
+                        val tx = bx - bw / 2 + bw * ((t * 37 + 11) % 100).toFloat() / 100f
+                        val tz = bz - bh / 2 + bh * ((t * 53 + 29) % 100).toFloat() / 100f
+                        canvas.drawCircle(tx, tz, 5f + (t % 3).toFloat() * 2f, treePaint)
+                        canvas.drawRect(tx - 1f, tz, tx + 1f, tz + 6f, trunkPaint)
+                    }
+                }
+
+                // Lake waves
+                if (b[0] == -25f && b[1] == 15f) {
+                    val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = 0x60FFFFFF; style = Paint.Style.STROKE; strokeWidth = 1.5f
+                    }
+                    for (w2 in 0 until 3) {
+                        val wy = bz - bh / 4 + bh * w2 / 4f
+                        canvas.drawLine(bx - bw / 3, wy, bx + bw / 3, wy, wavePaint)
+                    }
+                }
             }
 
-            // Procedural buildings (lighter blocks in empty areas)
-            val procPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = 0x44FFFFFF; style = Paint.Style.FILL
-            }
+            // Procedural buildings (residential blocks with variety)
+            val procColors = intArrayOf(
+                0x55FFFFFF, 0x44E8D5B5, 0x44B0BEC5, 0x44FFCCBC,
+                0x44C5CAE9, 0x44B2DFDB, 0x44F0F4C3, 0x44D1C4E9
+            )
+            val procPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
             val seed = 42
-            for (i in 0 until 30) {
-                val sx = ((seed * 137 + i * 73) % 1000).toFloat() / 1000f
-                val sz = ((seed * 251 + i * 113) % 1000).toFloat() / 1000f
-                val sw = 0.02f + (i % 5) * 0.005f
-                val sh = 0.02f + (i % 3) * 0.005f
-                canvas.drawRect(sx * w - sw * w / 2, sz * h - sh * h / 2,
-                    sx * w + sw * w / 2, sz * h + sh * h / 2, procPaint)
+            for (i in 0 until 50) {
+                val sx = ((seed * 137 + i * 73) % 1000).toFloat() / 1000f * w
+                val sz = ((seed * 251 + i * 113) % 1000).toFloat() / 1000f * h
+                val sw = 12f + (i % 5) * 6f
+                val sh = 10f + (i % 4) * 5f
+                procPaint.color = procColors[i % procColors.size]
+                canvas.drawRoundRect(sx - sw / 2, sz - sh / 2, sx + sw / 2, sz + sh / 2, 4f, 4f, procPaint)
             }
 
-            // Location icons
+            // Location markers with improved design
+            val markerShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x40000000; style = Paint.Style.FILL
+                maskFilter = BlurMaskFilter(6f, BlurMaskFilter.Blur.NORMAL)
+            }
+            val markerGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL; maskFilter = BlurMaskFilter(10f, BlurMaskFilter.Blur.NORMAL)
+            }
+            val markerLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE; textSize = 18f; textAlign = Paint.Align.CENTER
+                typeface = Typeface.DEFAULT_BOLD
+                setShadowLayer(3f, 1f, 1f, Color.BLACK)
+            }
+
             for (loc in MapLocations.LOCATIONS) {
                 val lx = MapLocations.cityToMap(loc.cityX) * w
                 val ly = MapLocations.cityToMap(loc.cityZ) * h
-                val iconRadius = 18f
+                val iconRadius = 20f
+
+                // Shadow
+                canvas.drawCircle(lx + 2, ly + 3, iconRadius, markerShadowPaint)
+
+                // Glow
+                markerGlowPaint.color = loc.color and 0x00FFFFFF or 0x30000000
+                canvas.drawCircle(lx, ly, iconRadius * 1.5f, markerGlowPaint)
 
                 // Background circle
                 iconBgPaint.color = loc.color
                 canvas.drawCircle(lx, ly, iconRadius, iconBgPaint)
+
+                // Inner ring
+                val innerRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = 0x44FFFFFF; style = Paint.Style.STROKE; strokeWidth = 1.5f
+                }
+                canvas.drawCircle(lx, ly, iconRadius - 3f, innerRingPaint)
+
+                // White border
                 canvas.drawCircle(lx, ly, iconRadius, iconBorderPaint)
 
                 // Emoji
-                textPaint.textSize = 22f
-                canvas.drawText(loc.emoji, lx, ly + 8f, textPaint)
+                textPaint.textSize = 24f
+                canvas.drawText(loc.emoji, lx, ly + 9f, textPaint)
+
+                // Label below
+                markerLabelPaint.textSize = 14f
+                canvas.drawText(loc.name, lx, ly + iconRadius + 16f, markerLabelPaint)
             }
 
-            // Player marker
+            // Player marker with pulse effect
             val px = MapLocations.cityToMap(playerX) * w
             val py = MapLocations.cityToMap(playerZ) * h
-            canvas.drawCircle(px, py, 12f, playerPaint)
-            canvas.drawCircle(px, py, 12f, playerBorderPaint)
 
-            // Player direction indicator (small triangle pointing up = forward)
+            // Player outer pulse ring
+            val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor(UiKit.ACCENT); alpha = 40; style = Paint.Style.FILL
+            }
+            canvas.drawCircle(px, py, 20f, pulsePaint)
+
+            // Player glow
+            val playerGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor(UiKit.ACCENT); alpha = 80; style = Paint.Style.FILL
+                maskFilter = BlurMaskFilter(8f, BlurMaskFilter.Blur.NORMAL)
+            }
+            canvas.drawCircle(px, py, 14f, playerGlowPaint)
+
+            // Player body
+            canvas.drawCircle(px, py, 10f, playerPaint)
+            canvas.drawCircle(px, py, 10f, playerBorderPaint)
+
+            // Player direction indicator
             val dirPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor(UiKit.ACCENT); style = Paint.Style.FILL
             }

@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
+import io.sentry.Sentry
 
 class Match3Activity : MiniGameBase() {
 
@@ -219,7 +220,7 @@ class Match3Activity : MiniGameBase() {
                 ),
                 MiniGameManager.GAME_MATCH3
             )
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {

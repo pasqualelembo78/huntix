@@ -102,12 +102,16 @@ object UiKit {
         return ll
     }
 
+    fun parseColorSafe(hex: String, fallback: Int = Color.parseColor(ACCENT)): Int {
+        return try { Color.parseColor(hex) } catch (_: Exception) { fallback }
+    }
+
     fun button(c: Context, label: String, color: String = ACCENT, onClick: () -> Unit): LinearLayout {
         return LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                cornerRadius = dp(c, 12).toFloat(); setColor(Color.parseColor(color))
+                cornerRadius = dp(c, 12).toFloat(); setColor(parseColorSafe(color))
             }
             setPadding(dp(c, 12), dp(c, 12), dp(c, 12), dp(c, 12))
             layoutParams = LinearLayout.LayoutParams(

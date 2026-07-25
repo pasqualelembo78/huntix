@@ -3,6 +3,7 @@ package com.intelligame.huntix.battle
 import android.content.Context
 import android.graphics.*
 import com.intelligame.huntix.battle.CharacterRenderer.AnimState
+import io.sentry.Sentry
 import kotlin.math.*
 
 class SpriteSheetRenderer(private val context: Context? = null) {
@@ -57,10 +58,10 @@ class SpriteSheetRenderer(private val context: Context? = null) {
                             frameCountCache[state.name] = BRAWLER_FRAME_COUNTS[fileName] ?: 1
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) { Sentry.captureException(e) }
             }
             spritesLoaded = spriteCache.isNotEmpty()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
 
     fun draw(

@@ -7,18 +7,24 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.lifecycle.lifecycleScope
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.intelligame.huntix.BuildConfig
+import io.sentry.Sentry
+import kotlinx.coroutines.launch
 
 /**
  * LoginActivity — schermata di accesso.
  * - Ospite: Firebase anonymous auth -> profilo locale.
- * - Google: Firebase Auth via Google ID token.
- * - Facebook: Firebase Auth via Facebook Access Token.
+ * - Google: Firebase Auth via Google ID token (Credential Manager).
  * - GitHub: Firebase Auth via OAuthProvider("github.com").
  */
 class LoginActivity : AppCompatActivity() {
-
-    private var fbCallbackManager: com.facebook.CallbackManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,16 +60,10 @@ class LoginActivity : AppCompatActivity() {
         })
         root.addView(spacer())
 
-        // Facebook: nascosto se non configurato, altrimenti bottone normale
-        if (BuildConfig.FACEBOOK_ENABLED) {
-            root.addView(UiKit.button(c, "\uD83D\uDCAC  Continua con Facebook", "#4267B2") {
-                signInWithFacebook(c)
-            })
-            root.addView(spacer())
-        }
+
 
         root.addView(UiKit.button(c, "🐙  Continua con GitHub", "#24292e") {
-            signInWithGitHub(c)
+            signInWithGitHub()
         })
         root.addView(spacer())
 
@@ -101,62 +101,101 @@ class LoginActivity : AppCompatActivity() {
         setContentView(root)
     }
 
-    // ── Google ──────────────────────────────────────────────
+    // ── Google (Credential Manager) ──────────────────────────
     private fun signInWithGoogle(context: android.content.Context) {
-        try {
-            val signInIntent = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(
-                this,
-                com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
-                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
-                )
-                    .requestIdToken(BuildConfig.WEB_CLIENT_ID)
-                    .requestEmail()
-                    .build()
-            ).signInIntent
-            @Suppress("DEPRECATION")
-            startActivityForResult(signInIntent, RC_GOOGLE_SIGN_IN)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Google Sign-In non disponibile", Toast.LENGTH_SHORT).show()
+        if (BuildConfig.WEB_CLIENT_ID.isBlank()) {
+            Toast.makeText(context, "Google login non configurato", Toast.LENGTH_SHORT).show()
             loginAsGuest()
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val credentialManager = CredentialManager.create(this@LoginActivity)
+
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(BuildConfig.WEB_CLIENT_ID)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                val response = credentialManager.getCredential(this@LoginActivity, request)
+                val credential = response.credential
+
+                val idToken = when {
+                    credential is GoogleIdTokenCredential -> credential.idToken
+                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL ->
+                        credential.data.getString("com.google.android.libraries.identity.googleid.BUNDLE_KEY_ID_TOKEN") ?: ""
+                    else -> ""
+                }
+
+                if (idToken.isNotBlank()) {
+                    firebaseAuthWithGoogle(idToken)
+                } else {
+                    Toast.makeText(context, "Google login: token non valido", Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: GetCredentialCancellationException) {
+                // Utente ha annullato — nessun messaggio
+            } catch (e: GetCredentialException) {
+                Toast.makeText(context, "Login Google fallito: ${e.message}", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Google Sign-In non disponibile: ${e.message}", Toast.LENGTH_SHORT).show()
+                loginAsGuest()
+            }
         }
     }
 
-    // ── Facebook ────────────────────────────────────────────
-    private fun signInWithFacebook(context: android.content.Context) {
-        if (!BuildConfig.FACEBOOK_ENABLED) {
-            Toast.makeText(context, "Login Facebook non ancora configurato", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val fbAppId = BuildConfig.FACEBOOK_APP_ID
-        if (fbAppId.isBlank()) {
-            Toast.makeText(context, "Login Facebook non ancora configurato", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val cm = com.facebook.CallbackManager.Factory.create()
-        fbCallbackManager = cm
-        val permissions = listOf("email", "public_profile")
-        com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(this, cm, permissions)
-    }
-
-    // ── GitHub ──────────────────────────────────────────────
-    private fun signInWithGitHub(context: android.content.Context) {
-        val provider = com.google.firebase.auth.OAuthProvider.newBuilder("github.com").build()
-        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-        // Se c'è già una pending result (es. dopo il browser), prova a risolverla
-        val pending = auth.pendingAuthResult
-        if (pending != null) {
-            pending.addOnSuccessListener { res -> onGitHubSuccess(res, context) }
-                .addOnFailureListener { e -> Toast.makeText(context, "GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show() }
-            return
-        }
-        auth.startActivityForSignInWithProvider(this, provider)
-            .addOnSuccessListener { res -> onGitHubSuccess(res, context) }
+    private fun firebaseAuthWithGoogle(idToken: String) {
+        val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+            .signInWithCredential(credential)
+            .addOnSuccessListener { result ->
+                if (isFinishing || isDestroyed) return@addOnSuccessListener
+                val uid = result.user?.uid ?: ""
+                val googleName = result.user?.displayName ?: "Cacciatore Google"
+                PlayerProfileManager.saveLoginMethod(this, "google", googleName, uid, true)
+                PlayerProfileManager.initMyProfile(
+                    context = this,
+                    name = googleName,
+                    firebaseUid = uid,
+                    isGoogleUser = true,
+                    onReady = { goToProfile() },
+                    onError = { msg ->
+                        if (isFinishing || isDestroyed) return@initMyProfile
+                        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                    }
+                )
+            }
             .addOnFailureListener { e ->
-                Toast.makeText(context, "Login GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show()
+                if (isFinishing || isDestroyed) return@addOnFailureListener
+                Toast.makeText(this, "Auth Firebase fallita: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
 
-    private fun onGitHubSuccess(result: com.google.firebase.auth.AuthResult, context: android.content.Context) {
+
+
+    // ── GitHub ──────────────────────────────────────────────
+    private fun signInWithGitHub() {
+        val provider = com.google.firebase.auth.OAuthProvider.newBuilder("github.com").build()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val pending = auth.pendingAuthResult
+        if (pending != null) {
+            pending.addOnSuccessListener { res -> onGitHubSuccess(res) }
+                .addOnFailureListener { e -> Toast.makeText(this, "GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show() }
+            return
+        }
+        auth.startActivityForSignInWithProvider(this, provider)
+            .addOnSuccessListener { res -> onGitHubSuccess(res) }
+            .addOnFailureListener { e ->
+                if (isFinishing || isDestroyed) return@addOnFailureListener
+                Toast.makeText(this, "Login GitHub fallito: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun onGitHubSuccess(result: com.google.firebase.auth.AuthResult) {
+        if (isFinishing || isDestroyed) return
         val uid = result.user?.uid ?: ""
         val name = result.user?.displayName ?: "Cacciatore GitHub"
         PlayerProfileManager.saveLoginMethod(this, "github", name, uid)
@@ -166,7 +205,10 @@ class LoginActivity : AppCompatActivity() {
             firebaseUid = uid,
             isGoogleUser = false,
             onReady = { goToProfile() },
-            onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+            onError = { msg ->
+                if (isFinishing || isDestroyed) return@initMyProfile
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
         )
     }
 
@@ -177,7 +219,7 @@ class LoginActivity : AppCompatActivity() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             })
             finish()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
     }
     private fun goToProfile() = safeGoToProfile()
 
@@ -193,13 +235,14 @@ class LoginActivity : AppCompatActivity() {
         }
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         auth.signInWithEmailAndPassword(email, password)
-            .addOnSuccessListener { res -> onEmailSuccess(res, context) }
+            .addOnSuccessListener { res -> onEmailSuccess(res) }
             .addOnFailureListener { e ->
-                // Utente non esiste -> registrazione
+                if (isFinishing || isDestroyed) return@addOnFailureListener
                 if (e is com.google.firebase.auth.FirebaseAuthInvalidUserException) {
                     auth.createUserWithEmailAndPassword(email, password)
-                        .addOnSuccessListener { res -> onEmailSuccess(res, context) }
+                        .addOnSuccessListener { res -> onEmailSuccess(res) }
                         .addOnFailureListener { ex ->
+                            if (isFinishing || isDestroyed) return@addOnFailureListener
                             Toast.makeText(context, "Registrazione fallita: ${ex.message}", Toast.LENGTH_LONG).show()
                         }
                 } else {
@@ -208,7 +251,8 @@ class LoginActivity : AppCompatActivity() {
             }
     }
 
-    private fun onEmailSuccess(result: com.google.firebase.auth.AuthResult, context: android.content.Context) {
+    private fun onEmailSuccess(result: com.google.firebase.auth.AuthResult) {
+        if (isFinishing || isDestroyed) return
         val uid = result.user?.uid ?: ""
         val name = result.user?.email?.substringBefore('@')?.replaceFirstChar { it.uppercase() }
             ?: "Cacciatore Email"
@@ -219,7 +263,10 @@ class LoginActivity : AppCompatActivity() {
             firebaseUid = uid,
             isGoogleUser = false,
             onReady = { goToProfile() },
-            onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+            onError = { msg ->
+                if (isFinishing || isDestroyed) return@initMyProfile
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
         )
     }
 
@@ -229,6 +276,7 @@ class LoginActivity : AppCompatActivity() {
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
         auth.signInAnonymously()
             .addOnSuccessListener { result ->
+                if (isFinishing || isDestroyed) return@addOnSuccessListener
                 val uid = result.user?.uid
                 if (uid.isNullOrBlank()) {
                     Toast.makeText(this, "Auth anonima senza UID", Toast.LENGTH_LONG).show()
@@ -240,78 +288,19 @@ class LoginActivity : AppCompatActivity() {
                     name = name,
                     firebaseUid = uid,
                     onReady = { goToProfile() },
-                    onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                    onError = { msg ->
+                        if (isFinishing || isDestroyed) return@initMyProfile
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    }
                 )
             }
             .addOnFailureListener { e ->
+                if (isFinishing || isDestroyed) return@addOnFailureListener
                 Toast.makeText(this, "Login anonimo fallito: ${e.message}", Toast.LENGTH_LONG).show()
             }
     }
 
-    @Deprecated("Use ActivityResult API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        fbCallbackManager?.onActivityResult(requestCode, resultCode, data)
-        // Facebook: il token arriva via AccessToken dopo il login
-        val fbToken = com.facebook.AccessToken.getCurrentAccessToken()
-        if (fbToken != null && !fbToken.isExpired && fbCallbackManager != null) {
-            val token = fbToken.token
-            val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
-            com.google.firebase.auth.FirebaseAuth.getInstance()
-                .signInWithCredential(credential)
-                .addOnSuccessListener { res ->
-                    val uid = res.user?.uid ?: ""
-                    PlayerProfileManager.saveLoginMethod(this, "facebook", "Cacciatore Facebook", uid)
-                    PlayerProfileManager.initMyProfile(
-                        context = this,
-                        name = "Cacciatore Facebook",
-                        firebaseUid = uid,
-                        isGoogleUser = false,
-                        onReady = { goToProfile() },
-                        onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
-                    )
-                }
-                .addOnFailureListener { e ->
-                    Toast.makeText(this, "Auth Firebase (FB) fallita: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            fbCallbackManager = null
-            return
-        }
-        if (requestCode == RC_GOOGLE_SIGN_IN) {
-            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(data)
-            try {
-                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-                val idToken = account?.idToken
-                if (idToken != null) {
-                    val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                    com.google.firebase.auth.FirebaseAuth.getInstance()
-                        .signInWithCredential(credential)
-                        .addOnSuccessListener { result ->
-                            val uid = result.user?.uid ?: ""
-                            val googleName = account.displayName ?: "Cacciatore Google"
-                            PlayerProfileManager.saveLoginMethod(this, "google", googleName, uid, true)
-                            PlayerProfileManager.initMyProfile(
-                                context = this,
-                                name = googleName,
-                                firebaseUid = uid,
-                                isGoogleUser = true,
-                                onReady = { goToProfile() },
-                                onError = { msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
-                            )
-                        }
-                        .addOnFailureListener { e ->
-                            Toast.makeText(this, "Auth Firebase fallita: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                } else {
-                    Toast.makeText(this, "Token Google non ricevuto", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this, "Login Google fallito: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    companion object {
-        private const val RC_GOOGLE_SIGN_IN = 9001
     }
 }

@@ -210,10 +210,18 @@ internal fun MainActivity.setupButtons() {
         val saveTime = dm.todayString()
         binding.menuTvSaveInfo.text = "Salvataggio..."
         lifecycleScope.launch(Dispatchers.IO) {
-            try { eggPlacementManager.saveCurrentSession() } catch (_: Exception) {}
+            var saveOk = false
+            try { eggPlacementManager.saveCurrentSession(); saveOk = true } catch (e: Exception) {
+                android.util.Log.e("MainActivityUi", "Save failed: ${e.message}")
+            }
             withContext(Dispatchers.Main) {
-                binding.menuTvSaveInfo.text = "Salvato: $saveTime"
-                Toast.makeText(ctx, "Partita salvata!", Toast.LENGTH_LONG).show()
+                if (saveOk) {
+                    binding.menuTvSaveInfo.text = "Salvato: $saveTime"
+                    Toast.makeText(ctx, "Partita salvata!", Toast.LENGTH_LONG).show()
+                } else {
+                    binding.menuTvSaveInfo.text = "Errore salvataggio"
+                    Toast.makeText(ctx, "Errore nel salvataggio. Riprova.", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }

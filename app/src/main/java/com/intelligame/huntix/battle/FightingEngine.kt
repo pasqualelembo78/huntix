@@ -55,8 +55,8 @@ class FightingEngine(
     var enemyBlocking: Boolean = false
         private set
 
-    val playerHpRatio: Float get() = (playerHp / playerMaxHp).coerceIn(0f, 1f)
-    val enemyHpRatio: Float get() = (enemyHp / enemy.maxHp).coerceIn(0f, 1f)
+    val playerHpRatio: Float get() = if (playerMaxHp <= 0f) 0f else (playerHp / playerMaxHp).coerceIn(0f, 1f)
+    val enemyHpRatio: Float get() = if (enemy.maxHp <= 0f) 0f else (enemyHp / enemy.maxHp).coerceIn(0f, 1f)
 
     private var playerHp = 100f
     private var enemyHp = enemy.hp

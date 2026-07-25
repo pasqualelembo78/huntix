@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
+import io.sentry.Sentry
 
 class CatchEggActivity : MiniGameBase() {
 
@@ -197,7 +198,7 @@ class CatchEggActivity : MiniGameBase() {
                 ),
                 MiniGameManager.GAME_CATCH_EGG
             )
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Sentry.captureException(e) }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {

@@ -320,7 +320,7 @@ class CharacterRenderer {
     ) {
         val effectiveState = if (isBlocking && state != AnimState.KO && state != AnimState.HIT_REACT)
             AnimState.BLOCK else state
-        val anim = ANIMS[effectiveState] ?: ANIMS[AnimState.IDLE]!!
+        val anim = ANIMS[effectiveState] ?: ANIMS[AnimState.IDLE] ?: return
         val pose = sample(anim, animProgress)
 
         canvas.save()

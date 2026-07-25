@@ -37,6 +37,8 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
     private lateinit var root: FrameLayout
     private lateinit var previewView: PreviewView
 
+    private var isSetup = false
+
     private val camPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { if (it) startCamera() else setupNonAR() }
@@ -84,6 +86,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
 
     override fun onPause() {
         super.onPause()
+        if (!isSetup) return
         eg.pause()
         vh.removeCallbacks(vr)
         vh.removeCallbacks(moveHandler)
@@ -91,6 +94,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
 
     override fun onResume() {
         super.onResume()
+        if (!isSetup) return
         eg.resume()
         vh.post(vr)
     }
@@ -99,7 +103,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
         super.onDestroy()
         vh.removeCallbacks(vr)
         vh.removeCallbacks(moveHandler)
-        eg.destroy()
+        if (::eg.isInitialized) eg.destroy()
     }
 
     private fun setup() {
@@ -293,6 +297,7 @@ class BattleActivity : BaseNavActivity(), ArcadeControls.Listener {
     }
 
     private fun showResult() {
+        if (isFinishing || isDestroyed) return
         vh.removeCallbacks(vr)
         vh.removeCallbacks(moveHandler)
 

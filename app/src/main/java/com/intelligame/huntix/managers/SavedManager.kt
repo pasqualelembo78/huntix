@@ -13,6 +13,7 @@ import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.SurpriseCreature
 import com.intelligame.huntix.WeatherType
 import com.intelligame.huntix.ZoneType
+import io.sentry.Sentry
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -262,7 +263,7 @@ object SavedManager {
         return try {
             val arr = JSONArray(json)
             (0 until arr.length()).map { EggInventoryItem.fromJson(arr.getJSONObject(it)) }.toMutableList()
-        } catch (e: Exception) { mutableListOf() }
+        } catch (e: Exception) { Sentry.captureException(e); mutableListOf() }
     }
 
     fun addPendingEgg(ctx: Context, item: EggInventoryItem) {
@@ -290,7 +291,7 @@ object SavedManager {
         return try {
             val arr = JSONArray(json)
             (0 until arr.length()).map { HatchingSlot.fromJson(arr.getJSONObject(it)) }.toMutableList()
-        } catch (e: Exception) { mutableListOf() }
+        } catch (e: Exception) { Sentry.captureException(e); mutableListOf() }
     }
 
     fun startHatching(ctx: Context, item: EggInventoryItem): Boolean {
@@ -348,7 +349,7 @@ object SavedManager {
         return try {
             val arr = JSONArray(json)
             (0 until arr.length()).map { HatchedEgg.fromJson(arr.getJSONObject(it)) }.toMutableList()
-        } catch (e: Exception) { mutableListOf() }
+        } catch (e: Exception) { Sentry.captureException(e); mutableListOf() }
     }
 
     fun removeHatchedEgg(ctx: Context, instanceId: String) {
@@ -376,7 +377,7 @@ object SavedManager {
                 }
             }
             result
-        } catch (e: Exception) { listOf(null, null, null) }
+        } catch (e: Exception) { Sentry.captureException(e); listOf(null, null, null) }
     }
 
     private fun saveFusionSlots(ctx: Context, slots: List<HatchedEgg?>) {

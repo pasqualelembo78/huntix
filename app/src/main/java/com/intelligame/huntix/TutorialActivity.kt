@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.ui.SwipeToCatchView
 
 class TutorialActivity : AppCompatActivity() {
@@ -146,7 +147,7 @@ class TutorialActivity : AppCompatActivity() {
             }
         }
 
-        val skipBtn = UiKit.button(c, "Salta Tutorial", "#666") {
+        val skipBtn = UiKit.button(c, "Salta Tutorial", "#666666") {
             goHome()
         }
 
@@ -169,7 +170,7 @@ class TutorialActivity : AppCompatActivity() {
 
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF0D0620.toInt())
+            setBackgroundColor(Color.parseColor("#0D0620"))
         }
 
         root.addView(pagesContainer)

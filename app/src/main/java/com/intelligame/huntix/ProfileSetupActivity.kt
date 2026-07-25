@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import io.sentry.Sentry
 
 class ProfileSetupActivity : BaseNavActivity() {
     private var editNickname: EditText? = null
@@ -105,9 +106,17 @@ class ProfileSetupActivity : BaseNavActivity() {
         }
         setResult(Activity.RESULT_OK)
         try {
-            startActivity(Intent(this, HomeActivity::class.java))
-        } catch (_: Exception) {}
-        finish()
+            startActivity(Intent(this, HomeActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            })
+            finish()
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            android.util.Log.e("ProfileSetup", "Failed to start HomeActivity: ${e.message}")
+            if (!isFinishing && !isDestroyed) {
+                Toast.makeText(this, "Errore di avvio. Riavvia l'app.", Toast.LENGTH_LONG).show()
+            }
+        }
     }
     private fun mkLabel(text: String, size: Float, color: Int, bold: Boolean) = TextView(this).apply { this.text = text; textSize = size; setTextColor(color); if (bold) typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

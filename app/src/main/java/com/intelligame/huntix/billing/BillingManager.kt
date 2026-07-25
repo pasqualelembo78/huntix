@@ -18,8 +18,8 @@ object BillingManager {
     private const val TAG = "BillingManager"
     private var billingClient: BillingClient? = null
     private var appContext: Context? = null
-    private val onPurchaseComplete = mutableMapOf<String, (Boolean, String) -> Unit>()
-    private var pendingProductId: String? = null
+    private val onPurchaseComplete = java.util.concurrent.ConcurrentHashMap<String, (Boolean, String) -> Unit>()
+    @Volatile private var pendingProductId: String? = null
 
     // ── Product IDs (da creare su Google Play Console) ──────────
     data class MvcPackage(
@@ -49,7 +49,7 @@ object BillingManager {
         appContext = context.applicationContext
         if (billingClient?.isReady == true) return
 
-        billingClient = BillingClient.newBuilder(context)
+        billingClient = BillingClient.newBuilder(appContext!!)
             .setListener(purchasesUpdatedListener)
             .enablePendingPurchases()
             .build()
@@ -149,11 +149,11 @@ object BillingManager {
                 }
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> {
-                pendingProductId?.let { onPurchaseComplete[it]?.invoke(false, "Acquisto annullato") }
+                pendingProductId?.let { pid -> onPurchaseComplete.remove(pid)?.invoke(false, "Acquisto annullato") }
                 pendingProductId = null
             }
             else -> {
-                pendingProductId?.let { onPurchaseComplete[it]?.invoke(false, "Errore: ${result.debugMessage}") }
+                pendingProductId?.let { pid -> onPurchaseComplete.remove(pid)?.invoke(false, "Errore: ${result.debugMessage}") }
                 pendingProductId = null
             }
         }
@@ -180,7 +180,7 @@ object BillingManager {
                 .setPurchaseToken(purchase.purchaseToken)
                 .build()
             billingClient?.consumeAsync(consumeParams) { _, _ ->
-                onPurchaseComplete[productId]?.invoke(true, "mvc:${mvcPack.mvcAmount}")
+                onPurchaseComplete.remove(productId)?.invoke(true, "mvc:${mvcPack.mvcAmount}")
             }
             return
         }
@@ -189,17 +189,17 @@ object BillingManager {
         when (productId) {
             PRODUCT_VIP_MONTHLY -> {
                 appContext?.let { VipManager.syncVipStatus(it) }
-                onPurchaseComplete[productId]?.invoke(true, "vip")
+                onPurchaseComplete.remove(productId)?.invoke(true, "vip")
             }
             PRODUCT_SEASON_PASS -> {
                 appContext?.let { SeasonPassManager.activate(it) }
-                onPurchaseComplete[productId]?.invoke(true, "season")
+                onPurchaseComplete.remove(productId)?.invoke(true, "season")
             }
             PRODUCT_MULTIPLAYER -> {
                 appContext?.let { MultiplayerProManager.activate(it) }
-                onPurchaseComplete[productId]?.invoke(true, "multiplayer")
+                onPurchaseComplete.remove(productId)?.invoke(true, "multiplayer")
             }
-            else -> onPurchaseComplete[productId]?.invoke(true, productId)
+            else -> onPurchaseComplete.remove(productId)?.invoke(true, productId)
         }
         pendingProductId = null
     }
