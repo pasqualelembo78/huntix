@@ -104,13 +104,14 @@ class DayNightOverlay(ctx: Context) : View(ctx) {
             cloudsGenerated = true
         }
 
-        // 1. Sky gradient background
+        // 1. Sky gradient background (semi-transparent so 3D scene shows through)
         skyColors?.let { sc ->
             skyPaint.shader = LinearGradient(
                 0f, 0f, 0f, h,
                 sc.topColor, sc.bottomColor,
                 Shader.TileMode.CLAMP
             )
+            skyPaint.alpha = 128
             canvas.drawRect(0f, 0f, w, h, skyPaint)
         }
 

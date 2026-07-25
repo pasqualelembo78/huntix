@@ -15,6 +15,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.filament.Skybox
+import com.google.android.filament.IndirectLight
 import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
@@ -67,6 +68,15 @@ class CityActivity : AppCompatActivity() {
     private var playerRoot: Node? = null
     private var playerX = 0f
     private var playerZ = 0f
+    private var cameraAngle = CAM_ANGLE_DEFAULT
+    private var rotationStartAngle = 0f
+    private var rotationStartCamAngle = 0f
+    private var isRotating = false
+
+    // Zoom (pinch to zoom)
+    private var cameraDistance = CAM_D
+    private var pinchStartDistance = 0f
+    private var pinchStartCamDist = 0f
     private lateinit var avatarConfig: AvatarConfig
     private var lastFrameNs = 0L
     @Volatile private var destroyed = false
@@ -101,6 +111,7 @@ class CityActivity : AppCompatActivity() {
     private var lampLightMaterial: com.google.android.filament.MaterialInstance? = null
     private var currentSkybox: Skybox? = null
     private var timeLabel: TextView? = null
+    private var osmStatusLabel: TextView? = null
 
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
@@ -157,6 +168,7 @@ class CityActivity : AppCompatActivity() {
         private const val P_Y = 0.35f
         private const val CAM_H = 80f
         private const val CAM_D = 60f
+        private const val CAM_ANGLE_DEFAULT = (kotlin.math.PI / 4f).toFloat()
         private const val SPEED = 12f
         private const val PLAYER_R = 0.3f
         private const val NPC_SPEED = 2.5f
@@ -171,6 +183,8 @@ class CityActivity : AppCompatActivity() {
         private const val OSM_CENTER_LAT = 41.8902
         private const val OSM_CENTER_LON = 12.4922
         private const val OSM_RADIUS_METERS = 1000
+        private const val CAM_D_MIN = 15f
+        private const val CAM_D_MAX = 200f
     }
 
     private var sceneReady = false
@@ -187,6 +201,11 @@ class CityActivity : AppCompatActivity() {
 
             cameraNode = CameraNode(engine).apply { far = 500f; near = 0.1f }
             sceneView.setCameraNode(cameraNode)
+
+            // Graphics quality: improve lighting
+            sceneView.mainLightNode?.apply {
+                intensity = 1.5f
+            }
         } catch (e: Exception) {
             Sentry.captureException(e)
             finish()
@@ -309,6 +328,18 @@ class CityActivity : AppCompatActivity() {
             }
         }
 
+        osmStatusLabel = TextView(this).apply {
+            textSize = 10f; setTextColor(Color.parseColor("#88CCFF"))
+            setShadowLayer(2f, 1f, 1f, Color.BLACK)
+            setPadding(UiKit.dp(this@CityActivity, 6), UiKit.dp(this@CityActivity, 2),
+                UiKit.dp(this@CityActivity, 6), UiKit.dp(this@CityActivity, 2))
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityActivity, 4).toFloat()
+                setColor(0x44000000)
+            }
+            text = "📥 Caricamento mappa..."
+        }
+
         val root = FrameLayout(this).apply {
             addView(sceneView)
             addView(dayNightOverlay, FrameLayout.LayoutParams(
@@ -335,6 +366,9 @@ class CityActivity : AppCompatActivity() {
             addView(timeLabel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
             ).apply { gravity = Gravity.TOP or Gravity.END; topMargin = UiKit.dp(this@CityActivity, 128); marginEnd = UiKit.dp(this@CityActivity, 12) })
+            addView(osmStatusLabel, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.TOP or Gravity.END; topMargin = UiKit.dp(this@CityActivity, 152); marginEnd = UiKit.dp(this@CityActivity, 12) })
             addView(joystickView, FrameLayout.LayoutParams(
                 UiKit.dp(this@CityActivity, 160), UiKit.dp(this@CityActivity, 160)
             ).apply { gravity = Gravity.BOTTOM or Gravity.START; marginStart = UiKit.dp(this@CityActivity, 24); bottomMargin = UiKit.dp(this@CityActivity, 32) })
@@ -355,7 +389,42 @@ class CityActivity : AppCompatActivity() {
             ).apply { gravity = Gravity.BOTTOM or Gravity.END; marginEnd = UiKit.dp(this@CityActivity, 20); bottomMargin = UiKit.dp(this@CityActivity, 40) })
         }
         sceneView.onTouchEvent = { event, _ ->
-            if (event.action == MotionEvent.ACTION_UP) {
+            // Two-finger gestures: rotation + pinch zoom
+            if (event.pointerCount == 2) {
+                val dx = event.getX(1) - event.getX(0)
+                val dy = event.getY(1) - event.getY(0)
+                val currentDistance = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        // Store initial angle and distance for rotation + zoom
+                        rotationStartAngle = kotlin.math.atan2(dy.toDouble(), dx.toDouble()).toFloat()
+                        rotationStartCamAngle = cameraAngle
+                        pinchStartDistance = currentDistance
+                        pinchStartCamDist = cameraDistance
+                        isRotating = true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        // Rotation
+                        if (isRotating) {
+                            val currentAngle: Float = kotlin.math.atan2(dy.toDouble(), dx.toDouble()).toFloat()
+                            val deltaAngle: Float = currentAngle - rotationStartAngle
+                            cameraAngle = rotationStartCamAngle + deltaAngle
+                        }
+                        // Pinch zoom
+                        if (pinchStartDistance > 0f) {
+                            val scale = currentDistance / pinchStartDistance
+                            cameraDistance = (pinchStartCamDist / scale).coerceIn(CAM_D_MIN, CAM_D_MAX)
+                        }
+                        syncCamera()
+                    }
+                    MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                        isRotating = false
+                        pinchStartDistance = 0f
+                    }
+                }
+                true
+            } else if (event.action == MotionEvent.ACTION_UP) {
                 val nearNpc = findNearestNpc()
                 if (nearNpc != null) {
                     openChat(nearNpc.mapNode)
@@ -363,8 +432,10 @@ class CityActivity : AppCompatActivity() {
                     val nearB = BuildingDefs.findNearest(playerX, playerZ)
                     if (nearB != null) openBuilding(nearB.first)
                 }
+                true
+            } else {
+                true
             }
-            true
         }
 
         setContentView(root)
@@ -576,9 +647,14 @@ class CityActivity : AppCompatActivity() {
                 val skyG = Color.green(sc.topColor) / 255f
                 val skyB = Color.blue(sc.topColor) / 255f
                 currentSkybox?.let { engine.safeDestroySkybox(it) }
-                val newSkybox = Skybox.Builder().color(floatArrayOf(skyR, skyG, skyB, 1f)).build(engine)
+                
+                // Higher quality skybox with environment
+                val newSkybox = Skybox.Builder()
+                    .color(floatArrayOf(skyR, skyG, skyB, 1f))
+                    .build(engine)
                 sceneView.skybox = newSkybox
                 currentSkybox = newSkybox
+                
                 sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
             } catch (e: Exception) { Sentry.captureException(e) }
         }
@@ -989,13 +1065,16 @@ class CityActivity : AppCompatActivity() {
 
         // 1. Load mini-chunk from assets immediately (200m around Colosseum)
         val miniData = OsmClient.loadMiniChunk()
-        if (miniData != null) {
+        val hasEnoughOsmData = miniData?.let { it.roads.size >= 5 && it.buildings.size >= 3 } == true
+        if (hasEnoughOsmData) {
             // Build immediately with mini-chunk on GL thread
-            rebuildCityWithOsm(miniData)
+            rebuildCityWithOsm(miniData!!)
+            osmStatusLabel?.text = "✅ Mappa OSM (mini)"
         } else {
-            // Fallback: build grid city
+            // Fallback: build grid city immediately (visible city while downloading)
             try { buildCity() } catch (e: Exception) { Sentry.captureException(e) }
             try { buildDetails() } catch (e: Exception) { Sentry.captureException(e) }
+            osmStatusLabel?.text = "🏙️ Città griglia (download OSM...)"
         }
         try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
         syncCamera()
@@ -1018,12 +1097,30 @@ class CityActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (!destroyed) {
                         rebuildCityWithOsm(data)
+                        osmStatusLabel?.text = "✅ Mappa OSM completa (1km²)"
                     }
                 }
             } catch (e: Exception) {
                 Sentry.captureException(e)
                 osmLoading = false
-                // Keep the mini-chunk or grid city
+                // On download failure, rebuild with grid city if we only had mini-chunk
+                if (!hasEnoughOsmData) {
+                    withContext(Dispatchers.Main) {
+                        if (!destroyed) {
+                            try { buildCity() } catch (e2: Exception) { Sentry.captureException(e2) }
+                            try { buildDetails() } catch (e2: Exception) { Sentry.captureException(e2) }
+                            placePlayer()
+                            syncCamera()
+                            osmStatusLabel?.text = "⚠️ OSM fallito - Città griglia"
+                        }
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        if (!destroyed) {
+                            osmStatusLabel?.text = "⚠️ Aggiornamento OSM fallito (usa mini)"
+                        }
+                    }
+                }
             }
         }
     }
@@ -1313,7 +1410,9 @@ class CityActivity : AppCompatActivity() {
     }
 
     private fun syncCamera() {
-        cameraNode.position = Position(playerX + CAM_D, CAM_H, playerZ + CAM_D)
+        val camX = playerX + cameraDistance * kotlin.math.cos(cameraAngle.toDouble()).toFloat()
+        val camZ = playerZ + cameraDistance * kotlin.math.sin(cameraAngle.toDouble()).toFloat()
+        cameraNode.position = Position(camX, CAM_H, camZ)
         cameraNode.lookAt(Position(playerX, 0f, playerZ))
     }
 
