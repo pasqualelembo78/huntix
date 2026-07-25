@@ -77,6 +77,12 @@ class CityActivity : AppCompatActivity() {
     private var cameraDistance = CAM_D
     private var pinchStartDistance = 0f
     private var pinchStartCamDist = 0f
+
+    // Single-finger drag to rotate camera
+    private var dragStartX = 0f
+    private var dragStartY = 0f
+    private var dragStartCamAngle = 0f
+    private var isDragging = false
     private lateinit var avatarConfig: AvatarConfig
     private var lastFrameNs = 0L
     @Volatile private var destroyed = false
@@ -166,10 +172,10 @@ class CityActivity : AppCompatActivity() {
         private const val ROAD = 6f
         private const val HALF = CITY / 2f
         private const val P_Y = 0.35f
-        private const val CAM_H = 80f
-        private const val CAM_D = 60f
+        private const val CAM_H = 1.7f
+        private const val CAM_D = 2.5f
         private const val CAM_ANGLE_DEFAULT = (kotlin.math.PI / 4f).toFloat()
-        private const val SPEED = 12f
+        private const val SPEED = 25f
         private const val PLAYER_R = 0.3f
         private const val NPC_SPEED = 2.5f
         private const val NPC_BODY_R = 0.2f
@@ -182,9 +188,9 @@ class CityActivity : AppCompatActivity() {
         // Roma — Colosseo
         private const val OSM_CENTER_LAT = 41.8902
         private const val OSM_CENTER_LON = 12.4922
-        private const val OSM_RADIUS_METERS = 4000
-        private const val CAM_D_MIN = 15f
-        private const val CAM_D_MAX = 200f
+        private const val OSM_RADIUS_METERS = 2000
+        private const val CAM_D_MIN = 1.5f
+        private const val CAM_D_MAX = 8f
     }
 
     private var sceneReady = false
@@ -397,7 +403,6 @@ class CityActivity : AppCompatActivity() {
 
                 when (event.actionMasked) {
                     MotionEvent.ACTION_POINTER_DOWN -> {
-                        // Store initial angle and distance for rotation + zoom
                         rotationStartAngle = kotlin.math.atan2(dy.toDouble(), dx.toDouble()).toFloat()
                         rotationStartCamAngle = cameraAngle
                         pinchStartDistance = currentDistance
@@ -405,13 +410,11 @@ class CityActivity : AppCompatActivity() {
                         isRotating = true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        // Rotation
                         if (isRotating) {
                             val currentAngle: Float = kotlin.math.atan2(dy.toDouble(), dx.toDouble()).toFloat()
                             val deltaAngle: Float = currentAngle - rotationStartAngle
                             cameraAngle = rotationStartCamAngle + deltaAngle
                         }
-                        // Pinch zoom
                         if (pinchStartDistance > 0f) {
                             val scale = currentDistance / pinchStartDistance
                             cameraDistance = (pinchStartCamDist / scale).coerceIn(CAM_D_MIN, CAM_D_MAX)
@@ -424,6 +427,40 @@ class CityActivity : AppCompatActivity() {
                     }
                 }
                 true
+            }
+            // Single-finger drag: rotate camera around player
+            else if (event.pointerCount == 1) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        dragStartX = event.getX()
+                        dragStartY = event.getY()
+                        dragStartCamAngle = cameraAngle
+                        isDragging = true
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (isDragging) {
+                            val deltaX = event.getX() - dragStartX
+                            cameraAngle = dragStartCamAngle - deltaX * 0.005f
+                            syncCamera()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        isDragging = false
+                        val deltaX = event.getX() - dragStartX
+                        val deltaY = event.getY() - dragStartY
+                        if (kotlin.math.sqrt((deltaX * deltaX + deltaY * deltaY).toDouble()).toFloat() < 20f) {
+                            val nearNpc = findNearestNpc()
+                            if (nearNpc != null) openChat(nearNpc.mapNode) else {
+                                val nearB = BuildingDefs.findNearest(playerX, playerZ)
+                                if (nearB != null) openBuilding(nearB.first)
+                            }
+                        }
+                        true
+                    }
+                    else -> true
+                }
             } else if (event.action == MotionEvent.ACTION_UP) {
                 val nearNpc = findNearestNpc()
                 if (nearNpc != null) {
@@ -490,12 +527,19 @@ class CityActivity : AppCompatActivity() {
         if (jdx == 0f && jdy == 0f) return
 
         val mag = sqrt(jdx * jdx + jdy * jdy)
-        val nx = jdx / mag
-        val ny = jdy / mag
-        val step = SPEED * dt * mag
+        var nx = jdx / mag
+        var ny = jdy / mag
 
-        val newX = playerX + nx * step
-        val newZ = playerZ + ny * step
+        // Rotate joystick input by camera angle so "forward" = camera direction
+        val cosA = kotlin.math.cos(cameraAngle.toDouble()).toFloat()
+        val sinA = kotlin.math.sin(cameraAngle.toDouble()).toFloat()
+        val worldNx = nx * cosA - ny * sinA
+        val worldNy = nx * sinA + ny * cosA
+
+        val step = SPEED * dt * mag * 2.5f  // increased speed
+
+        val newX = playerX + worldNx * step
+        val newZ = playerZ + worldNy * step
 
         if (!collides(newX, newZ)) {
             playerX = newX; playerZ = newZ

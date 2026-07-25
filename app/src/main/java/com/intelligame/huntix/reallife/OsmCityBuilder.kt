@@ -19,21 +19,34 @@ class OsmCityBuilder(
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
 
-    // ── Palette colori Brookhaven ──────────────────────────────────────
+    // ── Palette colori Roma ──────────────────────────────────────────────
     private val bodyColors = intArrayOf(
-        0xFFB3D9FF.toInt(), 0xFFFFCDD2.toInt(), 0xFFC8E6C9.toInt(),
-        0xFFFFF9C4.toInt(), 0xFFD1C4E9.toInt(), 0xFFFFE0B2.toInt(),
-        0xFFB2DFDB.toInt(), 0xFFF0F4C3.toInt(), 0xFFDCEDC8.toInt(),
-        0xFFFFAB91.toInt(), 0xFFB3E5FC.toInt(), 0xFFE1BEE7.toInt()
+        0xFFE8D4B9.toInt(), // crema chiaro
+        0xFFD4B896.toInt(), // ocra chiaro
+        0xFFC9A66C.toInt(), // giallo Roma
+        0xFFE0C9A6.toInt(), // beige sabbia
+        0xFFDDB892.toInt(), // terracotta chiaro
+        0xFFC4A484.toInt(), // travertino
+        0xFFE8DCC8.toInt(), // crema caldo
+        0xFFD4C4A8.toInt(), // pietra chiara
+        0xFFF5E6C8.toInt(), // giallo pallido
+        0xFFE8C5A0.toInt(), // pesca chiaro
+        0xFFD0B8A0.toInt(), // mattone chiaro
+        0xFFE0D8C8.toInt(), // grigio caldo
     )
     private val roofColorsArr = intArrayOf(
-        0xFF8D6E63.toInt(), 0xFF78909C.toInt(), 0xFFA1887F.toInt(),
-        0xFF90A4AE.toInt(), 0xFFBCAAA4.toInt(), 0xFFB0BEC5.toInt(),
-        0xFF80CBC4.toInt(), 0xFFC5E1A5.toInt(), 0xFFAED581.toInt(),
-        0xFFD4937A.toInt(), 0xFF81D4FA.toInt(), 0xFFCE93D8.toInt()
+        0xFF8B4513.toInt(), // tegola scura
+        0xFFA0522D.toInt(), // tegola media
+        0xFFCD853F.toInt(), // tegola chiara
+        0xFFB8860B.toInt(), // coppo antico
+        0xFF8B7355.toInt(), // pietra tetto
+        0xFF6B5B45.toInt(), // ardesia
     )
     private val awningColors = intArrayOf(
-        0xFFE53935.toInt(), 0xFF1E88E5.toInt(), 0xFFFFCA28.toInt(), 0xFF4CAF50.toInt()
+        0xFF8B0000.toInt(), // rosso tenda
+        0xFF2E8B57.toInt(), // verde tenda
+        0xFFDAA520.toInt(), // giallo tenda
+        0xFF8B4513.toInt(), // marrone tenda
     )
 
     // ── Materiali riutilizzabili (creati una volta sola) ───────────────
@@ -43,7 +56,7 @@ class OsmCityBuilder(
     private val roadMat by lazy { ml.createColorInstance(color = 0xFF484858.toInt()) }
     private val yellowLineMat by lazy { ml.createColorInstance(color = 0xFFFFC107.toInt()) }
     private val sidewalkMat by lazy { ml.createColorInstance(color = 0xFFBDBDBD.toInt()) }
-    private val windowMatInst by lazy { ml.createColorInstance(color = 0xFF90CAF9.toInt()) }
+    private val windowMatInst by lazy { ml.createColorInstance(color = 0xFF88CCEE.toInt()) }
     private val doorMatInst by lazy { ml.createColorInstance(color = 0xFF5D4037.toInt()) }
     private val trunkMatInst by lazy { ml.createColorInstance(color = 0xFF6B4226.toInt()) }
     private val leafMatInst by lazy { ml.createColorInstance(color = 0xFF2E7D32.toInt()) }
@@ -62,6 +75,10 @@ class OsmCityBuilder(
     private val arenaMatInst by lazy { ml.createColorInstance(color = 0xFF8B7355.toInt()) }
     private val waterMatInst by lazy { ml.createColorInstance(color = 0xFF42A5F5.toInt()) }
     private val grassDetailMatInst by lazy { ml.createColorInstance(color = 0xFF66BB6A.toInt()) }
+    // Window glass variants
+    private val windowGlassMatLit by lazy { ml.createColorInstance(color = 0xFFFFEE88.toInt()) }   // warm lit
+    private val windowGlassMatDark by lazy { ml.createColorInstance(color = 0xFF1A1A2E.toInt()) } // dark/off
+    private val windowGlassMat by lazy { ml.createColorInstance(color = 0xFF88CCEE.toInt()) }     // reflective day
 
     // ── Stato ──────────────────────────────────────────────────────────
     val windowMaterials = mutableListOf<com.google.android.filament.MaterialInstance>()
@@ -193,6 +210,8 @@ fun buildBuildings(osmData: OsmData) {
         val roofMatInst = ml.createColorInstance(color = roofColorVal)
         val darkBodyMatInst = ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt())
         val windowGlassMat = ml.createColorInstance(color = 0xFF88CCEE.toInt())
+        val windowGlassMatLit = ml.createColorInstance(color = 0xFFFFEEAA.toInt()) // finestre accese calde
+        val windowGlassMatDark = ml.createColorInstance(color = 0xFF223344.toInt()) // finestre spente scure
         val windowFrameMat = ml.createColorInstance(color = 0xFF443322.toInt())
         val shutterMat = ml.createColorInstance(color = 0xFF553311.toInt())
         val corniceMat = ml.createColorInstance(color = 0xFFDDCCAA.toInt())
@@ -234,8 +253,16 @@ fun buildBuildings(osmData: OsmData) {
                     position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                // Vetro
-                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = windowGlassMat).apply {
+                // Vetro: vario (acceso/spento/riflettente)
+                val glassChoice = (buildingIndex * 31 + floor * 17 + i * 7) % 5
+                val glassMat = when (glassChoice) {
+                    0 -> windowGlassMatLit    // accesa
+                    1 -> windowGlassMatDark   // spenta
+                    2 -> windowGlassMat       // riflettente giorno
+                    3 -> windowGlassMatDark   // spenta
+                    else -> windowGlassMat    // riflettente
+                }
+                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = glassMat).apply {
                     position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
@@ -268,11 +295,14 @@ fun buildBuildings(osmData: OsmData) {
             for (i in 1..windowsPerSide) {
                 val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
                 val winY = floorY
+                val glassMat = if ((buildingIndex + floor + i + 2) % 3 == 0) windowGlassMatLit
+                               else if ((buildingIndex + floor + i + 2) % 3 == 1) windowGlassMatDark
+                               else windowGlassMat
                 addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
                     position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = windowGlassMat).apply {
+                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = glassMat).apply {
                     position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
@@ -282,12 +312,15 @@ fun buildBuildings(osmData: OsmData) {
             for (i in 1..windowsPerDepth) {
                 val wz = fp.centerZ - d / 2f + i * d / (windowsPerDepth + 1).toFloat()
                 val winY = floorY
+                val glassMat = if ((buildingIndex + floor + i + 3) % 3 == 0) windowGlassMatLit
+                               else if ((buildingIndex + floor + i + 3) % 3 == 1) windowGlassMatDark
+                               else windowGlassMat
                 // Lato destro (X+)
                 addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
                     position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = windowGlassMat).apply {
+                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = glassMat).apply {
                     position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
@@ -296,7 +329,7 @@ fun buildBuildings(osmData: OsmData) {
                     position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = windowGlassMat).apply {
+                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = glassMat).apply {
                     position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
