@@ -185,9 +185,9 @@ class CityActivity : AppCompatActivity() {
         private const val SPEECH_DURATION = 4f
         private const val MAX_NPCS = 30
 
-        // Roma — Colosseo
-        private const val OSM_CENTER_LAT = 41.8902
-        private const val OSM_CENTER_LON = 12.4922
+        // Foggia — Centro
+        private const val OSM_CENTER_LAT = 41.4649
+        private const val OSM_CENTER_LON = 15.5387
         private const val OSM_RADIUS_METERS = 2000
         private const val CAM_D_MIN = 1.5f
         private const val CAM_D_MAX = 8f

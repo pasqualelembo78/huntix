@@ -177,6 +177,135 @@ class OsmCityBuilder(
         }
     }
 
+    /** Determina il tipo di edificio dai tag OSM */
+    private fun getBuildingType(way: OsmWay): BuildingType {
+        val amenity = way.amenity.lowercase()
+        val shop = way.shop.lowercase()
+        val building = way.tags["building"]?.lowercase() ?: ""
+        val name = way.name.lowercase()
+
+        // Landmark check
+        if (name.contains("colosseo") || name.contains("basilica") || name.contains("pantheon") ||
+            name.contains("castel") || name.contains("vatican") || name.contains("san pietro") ||
+            name.contains("piazza") && (name.contains("navona") || name.contains("spagna") || name.contains("popolo"))) {
+            return BuildingType.LANDMARK
+        }
+
+        // Amenity types
+        when {
+            amenity.contains("restaurant") || amenity.contains("cafe") || amenity.contains("bar") ||
+            amenity.contains("pub") || amenity.contains("fast_food") || amenity.contains("food_court") -> {
+                return BuildingType.RESTAURANT
+            }
+            amenity.contains("hospital") || amenity.contains("clinic") || amenity.contains("doctors") ||
+            amenity.contains("pharmacy") -> {
+                return BuildingType.HOSPITAL
+            }
+            amenity.contains("school") || amenity.contains("university") || amenity.contains("college") ||
+            amenity.contains("kindergarten") -> {
+                return BuildingType.SCHOOL
+            }
+            amenity.contains("police") || amenity.contains("fire_station") -> {
+                return BuildingType.GOVERNMENT
+            }
+            amenity.contains("bank") || amenity.contains("atm") -> {
+                return BuildingType.BANK
+            }
+            amenity.contains("cinema") || amenity.contains("theatre") || amenity.contains("arts_centre") ||
+            amenity.contains("nightclub") || amenity.contains("casino") -> {
+                return BuildingType.ENTERTAINMENT
+            }
+            amenity.contains("gym") || amenity.contains("fitness_centre") || amenity.contains("sports_centre") -> {
+                return BuildingType.GYM
+            }
+            amenity.contains("hotel") || amenity.contains("hostel") || amenity.contains("guest_house") -> {
+                return BuildingType.HOTEL
+            }
+            amenity.contains("place_of_worship") || amenity.contains("church") || amenity.contains("mosque") -> {
+                return BuildingType.RELIGIOUS
+            }
+        }
+
+        // Shop types
+        when {
+            shop.contains("supermarket") || shop.contains("convenience") || shop.contains("groceries") ||
+            shop.contains("bakery") || shop.contains("butcher") || shop.contains("greengrocer") -> {
+                return BuildingType.SUPERMARKET
+            }
+            shop.contains("mall") || shop.contains("department_store") -> {
+                return BuildingType.MALL
+            }
+            shop.contains("clothes") || shop.contains("fashion") || shop.contains("shoes") ||
+            shop.contains("boutique") || shop.contains("jewelry") -> {
+                return BuildingType.CLOTHING
+            }
+            shop.contains("electronics") || shop.contains("computer") || shop.contains("mobile_phone") -> {
+                return BuildingType.ELECTRONICS
+            }
+            shop.contains("book") || shop.contains("stationery") || shop.contains("library") -> {
+                return BuildingType.BOOKSTORE
+            }
+            shop.contains("furniture") || shop.contains("hardware") || shop.contains("diy") -> {
+                return BuildingType.HARDWARE
+            }
+            shop.contains("car") || shop.contains("bicycle") || shop.contains("motorcycle") -> {
+                return BuildingType.VEHICLE
+            }
+        }
+
+        // Building tag
+        when {
+            building.contains("residential") || building.contains("apartments") || building.contains("house") ||
+            building.contains("detached") || building.contains("terrace") || building.contains("semidetached") -> {
+                return BuildingType.RESIDENTIAL
+            }
+            building.contains("commercial") || building.contains("retail") || building.contains("office") -> {
+                return BuildingType.COMMERCIAL
+            }
+            building.contains("industrial") || building.contains("warehouse") || building.contains("factory") -> {
+                return BuildingType.INDUSTRIAL
+            }
+            building.contains("garage") || building.contains("parking") -> {
+                return BuildingType.PARKING
+            }
+        }
+
+        // Default: residenziale
+        return BuildingType.RESIDENTIAL
+    }
+
+    /** Colori per tipo di edificio */
+    private fun getTypeColors(type: BuildingType): Pair<Int, Int> {
+        return when (type) {
+            BuildingType.RESIDENTIAL -> 0xFFE8D4B9.toInt() to 0xFF8B4513.toInt() // crema + tegola
+            BuildingType.COMMERCIAL -> 0xFFD4C4A8.toInt() to 0xFF6B5B45.toInt() // travertino + ardesia
+            BuildingType.SUPERMARKET -> 0xFFFFF8DC.toInt() to 0xFFB8860B.toInt() // giallo chiaro + oro
+            BuildingType.MALL -> 0xFFE8E8E8.toInt() to 0xFF808080.toInt() // grigio chiaro + grigio
+            BuildingType.CLOTHING -> 0xFFF5E6CC.toInt() to 0xFF8B4513.toInt() // beige + marrone
+            BuildingType.ELECTRONICS -> 0xFFE0E0E0.toInt() to 0xFF4A4A4A.toInt() // grigio tech
+            BuildingType.BOOKSTORE -> 0xFFF0E6D2.toInt() to 0xFF8B7355.toInt() // carta + marrone
+            BuildingType.HARDWARE -> 0xFFD0D0D0.toInt() to 0xFF696969.toInt() // grigio industriale
+            BuildingType.VEHICLE -> 0xFFCCCCCC.toInt() to 0xFF555555.toInt() // acciaio
+            BuildingType.RESTAURANT -> 0xFFFFE4B5.toInt() to 0xFF8B0000.toInt() // moccasin + rosso scuro
+            BuildingType.HOSPITAL -> 0xFFFFFFFF.toInt() to 0xFF8B0000.toInt() // bianco + croce rossa
+            BuildingType.SCHOOL -> 0xFFF5F5DC.toInt() to 0xFF228B22.toInt() // beige + verde
+            BuildingType.GYM -> 0xFFE0E0E0.toInt() to 0xFF4169E1.toInt() // grigio + blu royal
+            BuildingType.HOTEL -> 0xFFFFF0D5.toInt() to 0xFF8B4513.toInt() // cream + marrone
+            BuildingType.BANK -> 0xFFF5F5F5.toInt() to 0xFF2F4F4F.toInt() // bianco + grigio scuro
+            BuildingType.GOVERNMENT -> 0xFFE8E8E8.toInt() to 0xFF1C1C1C.toInt() // istituzionale
+            BuildingType.ENTERTAINMENT -> 0xFFFFE4E1.toInt() to 0xFF8B008B.toInt() // rosa + magenta
+            BuildingType.RELIGIOUS -> 0xFFFFF8DC.toInt() to 0xFFDAA520.toInt() // crema + oro
+            BuildingType.PARKING -> 0xFFD0D0D0.toInt() to 0xFF696969.toInt() // grigio parcheggio
+            BuildingType.INDUSTRIAL -> 0xFFB0B0B0.toInt() to 0xFF404040.toInt() // grigio industriale
+            BuildingType.LANDMARK -> 0xFFD4C5A9.toInt() to 0xFFC4B599.toInt() // travertino speciale
+        }
+    }
+
+    enum class BuildingType {
+        RESIDENTIAL, COMMERCIAL, SUPERMARKET, MALL, CLOTHING, ELECTRONICS, BOOKSTORE, HARDWARE, VEHICLE,
+        RESTAURANT, HOSPITAL, SCHOOL, GYM, HOTEL, BANK, GOVERNMENT, ENTERTAINMENT, RELIGIOUS, PARKING, INDUSTRIAL, LANDMARK
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // FASE 3 — EDIFICI DA OSM
 // ══════════════════════════════════════════════════════════════════════
@@ -200,18 +329,23 @@ fun buildBuildings(osmData: OsmData) {
         if (w < 3f || d < 3f || h < 3f) continue
 
         val isLandmark = way.name.isNotEmpty() && (way.name.lowercase().contains("colosseo") || way.name.lowercase().contains("basilica") || way.name.lowercase().contains("pantheon") || way.name.lowercase().contains("castel") || way.name.lowercase().contains("vatican") || way.name.lowercase().contains("san pietro") || way.name.lowercase().contains("piazza"))
+
+        // Determine building type from OSM tags
+        val buildingType = getBuildingType(way)
+        val typeColors = getTypeColors(buildingType)
         val levels = maxOf(1, (h / 3.2f).toInt())
         val floorHeight = h / levels
 
-        val ci = buildingIndex % bodyColors.size
-        val bodyColor = way.facadeColor ?: bodyColors[ci]
-        val roofColorVal = way.roofColor ?: roofColorsArr[ci]
+        // Material instances based on building type
+        val bodyColor = typeColors.first
+        val roofColorVal = typeColors.second
         val bodyMatInst = ml.createColorInstance(color = bodyColor)
         val roofMatInst = ml.createColorInstance(color = roofColorVal)
         val darkBodyMatInst = ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt())
+        val windowGlassMatLit = ml.createColorInstance(color = 0xFFFFEEAA.toInt())
+        val windowGlassMatDark = ml.createColorInstance(color = 0xFF223344.toInt())
         val windowGlassMat = ml.createColorInstance(color = 0xFF88CCEE.toInt())
-        val windowGlassMatLit = ml.createColorInstance(color = 0xFFFFEEAA.toInt()) // finestre accese calde
-        val windowGlassMatDark = ml.createColorInstance(color = 0xFF223344.toInt()) // finestre spente scure
+
         val windowFrameMat = ml.createColorInstance(color = 0xFF443322.toInt())
         val shutterMat = ml.createColorInstance(color = 0xFF553311.toInt())
         val corniceMat = ml.createColorInstance(color = 0xFFDDCCAA.toInt())
