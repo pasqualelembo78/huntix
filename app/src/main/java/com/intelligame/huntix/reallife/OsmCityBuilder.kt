@@ -76,9 +76,6 @@ class OsmCityBuilder(
     private val carWheelMatInst by lazy { ml.createColorInstance(color = 0xFF212121.toInt()) }
     private val carWindshieldMatInst by lazy { ml.createColorInstance(color = 0xFF90CAF9.toInt()) }
     private val carHeadlightMatInst by lazy { ml.createColorInstance(color = 0xFFFFFFE0.toInt()) }
-    private val travertineMatInst by lazy { ml.createColorInstance(color = 0xFFD4C5A9.toInt()) }
-    private val travertineDarkMatInst by lazy { ml.createColorInstance(color = 0xFFC4B599.toInt()) }
-    private val arenaMatInst by lazy { ml.createColorInstance(color = 0xFF8B7355.toInt()) }
     private val waterMatInst by lazy { ml.createColorInstance(color = 0xFF42A5F5.toInt()) }
     private val grassDetailMatInst by lazy { ml.createColorInstance(color = 0xFF66BB6A.toInt()) }
     // Window glass variants
@@ -795,30 +792,6 @@ class OsmCityBuilder(
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    // FASE 8 — COLOSSEO
-    // ══════════════════════════════════════════════════════════════════════
-
-    fun buildColosseum(osmData: OsmData) {
-        val colosseo = osmData.buildings.firstOrNull {
-            it.name.lowercase().let { n -> n.contains("colosseum") || n.contains("colosseo") || n.contains("amphitheatre") }
-        } ?: return
-
-        val fp = colosseo.calculateFootprint() ?: return
-        val cx = fp.centerX; val cz = fp.centerZ
-
-        val w = 120f; val d = 100f; val h = 15f
-        addNode(CubeNode(engine, Size(w, h, d), materialInstance = travertineMatInst).apply {
-            position = Position(cx, h / 2f, cz)
-        })
-        addNode(CubeNode(engine, Size(w * 0.75f, 0.5f, d * 0.75f), materialInstance = arenaMatInst).apply {
-            position = Position(cx, 0.25f, cz)
-        })
-        addNode(CubeNode(engine, Size(w + 5f, 2f, d + 5f), materialInstance = travertineDarkMatInst).apply {
-            position = Position(cx, h + 1f, cz)
-        })
-    }
-
-    // ══════════════════════════════════════════════════════════════════════
     // FASE 9 — POI SPECIALI
     // ══════════════════════════════════════════════════════════════════════
 
@@ -993,7 +966,6 @@ class OsmCityBuilder(
 
         buildTerrain(mapSize)
         buildRoads(osmData)
-        buildColosseum(osmData)
         buildBuildings(osmData)
         buildTrees(osmData, mapSize)
         buildVegetation(osmData)
@@ -1020,8 +992,7 @@ class OsmCityBuilder(
     }
 
     suspend fun buildPhase2_ColosseumAndBuildings(osmData: OsmData) {
-        AppLog.d(TAG, "Phase 2: colosseum + buildings (buildings=${osmData.buildings.size})")
-        buildColosseum(osmData)
+        AppLog.d(TAG, "Phase 2: buildings (buildings=${osmData.buildings.size})")
         buildBuildings(osmData)
         AppLog.d(TAG, "Phase 2 done: nodes=$currentNodeCount, AABBs=${buildingAABBs.size}")
     }
