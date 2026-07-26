@@ -39,7 +39,7 @@ echo " Autorizzazione ARCore Cloud Anchor"
 echo "   1) api     -> API key nel manifest  (persistenza max 24h)"
 echo "   2) keyless -> OAuth client ID       (persistenza 30+ giorni)"
 echo "============================================================"
-AUTH_MODE=""
+AUTH_MODE="${AUTH_MODE:-api}"
 while [ -z "$AUTH_MODE" ]; do
     read -rp "Vuoi usare 'api' o 'keyless'? [default: api]: " choice
     case "$choice" in
@@ -56,7 +56,7 @@ PROPS_FILE="keystore.properties"
 # ── Configurazione feature (override via ENV, altrimenti da keystore.properties) ──
 # Web Client ID per Google Sign-In: priorità ENV > keystore.properties > default
 if [ -z "${WEB_CLIENT_ID:-}" ] && [ -f "$PROPS_FILE" ]; then
-    WEB_CLIENT_ID=$(grep '^webClientId=' "$PROPS_FILE" | cut -d= -f2-)
+    WEB_CLIENT_ID=$(grep '^webClientId=' "$PROPS_FILE" 2>/dev/null | cut -d= -f2-) || true
 fi
 WEB_CLIENT_ID="${WEB_CLIENT_ID:-418980419674-mq5d7a5jmbpujj4gfpitngobjcg17km5.apps.googleusercontent.com}"
 
@@ -98,26 +98,16 @@ fi
 if [ ! -f "$KEYSTORE_FILE" ]; then
     echo ">> Keystore $KEYSTORE_FILE assente — lo genero..."
 
-    if [ "${1:-}" = "--auto" ]; then
+    if [ ! -f "$KEYSTORE_FILE" ] || [ ! -f "$PROPS_FILE" ]; then
         STORE_PASS="${STORE_PASS:-huntix123}"
         KEY_ALIAS="${KEY_ALIAS:-huntix}"
         KEY_PASS="${KEY_PASS:-huntix123}"
-        CN="Huntix"
-        OU="Huntix"
-        O="Huntix"
-        L="IT"
-        S="IT"
-        C="IT"
-    else
-        [ -z "${STORE_PASS:-}" ] && { read -rsp "Password keystore: " STORE_PASS; echo; }
-        [ -z "${KEY_ALIAS:-}" ]  && { read -rp "Alias chiave: " KEY_ALIAS; }
-        [ -z "${KEY_PASS:-}" ]  && { read -rsp "Password chiave: " KEY_PASS; echo; }
-        read -rp "Nome e cognome (CN): " CN
-        read -rp "Unità organizzativa (OU): " OU
-        read -rp "Organizzazione (O): " O
-        read -rp "Città/Località (L): " L
-        read -rp "Stato/Provincia (S): " S
-        read -rp "Paese (C, es. IT): " C
+        CN="${CN:-Huntix}"
+        OU="${OU:-Huntix}"
+        O="${O:-Huntix}"
+        L="${L:-IT}"
+        S="${S:-IT}"
+        C="${C:-IT}"
     fi
 
     keytool -genkeypair \
@@ -248,7 +238,7 @@ for pair in \
     if [ -n "${!env_name:-}" ]; then
         val="${!env_name}"
     elif [ -f "$PROPS_FILE" ]; then
-        val=$(grep "^${prop_name}=" "$PROPS_FILE" 2>/dev/null | cut -d= -f2-)
+        val=$(grep "^${prop_name}=" "$PROPS_FILE" 2>/dev/null | cut -d= -f2-) || true
     fi
     if [ -n "${val:-}" ]; then
         GRADLE_ENV_PROPS="$GRADLE_ENV_PROPS -P$prop_name=$val"
@@ -523,7 +513,7 @@ start_huntix_backend() {
     fi
 
     local PORT
-    PORT=$(grep '^PORT=' .env | cut -d= -f2-)
+    PORT=$(grep '^PORT=' .env 2>/dev/null | cut -d= -f2-) || true
     PORT="${PORT:-5100}"
 
     # ── 5) Firewall ──
