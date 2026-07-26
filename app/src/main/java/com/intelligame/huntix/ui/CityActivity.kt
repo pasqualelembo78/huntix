@@ -1430,18 +1430,22 @@ override fun onPause() {
                     lampLightMaterial = osmCityBuilder!!.lampLightMaterial
                     minimap.invalidate()
                     osmStatusLabel?.text = "Mappa OSM completa (1km²)"
-                            AppLog.d(TAG, "Phase 5 complete — CITY BUILD FINISHED (total nodes=${osmCityBuilder!!.getCurrentNodeCount()}, AABBs=${buildingAABBs.size})")
-                            SentryDebugManager.breadcrumb("city3d", "City build finished", mapOf(
-                                "nodes" to osmCityBuilder!!.getCurrentNodeCount(),
-                                "aabbs" to buildingAABBs.size
-                            ))
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            AppLog.d(TAG, "Rebuild cancelled (likely onPause or new rebuild triggered)")
-                        } catch (e: Exception) {
-                            AppLog.e(TAG, "Rebuild FAILED", e)
-                            Sentry.captureException(e)
-                        }
-                    }
+                    AppLog.d(TAG, "Phase 5 complete — CITY BUILD FINISHED (total nodes=${osmCityBuilder!!.getCurrentNodeCount()}, AABBs=${buildingAABBs.size})")
+                    SentryDebugManager.breadcrumb("city3d", "City build finished", mapOf(
+                        "nodes" to osmCityBuilder!!.getCurrentNodeCount(),
+                        "aabbs" to buildingAABBs.size
+                    ))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    AppLog.d(TAG, "Rebuild cancelled (likely onPause or new rebuild triggered)")
+                } catch (e: Exception) {
+                    AppLog.e(TAG, "Rebuild FAILED", e)
+                    Sentry.captureException(e)
+                }
+            }
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+        }
+    }
 
     private fun buildCityGridPhased() {
         AppLog.d(TAG, "buildCityGridPhased: START")
