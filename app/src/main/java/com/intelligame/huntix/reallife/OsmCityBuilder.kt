@@ -135,7 +135,7 @@ class OsmCityBuilder(
     // FASE 2 — STRADE DA OSM
     // ══════════════════════════════════════════════════════════════════════
 
-    fun buildRoads(osmData: OsmData) {
+    suspend fun buildRoads(osmData: OsmData) {
         val roadBudget = (MAX_NODES * ROAD_BUDGET_RATIO).toInt()
         val initialNodeCount = currentNodeCount
 
@@ -146,6 +146,7 @@ class OsmCityBuilder(
             .sortedWith(compareByDescending<OsmWay> { it.highway !in minorTypes }
                 .thenByDescending { roadWidthForType(it.highway) })
 
+        var roadCount = 0
         for (way in sortedRoads) {
             if (currentNodeCount - initialNodeCount >= roadBudget) break
 
@@ -188,6 +189,11 @@ class OsmCityBuilder(
                         rotation = Position(0f, -angle, 0f)
                     })
                 }
+            }
+            roadCount++
+            if (roadCount % 100 == 0) {
+                AppLog.d(TAG, "Roads progress: $roadCount/${sortedRoads.size} (nodes=$currentNodeCount)")
+                yield()
             }
         }
     }
@@ -999,7 +1005,7 @@ class OsmCityBuilder(
 
     // ── Build incrementale (per caricamento a fasi) ──────────────────
 
-    fun buildPhase1_TerrainAndRoads(osmData: OsmData, mapSize: Float = 1000f) {
+    suspend fun buildPhase1_TerrainAndRoads(osmData: OsmData, mapSize: Float = 1000f) {
         AppLog.d(TAG, "Phase 1: terrain + roads (roads=${osmData.roads.size})")
         currentNodeCount = 0
         roadNodeBudget = (MAX_NODES * ROAD_BUDGET_RATIO).toInt()

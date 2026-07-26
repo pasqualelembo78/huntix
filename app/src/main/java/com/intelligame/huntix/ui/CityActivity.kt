@@ -1346,28 +1346,35 @@ class CityActivity : AppCompatActivity() {
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
 
-            // Phase 1: terrain + roads (immediate)
-            AppLog.d(TAG, "Phase 1: Terrain and roads...")
-            osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
-            AppLog.d(TAG, "Phase 1 complete")
-            // Populate roadCenters from OSM roads (for NPC navigation + minimap)
-            val rcSet = mutableSetOf<Float>()
-            for (way in data.roads) {
-                for (node in way.nodes) {
-                    rcSet.add(node.localX)
-                    rcSet.add(node.localZ)
-                }
-            }
-            roadCenters.addAll(rcSet)
-            // Re-place player and sync camera after clearing old nodes
-            try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
-            syncCamera()
-            minimap.setRoads(roadCenters, HALF)
-
-            // Phases 2-5: run as coroutine with yield between each phase
-            // This prevents ANR by not blocking the main thread for more than ~1s per frame
+            // ALL phases run as coroutine with yield between each phase
+            // This prevents ANR by never blocking the main thread for more than ~1s per frame
             rebuildJob = lifecycleScope.launch {
                 try {
+                    // Phase 1: terrain + roads
+                    AppLog.d(TAG, "Phase 1: Terrain and roads...")
+                    osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
+                    osmPhase = 1
+                    AppLog.d(TAG, "Phase 1 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    kotlinx.coroutines.yield()
+
+                    if (destroyed) return@launch
+
+                    // Populate roadCenters from OSM roads (for NPC navigation + minimap)
+                    val rcSet = mutableSetOf<Float>()
+                    for (way in data.roads) {
+                        for (node in way.nodes) {
+                            rcSet.add(node.localX)
+                            rcSet.add(node.localZ)
+                        }
+                    }
+                    roadCenters.addAll(rcSet)
+                    // Re-place player and sync camera after clearing old nodes
+                    try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
+                    syncCamera()
+                    minimap.setRoads(roadCenters, HALF)
+
+                    if (destroyed) return@launch
+
                     // Phase 2: colosseum + buildings
                     AppLog.d(TAG, "Phase 2: Colosseum and buildings...")
                     osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
