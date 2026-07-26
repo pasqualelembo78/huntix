@@ -1508,6 +1508,13 @@ class CityActivity : AppCompatActivity() {
         destroyed = true
         Choreographer.getInstance().removeFrameCallback(frameCb)
         currentSkybox = null
+        
+        // Explicitly destroy Filament engine to free handle arena
+        try {
+            sceneView.engine.destroy()
+        } catch (e: Exception) {
+            // Ignore
+        }
         sceneView.destroy()
         super.onDestroy()
     }
