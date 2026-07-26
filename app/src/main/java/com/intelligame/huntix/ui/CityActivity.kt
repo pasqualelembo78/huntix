@@ -1285,8 +1285,6 @@ class CityActivity : AppCompatActivity() {
                     if (!destroyed) {
                         AppLog.d(TAG, "Rebuilding city with FULL OSM data on GL thread...")
                         rebuildCityWithOsm(data)
-                        osmStatusLabel?.text = "Mappa OSM completa (1km2)"
-                        AppLog.d(TAG, "City rebuilt with full OSM data")
                     }
                 }
             } catch (e: Exception) {
@@ -1414,6 +1412,7 @@ class CityActivity : AppCompatActivity() {
                     windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
                     lampLightMaterial = osmCityBuilder!!.lampLightMaterial
                     minimap.invalidate()
+                    osmStatusLabel?.text = "Mappa OSM completa (1km2)"
                     AppLog.d(TAG, "Phase 5 complete — CITY BUILD FINISHED (total nodes=${osmCityBuilder!!.getCurrentNodeCount()}, AABBs=${buildingAABBs.size})")
                     SentryDebugManager.breadcrumb("city3d", "City build finished", mapOf(
                         "nodes" to osmCityBuilder!!.getCurrentNodeCount(),

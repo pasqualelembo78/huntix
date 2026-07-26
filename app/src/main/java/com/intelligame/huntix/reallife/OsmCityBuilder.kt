@@ -358,7 +358,10 @@ class OsmCityBuilder(
         var buildingIndex = 0
         for (way in buildings) {
             if (currentNodeCount - initialNodeCount >= buildingBudget) break
-            if (buildingIndex % 20 == 0 && buildingIndex > 0) yield()
+            if (buildingIndex % 20 == 0 && buildingIndex > 0) {
+                AppLog.d(TAG, "Buildings progress: $buildingIndex/${buildings.size} (nodes=$currentNodeCount, AABBs=${buildingAABBs.size})")
+                yield()
+            }
 
         val fp = way.calculateFootprint() ?: continue
         val h = way.height.toFloat()
