@@ -178,7 +178,7 @@ class DayNightOverlay(ctx: Context) : View(ctx) {
 
         // 5. Night overlay (darkens the scene with multiply so 3D shows through)
         skyColors?.let { sc ->
-            if (sc.overlayAlpha > 0.01f) {
+            if (sc.overlayAlpha > 0.01f && sc.overlayColor != Color.TRANSPARENT) {
                 overlayPaint.color = sc.overlayColor
                 overlayPaint.alpha = (sc.overlayAlpha * 255).toInt().coerceAtMost(160)
                 overlayPaint.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.MULTIPLY)
