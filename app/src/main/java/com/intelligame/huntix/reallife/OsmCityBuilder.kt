@@ -87,7 +87,7 @@ class OsmCityBuilder(
     val buildingAABBs = mutableListOf<AABB>()
 
     private var currentNodeCount = 0
-    private val MAX_NODES = 12000
+    private val MAX_NODES = 5000
 
     private fun addNode(node: CubeNode) {
         if (currentNodeCount >= MAX_NODES) return
@@ -316,7 +316,7 @@ fun buildBuildings(osmData: OsmData) {
     val buildings = osmData.buildings
         .filter { it.nodes.size >= 3 }
         .sortedByDescending { it.height }
-        .take(500)
+        .take(200)
 
     var buildingIndex = 0
     for (way in buildings) {
@@ -374,8 +374,8 @@ fun buildBuildings(osmData: OsmData) {
             }
 
             // ── FINESTRE PER PIANO ──
-            val windowsPerSide = ((w / 2.2f).toInt()).coerceIn(1, 6)
-            val windowsPerDepth = ((d / 2.2f).toInt()).coerceIn(1, 5)
+            val windowsPerSide = ((w / 2.5f).toInt()).coerceIn(1, 4)
+            val windowsPerDepth = ((d / 2.5f).toInt()).coerceIn(1, 3)
             val winW = 0.7f; val winH = floorHeight * 0.55f; val winD = 0.08f
 
             // Facciata frontale (Z+)
@@ -611,7 +611,7 @@ fun buildBuildings(osmData: OsmData) {
 
     fun buildTrees(osmData: OsmData, mapSize: Float = 1000f) {
         val half = mapSize / 2f
-        for (tree in osmData.trees.take(50)) {
+        for (tree in osmData.trees.take(30)) {
             if (currentNodeCount >= MAX_NODES - 5) break
             val x = tree.localX; val z = tree.localZ
             if (x < -half || x > half || z < -half || z > half) continue
