@@ -565,12 +565,12 @@ class CityActivity : AppCompatActivity() {
         Choreographer.getInstance().postFrameCallback(frameCb)
     }
 
-    override fun onPause() {
+override fun onPause() {
         super.onPause()
         AppLog.d(TAG, "onPause")
         Choreographer.getInstance().removeFrameCallback(frameCb)
-        rebuildJob?.cancel()
-        rebuildJob = null
+        // DON'T cancel rebuildJob — let build continue in background
+        // If user returns, build will be done or still running
     }
 
     private val frameCb = object : Choreographer.FrameCallback {
@@ -1247,7 +1247,13 @@ class CityActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     if (!destroyed) rebuildCityWithOsm(miniData!!)
                 }
-                osmStatusLabel?.text = "Mappa OSM (mini)"
+                // Dismiss loading screen — user sees mini-city while full build runs in background
+                withContext(Dispatchers.Main) {
+                    if (!destroyed) {
+                        osmStatusLabel?.text = "Mappa OSM (mini) — aggiornamento in corso..."
+                        dismissLoading()
+                    }
+                }
             } else {
                 // Fallback: build grid city across multiple frames to prevent ANR
                 updateLoadingText("Costruzione citta griglia...")
@@ -1344,16 +1350,17 @@ class CityActivity : AppCompatActivity() {
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
 
-            // ALL phases run as coroutine with yield between each phase
-            // This prevents ANR by never blocking the main thread for more than ~1s per frame
-            rebuildJob = lifecycleScope.launch {
-                try {
-                    // Phase 1: terrain + roads
-                    AppLog.d(TAG, "Phase 1: Terrain and roads...")
-                    osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
-                    osmPhase = 1
-                    AppLog.d(TAG, "Phase 1 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
-                    kotlinx.coroutines.yield()
+// ALL phases run as coroutine with yield between each phase
+                    // This prevents ANR by never blocking the main thread for more than ~1s per frame
+                    rebuildJob = lifecycleScope.launch {
+                        try {
+                            // Phase 1: terrain + roads
+                            AppLog.d(TAG, "Phase 1: Terrain and roads...")
+                            osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
+                            osmPhase = 1
+                            AppLog.d(TAG, "Phase 1 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                            osmStatusLabel?.text = "Strade completata · Edifici..."
+                            kotlinx.coroutines.yield()
 
                     if (destroyed) return@launch
 
@@ -1378,6 +1385,7 @@ class CityActivity : AppCompatActivity() {
                     osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
                     osmPhase = 2
                     AppLog.d(TAG, "Phase 2 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    osmStatusLabel?.text = "Edifici completati · Alberi..."
                     kotlinx.coroutines.yield()
 
                     if (destroyed) return@launch
@@ -1387,6 +1395,7 @@ class CityActivity : AppCompatActivity() {
                     osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
                     osmPhase = 3
                     AppLog.d(TAG, "Phase 3 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    osmStatusLabel?.text = "Alberi completati · Arredo..."
                     kotlinx.coroutines.yield()
 
                     if (destroyed) return@launch
@@ -1396,6 +1405,7 @@ class CityActivity : AppCompatActivity() {
                     osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
                     osmPhase = 4
                     AppLog.d(TAG, "Phase 4 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    osmStatusLabel?.text = "Arredo completato · Dettagli..."
                     kotlinx.coroutines.yield()
 
                     if (destroyed) return@launch
@@ -1412,7 +1422,7 @@ class CityActivity : AppCompatActivity() {
                     windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
                     lampLightMaterial = osmCityBuilder!!.lampLightMaterial
                     minimap.invalidate()
-                    osmStatusLabel?.text = "Mappa OSM completa (1km2)"
+                    osmStatusLabel?.text = "Mappa OSM completa (1km²)"
                     AppLog.d(TAG, "Phase 5 complete — CITY BUILD FINISHED (total nodes=${osmCityBuilder!!.getCurrentNodeCount()}, AABBs=${buildingAABBs.size})")
                     SentryDebugManager.breadcrumb("city3d", "City build finished", mapOf(
                         "nodes" to osmCityBuilder!!.getCurrentNodeCount(),
@@ -1821,6 +1831,8 @@ class CityActivity : AppCompatActivity() {
         AppLog.d(TAG, "onDestroy: cleaning up (destroyed was $destroyed)")
         destroyed = true
         Choreographer.getInstance().removeFrameCallback(frameCb)
+        rebuildJob?.cancel()
+        rebuildJob = null
         currentSkybox = null
         
         // Explicitly destroy Filament engine to free handle arena
