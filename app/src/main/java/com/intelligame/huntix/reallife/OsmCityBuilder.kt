@@ -633,8 +633,9 @@ class OsmCityBuilder(
             0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
             0xFF9C27B0.toInt(), 0xFFFF9800.toInt(), 0xFF2196F3.toInt()
         )
-        for (park in osmData.parks.take(15)) {
+        for ((parkIdx, park) in osmData.parks.take(15).withIndex()) {
             if (park.nodes.size < 3) continue
+            if (parkIdx % 3 == 0) yield()
             val fp = park.calculateFootprint() ?: continue
 
             val bushCount = (fp.width * fp.depth / 200f).toInt().coerceIn(2, 6)
@@ -674,8 +675,11 @@ class OsmCityBuilder(
     // ══════════════════════════════════════════════════════════════════════
 
     suspend fun buildStreetFurniture(osmData: OsmData) {
+        var roadCount = 0
         for (way in osmData.roads) {
             if (way.highway !in listOf("primary", "secondary")) continue
+            roadCount++
+            if (roadCount % 5 == 0) yield()
             for ((a, b) in way.segments()) {
                 val dx = b.localX - a.localX; val dz = b.localZ - a.localZ
                 val segLen = Math.sqrt((dx * dx + dz * dz).toDouble()).toFloat()
@@ -1011,11 +1015,14 @@ class OsmCityBuilder(
         AppLog.d(TAG, "Phase 4 done: nodes=$currentNodeCount")
     }
 
-    fun buildPhase5_Details(osmData: OsmData) {
+    suspend fun buildPhase5_Details(osmData: OsmData) {
         AppLog.d(TAG, "Phase 5: POI features, street signs, restaurants, shops")
         buildPoiFeatures(osmData)
+        yield()
         buildStreetSigns(osmData)
+        yield()
         buildRestaurantFeatures(osmData)
+        yield()
         buildShopFeatures(osmData)
         AppLog.d(TAG, "Phase 5 done: nodes=$currentNodeCount (FINAL)")
     }
