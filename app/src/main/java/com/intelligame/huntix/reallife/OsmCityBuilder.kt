@@ -801,11 +801,10 @@ class OsmCityBuilder(
     fun buildColosseum(osmData: OsmData) {
         val colosseo = osmData.buildings.firstOrNull {
             it.name.lowercase().let { n -> n.contains("colosseum") || n.contains("colosseo") || n.contains("amphitheatre") }
-        }
-        val (cx, cz) = if (colosseo != null) {
-            val fp = colosseo.calculateFootprint()
-            if (fp != null) fp.centerX to fp.centerZ else 0f to 0f
-        } else 0f to 0f
+        } ?: return
+
+        val fp = colosseo.calculateFootprint() ?: return
+        val cx = fp.centerX; val cz = fp.centerZ
 
         val w = 120f; val d = 100f; val h = 15f
         addNode(CubeNode(engine, Size(w, h, d), materialInstance = travertineMatInst).apply {
