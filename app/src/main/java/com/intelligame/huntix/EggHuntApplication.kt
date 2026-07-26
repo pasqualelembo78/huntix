@@ -14,6 +14,9 @@ class EggHuntApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // AppLog — must be first so all other init logs are captured
+        AppLog.init(this)
+
         // Firebase
         try {
             FirebaseApp.initializeApp(this)

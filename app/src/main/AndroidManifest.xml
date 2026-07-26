@@ -263,6 +263,7 @@
         <activity android:name=".ui.BattleActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.RealLifeActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.CityDebugLogActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityMapActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.BuildingInteriorActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>

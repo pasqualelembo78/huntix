@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.view.Choreographer
 import android.view.MotionEvent
@@ -16,7 +17,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.filament.Skybox
 import com.google.android.filament.IndirectLight
+import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.R
+import com.intelligame.huntix.SentryDebugManager
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
 import com.intelligame.huntix.reallife.BuildingDefs
@@ -131,6 +134,7 @@ class CityActivity : AppCompatActivity() {
     private var osmLoading = false
     private var osmLoaded = false
     private var osmPhase = 0
+    private var buildGeneration = 0
 
     private data class NpcData(
         val rootNode: Node,
@@ -167,6 +171,7 @@ class CityActivity : AppCompatActivity() {
     )
 
     companion object {
+        private const val TAG = "City3D"
         private const val CITY = 8000f
         private const val BLOCK = 80f
         private const val ROAD = 6f
@@ -194,6 +199,8 @@ class CityActivity : AppCompatActivity() {
     }
 
     private var sceneReady = false
+    private var loadingOverlay: FrameLayout? = null
+    private var loadingLabel: TextView? = null
 
     // Target city coordinates (from intent or default Foggia)
     private var targetLat = OSM_CENTER_LAT
@@ -201,23 +208,33 @@ class CityActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.d(TAG, "onCreate START")
 
         avatarConfig = AvatarConfig.load(this)
+        AppLog.d(TAG, "AvatarConfig loaded")
+
         OsmClient.init(this)
+        AppLog.d(TAG, "OsmClient initialized")
 
         try {
+            AppLog.d(TAG, "Creating SceneView...")
             sceneView = SceneView(this).apply { cameraManipulator = null }
+            AppLog.d(TAG, "SceneView created, engine=${sceneView.engine}")
             sceneView.lifecycle = lifecycle
 
             cameraNode = CameraNode(engine).apply { far = 500f; near = 0.1f }
             sceneView.setCameraNode(cameraNode)
+            AppLog.d(TAG, "CameraNode created and set")
 
             // Graphics quality: improve lighting
             sceneView.mainLightNode?.apply {
                 intensity = 1.5f
             }
+            AppLog.d(TAG, "Main light configured")
         } catch (e: Exception) {
+            AppLog.e(TAG, "SceneView creation FAILED", e)
             Sentry.captureException(e)
+            SentryDebugManager.breadcrumb("city3d", "SceneView creation failed", mapOf("error" to e.message))
             finish()
             return
         }
@@ -225,6 +242,7 @@ class CityActivity : AppCompatActivity() {
         // Read target city from intent (for city search/teleport)
         targetLat = intent.getDoubleExtra("TARGET_LAT", OSM_CENTER_LAT)
         targetLon = intent.getDoubleExtra("TARGET_LON", OSM_CENTER_LON)
+        AppLog.d(TAG, "Target city: lat=$targetLat, lon=$targetLon")
 
         // Day/Night cycle
         dayNightManager = DayNightManager()
@@ -422,6 +440,38 @@ class CityActivity : AppCompatActivity() {
             addView(emoteBtn, FrameLayout.LayoutParams(
                 UiKit.dp(this@CityActivity, 48), UiKit.dp(this@CityActivity, 48)
             ).apply { gravity = Gravity.BOTTOM or Gravity.END; marginEnd = UiKit.dp(this@CityActivity, 20); bottomMargin = UiKit.dp(this@CityActivity, 40) })
+
+            // Debug log button (small, bottom-right above emote)
+            val debugLogBtn = TextView(this@CityActivity).apply {
+                text = "\uD83D\uDD27"; textSize = 16f; setTextColor(Color.parseColor("#888888"))
+                isClickable = true; isFocusable = true
+                setPadding(UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 6),
+                    UiKit.dp(this@CityActivity, 8), UiKit.dp(this@CityActivity, 6))
+                setOnClickListener {
+                    startActivity(Intent(this@CityActivity, CityDebugLogActivity::class.java))
+                }
+            }
+            addView(debugLogBtn, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.BOTTOM or Gravity.END; marginEnd = UiKit.dp(this@CityActivity, 20); bottomMargin = UiKit.dp(this@CityActivity, 92) })
+
+            // Loading overlay (shown while city builds, dismissed when done)
+            loadingLabel = TextView(this@CityActivity).apply {
+                text = "Caricamento citta 3D..."
+                setTextColor(Color.WHITE); textSize = 16f
+                typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+                setShadowLayer(4f, 1f, 1f, Color.BLACK)
+                gravity = Gravity.CENTER
+            }
+            loadingOverlay = FrameLayout(this@CityActivity).apply {
+                setBackgroundColor(Color.parseColor("#CC0D0620"))
+                addView(loadingLabel, FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { gravity = Gravity.CENTER })
+            }
+            addView(loadingOverlay, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+            ))
         }
         sceneView.onTouchEvent = { event, _ ->
             // Two-finger gestures: rotation + pinch zoom
@@ -510,13 +560,17 @@ class CityActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppLog.d(TAG, "onResume, destroyed=$destroyed")
         lastFrameNs = 0L
         Choreographer.getInstance().postFrameCallback(frameCb)
     }
 
     override fun onPause() {
         super.onPause()
+        AppLog.d(TAG, "onPause")
         Choreographer.getInstance().removeFrameCallback(frameCb)
+        rebuildJob?.cancel()
+        rebuildJob = null
     }
 
     private val frameCb = object : Choreographer.FrameCallback {
@@ -525,6 +579,8 @@ class CityActivity : AppCompatActivity() {
 
             if (!sceneReady) {
                 sceneReady = true
+                AppLog.d(TAG, "=== FIRST FRAME === engine ready, loading OSM data")
+                SentryDebugManager.breadcrumb("city3d", "First frame rendered, starting OSM load")
                 // Load OSM data in background, then build city
                 loadOsmData()
                 // Create skybox on first frame (engine GL context now ready)
@@ -709,6 +765,7 @@ class CityActivity : AppCompatActivity() {
     private fun createSkybox() {
         if (destroyed) return
         try {
+            AppLog.d(TAG, "Creating skybox...")
             val sc = dayNightManager.getSkyColors()
             val skyR = Color.red(sc.topColor) / 255f
             val skyG = Color.green(sc.topColor) / 255f
@@ -721,7 +778,9 @@ class CityActivity : AppCompatActivity() {
             currentSkybox = newSkybox
             sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
             skyboxUpdateTimer = 10f
+            AppLog.d(TAG, "Skybox created successfully")
         } catch (e: Exception) {
+            AppLog.e(TAG, "Skybox creation FAILED", e)
             Sentry.captureException(e)
             skyboxUpdateTimer = 0.5f  // Retry fast if engine wasn't ready
         }
@@ -992,42 +1051,30 @@ class CityActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildDetails() {
+    private fun buildDetailsStreetFurniture() {
         val poleMat = ml.createColorInstance(color = Color.rgb(0x55, 0x55, 0x55))
         val lightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xEE, 0xAA))
-        lampLightMaterial = lightMat  // capture for day/night
+        lampLightMaterial = lightMat
         val benchMat = ml.createColorInstance(color = Color.rgb(0x8B, 0x5E, 0x3C))
-        val trunkMat = ml.createColorInstance(color = Color.rgb(0x6B, 0x42, 0x26))
-        val leafMat = ml.createColorInstance(color = Color.rgb(0x2E, 0x7D, 0x32))
-        val leafLightMat = ml.createColorInstance(color = Color.rgb(0x43, 0xA0, 0x47))
-        val leafDarkMat = ml.createColorInstance(color = Color.rgb(0x1B, 0x5E, 0x20))
-        val bushMat = ml.createColorInstance(color = Color.rgb(0x38, 0x8E, 0x3C))
-        val flowerColors = intArrayOf(
-            0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
-            0xFF9C27B0.toInt(), 0xFFFF9800.toInt(), 0xFF2196F3.toInt()
-        )
         val carColors = intArrayOf(
-            Color.rgb(0xE5, 0x39, 0x35), // rosso
-            Color.rgb(0x1E, 0x88, 0xE5), // blu
-            Color.rgb(0xEC, 0xEF, 0xF1), // bianco
-            Color.rgb(0xFF, 0xCA, 0x28), // giallo
-            Color.rgb(0x21, 0x21, 0x21), // nero
-            Color.rgb(0x4C, 0xAF, 0x50)  // verde
+            Color.rgb(0xE5, 0x39, 0x35),
+            Color.rgb(0x1E, 0x88, 0xE5),
+            Color.rgb(0xEC, 0xEF, 0xF1),
+            Color.rgb(0xFF, 0xCA, 0x28),
+            Color.rgb(0x21, 0x21, 0x21),
+            Color.rgb(0x4C, 0xAF, 0x50)
         )
         val wheelMat = ml.createColorInstance(color = Color.rgb(0x21, 0x21, 0x21))
         val windshieldMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
         val headlightMat = ml.createColorInstance(color = Color.rgb(0xFF, 0xFF, 0xE0))
         val tailLightMat = ml.createColorInstance(color = Color.rgb(0xEF, 0x53, 0x50))
-        val grassDetailMat = ml.createColorInstance(color = Color.rgb(0x66, 0xBB, 0x6A))
 
-        // ── LAMPIONI MIGLIORATI + BANCHE MIGLIORATE + AUTO DETTAGLIATE ──
         for (i in roadCenters.indices) {
             for (j in roadCenters.indices) {
                 val rx = roadCenters[i]
                 val rz = roadCenters[j]
                 val sd = ((rx * 173 + rz * 311).toInt().let { if (it < 0) -it else it }) % 1000
 
-                // Lampione: palo + luce (2 nodes instead of 5)
                 if (sd % 5 == 0) {
                     val lx = rx + ROAD / 2f + 0.8f
                     sceneView.addChildNode(CubeNode(engine, Size(0.08f, 2.8f, 0.08f), materialInstance = poleMat).apply {
@@ -1038,7 +1085,6 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                // Panchina: seduta + schienale (2 nodes instead of 6)
                 if (sd % 6 == 1) {
                     val bx = rx - ROAD / 2f - 0.6f
                     sceneView.addChildNode(CubeNode(engine, Size(0.9f, 0.06f, 0.35f), materialInstance = benchMat).apply {
@@ -1049,7 +1095,6 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                // Auto — solo procedurale (loadModelInstanceAsync causa SIGSEGV cross-thread)
                 if (sd % 10 == 3) {
                     val cx = rx + ROAD / 2f + 1.5f
                     val cz = rz + (if (sd % 2 == 0) 1.5f else -1.5f)
@@ -1057,8 +1102,20 @@ class CityActivity : AppCompatActivity() {
                 }
             }
         }
+    }
 
-        // ── ALBERI MIGLIORATI (3 sfere sovrapposte per chioma) + CESPUGLI + FIORI ──
+    private fun buildDetailsVegetation() {
+        val trunkMat = ml.createColorInstance(color = Color.rgb(0x6B, 0x42, 0x26))
+        val leafMat = ml.createColorInstance(color = Color.rgb(0x2E, 0x7D, 0x32))
+        val leafLightMat = ml.createColorInstance(color = Color.rgb(0x43, 0xA0, 0x47))
+        val leafDarkMat = ml.createColorInstance(color = Color.rgb(0x1B, 0x5E, 0x20))
+        val bushMat = ml.createColorInstance(color = Color.rgb(0x38, 0x8E, 0x3C))
+        val flowerColors = intArrayOf(
+            0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
+            0xFF9C27B0.toInt(), 0xFFFF9800.toInt(), 0xFF2196F3.toInt()
+        )
+        val grassDetailMat = ml.createColorInstance(color = Color.rgb(0x66, 0xBB, 0x6A))
+
         val occupied = BuildingDefs.occupiedBlocks().toSet()
         val s = 0.4f
         for (i in 0 until roadCenters.size - 1) {
@@ -1076,7 +1133,6 @@ class CityActivity : AppCompatActivity() {
 
                 val seed = ((cx * 197 + cz * 337).toInt().let { if (it < 0) -it else it }) % 10000
 
-                // 1 albero — solo procedurale
                 val treeCount = 1
                 for (t in 0 until treeCount) {
                     val ts = seed * 7 + t * 41
@@ -1085,7 +1141,6 @@ class CityActivity : AppCompatActivity() {
                     spawnProceduralTree(tx, tz, ts, trunkMat, leafMat, leafLightMat, leafDarkMat)
                 }
 
-                // 1 cespuglio (2 sfere sovrapposte)
                 val bushCount = 1
                 for (b in 0 until bushCount) {
                     val bs = seed * 13 + b * 29
@@ -1100,37 +1155,33 @@ class CityActivity : AppCompatActivity() {
                     })
                 }
 
-                // 2 fiori (con gambo)
                 val flowerCount = 2
                 for (f in 0 until flowerCount) {
                     val fs = seed * 11 + f * 37
                     val fx = x1 + ((fs % 100).toFloat() / 100f) * bw
                     val fz = z1 + (((fs / 10) % 100).toFloat() / 100f) * bh
                     val fMat = ml.createColorInstance(color = flowerColors[fs % flowerColors.size])
-                    // Gambo
                     sceneView.addChildNode(CubeNode(engine, Size(0.02f, 0.15f, 0.02f), materialInstance = grassDetailMat).apply {
                         position = Position(fx, 0.08f, fz)
                     })
-                    // Testa fiore
                     sceneView.addChildNode(SphereNode(engine, 0.06f + (fs % 5).toFloat() / 100f, materialInstance = fMat).apply {
                         position = Position(fx, 0.18f, fz)
                     })
                 }
             }
         }
+    }
 
-        // ── PISCINA (blocco [3][4] ≈ x=5, z=15) ──
+    private fun buildDetailsPool() {
         val poolX = 5f; val poolZ = 15f
         val waterMat = ml.createColorInstance(color = Color.rgb(0x42, 0xA5, 0xF5))
         val poolEdgeMat = ml.createColorInstance(color = Color.rgb(0xEC, 0xEF, 0xF1))
         val loungeMat = ml.createColorInstance(color = Color.rgb(0xFF, 0x98, 0x00))
         val loungeSeatMat = ml.createColorInstance(color = Color.rgb(0x8D, 0x6E, 0x63))
 
-        // Acqua
         sceneView.addChildNode(CubeNode(engine, Size(3.5f, 0.1f, 2.5f), materialInstance = waterMat).apply {
             position = Position(poolX, 0.05f, poolZ)
         })
-        // Muretto
         for (side in 0..3) {
             val (sx, sz, sw, sd2) = when (side) {
                 0 -> floatArrayOf(poolX - 1.85f, poolZ, 0.15f, 2.6f)
@@ -1142,7 +1193,6 @@ class CityActivity : AppCompatActivity() {
                 position = Position(sx, 0.18f, sz)
             })
         }
-        // Sdraio
         for (l in 0..2) {
             val lx = poolX + 2.5f + l * 1.2f
             sceneView.addChildNode(CubeNode(engine, Size(0.6f, 0.1f, 0.35f), materialInstance = loungeMat).apply {
@@ -1154,39 +1204,78 @@ class CityActivity : AppCompatActivity() {
         }
     }
 
+    private fun buildDetails() {
+        buildDetailsStreetFurniture()
+        buildDetailsVegetation()
+        buildDetailsPool()
+    }
+
     private fun loadOsmData() {
-        if (osmLoading || osmLoaded) return
-        osmLoading = true
-
-        // Initialize coordinate converter for target city
-        CoordinateConverter.init(targetLat, targetLon)
-
-        // 1. Load mini-chunk from assets immediately
-        val miniData = OsmClient.loadMiniChunk()
-        val hasEnoughOsmData = miniData?.let { it.roads.size >= 5 && it.buildings.size >= 3 } == true
-        if (hasEnoughOsmData) {
-            // Build immediately with mini-chunk on GL thread
-            rebuildCityWithOsm(miniData!!)
-            osmStatusLabel?.text = "✅ Mappa OSM (mini)"
-        } else {
-            // Fallback: build grid city immediately (visible city while downloading)
-            try { buildCity() } catch (e: Exception) { Sentry.captureException(e) }
-            try { buildDetails() } catch (e: Exception) { Sentry.captureException(e) }
-            osmStatusLabel?.text = "🏙️ Città griglia (download OSM...)"
+        if (osmLoading || osmLoaded) {
+            AppLog.d(TAG, "loadOsmData: skipped (loading=$osmLoading, loaded=$osmLoaded)")
+            return
         }
-        try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
-        syncCamera()
-        minimap.setRoads(roadCenters, HALF)
-        loadNpcs()
-        loadWorldState()
+        osmLoading = true
+        AppLog.d(TAG, "loadOsmData: START (lat=$targetLat, lon=$targetLon)")
+        updateLoadingText("Preparazione mappa...")
 
-        // 2. Download full km² data in background
+        // Move ALL heavy work to a coroutine so main thread stays free
         lifecycleScope.launch {
+            // Initialize coordinate converter for target city
+            CoordinateConverter.init(targetLat, targetLon)
+
+            // 1. Load mini-chunk from assets (IO thread - file + JSON parsing)
+            updateLoadingText("Caricamento mappa da assets...")
+            AppLog.d(TAG, "loadOsmData: loading mini-chunk from assets (IO)...")
+            val miniData = withContext(Dispatchers.IO) {
+                OsmClient.loadMiniChunk()
+            }
+            val hasEnoughOsmData = miniData?.let { it.roads.size >= 5 && it.buildings.size >= 3 } == true
+            AppLog.d(TAG, "loadOsmData: mini-chunk roads=${miniData?.roads?.size ?: 0}, buildings=${miniData?.buildings?.size ?: 0}, hasEnough=$hasEnoughOsmData")
+            SentryDebugManager.breadcrumb("city3d", "OSM mini-chunk loaded", mapOf(
+                "roads" to (miniData?.roads?.size ?: 0),
+                "buildings" to (miniData?.buildings?.size ?: 0),
+                "hasEnough" to hasEnoughOsmData
+            ))
+
+            if (destroyed) return@launch
+
+            if (hasEnoughOsmData) {
+                // Build immediately with mini-chunk on GL thread
+                updateLoadingText("Costruzione citta (mini OSM)...")
+                AppLog.d(TAG, "loadOsmData: rebuilding city with mini OSM data...")
+                withContext(Dispatchers.Main) {
+                    if (!destroyed) rebuildCityWithOsm(miniData!!)
+                }
+                osmStatusLabel?.text = "Mappa OSM (mini)"
+            } else {
+                // Fallback: build grid city across multiple frames to prevent ANR
+                updateLoadingText("Costruzione citta griglia...")
+                AppLog.d(TAG, "loadOsmData: mini-chunk insufficient, building grid city (phased)")
+                withContext(Dispatchers.Main) {
+                    if (!destroyed) {
+                        buildCityGridPhased()
+                    }
+                }
+            }
+
+            // 2. Download full km² data in background (works for both mini and grid paths)
+            AppLog.d(TAG, "loadOsmData: starting background download of full OSM data...")
             try {
+                AppLog.d(TAG, "OSM download: START (IO thread)")
                 val data = withContext(Dispatchers.IO) {
                     OsmClient.fetchAreaCached(targetLat, targetLon, OSM_RADIUS_METERS)
                 }
-                if (destroyed) return@launch
+                if (destroyed) {
+                    AppLog.w(TAG, "OSM download complete but activity destroyed, skipping")
+                    return@launch
+                }
+                AppLog.d(TAG, "OSM download: COMPLETE (roads=${data.roads.size}, buildings=${data.buildings.size}, trees=${data.trees.size})")
+                SentryDebugManager.breadcrumb("city3d", "OSM full data downloaded", mapOf(
+                    "roads" to data.roads.size,
+                    "buildings" to data.buildings.size,
+                    "trees" to data.trees.size
+                ))
                 osmData = data
                 osmLoaded = true
                 osmLoading = false
@@ -1194,28 +1283,28 @@ class CityActivity : AppCompatActivity() {
                 // Rebuild city with full OSM data on GL thread
                 withContext(Dispatchers.Main) {
                     if (!destroyed) {
+                        AppLog.d(TAG, "Rebuilding city with FULL OSM data on GL thread...")
                         rebuildCityWithOsm(data)
-                        osmStatusLabel?.text = "✅ Mappa OSM completa (1km²)"
+                        osmStatusLabel?.text = "Mappa OSM completa (1km2)"
+                        AppLog.d(TAG, "City rebuilt with full OSM data")
                     }
                 }
             } catch (e: Exception) {
+                AppLog.e(TAG, "OSM download FAILED: ${e.message}", e)
                 Sentry.captureException(e)
+                SentryDebugManager.breadcrumb("city3d", "OSM download failed", mapOf("error" to e.message))
                 osmLoading = false
-                // On download failure, rebuild with grid city if we only had mini-chunk
                 if (!hasEnoughOsmData) {
                     withContext(Dispatchers.Main) {
                         if (!destroyed) {
-                            try { buildCity() } catch (e2: Exception) { Sentry.captureException(e2) }
-                            try { buildDetails() } catch (e2: Exception) { Sentry.captureException(e2) }
-                            placePlayer()
-                            syncCamera()
-                            osmStatusLabel?.text = "⚠️ OSM fallito - Città griglia"
+                            AppLog.d(TAG, "Rebuilding with grid city after OSM failure (phased)")
+                            buildCityGridPhased()
                         }
                     }
                 } else {
                     withContext(Dispatchers.Main) {
                         if (!destroyed) {
-                            osmStatusLabel?.text = "⚠️ Aggiornamento OSM fallito (usa mini)"
+                            osmStatusLabel?.text = "Aggiornamento OSM fallito (usa mini)"
                         }
                     }
                 }
@@ -1237,15 +1326,30 @@ class CityActivity : AppCompatActivity() {
         playerRoot = null
     }
 
+    private var rebuildJob: kotlinx.coroutines.Job? = null
+
     private fun rebuildCityWithOsm(data: OsmData) {
         try {
+            AppLog.d(TAG, "rebuildCityWithOsm: START (roads=${data.roads.size}, buildings=${data.buildings.size})")
+            SentryDebugManager.breadcrumb("city3d", "Rebuilding city with OSM", mapOf(
+                "roads" to data.roads.size,
+                "buildings" to data.buildings.size
+            ))
+
+            // Cancel any previous rebuild in progress
+            rebuildJob?.cancel()
+
             // Remove old grid city nodes to prevent handle arena overflow
             clearCityNodes()
+            AppLog.d(TAG, "Old nodes cleared")
 
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
+
             // Phase 1: terrain + roads (immediate)
+            AppLog.d(TAG, "Phase 1: Terrain and roads...")
             osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
+            AppLog.d(TAG, "Phase 1 complete")
             // Populate roadCenters from OSM roads (for NPC navigation + minimap)
             val rcSet = mutableSetOf<Float>()
             for (way in data.roads) {
@@ -1260,63 +1364,151 @@ class CityActivity : AppCompatActivity() {
             syncCamera()
             minimap.setRoads(roadCenters, HALF)
 
-            // Phase 2: colosseum + buildings
-            Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                override fun doFrame(frameTimeNanos: Long) {
-                    if (destroyed) return
-                    try {
-                        osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
-                        osmPhase = 2
-                    } catch (e: Exception) { Sentry.captureException(e); return }
+            // Phases 2-5: run as coroutine with yield between each phase
+            // This prevents ANR by not blocking the main thread for more than ~1s per frame
+            rebuildJob = lifecycleScope.launch {
+                try {
+                    // Phase 2: colosseum + buildings
+                    AppLog.d(TAG, "Phase 2: Colosseum and buildings...")
+                    osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
+                    osmPhase = 2
+                    AppLog.d(TAG, "Phase 2 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    kotlinx.coroutines.yield()
+
+                    if (destroyed) return@launch
 
                     // Phase 3: trees + vegetation
-                    Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                        override fun doFrame(frameTimeNanos: Long) {
-                            if (destroyed) return
-                            try {
-                                osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
-                                osmPhase = 3
-                            } catch (e: Exception) { Sentry.captureException(e); return }
+                    AppLog.d(TAG, "Phase 3: Trees and vegetation...")
+                    osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
+                    osmPhase = 3
+                    AppLog.d(TAG, "Phase 3 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    kotlinx.coroutines.yield()
 
-                            // Phase 4: furniture + cars
-                            Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                                override fun doFrame(frameTimeNanos: Long) {
-                                    if (destroyed) return
-                                    try {
-                                        osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
-                                        osmPhase = 4
-                                    } catch (e: Exception) { Sentry.captureException(e); return }
+                    if (destroyed) return@launch
 
-                                    // Phase 5: POI details + signs + restaurants + shops
-                                    Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
-                                        override fun doFrame(frameTimeNanos: Long) {
-                                            if (destroyed) return
-                                            try {
-                                                osmCityBuilder!!.buildPhase5_Details(data)
-                                                osmPhase = 5
+                    // Phase 4: furniture + cars
+                    AppLog.d(TAG, "Phase 4: Furniture and cars...")
+                    osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
+                    osmPhase = 4
+                    AppLog.d(TAG, "Phase 4 complete (nodes=${osmCityBuilder!!.getCurrentNodeCount()})")
+                    kotlinx.coroutines.yield()
 
-                                                // Copy collision data
-                                                buildingAABBs.clear()
-                                                buildingAABBs.addAll(osmCityBuilder!!.buildingAABBs)
-                                                windowMaterials.clear()
-                                                windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
-                                                lampLightMaterial = osmCityBuilder!!.lampLightMaterial
-                                                minimap.invalidate()
-                                            } catch (e: Exception) { Sentry.captureException(e) }
-                                        }
-                                    })
-                                }
-                            })
-                        }
-                    })
+                    if (destroyed) return@launch
+
+                    // Phase 5: POI details + signs + restaurants + shops
+                    AppLog.d(TAG, "Phase 5: Details, POI, signs...")
+                    osmCityBuilder!!.buildPhase5_Details(data)
+                    osmPhase = 5
+
+                    // Copy collision data
+                    buildingAABBs.clear()
+                    buildingAABBs.addAll(osmCityBuilder!!.buildingAABBs)
+                    windowMaterials.clear()
+                    windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
+                    lampLightMaterial = osmCityBuilder!!.lampLightMaterial
+                    minimap.invalidate()
+                    AppLog.d(TAG, "Phase 5 complete — CITY BUILD FINISHED (total nodes=${osmCityBuilder!!.getCurrentNodeCount()}, AABBs=${buildingAABBs.size})")
+                    SentryDebugManager.breadcrumb("city3d", "City build finished", mapOf(
+                        "nodes" to osmCityBuilder!!.getCurrentNodeCount(),
+                        "aabbs" to buildingAABBs.size
+                    ))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    AppLog.d(TAG, "Rebuild cancelled (likely onPause or new rebuild triggered)")
+                } catch (e: Exception) {
+                    AppLog.e(TAG, "Rebuild FAILED", e)
+                    Sentry.captureException(e)
                 }
-            })
+            }
         } catch (e: Exception) {
             Sentry.captureException(e)
         }
     }
 
-    private fun buildCity() {
+    private fun buildCityGridPhased() {
+        AppLog.d(TAG, "buildCityGridPhased: START")
+        // Phase G1: Ground + roads + sidewalks
+        Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (destroyed) return
+                try {
+                    AppLog.d(TAG, "Grid Phase G1: Ground, roads, sidewalks...")
+                    buildCityGroundAndRoads()
+                    AppLog.d(TAG, "Grid Phase G1 complete")
+                } catch (e: Exception) { AppLog.e(TAG, "Grid Phase G1 FAILED", e); Sentry.captureException(e); return }
+
+                // Phase G2: Named buildings
+                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                    override fun doFrame(frameTimeNanos: Long) {
+                        if (destroyed) return
+                        try {
+                            AppLog.d(TAG, "Grid Phase G2: Named buildings...")
+                            buildCityNamedBuildings()
+                            AppLog.d(TAG, "Grid Phase G2 complete")
+                        } catch (e: Exception) { AppLog.e(TAG, "Grid Phase G2 FAILED", e); Sentry.captureException(e); return }
+
+                        // Phase G3: Procedural buildings
+                        Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                            override fun doFrame(frameTimeNanos: Long) {
+                                if (destroyed) return
+                                try {
+                                    AppLog.d(TAG, "Grid Phase G3: Procedural buildings (batched)...")
+                                    buildCityProceduralBuildings {
+                                        if (destroyed) return@buildCityProceduralBuildings
+                                        AppLog.d(TAG, "Grid Phase G3 complete")
+
+                                        // Phase D1: Street furniture (lamps, benches, cars)
+                                        Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                                            override fun doFrame(frameTimeNanos: Long) {
+                                                if (destroyed) return
+                                                try {
+                                                    AppLog.d(TAG, "Grid Phase D1: Street furniture...")
+                                                    buildDetailsStreetFurniture()
+                                                    AppLog.d(TAG, "Grid Phase D1 complete")
+                                                } catch (e: Exception) { AppLog.e(TAG, "Grid Phase D1 FAILED", e); Sentry.captureException(e); return }
+
+                                                // Phase D2: Vegetation + pool
+                                                Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                                                    override fun doFrame(frameTimeNanos: Long) {
+                                                        if (destroyed) return
+                                                        try {
+                                                            AppLog.d(TAG, "Grid Phase D2: Vegetation + pool...")
+                                                            buildDetailsVegetation()
+                                                            buildDetailsPool()
+                                                            AppLog.d(TAG, "Grid Phase D2 complete")
+                                                        } catch (e: Exception) { AppLog.e(TAG, "Grid Phase D2 FAILED", e); Sentry.captureException(e); return }
+
+                                                        // Final: place player, camera, minimap, dismiss loading
+                                                        Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                                                            override fun doFrame(frameTimeNanos: Long) {
+                                                                if (destroyed) return
+                                                                try {
+                                                                    AppLog.d(TAG, "Grid Final: Player, camera, minimap...")
+                                                                    placePlayer()
+                                                                    syncCamera()
+                                                                    minimap.setRoads(roadCenters, HALF)
+                                                                    osmStatusLabel?.text = "Citta griglia (download OSM...)"
+                                                                    dismissLoading()
+                                                                    loadNpcs()
+                                                                    loadWorldState()
+                                                                    AppLog.d(TAG, "Grid city build COMPLETE (total nodes=${sceneView.childNodes.size})")
+                                                                } catch (e: Exception) { AppLog.e(TAG, "Grid Final FAILED", e); Sentry.captureException(e) }
+                                                            }
+                                                        })
+                                                    }
+                                                })
+                                            }
+                                        })
+                                    }
+                                } catch (e: Exception) { AppLog.e(TAG, "Grid Phase G3 FAILED", e); Sentry.captureException(e) }
+                            }
+                        })
+                    }
+                })
+            }
+        })
+    }
+
+    private fun buildCityGroundAndRoads() {
         sceneView.addChildNode(
             CubeNode(engine, Size(CITY, 0.3f, CITY), materialInstance = ml.createColorInstance(color = Color.rgb(0x4A, 0x8C, 0x3F))).apply {
                 position = Position(0f, -0.15f, 0f)
@@ -1341,7 +1533,9 @@ class CityActivity : AppCompatActivity() {
             sceneView.addChildNode(CubeNode(engine, Size(CITY, 0.08f, s), materialInstance = swMat).apply { position = Position(0f, 0.04f, rc - o) })
             sceneView.addChildNode(CubeNode(engine, Size(CITY, 0.08f, s), materialInstance = swMat).apply { position = Position(0f, 0.04f, rc + o) })
         }
+    }
 
+    private fun buildCityNamedBuildings() {
         // ── Named buildings (edifici speciali) — GLB con fallback procedurale ──
         val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
         val awningColors = intArrayOf(
@@ -1350,7 +1544,6 @@ class CityActivity : AppCompatActivity() {
         )
 
         for (bd in BuildingDefs.BUILDINGS) {
-            // Sempre procedurale (loadModelInstanceAsync causa SIGSEGV cross-thread)
             val bMat = ml.createColorInstance(color = bd.color3D)
             val rMat = ml.createColorInstance(color = bd.roofColor)
 
@@ -1393,8 +1586,10 @@ class CityActivity : AppCompatActivity() {
 
             buildingAABBs.add(bd.aabb())
         }
+    }
 
-        // ── Procedural buildings (fill remaining blocks) DETTAGLIATI ──
+    private fun buildCityProceduralBuildings(onDone: () -> Unit) {
+        // ── Procedural buildings (fill remaining blocks) — BATCHED ──
         val colors = intArrayOf(
             0xFFB3D9FF.toInt(), // azzurro chiaro
             0xFFFFCDD2.toInt(), // rosa chiaro
@@ -1411,10 +1606,14 @@ class CityActivity : AppCompatActivity() {
             0xFF80CBC4.toInt(), 0xFFC5E1A5.toInt()
         )
         val occupied = BuildingDefs.occupiedBlocks().toSet()
+        val s = 0.4f
         val proceduralWindowMat = ml.createColorInstance(color = Color.rgb(0xBB, 0xDE, 0xFB))
         windowMaterials.add(proceduralWindowMat)
         val proceduralDoorMat = ml.createColorInstance(color = Color.rgb(0x5D, 0x40, 0x37))
 
+        // Pre-compute all block data to iterate in small batches
+        data class BlockData(val bcx: Float, val bcz: Float, val w: Float, val h: Float, val d: Float, val ci: Int, val roofCi: Int, val aabb: com.intelligame.huntix.reallife.AABB)
+        val blocks = mutableListOf<BlockData>()
         for (i in 0 until roadCenters.size - 1) {
             for (j in 0 until roadCenters.size - 1) {
                 val x1 = roadCenters[i] + ROAD / 2f + s + 0.2f
@@ -1430,7 +1629,6 @@ class CityActivity : AppCompatActivity() {
 
                 val seed = ((cx * 137f + cz * 251f).toInt().let { if (it < 0) -it else it }) % 10000
                 val n = 1 + (seed % 2)
-
                 for (k in 0 until n) {
                     val sd = seed * 7 + k * 31
                     val h = 1.5f + (sd % 70).toFloat() / 10f
@@ -1441,30 +1639,50 @@ class CityActivity : AppCompatActivity() {
                     val oz = (((sd / 10) % 100).toFloat() / 100f) * (bh - d).coerceAtLeast(0f)
                     val bcx = x1 + ox + w / 2f
                     val bcz = z1 + oz + d / 2f
-
-                    // Main body + roof + door (3 nodes instead of 15)
-                    sceneView.addChildNode(
-                        CubeNode(engine, Size(w, h, d), materialInstance = ml.createColorInstance(color = colors[ci])).apply {
-                            position = Position(bcx, h / 2f, bcz)
-                        }
-                    )
-                    sceneView.addChildNode(
-                        CubeNode(engine, Size(w + 0.2f, 0.2f, d + 0.2f), materialInstance = ml.createColorInstance(color = roofColors[ci])).apply {
-                            position = Position(bcx, h + 0.1f, bcz)
-                        }
-                    )
-                    sceneView.addChildNode(
-                        CubeNode(engine, Size(0.4f, 0.8f, 0.08f), materialInstance = proceduralDoorMat).apply {
-                            position = Position(bcx, 0.4f, bcz + d / 2f + 0.04f)
-                        }
-                    )
-                    buildingAABBs.add(com.intelligame.huntix.reallife.AABB(bcx - w / 2f, bcx + w / 2f, bcz - d / 2f, bcz + d / 2f))
+                    blocks.add(BlockData(bcx, bcz, w, h, d, ci, ci, com.intelligame.huntix.reallife.AABB(bcx - w / 2f, bcx + w / 2f, bcz - d / 2f, bcz + d / 2f)))
                 }
             }
         }
+
+        // Process in batches of 5 blocks per frame
+        val BATCH = 5
+        var idx = 0
+
+        fun processBatch() {
+            if (destroyed || idx >= blocks.size) {
+                onDone()
+                return
+            }
+            val end = (idx + BATCH).coerceAtMost(blocks.size)
+            for (k in idx until end) {
+                val b = blocks[k]
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(b.w, b.h, b.d), materialInstance = ml.createColorInstance(color = colors[b.ci])).apply {
+                        position = Position(b.bcx, b.h / 2f, b.bcz)
+                    }
+                )
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(b.w + 0.2f, 0.2f, b.d + 0.2f), materialInstance = ml.createColorInstance(color = roofColors[b.roofCi])).apply {
+                        position = Position(b.bcx, b.h + 0.1f, b.bcz)
+                    }
+                )
+                sceneView.addChildNode(
+                    CubeNode(engine, Size(0.4f, 0.8f, 0.08f), materialInstance = proceduralDoorMat).apply {
+                        position = Position(b.bcx, 0.4f, b.bcz + b.d / 2f + 0.04f)
+                    }
+                )
+                buildingAABBs.add(b.aabb)
+            }
+            idx = end
+            Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+                override fun doFrame(frameTimeNanos: Long) { processBatch() }
+            })
+        }
+        processBatch()
     }
 
     private fun placePlayer() {
+        AppLog.d(TAG, "placePlayer: creating player node at (0, 0, 0)")
         val root = Node(engine).apply { position = Position(0f, 0f, 0f) }
 
         val skinMat = ml.createColorInstance(color = avatarConfig.skinColor)
@@ -1555,6 +1773,25 @@ class CityActivity : AppCompatActivity() {
         cameraNode.lookAt(Position(playerX, 0f, playerZ))
     }
 
+    private fun updateLoadingText(msg: String) {
+        AppLog.d(TAG, "LOADING: $msg")
+        loadingLabel?.text = msg
+        // Update OSM status label too
+        osmStatusLabel?.text = msg
+    }
+
+    private fun dismissLoading() {
+        AppLog.d(TAG, "=== LOADING COMPLETE ===")
+        SentryDebugManager.breadcrumb("city3d", "Loading complete")
+        loadingOverlay?.let { overlay ->
+            overlay.animate()
+                .alpha(0f)
+                .setDuration(400)
+                .withEndAction { overlay.alpha = 0f }
+                .start()
+        }
+    }
+
     private fun checkMemoryPressure(dt: Float) {
         memoryCheckTimer -= dt
         if (memoryCheckTimer > 0f) return
@@ -1566,13 +1803,16 @@ class CityActivity : AppCompatActivity() {
         val availMb = memInfo.availMem / (1024 * 1024)
         val thresholdMb = memInfo.threshold / (1024 * 1024)
 
+        AppLog.d(TAG, "Memory check: ${availMb}MB available, threshold=${thresholdMb}MB")
         if (availMb < thresholdMb + 80L) {
+            AppLog.w(TAG, "LOW MEMORY! ${availMb}MB available, finishing activity")
             Sentry.captureMessage("CityActivity: low memory (${availMb}MB avail, threshold ${thresholdMb}MB) — finishing")
             finish()
         }
     }
 
     override fun onDestroy() {
+        AppLog.d(TAG, "onDestroy: cleaning up (destroyed was $destroyed)")
         destroyed = true
         Choreographer.getInstance().removeFrameCallback(frameCb)
         currentSkybox = null

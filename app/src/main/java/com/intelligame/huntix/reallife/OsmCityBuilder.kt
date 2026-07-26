@@ -1,7 +1,10 @@
 package com.intelligame.huntix.reallife
 
 import android.graphics.Color
+import android.util.Log
+import com.intelligame.huntix.AppLog
 import io.github.sceneview.SceneView
+import kotlinx.coroutines.yield
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Size
 import io.github.sceneview.node.CubeNode
@@ -16,6 +19,9 @@ import io.github.sceneview.node.SphereNode
 class OsmCityBuilder(
     private val sceneView: SceneView
 ) {
+    companion object {
+        private const val TAG = "City3D_Builder"
+    }
     private val engine get() = sceneView.engine
     private val ml get() = sceneView.materialLoader
 
@@ -87,7 +93,13 @@ class OsmCityBuilder(
     val buildingAABBs = mutableListOf<AABB>()
 
     private var currentNodeCount = 0
-    private val MAX_NODES = 5000
+    private val MAX_NODES = 15000
+
+    // Node budget allocation: prevent roads from starving buildings
+    private var roadNodeBudget = 0
+    private var buildingNodeBudget = 0
+    private val ROAD_BUDGET_RATIO = 0.35
+    private val BUILDING_BUDGET_RATIO = 0.45
 
     private fun addNode(node: CubeNode) {
         if (currentNodeCount >= MAX_NODES) return
@@ -124,10 +136,21 @@ class OsmCityBuilder(
     // ══════════════════════════════════════════════════════════════════════
 
     fun buildRoads(osmData: OsmData) {
-        for (way in osmData.roads) {
-            if (way.nodes.size < 2) continue
-            val width = roadWidthForType(way.highway)
+        val roadBudget = (MAX_NODES * ROAD_BUDGET_RATIO).toInt()
+        val initialNodeCount = currentNodeCount
+
+        val minorTypes = setOf("footway", "path", "cycleway", "service", "track", "corridor", "construction", "proposed", "raceway")
+
+        val sortedRoads = osmData.roads
+            .filter { it.nodes.size >= 2 }
+            .sortedWith(compareByDescending<OsmWay> { it.highway !in minorTypes }
+                .thenByDescending { roadWidthForType(it.highway) })
+
+        for (way in sortedRoads) {
+            if (currentNodeCount - initialNodeCount >= roadBudget) break
+
             for ((nodeA, nodeB) in way.segments()) {
+                if (currentNodeCount - initialNodeCount >= roadBudget) break
                 val dx = nodeB.localX - nodeA.localX
                 val dz = nodeB.localZ - nodeA.localZ
                 val length = Math.sqrt((dx * dx + dz * dz).toDouble()).toFloat()
@@ -137,7 +160,7 @@ class OsmCityBuilder(
                 val cz = (nodeA.localZ + nodeB.localZ) / 2f
                 val angle = Math.atan2(dz.toDouble(), dx.toDouble()).toFloat()
 
-                addNode(CubeNode(engine, Size(length, 0.06f, width), materialInstance = roadMat).apply {
+                addNode(CubeNode(engine, Size(length, 0.06f, roadWidthForType(way.highway)), materialInstance = roadMat).apply {
                     position = Position(cx, 0.03f, cz)
                     rotation = Position(0f, -angle, 0f)
                 })
@@ -151,7 +174,8 @@ class OsmCityBuilder(
 
                 if (way.highway in listOf("primary", "secondary", "residential") && length > 8f) {
                     val sidewalkWidth = 0.5f
-                    val offset = width / 2f + sidewalkWidth / 2f + 0.05f
+                    val roadW = roadWidthForType(way.highway)
+                    val offset = roadW / 2f + sidewalkWidth / 2f + 0.05f
                     val perpX = -Math.sin(angle.toDouble()).toFloat() * offset
                     val perpZ = Math.cos(angle.toDouble()).toFloat() * offset
 
@@ -312,21 +336,33 @@ class OsmCityBuilder(
 // FASE 3 — EDIFICI DA OSM (dettagliati stile Roma)
 // ══════════════════════════════════════════════════════════════════════
 
-fun buildBuildings(osmData: OsmData) {
-    val buildings = osmData.buildings
-        .filter { it.nodes.size >= 3 }
-        .sortedByDescending { it.height }
-        .take(200)
+    suspend fun buildBuildings(osmData: OsmData) {
+        val buildingBudget = (MAX_NODES * BUILDING_BUDGET_RATIO).toInt()
+        val initialNodeCount = currentNodeCount
 
-    var buildingIndex = 0
-    for (way in buildings) {
-        if (currentNodeCount >= MAX_NODES - 50) break
+        val buildings = osmData.buildings
+            .filter { it.nodes.size >= 3 }
+            .sortedByDescending { it.height }
+            .take(600)
+
+        val cachedMaterials = mutableMapOf<Int, com.google.android.filament.MaterialInstance>()
+
+        val maxDetailed = 80
+        var detailedCount = 0
+        var buildingIndex = 0
+        for (way in buildings) {
+            if (currentNodeCount - initialNodeCount >= buildingBudget) break
+            if (buildingIndex % 20 == 0 && buildingIndex > 0) yield()
 
         val fp = way.calculateFootprint() ?: continue
         val h = way.height.toFloat()
         val w = fp.width.coerceIn(3f, 40f)
         val d = fp.depth.coerceIn(3f, 40f)
         if (w < 3f || d < 3f || h < 3f) continue
+
+        val distFromCenter = Math.sqrt((fp.centerX * fp.centerX + fp.centerZ * fp.centerZ).toDouble()).toFloat()
+        val isDetailed = detailedCount < maxDetailed && distFromCenter < 400f
+        if (isDetailed) detailedCount++
 
         val isLandmark = way.name.isNotEmpty() && (way.name.lowercase().contains("colosseo") || way.name.lowercase().contains("basilica") || way.name.lowercase().contains("pantheon") || way.name.lowercase().contains("castel") || way.name.lowercase().contains("vatican") || way.name.lowercase().contains("san pietro") || way.name.lowercase().contains("piazza"))
 
@@ -339,18 +375,8 @@ fun buildBuildings(osmData: OsmData) {
         // Material instances based on building type
         val bodyColor = typeColors.first
         val roofColorVal = typeColors.second
-        val bodyMatInst = ml.createColorInstance(color = bodyColor)
-        val roofMatInst = ml.createColorInstance(color = roofColorVal)
-        val darkBodyMatInst = ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt())
-        val windowGlassMatLit = ml.createColorInstance(color = 0xFFFFEEAA.toInt())
-        val windowGlassMatDark = ml.createColorInstance(color = 0xFF223344.toInt())
-        val windowGlassMat = ml.createColorInstance(color = 0xFF88CCEE.toInt())
-
-        val windowFrameMat = ml.createColorInstance(color = 0xFF443322.toInt())
-        val shutterMat = ml.createColorInstance(color = 0xFF553311.toInt())
-        val corniceMat = ml.createColorInstance(color = 0xFFDDCCAA.toInt())
-        val storefrontMat = ml.createColorInstance(color = 0xFF222233.toInt())
-        val balconyMat = ml.createColorInstance(color = 0xFF775533.toInt())
+        val bodyMatInst = cachedMaterials.getOrPut(bodyColor) { ml.createColorInstance(color = bodyColor) }
+        val roofMatInst = cachedMaterials.getOrPut(roofColorVal) { ml.createColorInstance(color = roofColorVal) }
 
         // ── CORPO EDIFICIO: per piano ──
         for (floor in 0 until levels) {
@@ -359,143 +385,114 @@ fun buildBuildings(osmData: OsmData) {
             val floorW = w * 0.98f
             val floorD = d * 0.98f
 
-            // Muro piano
-            addNode(CubeNode(engine, Size(floorW, floorH, floorD), materialInstance = if (floor == 0) darkBodyMatInst else bodyMatInst).apply {
+            addNode(CubeNode(engine, Size(floorW, floorH, floorD), materialInstance = if (floor == 0) bodyMatInst else bodyMatInst).apply {
                 position = Position(fp.centerX, floorY, fp.centerZ)
                 rotation = Position(0f, -fp.rotation, 0f)
             })
 
-            // Cornice tra i piani (sopra piano terra e ultimo)
-            if (floor == 0 || floor == levels - 1) {
-                addNode(CubeNode(engine, Size(floorW + 0.15f, 0.12f, floorD + 0.15f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX, (floor + 1) * floorHeight - 0.06f, fp.centerZ)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-            }
+            if (isDetailed) {
+                val darkBodyMatInst = cachedMaterials.getOrPut((bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) { ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) }
+                val corniceMat = cachedMaterials.getOrPut(0xFFDDCCAA.toInt()) { ml.createColorInstance(color = 0xFFDDCCAA.toInt()) }
 
-            // ── FINESTRE PER PIANO ──
-            val windowsPerSide = ((w / 2.5f).toInt()).coerceIn(1, 4)
-            val windowsPerDepth = ((d / 2.5f).toInt()).coerceIn(1, 3)
-            val winW = 0.7f; val winH = floorHeight * 0.55f; val winD = 0.08f
-
-            // Facciata frontale (Z+)
-            for (i in 1..windowsPerSide) {
-                val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
-                val winY = floorY
-                // Cornice finestra
-                addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
-                    position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                // Vetro: vario (acceso/spento/riflettente)
-                val glassChoice = (buildingIndex * 31 + floor * 17 + i * 7) % 5
-                val glassMat = when (glassChoice) {
-                    0 -> windowGlassMatLit    // accesa
-                    1 -> windowGlassMatDark   // spenta
-                    2 -> windowGlassMat       // riflettente giorno
-                    3 -> windowGlassMatDark   // spenta
-                    else -> windowGlassMat    // riflettente
-                }
-                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = glassMat).apply {
-                    position = Position(wx, winY, fp.centerZ + d / 2f + 0.05f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                // Persiane (a volte aperte)
-                if ((buildingIndex + floor + i) % 3 == 0) {
-                    addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
-                        position = Position(wx + winW * 0.35f, winY, fp.centerZ + d / 2f + 0.07f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
-                    addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
-                        position = Position(wx - winW * 0.35f, winY, fp.centerZ + d / 2f + 0.07f)
+                if (floor == 0 || floor == levels - 1) {
+                    addNode(CubeNode(engine, Size(floorW + 0.15f, 0.12f, floorD + 0.15f), materialInstance = corniceMat).apply {
+                        position = Position(fp.centerX, (floor + 1) * floorHeight - 0.06f, fp.centerZ)
                         rotation = Position(0f, -fp.rotation, 0f)
                     })
                 }
-                // Balcone (piano nobile e ultimo)
-                if (floor == 1 || floor == levels - 1) {
-                    addNode(CubeNode(engine, Size(winW + 0.2f, 0.06f, 0.35f), materialInstance = balconyMat).apply {
-                        position = Position(wx, winY - winH / 2f - 0.03f, fp.centerZ + d / 2f + 0.175f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
-                    // Ringhiera
-                    addNode(CubeNode(engine, Size(winW + 0.2f, 0.4f, 0.02f), materialInstance = corniceMat).apply {
-                        position = Position(wx, winY - winH / 2f + 0.15f, fp.centerZ + d / 2f + 0.36f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
+
+                // Windows (detailed buildings only)
+                val windowsPerSide = ((w / 2.5f).toInt()).coerceIn(1, 4)
+                val windowsPerDepth = ((d / 2.5f).toInt()).coerceIn(1, 3)
+                val winW = 0.7f; val winH = floorHeight * 0.55f
+
+                val windowFrameMat = cachedMaterials.getOrPut(0xFF443322.toInt()) { ml.createColorInstance(color = 0xFF443322.toInt()) }
+                val shutterMat = cachedMaterials.getOrPut(0xFF553311.toInt()) { ml.createColorInstance(color = 0xFF553311.toInt()) }
+                val balconyMat = cachedMaterials.getOrPut(0xFF775533.toInt()) { ml.createColorInstance(color = 0xFF775533.toInt()) }
+                val windowGlassMat = cachedMaterials.getOrPut(0xFF88CCEE.toInt()) { ml.createColorInstance(color = 0xFF88CCEE.toInt()) }
+                val windowGlassMatLit = cachedMaterials.getOrPut(0xFFFFEEAA.toInt()) { ml.createColorInstance(color = 0xFFFFEEAA.toInt()) }
+                val windowGlassMatDark = cachedMaterials.getOrPut(0xFF223344.toInt()) { ml.createColorInstance(color = 0xFF223344.toInt()) }
+
+                // Front + back windows
+                for (i in 1..windowsPerSide) {
+                    val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
+                    val glassChoice = (buildingIndex * 31 + floor * 17 + i * 7) % 5
+                    val glassMat = when (glassChoice) { 0 -> windowGlassMatLit; 1 -> windowGlassMatDark; 2 -> windowGlassMat; 3 -> windowGlassMatDark; else -> windowGlassMat }
+
+                    for (zOff in listOf(d / 2f + 0.05f, -(d / 2f + 0.05f))) {
+                        addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
+                            position = Position(wx, floorY, fp.centerZ + zOff)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                        addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = glassMat).apply {
+                            position = Position(wx, floorY, fp.centerZ + zOff)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                    }
+
+                    if ((buildingIndex + floor + i) % 3 == 0) {
+                        addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
+                            position = Position(wx + winW * 0.35f, floorY, fp.centerZ + d / 2f + 0.07f)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                        addNode(CubeNode(engine, Size(winW * 0.5f, winH, 0.04f), materialInstance = shutterMat).apply {
+                            position = Position(wx - winW * 0.35f, floorY, fp.centerZ + d / 2f + 0.07f)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                    }
+                    if (floor == 1 || floor == levels - 1) {
+                        addNode(CubeNode(engine, Size(winW + 0.2f, 0.06f, 0.35f), materialInstance = balconyMat).apply {
+                            position = Position(wx, floorY - winH / 2f - 0.03f, fp.centerZ + d / 2f + 0.175f)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                        addNode(CubeNode(engine, Size(winW + 0.2f, 0.4f, 0.02f), materialInstance = corniceMat).apply {
+                            position = Position(wx, floorY - winH / 2f + 0.15f, fp.centerZ + d / 2f + 0.36f)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                    }
+                }
+
+                // Side windows
+                for (i in 1..windowsPerDepth) {
+                    val wz = fp.centerZ - d / 2f + i * d / (windowsPerDepth + 1).toFloat()
+                    val glassMat = if ((buildingIndex + floor + i + 3) % 3 == 0) windowGlassMatLit else if ((buildingIndex + floor + i + 3) % 3 == 1) windowGlassMatDark else windowGlassMat
+                    for (xOff in listOf(w / 2f + 0.05f, -(w / 2f + 0.05f))) {
+                        addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
+                            position = Position(fp.centerX + xOff, floorY, wz)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                        addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = glassMat).apply {
+                            position = Position(fp.centerX + xOff, floorY, wz)
+                            rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                    }
                 }
             }
 
-            // Facciata posteriore (Z-)
-            for (i in 1..windowsPerSide) {
-                val wx = fp.centerX - w / 2f + i * w / (windowsPerSide + 1).toFloat()
-                val winY = floorY
-                val glassMat = if ((buildingIndex + floor + i + 2) % 3 == 0) windowGlassMatLit
-                               else if ((buildingIndex + floor + i + 2) % 3 == 1) windowGlassMatDark
-                               else windowGlassMat
-                addNode(CubeNode(engine, Size(winW + 0.1f, winH + 0.1f, 0.1f), materialInstance = windowFrameMat).apply {
-                    position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(winW, winH, 0.08f), materialInstance = glassMat).apply {
-                    position = Position(wx, winY, fp.centerZ - d / 2f - 0.05f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-            }
-
-            // Lati (X+ e X-)
-            for (i in 1..windowsPerDepth) {
-                val wz = fp.centerZ - d / 2f + i * d / (windowsPerDepth + 1).toFloat()
-                val winY = floorY
-                val glassMat = if ((buildingIndex + floor + i + 3) % 3 == 0) windowGlassMatLit
-                               else if ((buildingIndex + floor + i + 3) % 3 == 1) windowGlassMatDark
-                               else windowGlassMat
-                // Lato destro (X+)
-                addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
-                    position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = glassMat).apply {
-                    position = Position(fp.centerX + w / 2f + 0.05f, winY, wz)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                // Lato sinistro (X-)
-                addNode(CubeNode(engine, Size(0.1f, winH + 0.1f, winW + 0.1f), materialInstance = windowFrameMat).apply {
-                    position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(0.08f, winH, winW), materialInstance = glassMat).apply {
-                    position = Position(fp.centerX - w / 2f - 0.05f, winY, wz)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-            }
-
-            // ── PIANO TERRA: VETRINE / PORTONI ──
+            // Ground floor door (all buildings)
             if (floor == 0) {
-                val entranceW = (w * 0.6f).coerceIn(1.5f, 4f)
-                // Portone centrale
                 addNode(CubeNode(engine, Size(1.2f, 2.4f, 0.1f), materialInstance = doorMatInst).apply {
                     position = Position(fp.centerX, 1.2f, fp.centerZ + d / 2f + 0.05f)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                // Vetrine ai lati
-                for (side in listOf(-1, 1)) {
-                    val sx = fp.centerX + side * (entranceW / 2f + 1.5f)
-                    addNode(CubeNode(engine, Size(2.5f, 2.4f, 0.08f), materialInstance = windowGlassMat).apply {
-                        position = Position(sx, 1.2f, fp.centerZ + d / 2f + 0.05f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
-                    addNode(CubeNode(engine, Size(2.5f, 0.2f, 0.1f), materialInstance = windowFrameMat).apply {
-                        position = Position(sx, 2.5f, fp.centerZ + d / 2f + 0.05f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
-                    // Tenda negozio
-                    if ((buildingIndex + side + 1) % 4 == 0) {
-                        val awningColor = awningColors[(buildingIndex + side + 1) % awningColors.size]
-                        val awningMat = ml.createColorInstance(color = awningColor)
-                        addNode(CubeNode(engine, Size(2.5f, 0.04f, 0.5f), materialInstance = awningMat).apply {
-                            position = Position(sx, 2.6f, fp.centerZ + d / 2f + 0.25f)
+                if (isDetailed) {
+                    val windowGlassMat = cachedMaterials.getOrPut(0xFF88CCEE.toInt()) { ml.createColorInstance(color = 0xFF88CCEE.toInt()) }
+                    val windowFrameMat = cachedMaterials.getOrPut(0xFF443322.toInt()) { ml.createColorInstance(color = 0xFF443322.toInt()) }
+                    val entranceW = (w * 0.6f).coerceIn(1.5f, 4f)
+                    for (side in listOf(-1, 1)) {
+                        val sx = fp.centerX + side * (entranceW / 2f + 1.5f)
+                        addNode(CubeNode(engine, Size(2.5f, 2.4f, 0.08f), materialInstance = windowGlassMat).apply {
+                            position = Position(sx, 1.2f, fp.centerZ + d / 2f + 0.05f)
                             rotation = Position(0f, -fp.rotation, 0f)
                         })
+                        if ((buildingIndex + side + 1) % 4 == 0) {
+                            val awningColor = awningColors[(buildingIndex + side + 1) % awningColors.size]
+                            val awningMat = cachedMaterials.getOrPut(awningColor) { ml.createColorInstance(color = awningColor) }
+                            addNode(CubeNode(engine, Size(2.5f, 0.04f, 0.5f), materialInstance = awningMat).apply {
+                                position = Position(sx, 2.6f, fp.centerZ + d / 2f + 0.25f)
+                                rotation = Position(0f, -fp.rotation, 0f)
+                            })
+                        }
                     }
                 }
             }
@@ -511,86 +508,49 @@ fun buildBuildings(osmData: OsmData) {
 
         when (roofType) {
             "flat" -> {
-                // Tetto piano con parapetto
                 addNode(CubeNode(engine, Size(w + 0.4f, 0.25f, d + 0.4f), materialInstance = roofMatInst).apply {
                     position = Position(fp.centerX, h + 0.125f, fp.centerZ)
                     rotation = Position(0f, -fp.rotation, 0f)
                 })
-                // Parapetto
-                addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX, h + 0.55f, fp.centerZ + d / 2f + 0.075f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX, h + 0.55f, fp.centerZ - d / 2f - 0.075f)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX + w / 2f + 0.075f, h + 0.55f, fp.centerZ)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX - w / 2f - 0.075f, h + 0.55f, fp.centerZ)
-                    rotation = Position(0f, -fp.rotation, 0f)
-                })
-                // Elementi tetto: comignoli, AC, torri acqua
-                if (levels >= 3) {
-                    addNode(CubeNode(engine, Size(0.6f, 1.5f, 0.6f), materialInstance = roofMatInst).apply {
-                        position = Position(fp.centerX - w * 0.3f, h + 1.0f, fp.centerZ - d * 0.3f)
-                        rotation = Position(0f, -fp.rotation, 0f)
+                if (isDetailed) {
+                    val corniceMat = cachedMaterials.getOrPut(0xFFDDCCAA.toInt()) { ml.createColorInstance(color = 0xFFDDCCAA.toInt()) }
+                    addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
+                        position = Position(fp.centerX, h + 0.55f, fp.centerZ + d / 2f + 0.075f); rotation = Position(0f, -fp.rotation, 0f)
                     })
-                    addNode(CubeNode(engine, Size(1.2f, 0.8f, 1.2f), materialInstance = ml.createColorInstance(color = 0xFF888888.toInt())).apply {
-                        position = Position(fp.centerX + w * 0.2f, h + 0.4f, fp.centerZ + d * 0.2f)
-                        rotation = Position(0f, -fp.rotation, 0f)
+                    addNode(CubeNode(engine, Size(w + 0.5f, 0.6f, 0.15f), materialInstance = corniceMat).apply {
+                        position = Position(fp.centerX, h + 0.55f, fp.centerZ - d / 2f - 0.075f); rotation = Position(0f, -fp.rotation, 0f)
                     })
+                    addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
+                        position = Position(fp.centerX + w / 2f + 0.075f, h + 0.55f, fp.centerZ); rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    addNode(CubeNode(engine, Size(0.15f, 0.6f, d + 0.5f), materialInstance = corniceMat).apply {
+                        position = Position(fp.centerX - w / 2f - 0.075f, h + 0.55f, fp.centerZ); rotation = Position(0f, -fp.rotation, 0f)
+                    })
+                    if (levels >= 3) {
+                        addNode(CubeNode(engine, Size(0.6f, 1.5f, 0.6f), materialInstance = roofMatInst).apply {
+                            position = Position(fp.centerX - w * 0.3f, h + 1.0f, fp.centerZ - d * 0.3f); rotation = Position(0f, -fp.rotation, 0f)
+                        })
+                    }
                 }
             }
             "gabled" -> {
-                // Tetto a due falde
-                val ridgeH = h + w * 0.35f
-                val roofDepth = d + 0.6f
-                val roofW = w + 0.6f
-                // Falda 1
+                val roofW = w + 0.6f; val roofDepth = d + 0.6f
                 addNode(CubeNode(engine, Size(roofW, w * 0.35f, roofDepth), materialInstance = roofMatInst).apply {
-                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ)
-                    rotation = Position(-0.6f, -fp.rotation, 0f) // inclinazione
+                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ); rotation = Position(-0.6f, -fp.rotation, 0f)
                 })
-                // Falda 2 (speculare - semplificato come box inclinato opposto)
                 addNode(CubeNode(engine, Size(roofW, w * 0.35f, roofDepth), materialInstance = roofMatInst).apply {
-                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ)
-                    rotation = Position(0.6f, -fp.rotation, 0f)
-                })
-                // Frontoni triangolari (semplificati)
-                addNode(CubeNode(engine, Size(roofW, 0.1f, w * 0.35f), materialInstance = corniceMat).apply {
-                    position = Position(fp.centerX, ridgeH, fp.centerZ + d / 2f + w * 0.175f)
-                    rotation = Position(0f, -fp.rotation, 0f)
+                    position = Position(fp.centerX, h + w * 0.35f / 2f, fp.centerZ); rotation = Position(0.6f, -fp.rotation, 0f)
                 })
             }
             "dome" -> {
-                // Cupola per landmark
                 val domeR = minOf(w, d) * 0.45f
                 val domeH = domeR * 0.7f
                 addNode(SphereNode(engine, domeR, materialInstance = roofMatInst).apply {
                     position = Position(fp.centerX, h + domeH * 0.5f, fp.centerZ)
                 })
-                // Lanternino
-                addNode(CubeNode(engine, Size(domeR * 0.3f, domeR * 0.4f, domeR * 0.3f), materialInstance = corniceMat).apply {
+                addNode(CubeNode(engine, Size(domeR * 0.3f, domeR * 0.4f, domeR * 0.3f), materialInstance = roofMatInst).apply {
                     position = Position(fp.centerX, h + domeH + domeR * 0.2f, fp.centerZ)
                 })
-            }
-        }
-
-        // ── DETTAGLI AGGIUNTIVI ──
-        // Pilastri angolari
-        if (w > 10f && d > 10f) {
-            val pilasterMat = ml.createColorInstance(color = 0xFFBBBBAA.toInt())
-            for (cornerX in listOf(-1f, 1f)) {
-                for (cornerZ in listOf(-1f, 1f)) {
-                    addNode(CubeNode(engine, Size(0.3f, h, 0.3f), materialInstance = pilasterMat).apply {
-                        position = Position(fp.centerX + cornerX * w / 2f, h / 2f, fp.centerZ + cornerZ * d / 2f)
-                        rotation = Position(0f, -fp.rotation, 0f)
-                    })
-                }
             }
         }
 
@@ -602,28 +562,32 @@ fun buildBuildings(osmData: OsmData) {
             buildingAABBs.add(AABB(fp.centerX - maxDim, fp.centerX + maxDim, fp.centerZ - maxDim, fp.centerZ + maxDim))
         }
         buildingIndex++
+        }
     }
-}
 
     // ══════════════════════════════════════════════════════════════════════
     // FASE 4 — ALBERI DA OSM + PROCEDURALI
     // ══════════════════════════════════════════════════════════════════════
 
-    fun buildTrees(osmData: OsmData, mapSize: Float = 1000f) {
+    suspend fun buildTrees(osmData: OsmData, mapSize: Float = 1000f) {
         val half = mapSize / 2f
+        val treeBudget = (MAX_NODES * 0.10).toInt()
+        val initialNodes = currentNodeCount
         for (tree in osmData.trees.take(30)) {
-            if (currentNodeCount >= MAX_NODES - 5) break
+            if (currentNodeCount - initialNodes >= treeBudget) break
             val x = tree.localX; val z = tree.localZ
             if (x < -half || x > half || z < -half || z > half) continue
-            spawnTree(x, z, tree.id.toInt())
+            spawnTree(x, z, tree.id.toInt() and 0x7FFFFFFF)
         }
-        for (park in osmData.parks) {
+        for (park in osmData.parks.take(20)) {
             if (park.nodes.size < 3) continue
+            if (currentNodeCount - initialNodes >= treeBudget) break
             val fp = park.calculateFootprint() ?: continue
-            val treeCount = (fp.width * fp.depth / 100f).toInt().coerceIn(3, 8)
+            yield()
+            val treeCount = (fp.width * fp.depth / 100f).toInt().coerceIn(3, 6)
             for (t in 0 until treeCount) {
-                if (currentNodeCount >= MAX_NODES - 5) break
-                val seed = park.id.toInt() * 7 + t * 41
+                if (currentNodeCount - initialNodes >= treeBudget) break
+                val seed = (park.id.toInt() * 7 + t * 41) and 0x7FFFFFFF
                 val tx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.8f
                 val tz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.8f
                 spawnTree(tx, tz, seed)
@@ -658,19 +622,19 @@ fun buildBuildings(osmData: OsmData) {
     // FASE 5 — CESPUGLI E FIORI NEI PARCHI
     // ══════════════════════════════════════════════════════════════════════
 
-    fun buildVegetation(osmData: OsmData) {
+    suspend fun buildVegetation(osmData: OsmData) {
         val flowerColors = intArrayOf(
             0xFFE91E63.toInt(), 0xFFFFEB3B.toInt(), 0xFFFF5722.toInt(),
             0xFF9C27B0.toInt(), 0xFFFF9800.toInt(), 0xFF2196F3.toInt()
         )
-        for (park in osmData.parks) {
+        for (park in osmData.parks.take(15)) {
             if (park.nodes.size < 3) continue
             val fp = park.calculateFootprint() ?: continue
 
             val bushCount = (fp.width * fp.depth / 200f).toInt().coerceIn(2, 6)
             for (b in 0 until bushCount) {
                 if (currentNodeCount >= MAX_NODES - 2) break
-                val seed = park.id.toInt() * 13 + b * 29
+                val seed = (park.id.toInt() * 13 + b * 29) and 0x7FFFFFFF
                 val bx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.7f
                 val bz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.7f
                 val bushSize = 0.22f + (seed % 20).toFloat() / 100f
@@ -685,7 +649,7 @@ fun buildBuildings(osmData: OsmData) {
             val flowerCount = (fp.width * fp.depth / 300f).toInt().coerceIn(1, 4)
             for (f in 0 until flowerCount) {
                 if (currentNodeCount >= MAX_NODES - 2) break
-                val seed = park.id.toInt() * 11 + f * 37
+                val seed = (park.id.toInt() * 11 + f * 37) and 0x7FFFFFFF
                 val fx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.6f
                 val fz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.6f
                 val fMat = ml.createColorInstance(color = flowerColors[seed % flowerColors.size])
@@ -703,7 +667,7 @@ fun buildBuildings(osmData: OsmData) {
     // FASE 6 — ARREDO URBANO
     // ══════════════════════════════════════════════════════════════════════
 
-    fun buildStreetFurniture(osmData: OsmData) {
+    suspend fun buildStreetFurniture(osmData: OsmData) {
         for (way in osmData.roads) {
             if (way.highway !in listOf("primary", "secondary")) continue
             for ((a, b) in way.segments()) {
@@ -736,13 +700,13 @@ fun buildBuildings(osmData: OsmData) {
             }
         }
 
-        for (park in osmData.parks) {
+        for (park in osmData.parks.take(15)) {
             if (park.nodes.size < 3) continue
             val fp = park.calculateFootprint() ?: continue
             val benchCount = (fp.width * fp.depth / 500f).toInt().coerceIn(1, 3)
             for (b in 0 until benchCount) {
                 if (currentNodeCount >= MAX_NODES - 2) break
-                val seed = park.id.toInt() * 17 + b * 53
+                val seed = (park.id.toInt() * 17 + b * 53) and 0x7FFFFFFF
                 val bx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.6f
                 val bz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.6f
                 addNode(CubeNode(engine, Size(0.9f, 0.06f, 0.35f), materialInstance = benchWoodMatInst).apply {
@@ -1012,8 +976,10 @@ fun buildBuildings(osmData: OsmData) {
     // BUILD COMPLETO
     // ══════════════════════════════════════════════════════════════════════
 
-    fun buildAll(osmData: OsmData, mapSize: Float = 1000f) {
+    suspend fun buildAll(osmData: OsmData, mapSize: Float = 1000f) {
         currentNodeCount = 0
+        roadNodeBudget = (MAX_NODES * ROAD_BUDGET_RATIO).toInt()
+        buildingNodeBudget = (MAX_NODES * BUILDING_BUDGET_RATIO).toInt()
         buildingAABBs.clear()
         windowMaterials.clear()
 
@@ -1034,32 +1000,44 @@ fun buildBuildings(osmData: OsmData) {
     // ── Build incrementale (per caricamento a fasi) ──────────────────
 
     fun buildPhase1_TerrainAndRoads(osmData: OsmData, mapSize: Float = 1000f) {
+        AppLog.d(TAG, "Phase 1: terrain + roads (roads=${osmData.roads.size})")
         currentNodeCount = 0
+        roadNodeBudget = (MAX_NODES * ROAD_BUDGET_RATIO).toInt()
+        buildingNodeBudget = (MAX_NODES * BUILDING_BUDGET_RATIO).toInt()
         buildingAABBs.clear()
         windowMaterials.clear()
         buildTerrain(mapSize)
         buildRoads(osmData)
+        AppLog.d(TAG, "Phase 1 done: nodes=$currentNodeCount")
     }
 
-    fun buildPhase2_ColosseumAndBuildings(osmData: OsmData) {
+    suspend fun buildPhase2_ColosseumAndBuildings(osmData: OsmData) {
+        AppLog.d(TAG, "Phase 2: colosseum + buildings (buildings=${osmData.buildings.size})")
         buildColosseum(osmData)
         buildBuildings(osmData)
+        AppLog.d(TAG, "Phase 2 done: nodes=$currentNodeCount, AABBs=${buildingAABBs.size}")
     }
 
-    fun buildPhase3_TreesAndVegetation(osmData: OsmData, mapSize: Float = 1000f) {
+    suspend fun buildPhase3_TreesAndVegetation(osmData: OsmData, mapSize: Float = 1000f) {
+        AppLog.d(TAG, "Phase 3: trees + vegetation (trees=${osmData.trees.size}, parks=${osmData.parks.size})")
         buildTrees(osmData, mapSize)
         buildVegetation(osmData)
+        AppLog.d(TAG, "Phase 3 done: nodes=$currentNodeCount")
     }
 
-    fun buildPhase4_FurnitureAndCars(osmData: OsmData) {
+    suspend fun buildPhase4_FurnitureAndCars(osmData: OsmData) {
+        AppLog.d(TAG, "Phase 4: street furniture + cars")
         buildStreetFurniture(osmData)
         buildCars(osmData)
+        AppLog.d(TAG, "Phase 4 done: nodes=$currentNodeCount")
     }
 
     fun buildPhase5_Details(osmData: OsmData) {
+        AppLog.d(TAG, "Phase 5: POI features, street signs, restaurants, shops")
         buildPoiFeatures(osmData)
         buildStreetSigns(osmData)
         buildRestaurantFeatures(osmData)
         buildShopFeatures(osmData)
+        AppLog.d(TAG, "Phase 5 done: nodes=$currentNodeCount (FINAL)")
     }
 }

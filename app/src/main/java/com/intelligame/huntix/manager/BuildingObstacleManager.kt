@@ -3,10 +3,10 @@ package com.intelligame.huntix.manager
 import android.util.Log
 import com.google.gson.JsonParser
 import kotlinx.coroutines.*
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.MediaType.Companion.toMediaType
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -25,9 +25,15 @@ class BuildingObstacleManager {
 
     companion object {
         private const val TAG = "BuildingObstacle"
-        private const val OVERPASS_URL = "https://overpass-api.de/api/interpreter"
         private const val CACHE_TTL_MS = 5 * 60 * 1000L
         private const val FETCH_RADIUS_M = 500.0
+
+        private val OVERPASS_MIRRORS = listOf(
+            "https://overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+        )
+        private const val MIRROR_COOLDOWN_MS = 60_000L
     }
 
     data class Building(val nodes: List<Pair<Double, Double>>)
@@ -51,6 +57,7 @@ class BuildingObstacleManager {
     private var lastFetchLng = 0.0
     private var lastFetchTime = 0L
     private var loading = false
+    private val mirrorFailures = ConcurrentHashMap<String, Long>()
 
     fun fetchBuildingsIfNeeded(lat: Double, lng: Double) {
         val now = System.currentTimeMillis()
@@ -215,19 +222,43 @@ class BuildingObstacleManager {
             out skel qt;
         """.trimIndent()
 
-        val formBody = "data=${java.net.URLEncoder.encode(query, "UTF-8")}"
-        val request = Request.Builder()
-            .url(OVERPASS_URL)
-            .post(formBody.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+        val requestBody = FormBody.Builder()
+            .add("data", query)
             .build()
 
-        val response = client.newCall(request).execute()
-        if (!response.isSuccessful) {
-            throw Exception("Overpass HTTP ${response.code}")
+        val now = System.currentTimeMillis()
+
+        for (mirror in OVERPASS_MIRRORS) {
+            val lastFailure = mirrorFailures[mirror] ?: 0L
+            if (now - lastFailure < MIRROR_COOLDOWN_MS) continue
+
+            try {
+                val request = Request.Builder()
+                    .url(mirror)
+                    .header("User-Agent", "HuntixGame/1.0")
+                    .post(requestBody)
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    response.close()
+                    mirrorFailures[mirror] = System.currentTimeMillis()
+                    continue
+                }
+
+                val body = response.body?.string() ?: continue
+                response.close()
+                if (body.isEmpty()) continue
+
+                mirrorFailures.remove(mirror)
+                return parseOverpassJson(body)
+            } catch (e: Exception) {
+                mirrorFailures[mirror] = System.currentTimeMillis()
+                Log.w(TAG, "fetchFromOverpass: mirror $mirror failed: ${e.message}")
+            }
         }
 
-        val body = response.body?.string() ?: throw Exception("Empty response")
-        return parseOverpassJson(body)
+        throw Exception("All Overpass mirrors failed for buildings")
     }
 
     private fun parseOverpassJson(json: String): List<Building> {

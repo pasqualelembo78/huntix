@@ -336,6 +336,16 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
 
+        // Debug log (hidden but accessible)
+        root.addView(TextView(this).apply {
+            text = "\uD83D\uDD27 Debug Log"
+            textSize = 11f
+            setTextColor(Color.parseColor("#444444"))
+            setPadding(dp(4), dp(8), dp(4), dp(4))
+            isClickable = true; isFocusable = true
+            setOnClickListener { startActivity(Intent(this@HomeActivity, com.intelligame.huntix.ui.CityDebugLogActivity::class.java)) }
+        })
+
         setContentView(scroll)
 
         try {
