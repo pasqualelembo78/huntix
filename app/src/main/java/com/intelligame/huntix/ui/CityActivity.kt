@@ -1245,11 +1245,16 @@ override fun onPause() {
                 updateLoadingText("Costruzione citta (mini OSM)...")
                 AppLog.d(TAG, "loadOsmData: rebuilding city with mini OSM data...")
                 withContext(Dispatchers.Main) {
-                    if (!destroyed) rebuildCityWithOsm(miniData!!)
+                    if (!destroyed) {
+                        AppLog.d(TAG, "loadOsmData: calling rebuildCityWithOsm for mini-chunk")
+                        rebuildCityWithOsm(miniData!!)
+                        AppLog.d(TAG, "loadOsmData: rebuildCityWithOsm returned for mini-chunk")
+                    }
                 }
                 // Dismiss loading screen — user sees mini-city while full build runs in background
                 withContext(Dispatchers.Main) {
                     if (!destroyed) {
+                        AppLog.d(TAG, "loadOsmData: dismissing loading overlay")
                         osmStatusLabel?.text = "Mappa OSM (mini) — aggiornamento in corso..."
                         dismissLoading()
                     }
@@ -1333,6 +1338,7 @@ override fun onPause() {
     private var rebuildJob: kotlinx.coroutines.Job? = null
 
     private fun rebuildCityWithOsm(data: OsmData) {
+        AppLog.d(TAG, "rebuildCityWithOsm: ENTERED (roads=${data.roads.size}, buildings=${data.buildings.size})")
         try {
             AppLog.d(TAG, "rebuildCityWithOsm: START (roads=${data.roads.size}, buildings=${data.buildings.size})")
             SentryDebugManager.breadcrumb("city3d", "Rebuilding city with OSM", mapOf(
@@ -1353,6 +1359,7 @@ override fun onPause() {
 // ALL phases run as coroutine with yield between each phase
                     // This prevents ANR by never blocking the main thread for more than ~1s per frame
                     rebuildJob = lifecycleScope.launch {
+                        AppLog.d(TAG, "rebuildCityWithOsm: coroutine STARTED")
                         try {
                             // Phase 1: terrain + roads
                             AppLog.d(TAG, "Phase 1: Terrain and roads...")
