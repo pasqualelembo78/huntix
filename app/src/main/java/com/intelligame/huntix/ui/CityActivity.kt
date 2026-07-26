@@ -110,7 +110,7 @@ class CityActivity : AppCompatActivity() {
     private lateinit var dayNightOverlay: DayNightOverlay
     private var skyboxUpdateTimer = 0f
     private var windowUpdateTimer = 0f
-    private var memoryCheckTimer = 0f
+    private var memoryCheckTimer = 5f // Wait 5s before first memory check
     private val MEMORY_CHECK_INTERVAL = 2f
     private var windowMaterial: com.google.android.filament.MaterialInstance? = null
     private val windowMaterials = mutableListOf<com.google.android.filament.MaterialInstance>()
@@ -371,6 +371,8 @@ class CityActivity : AppCompatActivity() {
         }
 
         val root = FrameLayout(this).apply {
+            // Sky-blue background ensures visibility even if SceneView fails to render
+            setBackgroundColor(Color.rgb(135, 193, 233))
             addView(sceneView)
             addView(dayNightOverlay, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
@@ -525,6 +527,8 @@ class CityActivity : AppCompatActivity() {
                 sceneReady = true
                 // Load OSM data in background, then build city
                 loadOsmData()
+                // Create skybox on first frame (engine GL context now ready)
+                createSkybox()
             }
 
             try {
@@ -702,6 +706,27 @@ class CityActivity : AppCompatActivity() {
         minimap.update(playerX, playerZ, npcDots)
     }
 
+    private fun createSkybox() {
+        if (destroyed) return
+        try {
+            val sc = dayNightManager.getSkyColors()
+            val skyR = Color.red(sc.topColor) / 255f
+            val skyG = Color.green(sc.topColor) / 255f
+            val skyB = Color.blue(sc.topColor) / 255f
+            currentSkybox?.let { engine.safeDestroySkybox(it) }
+            val newSkybox = Skybox.Builder()
+                .color(floatArrayOf(skyR, skyG, skyB, 1f))
+                .build(engine)
+            sceneView.skybox = newSkybox
+            currentSkybox = newSkybox
+            sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
+            skyboxUpdateTimer = 10f
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            skyboxUpdateTimer = 0.5f  // Retry fast if engine wasn't ready
+        }
+    }
+
     private fun updateDayNight(dt: Float) {
         dayNightManager.advance(dt)
         dayNightOverlay.update(dayNightManager)
@@ -711,7 +736,6 @@ class CityActivity : AppCompatActivity() {
 
         skyboxUpdateTimer -= dt
         if (skyboxUpdateTimer <= 0f && !destroyed) {
-            skyboxUpdateTimer = 10f
             try {
                 val sc = dayNightManager.getSkyColors()
                 val skyR = Color.red(sc.topColor) / 255f
@@ -719,7 +743,6 @@ class CityActivity : AppCompatActivity() {
                 val skyB = Color.blue(sc.topColor) / 255f
                 currentSkybox?.let { engine.safeDestroySkybox(it) }
                 
-                // Higher quality skybox with environment
                 val newSkybox = Skybox.Builder()
                     .color(floatArrayOf(skyR, skyG, skyB, 1f))
                     .build(engine)
@@ -727,7 +750,11 @@ class CityActivity : AppCompatActivity() {
                 currentSkybox = newSkybox
                 
                 sceneView.mainLightNode?.intensity = dayNightManager.getLightIntensity()
-            } catch (e: Exception) { Sentry.captureException(e) }
+                skyboxUpdateTimer = 10f  // Success: retry in 10s
+            } catch (e: Exception) {
+                Sentry.captureException(e)
+                skyboxUpdateTimer = 0.5f  // Failure: retry fast next frame
+            }
         }
 
         // Update window/lamp colors every 5 seconds
@@ -1196,45 +1223,86 @@ class CityActivity : AppCompatActivity() {
         }
     }
 
+    private fun clearCityNodes() {
+        // Remove all child nodes except camera and light
+        val toRemove = sceneView.children.filter {
+            it != cameraNode && it.javaClass.simpleName != "LightNode"
+        }
+        for (node in toRemove) {
+            sceneView.removeChildNode(node)
+        }
+        buildingAABBs.clear()
+        windowMaterials.clear()
+        roadCenters.clear()
+        playerRoot = null
+    }
+
     private fun rebuildCityWithOsm(data: OsmData) {
         try {
+            // Remove old grid city nodes to prevent handle arena overflow
+            clearCityNodes()
+
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
             // Phase 1: terrain + roads (immediate)
             osmCityBuilder!!.buildPhase1_TerrainAndRoads(data, CITY)
+            // Populate roadCenters from OSM roads (for NPC navigation + minimap)
+            val rcSet = mutableSetOf<Float>()
+            for (way in data.roads) {
+                for (node in way.nodes) {
+                    rcSet.add(node.localX)
+                    rcSet.add(node.localZ)
+                }
+            }
+            roadCenters.addAll(rcSet)
+            // Re-place player and sync camera after clearing old nodes
+            try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
+            syncCamera()
+            minimap.setRoads(roadCenters, HALF)
 
-            // Phase 2: after 500ms — colosseum + buildings
+            // Phase 2: colosseum + buildings
             Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
                 override fun doFrame(frameTimeNanos: Long) {
                     if (destroyed) return
-                    osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
-                    osmPhase = 2
-                    // Phase 3: after 500ms — trees + vegetation
+                    try {
+                        osmCityBuilder!!.buildPhase2_ColosseumAndBuildings(data)
+                        osmPhase = 2
+                    } catch (e: Exception) { Sentry.captureException(e); return }
+
+                    // Phase 3: trees + vegetation
                     Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
                         override fun doFrame(frameTimeNanos: Long) {
                             if (destroyed) return
-                            osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
-                            osmPhase = 3
-                            // Phase 4: after 500ms — furniture + cars
+                            try {
+                                osmCityBuilder!!.buildPhase3_TreesAndVegetation(data, CITY)
+                                osmPhase = 3
+                            } catch (e: Exception) { Sentry.captureException(e); return }
+
+                            // Phase 4: furniture + cars
                             Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
                                 override fun doFrame(frameTimeNanos: Long) {
                                     if (destroyed) return
-                                    osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
-                                    osmPhase = 4
-                                    // Phase 5: after 500ms — POI details + signs + restaurants + shops
+                                    try {
+                                        osmCityBuilder!!.buildPhase4_FurnitureAndCars(data)
+                                        osmPhase = 4
+                                    } catch (e: Exception) { Sentry.captureException(e); return }
+
+                                    // Phase 5: POI details + signs + restaurants + shops
                                     Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
                                         override fun doFrame(frameTimeNanos: Long) {
                                             if (destroyed) return
-                                            osmCityBuilder!!.buildPhase5_Details(data)
-                                            osmPhase = 5
+                                            try {
+                                                osmCityBuilder!!.buildPhase5_Details(data)
+                                                osmPhase = 5
 
-                                            // Copy collision data
-                                            buildingAABBs.clear()
-                                            buildingAABBs.addAll(osmCityBuilder!!.buildingAABBs)
-                                            windowMaterials.clear()
-                                            windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
-                                            lampLightMaterial = osmCityBuilder!!.lampLightMaterial
-                                            minimap.invalidate()
+                                                // Copy collision data
+                                                buildingAABBs.clear()
+                                                buildingAABBs.addAll(osmCityBuilder!!.buildingAABBs)
+                                                windowMaterials.clear()
+                                                windowMaterials.addAll(osmCityBuilder!!.windowMaterials)
+                                                lampLightMaterial = osmCityBuilder!!.lampLightMaterial
+                                                minimap.invalidate()
+                                            } catch (e: Exception) { Sentry.captureException(e) }
                                         }
                                     })
                                 }
