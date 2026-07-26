@@ -1225,7 +1225,7 @@ class CityActivity : AppCompatActivity() {
 
     private fun clearCityNodes() {
         // Remove all child nodes except camera and light
-        val toRemove = sceneView.children.filter {
+        val toRemove = sceneView.childNodes.filter {
             it != cameraNode && it.javaClass.simpleName != "LightNode"
         }
         for (node in toRemove) {
