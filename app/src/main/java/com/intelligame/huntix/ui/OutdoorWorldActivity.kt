@@ -91,6 +91,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var btnPhoto: TextView
     private lateinit var btnCalendar: TextView
     private lateinit var btnLever: TextView
+    private lateinit var btnArToggle: TextView
     private lateinit var incubationProgress: LinearLayout
     private lateinit var tvIncubationKm: TextView
     private lateinit var incubationBarFill: View
@@ -157,6 +158,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnPhoto = findViewById(R.id.btnPhoto)
         btnCalendar = findViewById(R.id.btnCalendar)
         btnLever = findViewById(R.id.btnLever)
+        btnArToggle = findViewById(R.id.btnArToggle)
         incubationProgress = findViewById(R.id.incubationProgress)
         tvIncubationKm = findViewById(R.id.tvIncubationKm)
         incubationBarFill = findViewById(R.id.incubationBarFill)
@@ -241,6 +243,11 @@ class OutdoorWorldActivity : BaseNavActivity() {
             val result = mgr.simulateApproach()
             Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
             refreshUi()
+        }
+
+        // AR toggle: switch to AR camera view
+        btnArToggle.setOnClickListener {
+            startActivity(Intent(this, OutdoorArCatchActivity::class.java))
         }
 
         // Phase 1: Central catch button

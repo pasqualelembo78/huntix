@@ -410,6 +410,17 @@
         android:layout_marginEnd="12dp"
         android:gravity="center_horizontal">
 
+        <!-- AR mode toggle button -->
+        <TextView
+            android:id="@+id/btnArToggle"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:text="\uD83C\uDFB5"
+            android:textSize="20sp"
+            android:background="@drawable/btn_accent" />
+
         <!-- Settings gear (top-right) -->
         <TextView
             android:id="@+id/btnSettings"
