@@ -782,9 +782,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
             hideBottomSheet()
             return
         }
-        startActivity(Intent(this, ArNavigationActivity::class.java).apply {
-            putExtra("eggId", eggId)
-        })
+        startActivity(Intent(this, OutdoorArCatchActivity::class.java))
         hideBottomSheet()
     }
 

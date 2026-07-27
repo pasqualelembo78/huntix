@@ -21,7 +21,7 @@ class GeospatialAnchorManager {
 
     companion object {
         private const val TAG = "GeoAnchorMgr"
-        private const val DEFAULT_ALTITUDE_M = 1.5
+        private const val DEFAULT_ALTITUDE_M = 0.15
     }
 
     enum class GeoState {

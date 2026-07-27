@@ -36,7 +36,10 @@ class ArNavigationActivity : AppCompatActivity() {
 
     companion object {
         private const val REVEAL_RADIUS_M = 60f
-        private val ARROW_COLOR = 0xFFFDD835.toInt()
+        private const val ARROW_COLOR = 0xFFFDD835.toInt()
+        private const val MAX_DISPLAY_RANGE_M = 80f
+        private const val SCENE_SCALE = 0.06f
+        private const val MAX_SCENE_DIST_M = 5f
     }
 
     private val mgr by lazy { OutdoorManager.get() }
@@ -47,10 +50,10 @@ class ArNavigationActivity : AppCompatActivity() {
     private lateinit var overlay: FrameLayout
 
     private var arrowNode: Node? = null
-    @Volatile private var eggNode: SphereNode? = null
+    private var eggNode: SphereNode? = null
+    private var eggAnchorNode: Node? = null
     @Volatile private var currentEggId: String? = null
     private var trackingReady = false
-    private var bobT = 0.0
 
     private lateinit var compassArrow: CompassArrowView
     private lateinit var targetText: TextView
@@ -104,17 +107,28 @@ class ArNavigationActivity : AppCompatActivity() {
 
             if (geoMgr.isTracking()) {
                 updateGeospatialAnchors()
+                eggNode?.let { it.parent?.removeChildNode(it) }
+                eggNode = null
+                eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+                eggAnchorNode = null
             } else if (wasTracking) {
                 geoMgr.removeAll()
                 currentEggId = null
+                eggNode?.let { it.parent?.removeChildNode(it) }
                 eggNode = null
+                eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+                eggAnchorNode = null
             } else {
                 updateArrow3D()
-                showEggNode(mgr.targetEgg()?.takeIf { mgr.distanceMeters(it) <= 80f })
-                eggNode?.let { node ->
-                    bobT += 0.06
-                    val y = (-0.3f + 0.06f * Math.sin(bobT).toFloat())
-                    node.position = Position(0f, y, -1.3f)
+                val target = mgr.targetEgg()
+                if (target != null && mgr.distanceMeters(target) <= MAX_DISPLAY_RANGE_M) {
+                    updateCompassEgg(target)
+                } else {
+                    eggNode?.let { it.parent?.removeChildNode(it) }
+                    eggNode = null
+                    eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+                    eggAnchorNode = null
+                    currentEggId = null
                 }
             }
         }
@@ -143,6 +157,27 @@ class ArNavigationActivity : AppCompatActivity() {
         }
 
         hudHandler.post(hudRunnable)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hudHandler.post(hudRunnable)
+    }
+
+    override fun onPause() {
+        hudHandler.removeCallbacks(hudRunnable)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        hudHandler.removeCallbacks(hudRunnable)
+        geoMgr.removeAll()
+        buildingMgr.destroy()
+        eggNode?.let { it.parent?.removeChildNode(it) }
+        eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+        mgr.huntingEggId = null
+        mgr.stop()
+        super.onDestroy()
     }
 
     private fun configureSession() {
@@ -183,7 +218,9 @@ class ArNavigationActivity : AppCompatActivity() {
 
         currentEggId?.let { geoMgr.removeAnchor(it) }
         eggNode?.let { it.parent?.removeChildNode(it) }
+        eggAnchorNode?.let { it.parent?.removeChildNode(it) }
         eggNode = null
+        eggAnchorNode = null
 
         val anchor = geoMgr.createAnchorForEgg(egg) ?: return
         val anchorNode = AnchorNode(sceneView.engine, anchor).apply { isVisible = true }
@@ -201,9 +238,39 @@ class ArNavigationActivity : AppCompatActivity() {
         val glowMat = sceneView.materialLoader.createColorInstance(glowColor)
         val glow = SphereNode(sceneView.engine, 0.35f, materialInstance = glowMat)
         anchorNode.addChildNode(glow)
+        eggAnchorNode = anchorNode
         eggNode = sphere
         currentEggId = egg.id
         geoMgr.trackNode(egg.id, anchorNode)
+    }
+
+    private fun updateCompassEgg(egg: WorldEgg) {
+        if (currentEggId == egg.id && eggNode != null) return
+
+        eggNode?.let { it.parent?.removeChildNode(it) }
+        eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+        eggNode = null
+        eggAnchorNode = null
+        currentEggId = null
+
+        val mat = sceneView.materialLoader.createColorInstance(egg.rarity.color)
+        val node = SphereNode(sceneView.engine, 0.18f, materialInstance = mat).apply {
+            position = Position(0f, 0.05f, 0f)
+        }
+        sceneView.cameraNode.addChildNode(node)
+        eggNode = node
+        currentEggId = egg.id
+
+        val heading = mgr.getDeviceHeadingDeg()
+        var relative = mgr.bearingTo(egg) - heading
+        if (relative > 180f) relative -= 360f
+        else if (relative < -180f) relative += 360f
+        val dist = mgr.distanceMeters(egg)
+        val scaledDist = (dist * SCENE_SCALE).coerceIn(0.5f, MAX_SCENE_DIST_M)
+        val rad = Math.toRadians(relative.toDouble())
+        val x = (Math.sin(rad) * scaledDist).toFloat()
+        val z = (-Math.cos(rad) * scaledDist).toFloat()
+        node.position = Position(x, 0.05f, z)
     }
 
     private fun updateArrow3D() {
@@ -223,7 +290,11 @@ class ArNavigationActivity : AppCompatActivity() {
             catchBtn.visibility = View.GONE
             compassArrow.visibility = View.GONE
             obstacleHint.visibility = View.GONE
-            showEggNode(null)
+            eggNode?.let { it.parent?.removeChildNode(it) }
+            eggNode = null
+            eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+            eggAnchorNode = null
+            currentEggId = null
             return
         }
         val dist = mgr.distanceMeters(egg)
@@ -254,32 +325,53 @@ class ArNavigationActivity : AppCompatActivity() {
             targetText.text = "${egg.rarity.displayName} [VPS]"
             hintText.text = "Guarda attorno: l'uovo e' vicino!"
             compassArrow.visibility = View.GONE
-            showEggNode(null)
+            eggNode?.let { it.parent?.removeChildNode(it) }
+            eggNode = null
+            eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+            eggAnchorNode = null
+            currentEggId = null
         } else {
             targetText.text = "${egg.rarity.displayName}: ${dist.toInt()} m"
             hintText.text = if (geoMgr.isTracking()) "VPS attivo — segui la freccia" else "Segui la freccia gialla"
             compassArrow.visibility = View.VISIBLE
-            showEggNode(if (dist <= REVEAL_RADIUS_M) egg else null)
+            if (dist <= REVEAL_RADIUS_M) {
+                if (geoMgr.isTracking()) {
+                    // geospatial anchor handles rendering
+                } else updateCompassEgg(egg)
+            } else {
+                eggNode?.let { it.parent?.removeChildNode(it) }
+                eggNode = null
+                eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+                eggAnchorNode = null
+                currentEggId = null
+            }
         }
         catchBtn.visibility = if (dist <= mgr.getCatchRadiusM(egg)) View.VISIBLE else View.GONE
     }
 
-    private fun showEggNode(egg: WorldEgg?) {
-        if (egg == null) {
-            eggNode?.let { it.parent?.removeChildNode(it) }
-            eggNode = null
-            currentEggId = null
+    private fun onCatch() {
+        val egg = mgr.targetEgg() ?: return
+        if (mgr.distanceMeters(egg) > mgr.getCatchRadiusM(egg)) {
+            Toast.makeText(this, "Avvicinati per catturare", Toast.LENGTH_SHORT).show()
             return
         }
-        if (currentEggId == egg.id) return
-        eggNode?.let { it.parent?.removeChildNode(it) }
-        val mat = sceneView.materialLoader.createColorInstance(egg.rarity.color)
-        val node = SphereNode(sceneView.engine, 0.18f, materialInstance = mat).apply {
-            position = Position(0f, -0.3f, -1.3f)
-        }
-        sceneView.cameraNode.addChildNode(node)
-        eggNode = node
-        currentEggId = egg.id
+        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
+            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
+                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
+                val res = mgr.tryCatch(this@ArNavigationActivity, egg.id, effectiveBonus)
+                Toast.makeText(this@ArNavigationActivity, res.message, Toast.LENGTH_LONG).show()
+                if (res.success) {
+                    geoMgr.removeAnchor(egg.id)
+                    eggNode?.let { it.parent?.removeChildNode(it) }
+                    eggNode = null
+                    eggAnchorNode?.let { it.parent?.removeChildNode(it) }
+                    eggAnchorNode = null
+                    currentEggId = null
+                    updateHud()
+                    EggOpeningAnimationActivity.start(this@ArNavigationActivity, res.egg!!.rarity, res.egg.name, res.egg.rarity.xpReward)
+                }
+            }
+        })
     }
 
     private fun buildHud() {
@@ -344,35 +436,5 @@ class ArNavigationActivity : AppCompatActivity() {
         overlay.addView(catchBtn, catchP)
         overlay.addView(mapBtn, mapP)
         catchBtn.visibility = View.GONE
-    }
-
-    private fun onCatch() {
-        val egg = mgr.targetEgg() ?: return
-        if (mgr.distanceMeters(egg) > mgr.getCatchRadiusM(egg)) {
-            Toast.makeText(this, "Avvicinati per catturare", Toast.LENGTH_SHORT).show()
-            return
-        }
-        CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
-            override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
-                val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
-                val res = mgr.tryCatch(this@ArNavigationActivity, egg.id, effectiveBonus)
-                Toast.makeText(this@ArNavigationActivity, res.message, Toast.LENGTH_LONG).show()
-                if (res.success) {
-                    geoMgr.removeAnchor(egg.id)
-                    showEggNode(null)
-                    updateHud()
-                    EggOpeningAnimationActivity.start(this@ArNavigationActivity, res.egg!!.rarity, res.egg.name, res.egg.rarity.xpReward)
-                }
-            }
-        })
-    }
-
-    override fun onDestroy() {
-        hudHandler.removeCallbacks(hudRunnable)
-        geoMgr.removeAll()
-        buildingMgr.destroy()
-        mgr.huntingEggId = null
-        mgr.stop()
-        super.onDestroy()
     }
 }

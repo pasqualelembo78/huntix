@@ -114,6 +114,7 @@
 
         <activity android:name=".ui.OutdoorArCatchActivity"
             android:exported="false" android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"
             android:configChanges="orientation|keyboardHidden|screenSize"/>
 
         <activity android:name=".ui.ArNavigationActivity"
