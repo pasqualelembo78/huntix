@@ -472,6 +472,42 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     textPaint.textSize = w * 0.04f
                     canvas.drawText("💪", cx, h * 0.08f, textPaint)
                 }
+                BuildingType.MONUMENT -> {
+                    // Pedestal
+                    objectPaint.color = 0xFF5D4037.toInt()
+                    canvas.drawRect(cx - w * 0.12f, baseY - h * 0.08f, cx + w * 0.12f, baseY, objectPaint)
+                    objectPaint.color = 0xFF795548.toInt()
+                    canvas.drawRect(cx - w * 0.1f, baseY - h * 0.06f, cx + w * 0.1f, baseY - h * 0.02f, objectPaint)
+                    // Statue/column
+                    objectPaint.color = 0xFFBDBDBD.toInt()
+                    canvas.drawRect(cx - w * 0.04f, h * 0.2f, cx + w * 0.04f, baseY - h * 0.08f, objectPaint)
+                    objectPaint.color = 0xFFE0E0E0.toInt()
+                    canvas.drawCircle(cx, h * 0.18f, w * 0.05f, objectPaint)
+                    // Plaque
+                    objectPaint.color = 0xFF8D6E63.toInt()
+                    canvas.drawRoundRect(w * 0.6f, h * 0.25f, w * 0.9f, h * 0.38f, 3f, 3f, objectPaint)
+                    objectPaint.color = 0xFFFFEB3B.toInt()
+                    canvas.drawRect(w * 0.62f, h * 0.27f, w * 0.88f, h * 0.36f, objectPaint)
+                    textPaint.textSize = w * 0.04f
+                    canvas.drawText("🏰", cx, h * 0.08f, textPaint)
+                }
+                BuildingType.MUSEUM -> {
+                    // Display cases
+                    for (d in 0..1) {
+                        val dx = w * (0.2f + d * 0.5f)
+                        objectPaint.color = 0xFF37474F.toInt()
+                        canvas.drawRect(dx - w * 0.1f, h * 0.2f, dx + w * 0.1f, baseY, objectPaint)
+                        objectPaint.color = 0xFF81D4FA.toInt()
+                        canvas.drawRect(dx - w * 0.08f, h * 0.22f, dx + w * 0.08f, baseY - h * 0.05f, objectPaint)
+                        objectPaint.color = 0xFFFFEB3B.toInt()
+                        canvas.drawRect(dx - w * 0.02f, h * 0.3f, dx + w * 0.02f, h * 0.4f, objectPaint)
+                    }
+                    // Bench
+                    objectPaint.color = 0xFF5D4037.toInt()
+                    canvas.drawRoundRect(w * 0.35f, baseY - h * 0.04f, w * 0.65f, baseY, 4f, 4f, objectPaint)
+                    textPaint.textSize = w * 0.04f
+                    canvas.drawText("🏛️", cx, h * 0.08f, textPaint)
+                }
             }
         }
 

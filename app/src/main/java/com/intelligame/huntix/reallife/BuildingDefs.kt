@@ -10,7 +10,7 @@ import android.graphics.Color
  * I rimanenti blocchi vengono riempiti con edifici procedurali generici.
  */
 enum class BuildingType {
-    HOUSE, RESTAURANT, SUPERMARKET, HOSPITAL, GYM
+    HOUSE, RESTAURANT, SUPERMARKET, HOSPITAL, GYM, MONUMENT, MUSEUM
 }
 
 data class BuildingAction(
@@ -129,6 +129,33 @@ object BuildingDefs {
             ),
             glbModel = "city_models/gym.glb",
             modelScale = 0.03f
+        ),
+        BuildingDef(
+            type = BuildingType.MONUMENT,
+            name = "Monumento",
+            emoji = "\uD83C\uDFF0",
+            color3D = 0xFF8D6E63.toInt(),    // marrone
+            roofColor = 0xFF5D4037.toInt(),   // marrone scuro
+            x = -20f, z = -5f,
+            width = 3f, depth = 3f, height = 4f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCDC", "Leggi", "fun", 15f),
+                BuildingAction("\uD83D\uDCF8", "Foto", "fun", 20f)
+            )
+        ),
+        BuildingDef(
+            type = BuildingType.MUSEUM,
+            name = "Museo",
+            emoji = "\uD83C\uDFDB\uFE0F",
+            color3D = 0xFF78909C.toInt(),    // grigio azzurro
+            roofColor = 0xFF455A64.toInt(),   // grigio scuro
+            x = 20f, z = -5f,
+            width = 4f, depth = 3.5f, height = 3f,
+            actions = listOf(
+                BuildingAction("\uD83C\uDFA8", "Arte", "fun", 25f),
+                BuildingAction("\uD83D\uDCD6", "Studia", "fun", 15f),
+                BuildingAction("\uD83D\uDCDC", "Guida", "fun", 10f)
+            )
         )
     )
 
