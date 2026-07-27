@@ -22,9 +22,17 @@ import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.WeatherZoneManager
 import com.intelligame.huntix.reallife.BuildingDefs
 import com.intelligame.huntix.reallife.BuildingType
+import com.intelligame.huntix.manager.OnlinePoiManager
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class OutdoorManager private constructor() : SensorEventListener {
+
+    // Declare online POI manager
+    private var onlinePoiManager: OnlinePoiManager? = null
 
     class Poi(
         val id: String,
@@ -52,6 +60,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         private const val DEFAULT_LNG = 12.4964
         private const val RESPAWN_THRESHOLD_M = 150f
         const val POI_COOLDOWN_MS = 5 * 60 * 1000L  // 5 minutes
+        const val LEVER_COOLDOWN_MS = 5_000L
     }
 
     private var locationManager: LocationManager? = null
@@ -83,10 +92,19 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     private var appCtx: Context? = null
 
+    private var scope: CoroutineScope? = null
+
     fun start(ctx: Context) {
         activeClients++
         appCtx = ctx.applicationContext
         registerCompass(ctx)
+        this.appCtx = ctx
+        if (onlinePoiManager == null) {
+            onlinePoiManager = OnlinePoiManager()
+        }
+        if (scope == null) {
+            scope = CoroutineScope(Dispatchers.IO)
+        }
         locationManager = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         val hasPerm = ContextCompat.checkSelfPermission(
             ctx, Manifest.permission.ACCESS_FINE_LOCATION
@@ -238,6 +256,9 @@ class OutdoorManager private constructor() : SensorEventListener {
 
         val newEggs = mutableListOf<WorldEgg>()
         val newPois = mutableListOf<Poi>()
+
+        newPois.add(generateGeographicHouseForPlayer(loc))
+
         try {
             repeat(eggCount) {
                 val dist = (10.0 + rng.nextDouble() * (maxDist - 10.0).coerceAtLeast(10.0)) * radiusMultiplier
@@ -295,6 +316,60 @@ class OutdoorManager private constructor() : SensorEventListener {
                 pois.addAll(newPois)
             }
             android.util.Log.e("OutdoorManager", "regenerate error: ${e.message}")
+        }
+
+        fetchOnlinePoisAsync(loc, setupRadius.toDouble())
+    }
+
+    private fun generateGeographicHouseForPlayer(loc: Location): Poi {
+        return Poi(
+            id = "house_player",
+            name = "Casa Mia",
+            lat = loc.latitude,
+            lng = loc.longitude,
+            type = "building",
+            buildingType = BuildingType.HOUSE.name
+        )
+    }
+
+    private fun fetchOnlinePoisAsync(loc: Location, radiusMeters: Double) {
+        val mgr = onlinePoiManager ?: return
+        val ctx = appCtx ?: return
+        scope?.launch {
+            try {
+                val dLat = radiusMeters / 111320.0
+                val cosLat = kotlin.math.cos(Math.toRadians(loc.latitude))
+                val dLng = if (kotlin.math.abs(cosLat) > 1e-10) radiusMeters / (111320.0 * cosLat) else 0.0
+
+                val result = mgr.fetchPoiForRegion(
+                    ctx,
+                    southwestLat = loc.latitude - dLat,
+                    northeastLat = loc.latitude + dLat,
+                    southwestLng = loc.longitude - dLng,
+                    northeastLng = loc.longitude + dLng
+                )
+                result.onSuccess { onlinePois ->
+                    val newPois = onlinePois.mapNotNull { op ->
+                        if (op.id == "house_player") return@mapNotNull null
+                        Poi(
+                            id = op.id,
+                            name = op.name,
+                            lat = op.lat,
+                            lng = op.lng,
+                            type = op.poiType,
+                            buildingType = op.buildingType
+                        )
+                    }
+                    withContext(Dispatchers.Main) {
+                        val onlineIds = newPois.map { it.id }.toSet()
+                        pois.removeAll { it.id in onlineIds }
+                        pois.addAll(newPois)
+                        android.util.Log.d("OutdoorManager", "Online POI caricati: ${newPois.size}")
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("OutdoorManager", "fetchOnlinePois fallito: ${e.message}")
+            }
         }
     }
 
@@ -400,8 +475,8 @@ class OutdoorManager private constructor() : SensorEventListener {
         return ((Math.toDegrees(kotlin.math.atan2(y, x)) + 360) % 360).toFloat()
     }
 
-    private var lastLeverTime: Long = 0L
-    private val LEVER_COOLDOWN_MS = 5_000L
+    var lastLeverTime: Long = 0L
+    val LEVER_COOLDOWN_MS = 5_000L
 
     fun simulateApproach(): String {
         val now = System.currentTimeMillis()

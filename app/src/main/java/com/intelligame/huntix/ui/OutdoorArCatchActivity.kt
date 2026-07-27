@@ -49,12 +49,14 @@ class OutdoorArCatchActivity : AppCompatActivity() {
     private lateinit var hintText: TextView
     private lateinit var obstacleHint: TextView
     private lateinit var catchBtn: Button
+    private lateinit var dashBtn: Button
     private lateinit var mapBtn: Button
 
     private val hudHandler = Handler(Looper.getMainLooper())
     private val hudRunnable = object : Runnable {
         override fun run() {
             updateHud()
+            refreshDashButton()
             hudHandler.postDelayed(this, 500)
         }
     }
@@ -137,6 +139,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         hudHandler.post(hudRunnable)
+        refreshDashButton()
     }
 
     override fun onPause() {
@@ -152,6 +155,16 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         mgr.huntingEggId = null
         mgr.stop()
         super.onDestroy()
+    }
+
+    private fun refreshDashButton() {
+        val now = System.currentTimeMillis()
+        val lastLeverTime = mgr.lastLeverTime
+        val remaining = ((OutdoorManager.LEVER_COOLDOWN_MS - (now - lastLeverTime)) / 1000f).coerceAtLeast(1f)
+        dashBtn.isEnabled = now - lastLeverTime >= OutdoorManager.LEVER_COOLDOWN_MS
+        dashBtn.text = if (now - lastLeverTime < OutdoorManager.LEVER_COOLDOWN_MS) {
+            "🔜 Pesta! (${remaining.toInt()}s)"
+        } else "🗩 Pesta!"
     }
 
     private fun configureSession() {
@@ -387,6 +400,12 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         })
     }
 
+    private fun onDash() {
+        val result = mgr.simulateApproach()
+        Toast.makeText(this@OutdoorArCatchActivity, result, Toast.LENGTH_SHORT).show()
+        refreshDashButton()
+    }
+
     private fun buildHud() {
         compassArrow = CompassArrowView(this).apply {
             alpha = 0.92f
@@ -416,6 +435,12 @@ class OutdoorArCatchActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             setOnClickListener { onCatch() }
         }
+        dashBtn = Button(this).apply {
+            text = "🗩 Pesta!"
+            setBackgroundColor(0xFFE53935.toInt())
+            setTextColor(Color.WHITE)
+            setOnClickListener { onDash() }
+        }
         mapBtn = Button(this).apply {
             text = "Mappa"
             setBackgroundColor(0xFF1565C0.toInt())
@@ -437,7 +462,10 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         ).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; setMargins(0, 120, 0, 0) }
         val catchP = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply { gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; setMargins(0, 0, 0, 130) }
+        ).apply { gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; setMargins(0, 0, 0, 180) }
+        val dashP = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.BOTTOM or Gravity.END; setMargins(0, 0, 40, 160) }
         val mapP = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.BOTTOM or Gravity.START; setMargins(30, 0, 0, 40) }
@@ -447,6 +475,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         overlay.addView(hintText, hintP)
         overlay.addView(obstacleHint, obstacleP)
         overlay.addView(catchBtn, catchP)
+        overlay.addView(dashBtn, dashP)
         overlay.addView(mapBtn, mapP)
         catchBtn.visibility = View.GONE
     }
