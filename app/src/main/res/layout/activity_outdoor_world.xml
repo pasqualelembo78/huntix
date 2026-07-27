@@ -513,8 +513,9 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            android:text="\uD83E\uDD5A"
-            android:textSize="28sp" />
+            android:text="🍳"
+            android:textSize="28sp"
+            android:textColor="#FFFFE400" />
     </FrameLayout>
 
     <!-- Catch tooltip (shown when near an egg) -->
