@@ -135,6 +135,7 @@ class CityActivity : AppCompatActivity() {
     private var osmLoaded = false
     private var osmPhase = 0
     private var buildGeneration = 0
+    private var osmDownloadFailed = false
 
     private data class NpcData(
         val rootNode: Node,
@@ -193,7 +194,7 @@ class CityActivity : AppCompatActivity() {
         // Foggia — Centro
         private const val OSM_CENTER_LAT = 41.4649
         private const val OSM_CENTER_LON = 15.5387
-        private const val OSM_RADIUS_METERS = 2000
+        private const val OSM_RADIUS_METERS = 1000
         private const val CAM_D_MIN = 1.5f
         private const val CAM_D_MAX = 8f
     }
@@ -558,12 +559,16 @@ class CityActivity : AppCompatActivity() {
         joystickView.bringToFront()
     }
 
-    override fun onResume() {
-        super.onResume()
-        AppLog.d(TAG, "onResume, destroyed=$destroyed")
-        lastFrameNs = 0L
-        Choreographer.getInstance().postFrameCallback(frameCb)
-    }
+override fun onResume() {
+         super.onResume()
+         AppLog.d(TAG, "onResume, destroyed=$destroyed")
+         lastFrameNs = 0L
+         Choreographer.getInstance().postFrameCallback(frameCb)
+         if (osmDownloadFailed && !osmLoading && !osmLoaded) {
+             AppLog.d(TAG, "onResume: retrying OSM download after previous failure")
+             loadOsmData()
+         }
+     }
 
 override fun onPause() {
         super.onPause()
@@ -1290,6 +1295,7 @@ override fun onPause() {
                 osmData = data
                 osmLoaded = true
                 osmLoading = false
+                osmDownloadFailed = false
 
                 // Rebuild city with full OSM data on GL thread
                 withContext(Dispatchers.Main) {
@@ -1303,18 +1309,13 @@ override fun onPause() {
                 Sentry.captureException(e)
                 SentryDebugManager.breadcrumb("city3d", "OSM download failed", mapOf("error" to e.message))
                 osmLoading = false
-                if (!hasEnoughOsmData) {
-                    withContext(Dispatchers.Main) {
-                        if (!destroyed) {
-                            AppLog.d(TAG, "Rebuilding with grid city after OSM failure (phased)")
-                            buildCityGridPhased()
-                        }
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        if (!destroyed) {
-                            osmStatusLabel?.text = "Aggiornamento OSM fallito (usa mini)"
-                        }
+                osmDownloadFailed = true
+                withContext(Dispatchers.Main) {
+                    if (!destroyed) {
+                        AppLog.d(TAG, "Rebuilding with grid city after OSM failure (fallback)")
+                        osmStatusLabel?.text = "Aggiornamento OSM fallito (città griglia)"
+                        clearCityNodes()
+                        buildCityGridPhased()
                     }
                 }
             }

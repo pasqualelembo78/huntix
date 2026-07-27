@@ -53,7 +53,7 @@ object OsmClient {
 
     private const val MIRROR_RETRY_ATTEMPTS = 2
     private const val MIRROR_BACKOFF_BASE_MS = 1000L
-    private const val MIRROR_COOLDOWN_MS = 60_000L
+    private const val MIRROR_COOLDOWN_MS = 30_000L
 
     // Mirror health: track failures to skip dead mirrors quickly
     private val mirrorFailures = ConcurrentHashMap<String, Long>()
@@ -331,7 +331,7 @@ object OsmClient {
         north: Double, east: Double
     ): String {
         return """
-[out:json][timeout:60];
+[out:json][timeout:25];
 (
   way["highway"]($south,$west,$north,$east);
   way["building"]($south,$west,$north,$east);

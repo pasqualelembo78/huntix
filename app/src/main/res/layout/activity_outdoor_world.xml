@@ -470,6 +470,19 @@
         android:textSize="20sp"
         android:background="@drawable/btn_accent" />
 
+    <!-- Lever / Dash toward nearest egg -->
+    <TextView
+        android:id="@+id/btnLever"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="96dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:text="\u2696\uFE0F"
+        android:textSize="20sp"
+        android:background="@drawable/btn_purple" />
+
     <!-- Central catch button (bottom-center) -->
     <FrameLayout
         android:id="@+id/btnCatch"

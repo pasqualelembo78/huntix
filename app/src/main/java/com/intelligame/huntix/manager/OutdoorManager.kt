@@ -20,6 +20,8 @@ import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.WorldEgg
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.WeatherZoneManager
+import com.intelligame.huntix.reallife.BuildingDefs
+import com.intelligame.huntix.reallife.BuildingType
 import java.util.concurrent.atomic.AtomicLong
 
 class OutdoorManager private constructor() : SensorEventListener {
@@ -30,6 +32,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         val lat: Double,
         val lng: Double,
         val type: String = "gym",
+        val buildingType: String = "",
         var spun: Boolean = false,
         var spunAt: Long = 0L
     )
@@ -254,14 +257,30 @@ class OutdoorManager private constructor() : SensorEventListener {
                     )
                 )
             }
-            if (includePois) {
-                val poiCount = 2 + rng.nextInt(2)
-                val poiNames = listOf("Palestra", "Arena", "Santuario", "Torre")
-                repeat(poiCount) {
-                    val (la, ln) = offset(loc.latitude, loc.longitude, 80.0 + rng.nextDouble() * 300.0, rng)
-                    newPois.add(Poi("poi_${nextPoiId.incrementAndGet()}", "${poiNames[rng.nextInt(poiNames.size)]} ${it + 1}", la, ln, "gym"))
-                }
-            }
+             if (includePois) {
+                 val poiCount = 2 + rng.nextInt(2)
+                 val poiNames = listOf("Palestra", "Arena", "Santuario", "Torre")
+                 repeat(poiCount) {
+                     val (la, ln) = offset(loc.latitude, loc.longitude, 80.0 + rng.nextDouble() * 300.0, rng)
+                     newPois.add(Poi("poi_${nextPoiId.incrementAndGet()}", "${poiNames[rng.nextInt(poiNames.size)]} ${it + 1}", la, ln, "gym"))
+                 }
+             }
+             val buildingCount = prefs?.getInt("buildings", 3) ?: 3
+             if (buildingCount > 0) {
+                 val buildingTypes = BuildingDefs.BUILDINGS
+                 repeat(buildingCount) {
+                     val (la, ln) = offset(loc.latitude, loc.longitude, 50.0 + rng.nextDouble() * 250.0, rng)
+                     val bDef = buildingTypes[rng.nextInt(buildingTypes.size)]
+                     newPois.add(Poi(
+                         id = "bld_${nextPoiId.incrementAndGet()}",
+                         name = bDef.name,
+                         lat = la,
+                         lng = ln,
+                         type = "building",
+                         buildingType = bDef.type.name
+                     ))
+                 }
+             }
             eggs.clear()
             eggs.addAll(newEggs)
             pois.clear()
@@ -379,6 +398,58 @@ class OutdoorManager private constructor() : SensorEventListener {
         val x = kotlin.math.cos(la1r) * kotlin.math.sin(la2r) -
                 kotlin.math.sin(la1r) * kotlin.math.cos(la2r) * kotlin.math.cos(dLnR)
         return ((Math.toDegrees(kotlin.math.atan2(y, x)) + 360) % 360).toFloat()
+    }
+
+    private var lastLeverTime: Long = 0L
+    private val LEVER_COOLDOWN_MS = 5_000L
+
+    fun simulateApproach(): String {
+        val now = System.currentTimeMillis()
+        if (now - lastLeverTime < LEVER_COOLDOWN_MS) {
+            val remaining = ((LEVER_COOLDOWN_MS - (now - lastLeverTime)) / 1000f).coerceAtLeast(1f)
+            return "Levetta in ricarica: ${remaining.toInt()}s"
+        }
+        val loc = currentLocation ?: return "Posizione sconosciuta"
+        val nearestEgg = targetEgg()
+        val nearestBuildingPoi = pois
+            .filter { it.type == "building" && it.buildingType.isNotEmpty() }
+            .minByOrNull { distanceMeters(it) }
+        val targetEntry = when {
+            nearestEgg == null && nearestBuildingPoi == null -> return "Nessuna uova o edifici nelle vicinanze"
+            nearestEgg == null -> Pair(nearestBuildingPoi as Any, distanceMeters(nearestBuildingPoi))
+            nearestBuildingPoi == null -> Pair(nearestEgg as Any, distanceMeters(nearestEgg))
+            distanceMeters(nearestEgg) < distanceMeters(nearestBuildingPoi) -> Pair(nearestEgg as Any, distanceMeters(nearestEgg))
+            else -> Pair(nearestBuildingPoi as Any, distanceMeters(nearestBuildingPoi))
+        }
+        val target = targetEntry.first
+        val targetDist = targetEntry.second
+        val thresholdM = when (target) {
+            is WorldEgg -> getCatchRadiusM(target)
+            is Poi -> 30f
+            else -> 50f
+        }
+        if (targetDist <= thresholdM) return "Gi vicino!"
+        val stepM = 30f
+        val ratio = if (targetDist > stepM) stepM / targetDist else 1f
+        val targetLat = when (target) {
+            is WorldEgg -> target.lat
+            is Poi -> target.lat
+            else -> return "Target non valido"
+        }
+        val targetLng = when (target) {
+            is WorldEgg -> target.lng
+            is Poi -> target.lng
+            else -> return "Target non valido"
+        }
+        val newLat = loc.latitude + (targetLat - loc.latitude) * ratio
+        val newLng = loc.longitude + (targetLng - loc.longitude) * ratio
+        currentLocation = Location("simulated").apply {
+            latitude = newLat
+            longitude = newLng
+        }
+        ensureSpawns(currentLocation!!)
+        lastLeverTime = now
+        return "Levetta attivata! Ti avvicini"
     }
 
     fun getEggs(): List<WorldEgg> = eggs.toList()

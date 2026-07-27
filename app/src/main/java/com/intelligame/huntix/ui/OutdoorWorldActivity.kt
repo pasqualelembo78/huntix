@@ -27,6 +27,9 @@ import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.manager.OutdoorManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.WeatherZoneManager
+import com.intelligame.huntix.reallife.BuildingDefs
+import com.intelligame.huntix.reallife.BuildingType
+import com.intelligame.huntix.ui.BuildingInteriorActivity
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.MarkerOptions
@@ -87,6 +90,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var btnCompass: TextView
     private lateinit var btnPhoto: TextView
     private lateinit var btnCalendar: TextView
+    private lateinit var btnLever: TextView
     private lateinit var incubationProgress: LinearLayout
     private lateinit var tvIncubationKm: TextView
     private lateinit var incubationBarFill: View
@@ -152,6 +156,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnCompass = findViewById(R.id.btnCompass)
         btnPhoto = findViewById(R.id.btnPhoto)
         btnCalendar = findViewById(R.id.btnCalendar)
+        btnLever = findViewById(R.id.btnLever)
         incubationProgress = findViewById(R.id.incubationProgress)
         tvIncubationKm = findViewById(R.id.tvIncubationKm)
         incubationBarFill = findViewById(R.id.incubationBarFill)
@@ -191,7 +196,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 val egg = mgr.getEggs().firstOrNull { it.displayLabel == title && !it.found }
                 val poi = mgr.getPois().firstOrNull { it.name == title }
                 if (egg != null) showEggSheet(egg)
-                else if (poi != null) showPoiSheet(poi)
+                else if (poi != null) {
+                    if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+                        openBuilding(poi)
+                    } else {
+                        showPoiSheet(poi)
+                    }
+                }
                 true
             }
         }
@@ -223,6 +234,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
         // Phase 1: Calendar — open events
         btnCalendar.setOnClickListener {
             startActivity(Intent(this, com.intelligame.huntix.ui.LiveEventsActivity::class.java))
+        }
+
+        // Lever: dash toward nearest egg
+        btnLever.setOnClickListener {
+            val result = mgr.simulateApproach()
+            Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
+            refreshUi()
         }
 
         // Phase 1: Central catch button
@@ -393,17 +411,29 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
             mgr.getPois().forEach { poi ->
                 val latLng = LatLng(poi.lat, poi.lng)
-                val bitmap = if (mgr.isPoiOnCooldown(poi)) {
-                    makePoiBitmapGray(poi.type)
+                if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+                    val bDef = BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType }
+                    val emoji = bDef?.emoji ?: "\uD83C\uDFE0"
+                    val buildingBitmap = makeBuildingBitmap(emoji, bDef?.color3D ?: 0xFF888888.toInt())
+                    map.addMarker(MarkerOptions()
+                        .position(latLng)
+                        .icon(iconFactory.fromBitmap(buildingBitmap))
+                        .title(poi.name)
+                        .snippet(poi.buildingType)
+                    )
                 } else {
-                    makePoiBitmap(poi.type)
+                    val bitmap = if (mgr.isPoiOnCooldown(poi)) {
+                        makePoiBitmapGray(poi.type)
+                    } else {
+                        makePoiBitmap(poi.type)
+                    }
+                    map.addMarker(MarkerOptions()
+                        .position(latLng)
+                        .icon(iconFactory.fromBitmap(bitmap))
+                        .title(poi.name)
+                        .snippet(poi.type)
+                    )
                 }
-                map.addMarker(MarkerOptions()
-                    .position(latLng)
-                    .icon(iconFactory.fromBitmap(bitmap))
-                    .title(poi.name)
-                    .snippet(poi.type)
-                )
             }
 
         // Phase 3: Player avatar marker + buddy + direction indicator
@@ -786,6 +816,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
         hideBottomSheet()
     }
 
+    private fun openBuilding(poi: OutdoorManager.Poi) {
+        val bDef = BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType } ?: return
+        startActivity(Intent(this, BuildingInteriorActivity::class.java).apply {
+            putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, bDef.type.ordinal)
+        })
+        hideBottomSheet()
+    }
+
     private fun openPoi(poiId: String) {
         startActivity(Intent(this, POIInteractionActivity::class.java).apply {
             putExtra("poiId", poiId)
@@ -828,6 +866,35 @@ class OutdoorWorldActivity : BaseNavActivity() {
         p.color = color
         val dotR = 3f
         c.drawCircle(w / 2f, headY + 2f, dotR, p)
+
+        return bmp
+    }
+
+    private fun makeBuildingBitmap(emoji: String, color: Int): Bitmap {
+        val w = 80; val h = 100
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        val headR = 26f
+        val headY = h - 52f
+
+        val pin = android.graphics.Path()
+        pin.moveTo(w / 2f, h.toFloat())
+        pin.quadTo(w / 2f - 8f, h - 28f, w / 2f - headR, headY)
+        pin.arcTo(w / 2f - headR, headY - headR, w / 2f + headR, headY + headR, 180f, -180f, false)
+        pin.quadTo(w / 2f + 8f, h - 28f, w / 2f, h.toFloat())
+        pin.close()
+
+        p.color = color
+        p.style = Paint.Style.FILL
+        c.drawPath(pin, p)
+
+        p.color = Color.WHITE
+        p.style = Paint.Style.FILL
+        p.textSize = 28f
+        p.textAlign = Paint.Align.CENTER
+        c.drawText(emoji, w / 2f, headY + 10f, p)
 
         return bmp
     }
