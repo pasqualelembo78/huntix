@@ -337,17 +337,8 @@ class OutdoorManager private constructor() : SensorEventListener {
         val ctx = appCtx ?: return
         scope?.launch {
             try {
-                val dLat = radiusMeters / 111320.0
-                val cosLat = kotlin.math.cos(Math.toRadians(loc.latitude))
-                val dLng = if (kotlin.math.abs(cosLat) > 1e-10) radiusMeters / (111320.0 * cosLat) else 0.0
-
-                val result = mgr.fetchPoiForRegion(
-                    ctx,
-                    southwestLat = loc.latitude - dLat,
-                    northeastLat = loc.latitude + dLat,
-                    southwestLng = loc.longitude - dLng,
-                    northeastLng = loc.longitude + dLng
-                )
+                // Usa la posizione corrente (reale o simulata dalla levetta)
+                val result = mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude)
                 result.onSuccess { onlinePois ->
                     val newPois = onlinePois.mapNotNull { op ->
                         if (op.id == "house_player") return@mapNotNull null
