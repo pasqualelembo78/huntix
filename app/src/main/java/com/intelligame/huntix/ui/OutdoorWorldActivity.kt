@@ -62,7 +62,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     companion object {
         private const val TAG = "OutdoorWorld"
-        private const val MIN_REPORT_DISTANCE_M = 200.0
+        private const val MIN_REPORT_DISTANCE_M = 10.0
         private const val REPORT_COOLDOWN_MS = 10_000L
         private const val MAX_REPORTS_PER_SESSION = 10
     }
@@ -1068,6 +1068,61 @@ class OutdoorWorldActivity : BaseNavActivity() {
         return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFloat()
     }
 
+    private fun normalizePoiName(name: String): String {
+        var normalized = name.lowercase()
+            .replace(Regex("[^a-z0-9\\s]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+        val stopWords = setOf("da", "di", "del", "della", "dei", "delle", "il", "la", "i", "gli", "le",
+            "the", "of", "and", "pizzeria", "ristorante", "bar", "caffe", "caffè", "pastificio",
+            "gelateria", "supermercato", "negozio", "store", "shop", "restaurant", "cafe", "coffee")
+        val tokens = normalized.split(" ").filter { it.isNotBlank() && !stopWords.contains(it) }
+        return tokens.sorted().joinToString(" ")
+    }
+
+    private fun levenshteinDistance(s1: String, s2: String): Int {
+        val m = s1.length
+        val n = s2.length
+        if (m == 0) return n
+        if (n == 0) return m
+        var prevRow = IntArray(n + 1) { it }
+        var currRow = IntArray(n + 1)
+        for (i in 1..m) {
+            currRow[0] = i
+            for (j in 1..n) {
+                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
+                currRow[j] = minOf(
+                    prevRow[j] + 1,
+                    currRow[j - 1] + 1,
+                    prevRow[j - 1] + cost
+                )
+            }
+            val temp = prevRow
+            prevRow = currRow
+            currRow = temp
+        }
+        return prevRow[n]
+    }
+
+    private fun nameSimilarity(name1: String, name2: String): Double {
+        val n1 = normalizePoiName(name1)
+        val n2 = normalizePoiName(name2)
+        if (n1.isEmpty() || n2.isEmpty()) return 0.0
+        val maxLen = maxOf(n1.length, n2.length)
+        if (maxLen == 0) return 1.0
+        val distance = levenshteinDistance(n1, n2)
+        return 1.0 - (distance.toDouble() / maxLen)
+    }
+
+    private fun isSimilarName(name1: String, name2: String): Boolean {
+        val similarity = nameSimilarity(name1, name2)
+        return similarity >= 0.7
+    }
+
+    private fun hasSimilarPoiName(name: String): Boolean {
+        return mgr.getPois().any { isSimilarName(name, it.name) }
+    }
+
     /** Mostra dialog per segnalare un POI mancante */
     private fun showReportPoiDialog(lat: Double, lng: Double) {
         val now = System.currentTimeMillis()
@@ -1086,7 +1141,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         if (tooClose) return
         // Guarda se l'ultimo report è troppo vicino
         if (lastReportTime > 0 && haversineM(lat, lng, lastReportLat, lastReportLng) < MIN_REPORT_DISTANCE_M) {
-            Toast.makeText(this, "Troppo vicino all'ultima segnalazione — spostati di almeno 200m", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Troppo vicino all'ultima segnalazione — spostati di almeno 10m", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -1153,6 +1208,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 reportsThisSession--
                 return
             }
+            // Validate: name not too similar to existing POI names
+            if (hasSimilarPoiName(name)) {
+                Toast.makeText(this, "Esiste già un POI con nome simile nelle vicinanze", Toast.LENGTH_SHORT).show()
+                reportsThisSession--
+                return
+            }
             val suggestionsFile = File(filesDir, "poi_suggestions.json")
             val existing = mutableListOf<JSONObject>()
             if (suggestionsFile.exists()) {
@@ -1167,6 +1228,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 haversineM(lat, lng, s.optDouble("lat", 0.0), s.optDouble("lng", 0.0)) < MIN_REPORT_DISTANCE_M
             }) {
                 Toast.makeText(this, "Esiste già una segnalazione nelle vicinanze", Toast.LENGTH_SHORT).show()
+                reportsThisSession--
+                return
+            }
+            // Check name similarity against saved suggestions
+            if (existing.any { s ->
+                isSimilarName(name, s.optString("name", ""))
+            }) {
+                Toast.makeText(this, "Esiste già una segnalazione con nome simile", Toast.LENGTH_SHORT).show()
                 reportsThisSession--
                 return
             }
