@@ -314,6 +314,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Lever: dash toward nearest egg
         btnLever.setOnClickListener {
+            if (mgr.isSimulating) {
+                mgr.stopSimulation()
+                Toast.makeText(this, "Simulazione GPS disattivata", Toast.LENGTH_SHORT).show()
+                refreshUi()
+                return@setOnClickListener
+            }
             val result = mgr.simulateApproach()
             Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
             refreshUi()
@@ -398,6 +404,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         AppLog.i(TAG, "onPause — stopping tick, sensor, mgr")
         refresh.removeCallbacks(tick)
         mapView?.onPause()
+        mgr.stopSimulation()
         mgr.stop()
         if (hasSensor) sensorManager?.unregisterListener(sensorListener)
         isExploring = false
@@ -514,6 +521,15 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Phase 1.4: Catch button state
         refreshCatchButton()
+
+        // Phase 1.7: Lever state indicator
+        if (mgr.isSimulating) {
+            btnLever.setBackgroundResource(R.drawable.btn_accent)
+            btnLever.text = "⏹"
+        } else {
+            btnLever.setBackgroundResource(R.drawable.btn_purple)
+            btnLever.text = "⛓"
+        }
 
         // Phase 5.2: Proximity hint
         checkProximityHint()

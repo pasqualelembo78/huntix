@@ -92,6 +92,7 @@ class OutdoorManager private constructor() : SensorEventListener {
     fun getDeviceHeadingDeg(): Float = deviceAzimuth
 
     private val listener = LocationListener { loc ->
+        if (isSimulating) return@LocationListener
         currentLocation = loc
         ensureSpawns(loc)
         appCtx?.let { WeatherZoneManager.refreshAsync(it, loc.latitude, loc.longitude) }
@@ -510,6 +511,7 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     var lastLeverTime: Long = 0L
     val LEVER_COOLDOWN_MS = 5_000L
+    var isSimulating: Boolean = false
 
     fun simulateApproach(): String {
         val now = System.currentTimeMillis()
@@ -551,6 +553,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         }
         val newLat = loc.latitude + (targetLat - loc.latitude) * ratio
         val newLng = loc.longitude + (targetLng - loc.longitude) * ratio
+        isSimulating = true
         currentLocation = Location("simulated").apply {
             latitude = newLat
             longitude = newLng
@@ -558,6 +561,10 @@ class OutdoorManager private constructor() : SensorEventListener {
         ensureSpawns(currentLocation!!)
         lastLeverTime = now
         return "Levetta attivata! Ti avvicini"
+    }
+
+    fun stopSimulation() {
+        isSimulating = false
     }
 
     fun getEggs(): List<WorldEgg> = eggs.toList()
