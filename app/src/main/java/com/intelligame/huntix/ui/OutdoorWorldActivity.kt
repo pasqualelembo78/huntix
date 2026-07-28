@@ -1,26 +1,27 @@
 package com.intelligame.huntix.ui
 
 import android.Manifest
-import android.app.AlertDialog
+import android.app.ActivityManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.app.ActivityManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
+import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.intelligame.huntix.UiKit
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import com.intelligame.huntix.BaseNavActivity
 import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.EggRarity
@@ -217,8 +218,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 AppLog.d(TAG, "Style loaded, buildings layer added, zoom=17 tilt=60")
             }
 
-            map.addOnMapClickListener {
+            map.addOnMapClickListener { point ->
                 hideBottomSheet()
+                showReportPoiDialog(point.latitude, point.longitude)
                 true
             }
 
@@ -1024,7 +1026,83 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activePoiId = null
     }
 
-    // ─── Actions ───────────────────────────────────────────────
+    /** Mostra dialog per segnalare un POI mancante */
+    private fun showReportPoiDialog(lat: Double, lng: Double) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 8),
+                UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 8))
+        }
+
+        val txtHint = TextView(this).apply {
+            text = "Nessun punto registrato in questa zona.\nSegnala un POI mancante:"
+            textSize = 13f; setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, UiKit.dp(this@OutdoorWorldActivity, 8))
+        }
+        container.addView(txtHint)
+
+        val inputName = EditText(this).apply {
+            hint = "Nome del negozio/luogo"
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x88FFFFFF.toInt())
+        }
+        container.addView(inputName)
+
+        val spinnerCategory = AutoCompleteTextView(this).apply {
+            hint = "Categoria"
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x88FFFFFF.toInt())
+            val categories = arrayOf("ristorante", "bar", "palestra", "ospedale", "monumento", "museo", "supermercato", "altro")
+            setAdapter(ArrayAdapter(this@OutdoorWorldActivity, android.R.layout.simple_dropdown_item_1line, categories))
+        }
+        container.addView(spinnerCategory)
+
+        AlertDialog.Builder(this).apply {
+            setTitle("Segnala POI")
+            setView(container)
+            setPositiveButton("Invia") { _, _ ->
+                val name = inputName.text.toString().trim()
+                val cat = spinnerCategory.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(this@OutdoorWorldActivity, "Inserisci almeno un nome", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                savePoiSuggestion(name, cat, lat, lng)
+            }
+            setNegativeButton("Annulla", null)
+            show()
+        }
+    }
+
+    /** Salva il suggerimento POI in un file cache locale */
+    private fun savePoiSuggestion(name: String, category: String, lat: Double, lng: Double) {
+        try {
+            val suggestionsFile = File(filesDir, "poi_suggestions.json")
+            val existing = mutableListOf<JSONObject>()
+            if (suggestionsFile.exists()) {
+                val content = suggestionsFile.readText()
+                val arr = JSONArray(content)
+                for (i in 0 until arr.length()) {
+                    existing.add(arr.getJSONObject(i))
+                }
+            }
+            existing.add(JSONObject().apply {
+                put("name", name)
+                put("category", category)
+                put("lat", lat)
+                put("lng", lng)
+                put("timestamp", System.currentTimeMillis())
+            })
+            val arr = JSONArray(existing)
+            suggestionsFile.writeText(arr.toString(2))
+            Toast.makeText(this, "Segnalazione inviata: grazie!", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore salvataggio", Toast.LENGTH_SHORT).show()
+            AppLog.e("ReportPoi", e.message ?: "unknown error")
+        }
+    }
 
     private fun doHunt(eggId: String) {
         val egg = mgr.getEgg(eggId) ?: return
