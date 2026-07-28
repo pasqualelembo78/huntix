@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Huntix. All rights reserved.
+// Original code by Pasquale Lembo. Unauthorized redistribution prohibited.
+
 package com.intelligame.huntix.managers
 
 import android.content.Context
