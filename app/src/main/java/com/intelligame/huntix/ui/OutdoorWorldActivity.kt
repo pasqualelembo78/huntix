@@ -1,15 +1,18 @@
 package com.intelligame.huntix.ui
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.app.ActivityManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -19,6 +22,7 @@ import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.intelligame.huntix.BaseNavActivity
+import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.EggRarity
 import com.intelligame.huntix.OutdoorSetupActivity
 import com.intelligame.huntix.PlayerProfileManager
@@ -30,9 +34,12 @@ import com.intelligame.huntix.managers.WeatherZoneManager
 import com.intelligame.huntix.reallife.BuildingDefs
 import com.intelligame.huntix.reallife.BuildingType
 import com.intelligame.huntix.ui.BuildingInteriorActivity
+import java.util.concurrent.atomic.AtomicLong
 import org.maplibre.android.MapLibre
 import org.maplibre.android.annotations.IconFactory
+import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.Polygon
 import org.maplibre.android.annotations.PolygonOptions
 import org.maplibre.android.camera.CameraPosition.Builder
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -49,11 +56,23 @@ import java.util.Locale
 
 class OutdoorWorldActivity : BaseNavActivity() {
 
+    companion object {
+        private const val TAG = "OutdoorWorld"
+    }
+
     override fun activeTab() = ""
 
     private val mgr = OutdoorManager.get()
     private var mapView: MapView? = null
     private var mapLibre: MapLibreMap? = null
+    private val iconCache = mutableMapOf<String, org.maplibre.android.annotations.Icon>()
+    private val eggMarkers = mutableMapOf<String, Marker>()
+    private val eggPolygons = mutableMapOf<String, Polygon>()
+    private val poiMarkers = mutableMapOf<String, Marker>()
+    private var avatarMarker: Marker? = null
+    private var buddyMarker: Marker? = null
+    private var directionMarker: Marker? = null
+    private var mapInitialized = false
     private lateinit var tvWeatherEmoji: TextView
     private lateinit var weatherTooltip: LinearLayout
     private lateinit var tvWeatherName: TextView
@@ -102,8 +121,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private var walkTick: Int = 0
     private var sensorManager: android.hardware.SensorManager? = null
     private var hasSensor: Boolean = false
+    private var initDone = false
+    private var isExploring = false
+    @Volatile private var isCameraMoving = false
+    @Volatile private var needsRefreshOnIdle = false
     private val sensorListener = object : android.hardware.SensorEventListener {
         override fun onSensorChanged(event: android.hardware.SensorEvent) {
+            if (!isExploring || event.values.isEmpty()) return
             val rotation = FloatArray(9)
             android.hardware.SensorManager.getRotationMatrixFromVector(rotation, event.values)
             val orientation = FloatArray(3)
@@ -116,6 +140,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.i(TAG, "onCreate START")
 
         MapLibre.getInstance(this)
 
@@ -166,9 +191,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         mapView = findViewById(R.id.mapView)
         mapView?.onCreate(savedInstanceState)
+        AppLog.d(TAG, "mapView created")
 
         mapView?.getMapAsync { map ->
             mapLibre = map
+            mapInitialized = true
+            AppLog.i(TAG, "MapLibre map ready, style loading...")
 
             map.setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
                 val loc = mgr.currentLocation
@@ -186,6 +214,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
                     .build()
 
                 addBuildingLayer(style)
+                AppLog.d(TAG, "Style loaded, buildings layer added, zoom=17 tilt=60")
             }
 
             map.addOnMapClickListener {
@@ -199,13 +228,37 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 val poi = mgr.getPois().firstOrNull { it.name == title }
                 if (egg != null) showEggSheet(egg)
                 else if (poi != null) {
-                    if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
-                        openBuilding(poi)
-                    } else {
-                        showPoiSheet(poi)
+                    when (poi.pageType) {
+                        "web" -> if (poi.url.isNotBlank()) openWebView(poi) else showPoiSheet(poi)
+                        "custom" -> if (poi.url.isNotBlank()) openCustomPage(poi) else showPoiSheet(poi)
+                        else -> {
+                            val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
+                            if (bt != null) {
+                                openBuilding(poi, bt)
+                            } else if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+                                openBuilding(poi, null)
+                            } else {
+                                showPoiSheet(poi)
+                            }
+                        }
                     }
                 }
                 true
+            }
+
+            map.addOnCameraMoveListener {
+                isCameraMoving = true
+                AppLog.d(TAG, "Camera MOVE start")
+            }
+
+            map.addOnCameraIdleListener {
+                isCameraMoving = false
+                AppLog.d(TAG, "Camera IDLE, needsRefresh=$needsRefreshOnIdle")
+                if (needsRefreshOnIdle) {
+                    needsRefreshOnIdle = false
+                    lastMapUpdate.set(0L)
+                    refreshMapMarkers(force = true)
+                }
             }
         }
 
@@ -277,7 +330,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 if (weatherTooltip.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
 
-        refresh.post(tick)
+        // Post refresh with initial delay to allow map initialization
+        refresh.postDelayed(tick, 1000L)
+        AppLog.d(TAG, "Tick scheduled (1s delay)")
 
         // Phase 3: compass sensor
         sensorManager = getSystemService(SENSOR_SERVICE) as? android.hardware.SensorManager
@@ -285,33 +340,51 @@ class OutdoorWorldActivity : BaseNavActivity() {
         if (rotationVector != null) {
             sensorManager?.registerListener(sensorListener, rotationVector, android.hardware.SensorManager.SENSOR_DELAY_UI)
             hasSensor = true
+            AppLog.d(TAG, "Compass sensor registered")
+        } else {
+            AppLog.w(TAG, "Rotation vector sensor unavailable")
         }
+        AppLog.i(TAG, "onCreate COMPLETE, mapInitialized=$mapInitialized")
     }
 
     override fun onResume() {
         super.onResume()
+        AppLog.i(TAG, "onResume")
         mgr.start(this)
+        checkGpsEnabled()
         mapView?.onResume()
         if (!refresh.hasCallbacks(tick)) refresh.post(tick)
-        centerOnUser()
-        updateSkyColor()
+        if (mapInitialized) {
+            centerOnUser()
+            updateSkyColor()
+        }
+        isExploring = true
     }
 
     override fun onPause() {
         super.onPause()
+        AppLog.i(TAG, "onPause — stopping tick, sensor, mgr")
         refresh.removeCallbacks(tick)
         mapView?.onPause()
         mgr.stop()
         if (hasSensor) sensorManager?.unregisterListener(sensorListener)
+        isExploring = false
     }
 
     override fun onStop() {
         super.onStop()
+        refresh.removeCallbacks(tick)
         mapView?.onStop()
     }
 
     override fun onDestroy() {
+        AppLog.i(TAG, "onDestroy — clearing ${iconCache.size} cached icons, ${poiMarkers.size} POI markers")
         refresh.removeCallbacks(tick)
+        iconCache.clear()
+        eggMarkers.clear()
+        eggPolygons.clear()
+        poiMarkers.clear()
+        poiCooldownState.clear()
         mapView?.onDestroy()
         mgr.stop()
         super.onDestroy()
@@ -319,6 +392,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     override fun onLowMemory() {
         super.onLowMemory()
+        AppLog.w(TAG, "onLowMemory — clearing iconCache (${iconCache.size} entries)")
+        iconCache.clear()
         mapView?.onLowMemory()
     }
 
@@ -332,14 +407,36 @@ class OutdoorWorldActivity : BaseNavActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 101 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            AppLog.i(TAG, "Location permission GRANTED")
+            checkGpsEnabled()
             centerOnUser()
         } else if (requestCode == 101) {
+            AppLog.w(TAG, "Location permission DENIED — using demo spawn")
             Toast.makeText(this, "Permesso GPS negato: usato spawn dimostrativo", Toast.LENGTH_LONG).show()
         }
     }
 
+    private fun checkGpsEnabled() {
+        val lm = getSystemService(LOCATION_SERVICE) as? android.location.LocationManager ?: return
+        if (lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) return
+        AlertDialog.Builder(this).apply {
+            setTitle("GPS non attivato")
+            setMessage("Il GPS non è attivo. Senza GPS la posizione mostrata potrebbe non essere precisa.\n\nVuoi attivarlo nelle impostazioni?")
+            setPositiveButton("Attiva GPS") { _, _ ->
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            setNegativeButton("Continua senza") { _, _ -> }
+            setCancelable(true)
+            show()
+        }
+    }
+
     private fun centerOnUser() {
-        val loc = mgr.currentLocation ?: return
+        val loc = mgr.currentLocation ?: run {
+            AppLog.w(TAG, "centerOnUser: no location available")
+            return
+        }
+        AppLog.d(TAG, "centerOnUser: ${loc.latitude}, ${loc.longitude}")
         val latLng = LatLng(loc.latitude, loc.longitude)
         mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 17.0))
     }
@@ -347,6 +444,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
     // ─── Main UI refresh ───────────────────────────────────────
 
     private fun refreshUi() {
+        if (!mapInitialized) return
+
+        memoryCheckTimer -= 3f
+        if (memoryCheckTimer <= 0f) {
+            memoryCheckTimer = MEMORY_CHECK_INTERVAL
+            checkMemoryPressure()
+        }
+
         val w = WeatherZoneManager.currentWeather
         walkTick = (walkTick + 1) % 64
 
@@ -386,108 +491,227 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         updateWeatherParticles(w)
 
-        mapLibre?.let { map ->
-            map.clear()
+        refreshMapMarkers()
+    }
 
-            mgr.getEggs().forEach { egg ->
-                if (!egg.found) {
-                    val color = rarityColor(egg.rarity)
-                    val center = LatLng(egg.lat, egg.lng)
-                    val points = createCirclePoints(center, mgr.getCatchRadiusM(egg).toDouble())
-                    map.addPolygon(PolygonOptions()
-                        .addAll(points)
-                        .strokeColor(color)
-                        .fillColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)))
-                    )
-                }
+    private val poiCooldownState = mutableMapOf<String, Boolean>()
+
+    // ── Memory pressure monitoring ────────────────────────────
+    private var memoryCheckTimer = 5f
+    private val MEMORY_CHECK_INTERVAL = 3f
+
+    private fun checkMemoryPressure() {
+        val am = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return
+        val memInfo = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(memInfo)
+        val availMb = memInfo.availMem / (1024 * 1024)
+        val totalMb = memInfo.totalMem / (1024 * 1024)
+        val thresholdMb = memInfo.threshold / (1024 * 1024)
+
+        AppLog.d(TAG, "Memory: ${availMb}MB avail / ${totalMb}MB total, threshold=${thresholdMb}MB, iconCache=${iconCache.size} markers=egg:${eggMarkers.size}+poi:${poiMarkers.size}")
+
+        if (availMb < thresholdMb + 100L) {
+            AppLog.w(TAG, "LOW MEMORY! ${availMb}MB avail — clearing iconCache (${iconCache.size} entries)")
+            iconCache.clear()
+            mapView?.onLowMemory()
+            if (availMb < thresholdMb + 50L) {
+                AppLog.w(TAG, "CRITICAL MEMORY ${availMb}MB — finishing activity")
+                finish()
             }
+        }
+    }
 
-            val iconFactory = IconFactory.getInstance(this)
+    private fun refreshMapMarkers(force: Boolean = false) {
+        if (!mapInitialized) return
+        if (isCameraMoving) {
+            needsRefreshOnIdle = true
+            AppLog.d(TAG, "refreshMapMarkers: SKIPPED (camera moving, queued idle refresh)")
+            return
+        }
+        if (!force && !checkMapUpdateRequired()) return
 
-            mgr.getEggs().forEach { egg ->
-                if (!egg.found) {
-                    val latLng = LatLng(egg.lat, egg.lng)
-                    map.addMarker(MarkerOptions()
-                        .position(latLng)
-                        .icon(iconFactory.fromBitmap(makeMarkerBitmap(egg.rarity)))
-                        .title(egg.displayLabel)
-                        .snippet("${egg.rarity.displayName} — ${egg.element.name}")
-                    )
-                }
+        val map = mapLibre ?: return
+        val am = getSystemService(ACTIVITY_SERVICE) as? ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        am?.getMemoryInfo(memInfo)
+        val availMb = (memInfo?.availMem ?: 0L) / (1024 * 1024)
+        AppLog.d(TAG, "refreshMapMarkers: START (force=$force) mem=${availMb}MB iconCache=${iconCache.size}")
+
+        // ── Eggs: incremental add/remove ──
+        val visibleEggs = mgr.getEggs().filter { !it.found }
+        val visibleEggIds = visibleEggs.map { it.id }.toSet()
+
+        // Remove eggs that are no longer visible
+        eggMarkers.keys.toList().forEach { id ->
+            if (id !in visibleEggIds) {
+                AppLog.d(TAG, "Egg $id removed (found or out of range)")
+                eggMarkers.remove(id)?.let { map.removeMarker(it) }
+                eggPolygons.remove(id)?.let { map.removePolygon(it) }
             }
+        }
 
-            mgr.getPois().forEach { poi ->
+        // Add new eggs
+        visibleEggs.forEach { egg ->
+            if (egg.id !in eggMarkers) {
+                AppLog.d(TAG, "Egg ${egg.id} added (${egg.rarity.displayName} ${egg.element.name})")
+                val color = rarityColor(egg.rarity)
+                val center = LatLng(egg.lat, egg.lng)
+                val points = createCirclePoints(center, mgr.getCatchRadiusM(egg).toDouble())
+                val poly = map.addPolygon(PolygonOptions()
+                    .addAll(points)
+                    .strokeColor(color)
+                    .fillColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)))
+                )
+                eggPolygons[egg.id] = poly
+
+                val eggKey = "egg_${egg.id}"
+                val bitmap = makeMarkerBitmap(egg.rarity)
+                val marker = map.addMarker(MarkerOptions()
+                    .position(center)
+                    .icon(getCachedIcon(eggKey, bitmap))
+                    .title(egg.displayLabel)
+                    .snippet("${egg.rarity.displayName} — ${egg.element.name}")
+                )
+                eggMarkers[egg.id] = marker
+            }
+        }
+
+        // ── POIs: incremental add/remove (capped to avoid memory explosion) ──
+        val allPois = mgr.getPois()
+        val currentPois = if (allPois.size > OutdoorManager.MAX_POIS) {
+            val loc = mgr.currentLocation
+            val sorted = if (loc != null) {
+                allPois.sortedBy { mgr.distanceMeters(it) }
+            } else allPois
+            AppLog.w(TAG, "POI overflow: ${allPois.size} > ${OutdoorManager.MAX_POIS}, capping to nearest ${OutdoorManager.MAX_POIS}")
+            sorted.take(OutdoorManager.MAX_POIS)
+        } else allPois
+        val currentPoiIds = currentPois.map { it.id }.toSet()
+
+        // Remove POIs that no longer exist
+        poiMarkers.keys.toList().forEach { id ->
+            if (id !in currentPoiIds) {
+                AppLog.d(TAG, "POI $id removed")
+                poiMarkers.remove(id)?.let { map.removeMarker(it) }
+                poiCooldownState.remove(id)
+            }
+        }
+
+        // Add or update POIs
+        currentPois.forEach { poi ->
+            val onCooldown = mgr.isPoiOnCooldown(poi)
+            val wasOnCooldown = poiCooldownState[poi.id]
+            val existing = poiMarkers[poi.id]
+            if (existing != null) {
+                // Update icon only if cooldown state changed
+                if (wasOnCooldown == null || onCooldown != wasOnCooldown) {
+                    val newBitmap = if (onCooldown) makePoiBitmapGray(poi.type) else makePoiBitmap(poi.type)
+                    existing.setIcon(getCachedIcon("poi_${poi.id}_${onCooldown}", newBitmap))
+                    // Remove stale cooldown entry from cache
+                    iconCache.remove("poi_${poi.id}_${!onCooldown}")
+                }
+            } else {
                 val latLng = LatLng(poi.lat, poi.lng)
                 if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
                     val bDef = BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType }
                     val emoji = bDef?.emoji ?: "\uD83C\uDFE0"
                     val buildingBitmap = makeBuildingBitmap(emoji, bDef?.color3D ?: 0xFF888888.toInt())
-                    map.addMarker(MarkerOptions()
+                    val marker = map.addMarker(MarkerOptions()
                         .position(latLng)
-                        .icon(iconFactory.fromBitmap(buildingBitmap))
+                        .icon(getCachedIcon("poi_${poi.id}", buildingBitmap))
                         .title(poi.name)
                         .snippet(poi.buildingType)
                     )
+                    poiMarkers[poi.id] = marker
                 } else {
-                    val bitmap = if (mgr.isPoiOnCooldown(poi)) {
-                        makePoiBitmapGray(poi.type)
-                    } else {
-                        makePoiBitmap(poi.type)
-                    }
-                    map.addMarker(MarkerOptions()
+                    val bitmap = if (onCooldown) makePoiBitmapGray(poi.type) else makePoiBitmap(poi.type)
+                    val marker = map.addMarker(MarkerOptions()
                         .position(latLng)
-                        .icon(iconFactory.fromBitmap(bitmap))
+                        .icon(getCachedIcon("poi_${poi.id}", bitmap))
                         .title(poi.name)
                         .snippet(poi.type)
                     )
+                    poiMarkers[poi.id] = marker
                 }
             }
-
-        // Phase 3: Player avatar marker + buddy + direction indicator
-        val currentLoc = mgr.currentLocation
-        if (currentLoc != null) {
-            val profile = PlayerProfileManager.myProfile
-            val level = profile?.level ?: 1
-
-            // 3.1: Player avatar (RPM or fallback)
-            val avatarDrawable = com.intelligame.huntix.avatar.AvatarMapRenderer
-                .makeAvatarMarkerDrawable(resources, 104, walkTick, level, currentHeading, this)
-            val avatarBitmap = avatarDrawable.bitmap
-            map.addMarker(MarkerOptions()
-                .position(LatLng(currentLoc.latitude, currentLoc.longitude))
-                .icon(iconFactory.fromBitmap(avatarBitmap))
-                .title("Io")
-                .snippet("Lv.$level")
-            )
-
-            // 3.2: Buddy creature marker (offset slightly)
-            val buddy = com.intelligame.huntix.managers.SurpriseManager.getAll(this)
-                .firstOrNull { it.isBuddy }
-            if (buddy != null) {
-                val creature = com.intelligame.huntix.SurpriseCreature.ALL
-                    .firstOrNull { it.id == buddy.creatureId }
-                if (creature != null) {
-                    val buddyBitmap = makeBuddyBitmap(creature.emoji)
-                    // Offset the buddy marker ~20m in a fixed direction
-                    val offsetLat = currentLoc.latitude + 0.00018
-                    val offsetLng = currentLoc.longitude + 0.00012
-                    map.addMarker(MarkerOptions()
-                        .position(LatLng(offsetLat, offsetLng))
-                        .icon(iconFactory.fromBitmap(buddyBitmap))
-                        .title(creature.name)
-                        .snippet("Compagno - ${buddy.candies} caramelle")
-                    )
-                }
-            }
-
-            // 3.3: Direction indicator (triangle pointing where player faces)
-            val dirBitmap = makeDirectionBitmap(currentHeading)
-            map.addMarker(MarkerOptions()
-                .position(LatLng(currentLoc.latitude, currentLoc.longitude))
-                .icon(iconFactory.fromBitmap(dirBitmap))
-                .title("")
-            )
+            poiCooldownState[poi.id] = onCooldown
         }
+
+        // ── Player avatar + buddy + direction: always remove & re-add ──
+        avatarMarker?.let { map.removeMarker(it); avatarMarker = null }
+        buddyMarker?.let { map.removeMarker(it); buddyMarker = null }
+        directionMarker?.let { map.removeMarker(it); directionMarker = null }
+
+        val currentLoc = mgr.currentLocation ?: return
+        val profile = PlayerProfileManager.myProfile
+        val level = profile?.level ?: 1
+
+        // Avatar
+        val avatarDrawable = com.intelligame.huntix.avatar.AvatarMapRenderer
+            .makeAvatarMarkerDrawable(resources, 104, walkTick, level, currentHeading, this)
+        val avatarBitmap = avatarDrawable.bitmap
+        avatarMarker = map.addMarker(MarkerOptions()
+            .position(LatLng(currentLoc.latitude, currentLoc.longitude))
+            .icon(getCachedIcon("avatar_$walkTick", avatarBitmap))
+            .title("Io")
+            .snippet("Lv.$level")
+        )
+
+        // Buddy
+        val buddy = com.intelligame.huntix.managers.SurpriseManager.getAll(this)
+            .firstOrNull { it.isBuddy }
+        if (buddy != null) {
+            val creature = com.intelligame.huntix.SurpriseCreature.ALL
+                .firstOrNull { it.id == buddy.creatureId }
+            if (creature != null) {
+                val buddyBitmap = makeBuddyBitmap(creature.emoji)
+                val offsetLat = currentLoc.latitude + 0.00018
+                val offsetLng = currentLoc.longitude + 0.00012
+                buddyMarker = map.addMarker(MarkerOptions()
+                    .position(LatLng(offsetLat, offsetLng))
+                    .icon(getCachedIcon("buddy_${creature.id}", buddyBitmap))
+                    .title(creature.name)
+                    .snippet("Compagno - ${buddy.candies} caramelle")
+                )
+            }
+        }
+
+        // Direction indicator — never cached (unique per heading)
+        val dirBitmap = makeDirectionBitmap(currentHeading)
+        val dirIcon = IconFactory.getInstance(this).fromBitmap(dirBitmap)
+        directionMarker = map.addMarker(MarkerOptions()
+            .position(LatLng(currentLoc.latitude, currentLoc.longitude))
+            .icon(dirIcon)
+            .title("")
+        )
+
+        // Prune stale direction and old avatar entries from iconCache
+        val staleKeys = iconCache.keys.filter { key ->
+            (key.startsWith("direction_")) ||
+            (key.startsWith("avatar_") && key.removePrefix("avatar_").toIntOrNull()?.let { tick ->
+                kotlin.math.abs(tick - walkTick) > 8 && kotlin.math.abs(tick - walkTick) < 56
+            } ?: false)
+        }
+        staleKeys.forEach { iconCache.remove(it) }
+
+        AppLog.d(TAG, "refreshMapMarkers: DONE — eggs=${eggMarkers.size} pois=${poiMarkers.size} avatar=${avatarMarker != null} iconCache=${iconCache.size} mem=${availMb}MB")
+    }
+    
+    // Track map movement to prevent excessive redraws during panning
+    private val lastMapUpdate = AtomicLong(0L)
+    private fun checkMapUpdateRequired(): Boolean {
+        val now = System.currentTimeMillis()
+        val minInterval = 5000L // Minimum 5 seconds between full marker redraws
+        if (now - lastMapUpdate.get() < minInterval) {
+            return false
+        }
+        lastMapUpdate.set(now)
+        return true
+    }
+
+    private fun getCachedIcon(key: String, bitmap: Bitmap): org.maplibre.android.annotations.Icon {
+        return iconCache.getOrPut(key) {
+            IconFactory.getInstance(this).fromBitmap(bitmap)
         }
     }
 
@@ -677,9 +901,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
     // ─── Phase 1.3: Screenshot ────────────────────────────────
 
     private fun takeScreenshot() {
+        var bitmap: Bitmap? = null
         try {
             val rootView = window.decorView.rootView
-            val bitmap = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
+            bitmap = Bitmap.createBitmap(rootView.width, rootView.height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             rootView.draw(canvas)
 
@@ -702,6 +927,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
             startActivity(Intent.createChooser(share, "Condividi screenshot"))
         } catch (e: Exception) {
             Toast.makeText(this, "Screenshot non disponibile", Toast.LENGTH_SHORT).show()
+        } finally {
+            bitmap?.recycle()
         }
     }
 
@@ -823,10 +1050,30 @@ class OutdoorWorldActivity : BaseNavActivity() {
         hideBottomSheet()
     }
 
-    private fun openBuilding(poi: OutdoorManager.Poi) {
-        val bDef = BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType } ?: return
+    private fun openBuilding(poi: OutdoorManager.Poi, bt: BuildingType?) {
+        val bDef = bt?.let { t -> BuildingDefs.BUILDINGS.find { it.type == t } }
+            ?: BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType }
+            ?: return
         startActivity(Intent(this, BuildingInteriorActivity::class.java).apply {
             putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, bDef.type.ordinal)
+            putExtra(BuildingInteriorActivity.EXTRA_POI_NAME, poi.name)
+            if (poi.url.isNotBlank()) putExtra(BuildingInteriorActivity.EXTRA_POI_URL, poi.url)
+        })
+        hideBottomSheet()
+    }
+
+    private fun openWebView(poi: OutdoorManager.Poi) {
+        startActivity(Intent(this, POIWebViewActivity::class.java).apply {
+            putExtra(POIWebViewActivity.EXTRA_URL, poi.url)
+            putExtra(POIWebViewActivity.EXTRA_TITLE, poi.name)
+        })
+        hideBottomSheet()
+    }
+
+    private fun openCustomPage(poi: OutdoorManager.Poi) {
+        startActivity(Intent(this, POICustomPageActivity::class.java).apply {
+            putExtra(POICustomPageActivity.EXTRA_JSON_URL, poi.url)
+            putExtra(POICustomPageActivity.EXTRA_POI_NAME, poi.name)
         })
         hideBottomSheet()
     }

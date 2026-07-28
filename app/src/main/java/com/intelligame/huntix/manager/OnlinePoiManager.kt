@@ -1,6 +1,7 @@
 package com.intelligame.huntix.manager
 
 import android.content.Context
+import com.intelligame.huntix.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -69,13 +70,14 @@ class OnlinePoiManager {
         context: Context,
         lat: Double,
         lng: Double,
+        maxPois: Int = 500,
         category: String? = null
     ): Result<List<OnlinePoi>> = withContext(Dispatchers.IO) {
         try {
             // 1. Se la città non è cambiata e cache valida (< 24h), usa cache
             val regionSlug = findRegion(lat, lng)
             if (regionSlug == null) {
-                return@withContext Result.success(fetchFromGlobal())
+                return@withContext Result.success(fetchFromGlobal(lat, lng, maxPois))
             }
 
             // 2. Trova la città più vicina
@@ -84,19 +86,24 @@ class OnlinePoiManager {
 
             if (nearestCity != null && nearestCity.slug == cachedCitySlug && cachedPois != null
                 && System.currentTimeMillis() - cachedTime < 24 * 60 * 60 * 1000L) {
-                android.util.Log.d("OnlinePoi", "Cache hit: ${nearestCity.name}")
-                return@withContext Result.success(cachedPois!!)
+                AppLog.d("OnlinePoi", "Cache hit: ${nearestCity.name} (${cachedPois!!.size} POIs)")
+                val cached = cachedPois!!
+                val pois = if (cached.size > maxPois) {
+                    val sorted = cached.sortedBy { haversine(lat, lng, it.lat, it.lng) }
+                    sorted.take(maxPois)
+                } else cached
+                return@withContext Result.success(pois)
             }
 
-            // 3. Scarica POI della città
+            // 3. Scarica POI della città (già filtrati per distanza)
             val pois = if (nearestCity != null) {
-                fetchCityPois(regionSlug, nearestCity.slug)
+                fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
             } else {
                 // Fallback: scarica tutta la regione
-                fetchRegionPois(regionSlug)
+                fetchRegionPois(regionSlug, lat, lng, maxPois)
             }
 
-            // 4. Salva in cache
+            // 4. Salva in cache (filtered list for offline use)
             cachedCitySlug = nearestCity?.slug
             cachedPois = pois
             cachedTime = System.currentTimeMillis()
@@ -125,7 +132,7 @@ class OnlinePoiManager {
     ): Result<List<OnlinePoi>> {
         val centerLat = (southwestLat + northeastLat) / 2
         val centerLng = (southwestLng + northeastLng) / 2
-        return fetchPoiForLocation(context, centerLat, centerLng, category)
+        return fetchPoiForLocation(context, centerLat, centerLng, category = category)
     }
 
     // --- PRIVATE ---
@@ -191,24 +198,24 @@ class OnlinePoiManager {
     }
 
     /** Fetch italia/{regione}/{citta}/_all.csv */
-    private fun fetchCityPois(regionSlug: String, citySlug: String): List<OnlinePoi> {
+    private fun fetchCityPois(regionSlug: String, citySlug: String, refLat: Double, refLng: Double, maxPois: Int): List<OnlinePoi> {
         val url = "$BASE_URL/italia/$regionSlug/$citySlug/_all.csv"
         val text = httpGet(url) ?: return emptyList()
-        return parseCsv(text)
+        return parseCsvNearest(text, refLat, refLng, maxPois)
     }
 
     /** Fetch italia/{regione}/_all.csv (fallback regione intera) */
-    private fun fetchRegionPois(regionSlug: String): List<OnlinePoi> {
+    private fun fetchRegionPois(regionSlug: String, refLat: Double, refLng: Double, maxPois: Int): List<OnlinePoi> {
         val url = "$BASE_URL/italia/$regionSlug/_all.csv"
-        val text = httpGet(url) ?: return fetchFromGlobal()
-        return parseCsv(text)
+        val text = httpGet(url) ?: return fetchFromGlobal(refLat, refLng, maxPois)
+        return parseCsvNearest(text, refLat, refLng, maxPois)
     }
 
     /** Fetch global_pois.csv (ultimo fallback) */
-    private fun fetchFromGlobal(): List<OnlinePoi> {
+    private fun fetchFromGlobal(refLat: Double, refLng: Double, maxPois: Int): List<OnlinePoi> {
         val url = "$BASE_URL/global_pois.csv"
         val text = httpGet(url) ?: return fallbackPois()
-        return parseCsv(text)
+        return parseCsvNearest(text, refLat, refLng, maxPois)
     }
 
     /** HTTP GET semplice */
@@ -226,25 +233,34 @@ class OnlinePoiManager {
         }
     }
 
-    /** Parse CSV: lat,lng,id,name,building_type,type */
-    private fun parseCsv(csv: String): List<OnlinePoi> {
-        val pois = mutableListOf<OnlinePoi>()
+    /** Parse CSV keeping only the closest maxPois to (refLat, refLng) — O(N log K) */
+    private fun parseCsvNearest(csv: String, refLat: Double, refLng: Double, maxPois: Int): List<OnlinePoi> {
+        if (maxPois <= 0) return emptyList()
+        // Max-heap: farthest at top, so we can evict it when over capacity
+        val heap = java.util.PriorityQueue<OnlinePoi>(maxPois + 1) { a, b ->
+            val da = haversine(refLat, refLng, b.lat, b.lng).toDouble()
+            val db = haversine(refLat, refLng, a.lat, a.lng).toDouble()
+            da.compareTo(db)
+        }
         for (line in csv.lines()) {
             if (line.startsWith("#") || line.isBlank()) continue
             val parts = line.split(",")
             if (parts.size < 6) continue
             val lat = parts[0].toDoubleOrNull() ?: continue
             val lng = parts[1].toDoubleOrNull() ?: continue
-            pois.add(OnlinePoi(
+            val poi = OnlinePoi(
                 id = parts[2].trim(),
                 name = parts[3].trim().removeSurrounding("\""),
-                lat = lat,
-                lng = lng,
+                lat = lat, lng = lng,
                 buildingType = parts[4].trim(),
-                poiType = parts[5].trim()
-            ))
+                poiType = parts[5].trim(),
+                url = if (parts.size >= 7) parts[6].trim().removeSurrounding("\"") else "",
+                pageType = if (parts.size >= 8) parts[7].trim().removeSurrounding("\"") else ""
+            )
+            heap.add(poi)
+            if (heap.size > maxPois) heap.poll()
         }
-        return pois
+        return heap.sortedBy { haversine(refLat, refLng, it.lat, it.lng) }
     }
 
     // --- CACHE OFFLINE ---
@@ -255,10 +271,32 @@ class OnlinePoiManager {
             FileWriter(cacheFile).use { writer ->
                 writer.write("$regionSlug,$citySlug\n")
                 for (p in pois) {
-                    writer.write("${p.lat},${p.lng},${p.id},${p.name},${p.buildingType},${p.poiType}\n")
+                    writer.write("${p.lat},${p.lng},${p.id},${p.name},${p.buildingType},${p.poiType},${p.url},${p.pageType}\n")
                 }
             }
         } catch (_: Exception) {}
+    }
+
+    /** Simple parse for offline cache (file is already limited) */
+    private fun parseCsvAll(csv: String): List<OnlinePoi> {
+        val pois = mutableListOf<OnlinePoi>()
+        for (line in csv.lines()) {
+            if (line.startsWith("#") || line.isBlank()) continue
+            val parts = line.split(",")
+            if (parts.size < 6) continue
+            val lat = parts[0].toDoubleOrNull() ?: continue
+            val lng = parts[1].toDoubleOrNull() ?: continue
+            pois.add(OnlinePoi(
+                id = parts[2].trim(),
+                name = parts[3].trim().removeSurrounding("\""),
+                lat = lat, lng = lng,
+                buildingType = parts[4].trim(),
+                poiType = parts[5].trim(),
+                url = if (parts.size >= 7) parts[6].trim().removeSurrounding("\"") else "",
+                pageType = if (parts.size >= 8) parts[7].trim().removeSurrounding("\"") else ""
+            ))
+        }
+        return pois
     }
 
     private fun loadCachedPois(context: Context): List<OnlinePoi>? {
@@ -268,15 +306,27 @@ class OnlinePoiManager {
             val lines = cacheFile.readLines()
             if (lines.isEmpty()) return null
             // Skip header line (region,city)
-            return parseCsv(lines.drop(1).joinToString("\n"))
+            return parseCsvAll(lines.drop(1).joinToString("\n"))
         } catch (_: Exception) {
             return null
         }
     }
 
+    private fun haversine(la1: Double, ln1: Double, la2: Double, ln2: Double): Float {
+        val R = 6371000.0
+        val dLat = Math.toRadians(la2 - la1)
+        val dLng = Math.toRadians(ln2 - ln1)
+        val sinDLat = Math.sin(dLat / 2)
+        val sinDLng = Math.sin(dLng / 2)
+        val a = sinDLat * sinDLat +
+                Math.cos(Math.toRadians(la1)) * Math.cos(Math.toRadians(la2)) *
+                sinDLng * sinDLng
+        return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFloat()
+    }
+
     private fun fallbackPois(): List<OnlinePoi> {
         return listOf(
-            OnlinePoi("poi_roma_colosseo", "Colosseo", 41.8902, 12.4924, "landmark", "monumento"),
+            OnlinePoi("poi_roma_colosseo", "Colosseo", 41.8902, 12.4924, "landmark", "monumento", "https://www.colosseo.it"),
             OnlinePoi("poi_roma_piazza_venezia", "Piazza Venezia", 41.8954, 12.4843, "square", "piazza"),
             OnlinePoi("poi_roma_fontana_di_trevi", "Fontana di Trevi", 41.9010, 12.4830, "fountain", "monumento"),
             OnlinePoi("poi_roma_pantheon", "Pantheon", 41.8980, 12.4769, "building", "monumento"),
@@ -292,5 +342,7 @@ data class OnlinePoi(
     val lat: Double,
     val lng: Double,
     val buildingType: String,
-    val poiType: String
+    val poiType: String,
+    val url: String = "",
+    val pageType: String = ""
 )

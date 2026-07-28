@@ -1,6 +1,7 @@
 package com.intelligame.huntix.ui
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -23,6 +24,8 @@ class BuildingInteriorActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_BUILDING_TYPE = "building_type"
+        const val EXTRA_POI_NAME = "poi_name"
+        const val EXTRA_POI_URL = "poi_url"
     }
 
     private lateinit var building: com.intelligame.huntix.reallife.BuildingDef
@@ -42,6 +45,7 @@ class BuildingInteriorActivity : AppCompatActivity() {
 
         val typeOrdinal = intent.getIntExtra(EXTRA_BUILDING_TYPE, 0)
         building = BuildingDefs.BUILDINGS[typeOrdinal]
+        val poiName = intent.getStringExtra(EXTRA_POI_NAME)
         needs = LocalNeeds.load(this).toMutableMap()
 
         val bgColor = darken(building.color3D, 0.15f)
@@ -67,7 +71,7 @@ class BuildingInteriorActivity : AppCompatActivity() {
             isClickable = true; setOnClickListener { finish() }
         })
         topBar.addView(TextView(this).apply {
-            text = "${building.emoji}  ${building.name}"
+            text = "${building.emoji}  ${poiName ?: building.name}"
             textSize = 18f; setTextColor(Color.WHITE)
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             setPadding(UiKit.dp(this@BuildingInteriorActivity, 8), 0, 0, 0)
@@ -129,6 +133,28 @@ class BuildingInteriorActivity : AppCompatActivity() {
         }
         actionsCard.addView(actionsRow)
         root.addView(actionsCard)
+
+        // ── Web link button (if POI has URL) ──
+        val poiUrl = intent.getStringExtra(EXTRA_POI_URL)
+        if (!poiUrl.isNullOrBlank()) {
+            val linkBtn = Button(this).apply {
+                text = "\uD83C\uDF10  Apri Sito"
+                setTextColor(Color.WHITE)
+                textSize = 14f
+                typeface = Typeface.DEFAULT_BOLD
+                setBackgroundColor(0x3300BCD4.toInt())
+                setPadding(
+                    UiKit.dp(this@BuildingInteriorActivity, 14),
+                    UiKit.dp(this@BuildingInteriorActivity, 10),
+                    UiKit.dp(this@BuildingInteriorActivity, 14),
+                    UiKit.dp(this@BuildingInteriorActivity, 10)
+                )
+                setOnClickListener {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(poiUrl)))
+                }
+            }
+            root.addView(linkBtn)
+        }
 
         // ── Needs bars ──
         val needsCard = LinearLayout(this).apply {

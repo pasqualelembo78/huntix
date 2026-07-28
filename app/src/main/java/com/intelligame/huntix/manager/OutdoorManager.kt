@@ -1,8 +1,12 @@
 package com.intelligame.huntix.manager
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import com.intelligame.huntix.AppLog
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -41,6 +45,8 @@ class OutdoorManager private constructor() : SensorEventListener {
         val lng: Double,
         val type: String = "gym",
         val buildingType: String = "",
+        val url: String = "",
+        val pageType: String = "",
         var spun: Boolean = false,
         var spunAt: Long = 0L
     )
@@ -59,6 +65,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         private const val DEFAULT_LAT = 41.9028
         private const val DEFAULT_LNG = 12.4964
         private const val RESPAWN_THRESHOLD_M = 150f
+        const val MAX_POIS = 500
         const val POI_COOLDOWN_MS = 5 * 60 * 1000L  // 5 minutes
         const val LEVER_COOLDOWN_MS = 5_000L
     }
@@ -93,6 +100,25 @@ class OutdoorManager private constructor() : SensorEventListener {
     private var appCtx: Context? = null
 
     private var scope: CoroutineScope? = null
+
+    private val providerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            val lm = locationManager ?: return
+            if (!listening && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                try {
+                    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 5f, listener)
+                    listening = true
+                    AppLog.d("OutdoorManager", "GPS diventato disponibile, listener registrato")
+                } catch (_: Exception) {}
+                val lastLoc = try { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+                if (lastLoc != null) {
+                    currentLocation = lastLoc
+                    ensureSpawns(lastLoc)
+                }
+            }
+        }
+    }
 
     fun start(ctx: Context) {
         activeClients++
@@ -140,6 +166,10 @@ class OutdoorManager private constructor() : SensorEventListener {
             } catch (e: Exception) { Sentry.captureException(e) }
         }
         listening = started
+        // Register provider change receiver to catch GPS activation later
+        try {
+            ctx.registerReceiver(providerReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION))
+        } catch (_: Exception) {}
         currentLocation?.let { loc ->
             WeatherZoneManager.refreshAsync(ctx, loc.latitude, loc.longitude)
         }
@@ -193,6 +223,7 @@ class OutdoorManager private constructor() : SensorEventListener {
             try { locationManager?.removeUpdates(listener) } catch (_: Exception) {}
             listening = false
         }
+        try { appCtx?.unregisterReceiver(providerReceiver) } catch (_: Exception) {}
         if (sensorsRegistered) {
             try { sensorManager?.unregisterListener(this) } catch (_: Exception) {}
             sensorsRegistered = false
@@ -315,7 +346,7 @@ class OutdoorManager private constructor() : SensorEventListener {
                 pois.clear()
                 pois.addAll(newPois)
             }
-            android.util.Log.e("OutdoorManager", "regenerate error: ${e.message}")
+            AppLog.e("OutdoorManager", "regenerate error: ${e.message}")
         }
 
         fetchOnlinePoisAsync(loc, setupRadius.toDouble())
@@ -338,7 +369,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         scope?.launch {
             try {
                 // Usa la posizione corrente (reale o simulata dalla levetta)
-                val result = mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude)
+                val result = mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude, maxPois = MAX_POIS)
                 result.onSuccess { onlinePois ->
                     val newPois = onlinePois.mapNotNull { op ->
                         if (op.id == "house_player") return@mapNotNull null
@@ -348,18 +379,29 @@ class OutdoorManager private constructor() : SensorEventListener {
                             lat = op.lat,
                             lng = op.lng,
                             type = op.poiType,
-                            buildingType = op.buildingType
+                            buildingType = op.buildingType,
+                            url = op.url,
+                            pageType = op.pageType
                         )
                     }
                     withContext(Dispatchers.Main) {
                         val onlineIds = newPois.map { it.id }.toSet()
                         pois.removeAll { it.id in onlineIds }
                         pois.addAll(newPois)
-                        android.util.Log.d("OutdoorManager", "Online POI caricati: ${newPois.size}")
+                        if (pois.size > MAX_POIS) {
+                            val loc = currentLocation
+                            if (loc != null) {
+                                pois.sortBy { haversine(loc.latitude, loc.longitude, it.lat, it.lng) }
+                            }
+                            while (pois.size > MAX_POIS) {
+                                pois.removeAt(pois.lastIndex)
+                            }
+                        }
+                        AppLog.d("OutdoorManager", "Online POI caricati: ${newPois.size}, total: ${pois.size}")
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.w("OutdoorManager", "fetchOnlinePois fallito: ${e.message}")
+                AppLog.w("OutdoorManager", "fetchOnlinePois fallito: ${e.message}")
             }
         }
     }

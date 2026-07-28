@@ -186,6 +186,35 @@ object BuildingDefs {
         return null
     }
 
+    /** Mappa un POI (buildingType + poiType) a BuildingType per attività interattiva */
+    fun resolveBuildingType(buildingType: String, poiType: String): BuildingType? {
+        // Try uppercase enum name first (Overture style: HOSPITAL, RESTAURANT, GYM...)
+        try { return BuildingType.valueOf(buildingType.uppercase()) } catch (_: Exception) {}
+        try { return BuildingType.valueOf(poiType.uppercase()) } catch (_: Exception) {}
+        // Fallback: mappa nomi italiani e inglesi lowercase
+        return mapOf(
+            "hospital" to BuildingType.HOSPITAL,
+            "hospitals" to BuildingType.HOSPITAL,
+            "ristorante" to BuildingType.RESTAURANT,
+            "ristoranti" to BuildingType.RESTAURANT,
+            "restaurant" to BuildingType.RESTAURANT,
+            "restaurants" to BuildingType.RESTAURANT,
+            "bar_cafe" to BuildingType.RESTAURANT,
+            "bar" to BuildingType.RESTAURANT,
+            "cafe" to BuildingType.RESTAURANT,
+            "palestra" to BuildingType.GYM,
+            "palestre" to BuildingType.GYM,
+            "gym" to BuildingType.GYM,
+            "gyms" to BuildingType.GYM,
+            "fitness" to BuildingType.GYM,
+            "monumento" to BuildingType.MONUMENT,
+            "monumenti" to BuildingType.MONUMENT,
+            "monument" to BuildingType.MONUMENT,
+            "museo" to BuildingType.MUSEUM,
+            "museum" to BuildingType.MUSEUM,
+        )[poiType.lowercase().trim()]
+    }
+
     /** Lista dei blocchi occupati da edifici speciali (per escluderli dalla generazione procedurale) */
     fun occupiedBlocks(): List<Pair<Float, Float>> {
         return BUILDINGS.map { b ->
