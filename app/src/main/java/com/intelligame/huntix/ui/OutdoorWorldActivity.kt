@@ -95,6 +95,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var tvSheetHunt: TextView
     private lateinit var btnSheetAr: LinearLayout
     private lateinit var tvSheetAr: TextView
+    private lateinit var btnReportPosition: TextView
     private var activeEggId: String? = null
     private var activePoiId: String? = null
     private var lastReportTime = 0L
@@ -179,6 +180,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetHunt = findViewById(R.id.tvSheetHunt)
         btnSheetAr = findViewById(R.id.btnSheetAr)
         tvSheetAr = findViewById(R.id.tvSheetAr)
+        btnReportPosition = findViewById(R.id.btnReportPosition)
 
         // Phase 1 bindings
         tvPlayerLevel = findViewById(R.id.tvPlayerLevel)
@@ -230,6 +232,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
             }
 
             map.addOnMapClickListener { point ->
+                val correctionPoi = positionCorrectionPoi
+                if (correctionPoi != null) {
+                    positionCorrectionPoi = null
+                    savePositionCorrection(correctionPoi, point.latitude, point.longitude)
+                    return@addOnMapClickListener true
+                }
                 hideBottomSheet()
                 showReportPoiDialog(point.latitude, point.longitude)
                 true
@@ -336,6 +344,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         btnSheetAr.setOnClickListener {
             activeEggId?.let { doArNavigation(it) }
+        }
+
+        btnReportPosition.setOnClickListener {
+            val poiId = activePoiId ?: return@setOnClickListener
+            val poi = mgr.getPois().firstOrNull { it.id == poiId } ?: return@setOnClickListener
+            showReportPositionCorrectionDialog(poi)
         }
 
         badgeWeather.setOnClickListener {
@@ -1018,6 +1032,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetHunt.text = "\uD83C\uDFAF Cattura"
         btnSheetHunt.visibility = View.VISIBLE
         btnSheetAr.visibility = View.VISIBLE
+        btnReportPosition.visibility = View.GONE
         bottomSheet.visibility = View.VISIBLE
 
         // Phase 5.1: Show progress di schiusa if this egg is in termocolla
@@ -1033,6 +1048,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetHunt.text = "Spinna"
         btnSheetHunt.visibility = View.VISIBLE
         btnSheetAr.visibility = View.GONE
+        btnReportPosition.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
     }
 
@@ -1166,6 +1182,115 @@ class OutdoorWorldActivity : BaseNavActivity() {
             Toast.makeText(this, "Segnalazione inviata: grazie!", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Errore salvataggio", Toast.LENGTH_SHORT).show()
+            AppLog.e("ReportPoi", e.message ?: "unknown error")
+        }
+    }
+
+    private fun showReportPositionCorrectionDialog(poi: OutdoorManager.Poi) {
+        val now = System.currentTimeMillis()
+        if (now - lastReportTime < REPORT_COOLDOWN_MS) {
+            Toast.makeText(this, "Aspetta un momento prima di segnalare di nuovo", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (reportsThisSession >= MAX_REPORTS_PER_SESSION) {
+            Toast.makeText(this, "Limite di ${MAX_REPORTS_PER_SESSION} segnalazioni raggiunto in questa sessione", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        reportsThisSession++
+        lastReportTime = now
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 8),
+                UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 8))
+        }
+
+        val txtInfo = TextView(this).apply {
+            text = "Posizione attuale: ${poi.lat}, ${poi.lng}\nToca la mappa per selezionare la posizione corretta"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, UiKit.dp(this@OutdoorWorldActivity, 12))
+        }
+        container.addView(txtInfo)
+
+        val btnSelectOnMap = TextView(this).apply {
+            text = "Seleziona sulla mappa"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setBackgroundResource(R.drawable.btn_accent)
+            setPadding(UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 12),
+                UiKit.dp(this@OutdoorWorldActivity, 16),
+                UiKit.dp(this@OutdoorWorldActivity, 12))
+            gravity = android.view.Gravity.CENTER
+            isClickable = true
+            setOnClickListener {
+                hideBottomSheet()
+                startPositionCorrectionMode(poi)
+            }
+        }
+        container.addView(btnSelectOnMap)
+
+        val btnCancel = TextView(this).apply {
+            text = "Annulla"
+            textSize = 14f
+            setTextColor(0x88FFFFFF.toInt())
+            setPadding(0, UiKit.dp(this@OutdoorWorldActivity, 12), 0, 0)
+            gravity = android.view.Gravity.CENTER
+            isClickable = true
+            setOnClickListener {
+                reportsThisSession--
+                hideBottomSheet()
+            }
+        }
+        container.addView(btnCancel)
+
+        AlertDialog.Builder(this).apply {
+            setTitle("Correggi posizione")
+            setView(container)
+            show()
+        }
+    }
+
+    private var positionCorrectionPoi: OutdoorManager.Poi? = null
+
+    private fun startPositionCorrectionMode(poi: OutdoorManager.Poi) {
+        positionCorrectionPoi = poi
+        Toast.makeText(this, "Tocca la mappa per selezionare la posizione corretta", Toast.LENGTH_LONG).show()
+    }
+
+    private fun savePositionCorrection(poi: OutdoorManager.Poi, correctedLat: Double, correctedLng: Double) {
+        try {
+            val correctionsFile = File(filesDir, "poi_position_corrections.json")
+            val existing = mutableListOf<JSONObject>()
+            if (correctionsFile.exists()) {
+                val content = correctionsFile.readText()
+                if (content.isNotBlank()) {
+                    val arr = JSONArray(content)
+                    for (i in 0 until arr.length()) {
+                        existing.add(arr.getJSONObject(i))
+                    }
+                }
+            }
+            existing.add(JSONObject().apply {
+                put("poiId", poi.id)
+                put("poiName", poi.name)
+                put("originalLat", poi.lat)
+                put("originalLng", poi.lng)
+                put("correctedLat", correctedLat)
+                put("correctedLng", correctedLng)
+                put("timestamp", System.currentTimeMillis())
+            })
+            val outArr = JSONArray(existing)
+            correctionsFile.writeText(outArr.toString(2))
+            Toast.makeText(this, "Correzione posizione inviata: grazie!", Toast.LENGTH_SHORT).show()
+            lastReportLat = correctedLat
+            lastReportLng = correctedLng
+        } catch (e: Exception) {
+            Toast.makeText(this, "Errore salvataggio correzione", Toast.LENGTH_SHORT).show()
             AppLog.e("ReportPoi", e.message ?: "unknown error")
         }
     }

@@ -397,6 +397,20 @@
                     android:textColor="#FFFFFF"
                     android:textStyle="bold" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/btnReportPosition"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:background="@drawable/btn_purple"
+                android:padding="10dp"
+                android:layout_marginTop="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="Segnala posizione errata"
+                android:textSize="12sp"
+                android:textColor="#B0BEC5" />
         </LinearLayout>
     </LinearLayout>
 
