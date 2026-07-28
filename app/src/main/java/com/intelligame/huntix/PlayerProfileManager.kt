@@ -417,8 +417,8 @@ object PlayerProfileManager {
             "egg_inventory_prefs",
             // Sorprese / Borsa
             "surprise_inventory_v1",
-            // Buddy
-            "buddy_manager_v1",
+            // Fidato
+            "fidato_manager_v1",
             // Camminata
             "walking_reward_prefs", "walking_rewards_v1",
             // POI
@@ -474,9 +474,9 @@ object PlayerProfileManager {
 
     // ─── Buddy Creature ───────────────────────────────────────────
 
-    fun setBuddyCreature(creatureId: String, onComplete: (() -> Unit)? = null) {
+    fun setFidatoCreature(creatureId: String, onComplete: (() -> Unit)? = null) {
         val p = _myProfile ?: return
-        p.buddyCreatureId = creatureId
+        p.fidatoCreatureId = creatureId
         saveProfile(p) { onComplete?.invoke() }
     }
 

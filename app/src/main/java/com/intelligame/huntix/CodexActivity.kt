@@ -11,7 +11,7 @@ import android.widget.TextView
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.SurpriseManager
 
-class PokedexActivity : BaseNavActivity() {
+class CodexActivity : BaseNavActivity() {
 
     override fun activeTab() = ""
 
@@ -29,7 +29,7 @@ class PokedexActivity : BaseNavActivity() {
         val pct = if (total > 0) (found * 100 / total) else 0
 
         val children = mutableListOf<View>(
-            UiKit.title(c, "Pokédex", "📖"),
+            UiKit.title(c, "Enciclopedia", "📖"),
             UiKit.subtitle(c, "$found / $total creature scoperte ($pct%)")
         )
 

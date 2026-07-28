@@ -14,7 +14,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.managers.DistanceTracker
-import com.intelligame.huntix.managers.IncubatorManager
+import com.intelligame.huntix.managers.TermocullaManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.ui.EggOpeningAnimationActivity
 
@@ -22,7 +22,7 @@ class HatchingActivity : BaseNavActivity() {
 
     override fun activeTab() = "Uova"
 
-    private lateinit var incubatorsBox: LinearLayout
+    private lateinit var termocullasBox: LinearLayout
     private lateinit var activeBox: LinearLayout
     private lateinit var pendingBox: LinearLayout
     private lateinit var hatchedBox: LinearLayout
@@ -38,7 +38,7 @@ class HatchingActivity : BaseNavActivity() {
         super.onCreate(savedInstanceState)
         val c = this
 
-        incubatorsBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        termocullasBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         activeBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         pendingBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         hatchedBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
@@ -54,7 +54,7 @@ class HatchingActivity : BaseNavActivity() {
                 startActivity(Intent(c, com.intelligame.huntix.ui.BattleActivity::class.java))
             },
             kmLabel,
-            UiKit.section(c, "Incubatrici"), incubatorsBox,
+            UiKit.section(c, "Termoculle"), termocullasBox,
             UiKit.section(c, "In Schiusura"), activeBox,
             UiKit.section(c, "Da Schiudere"), pendingBox,
             UiKit.section(c, "Collezione"), hatchedBox
@@ -63,7 +63,7 @@ class HatchingActivity : BaseNavActivity() {
 
         // Start distance tracking
         if (!DistanceTracker.isListening(c)) {
-            DistanceTracker.startListening(c) { /* distance fed to incubators internally */ }
+            DistanceTracker.startListening(c) { /* distance fed to termocullas internally */ }
         }
 
         render()
@@ -71,7 +71,7 @@ class HatchingActivity : BaseNavActivity() {
 
     private fun render() {
         val c = this
-        incubatorsBox.removeAllViews()
+        termocullasBox.removeAllViews()
         activeBox.removeAllViews()
         pendingBox.removeAllViews()
         hatchedBox.removeAllViews()
@@ -80,20 +80,20 @@ class HatchingActivity : BaseNavActivity() {
         val sessionSteps = DistanceTracker.getSessionSteps(c)
         kmLabel.text = "🚶 %.2f km totali · %d passi sessione".format(totalKm, sessionSteps)
 
-        // Incubators
-        val incubators = IncubatorManager.getIncubators(c)
-        val activeEggs = IncubatorManager.getActiveEggs(c)
-        incubators.forEach { inc ->
-            val activeEgg = activeEggs.firstOrNull { it.incubatorId == inc.id }
+        // Termocullas
+        val termocullas = TermocullaManager.getTermocullas(c)
+        val activeEggs = TermocullaManager.getActiveEggs(c)
+        termocullas.forEach { inc ->
+            val activeEgg = activeEggs.firstOrNull { it.termocullaId == inc.id }
             val status = when {
                 inc.isBroken && activeEgg == null -> "❌ Rotta"
                 activeEgg != null && activeEgg.isReady -> "✅ Pronta!"
                 activeEgg != null -> "🚶 %.1f/%.1f km".format(activeEgg.distanceWalked, activeEgg.distanceRequired)
                 else -> "🟢 Libera"
             }
-            val usesText = if (inc.isUnlimited) "∞ usi" else "${inc.usesRemaining} usi"
+            val usesText = if (inc.isIllimitato) "∞ usi" else "${inc.usiRimanenti} usi"
 
-            incubatorsBox.addView(UiKit.card(c,
+            termocullasBox.addView(UiKit.card(c,
                 TextView(c).apply {
                     text = "${inc.name}  ·  $usesText"
                     textSize = 13f; setTextColor(Color.WHITE)
@@ -107,7 +107,7 @@ class HatchingActivity : BaseNavActivity() {
             ))
         }
 
-        // Active eggs in incubators
+        // Active eggs in termocullas
         activeEggs.forEach { egg ->
             val rarity = egg.rarity
             val ready = egg.isReady
@@ -136,11 +136,11 @@ class HatchingActivity : BaseNavActivity() {
 
             if (ready) {
                 card.addView(UiKit.button(c, "🎉 Raccogli", UiKit.GREEN) {
-                    val collected = IncubatorManager.collectHatchedEgg(c, egg.instanceId)
+                    val collected = TermocullaManager.collectHatchedEgg(c, egg.istanzaId)
                     if (collected != null) {
                         val rarity2 = EggRarity.fromId(collected.rarityId)
                         SavedManager.addPendingEgg(c, EggInventoryItem(
-                            instanceId = collected.instanceId,
+                            istanzaId = collected.istanzaId,
                             rarityId = collected.rarityId,
                             fantasyName = collected.fantasyName,
                             power = rarity2.basePower
@@ -156,16 +156,16 @@ class HatchingActivity : BaseNavActivity() {
         }
 
         if (activeEggs.isEmpty()) {
-            activeBox.addView(UiKit.comingSoon(c, "Nessuna uova in incubatrice", "Seleziona un uova da schiudere qui sotto."))
+            activeBox.addView(UiKit.comingSoon(c, "Nessuna uova in termoculla", "Seleziona un uova da schiudere qui sotto."))
         }
 
-        // Pending eggs (not yet incubated)
+        // Pending eggs (non ancora in schiusa)
         val pending = SavedManager.getPendingEggs(c)
         if (pending.isEmpty()) pendingBox.addView(UiKit.comingSoon(c, "Nessuna uova", "Gioca per ottenere uova!"))
         pending.forEach { item ->
             val rarity = EggRarity.fromId(item.rarityId)
-            val distLabel = IncubatorManager.distanceLabelForRarity(rarity)
-            val freeIncubators = IncubatorManager.getFreeIncubators(c)
+            val distLabel = TermocullaManager.distanceLabelForRarity(rarity)
+            val freeTermocullas = TermocullaManager.getFreeTermocullas(c)
 
             pendingBox.addView(UiKit.card(c,
                 TextView(c).apply {
@@ -179,12 +179,12 @@ class HatchingActivity : BaseNavActivity() {
                     setPadding(0, UiKit.dp(c, 4), 0, UiKit.dp(c, 8))
                 },
                 UiKit.button(c,
-                    if (freeIncubators.isNotEmpty()) "🧬 Metti in incubatrice" else "❌ Nessuna incubatrice libera",
-                    if (freeIncubators.isNotEmpty()) UiKit.PURPLE else "#444"
+                    if (freeTermocullas.isNotEmpty()) "🧬 Metti in termoculla" else "❌ Nessuna termoculla libera",
+                    if (freeTermocullas.isNotEmpty()) UiKit.PURPLE else "#444"
                 ) {
-                    if (freeIncubators.isNotEmpty()) {
-                        if (IncubatorManager.startIncubation(c, item, freeIncubators.first().id)) {
-                            SavedManager.removePendingEgg(c, item.instanceId)
+                    if (freeTermocullas.isNotEmpty()) {
+                        if (TermocullaManager.startSchiusa(c, item, freeTermocullas.first().id)) {
+                            SavedManager.removePendingEgg(c, item.istanzaId)
                             render()
                         }
                     }

@@ -44,7 +44,7 @@ class HomeActivity : BaseNavActivity() {
         try {
             SavedManager.accrueInstallRewards(this)
             SavedManager.accrueMiningRewards(this)
-            // Start distance tracking for incubators
+            // Start distance tracking for termocullas
             if (!DistanceTracker.isListening(this)) {
                 DistanceTracker.startListening(this) { /* handled internally */ }
             }
@@ -303,7 +303,7 @@ class HomeActivity : BaseNavActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW)
         }
-        row3.addView(gameTile("\uD83E\uDD5A", "UOVA", "Incubatrici e schiusa", "#9C27B0", "#4A148C") { startActivity(Intent(this, HatchingActivity::class.java)) })
+        row3.addView(gameTile("\uD83E\uDD5A", "UOVA", "Termoculle e schiusa", "#9C27B0", "#4A148C") { startActivity(Intent(this, HatchingActivity::class.java)) })
         row3.addView(spacerH(dp(8)))
         row3.addView(gameTile("\uD83C\uDFDF\uFE0F", "RAID", "Boss battles", "#D32F2F", "#B71C1C") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
         grid.addView(row3)
@@ -314,7 +314,7 @@ class HomeActivity : BaseNavActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
         }
-        quickRow.addView(quickChip("\uD83D\uDCD3", "Pokédex", "#00E5FF") { startActivity(Intent(this, PokedexActivity::class.java)) })
+        quickRow.addView(quickChip("\uD83D\uDCD3", "Codex", "#00E5FF") { startActivity(Intent(this, CodexActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))
         quickRow.addView(quickChip("\uD83D\uDDD3\uFE0F", "Streak", "#FFD700") { startActivity(Intent(this, DailyStreakActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))

@@ -237,8 +237,8 @@ object GameProgressSync {
     private fun getFoodInventory(ctx: Context): Map<String, Int> {
         val result = mutableMapOf<String, Int>()
         try {
-            for (food in EggFoodManager.EggFood.values()) {
-                val qty = EggFoodManager.getQuantity(ctx, food)
+            for (food in EggNutrimentManager.EggFood.values()) {
+                val qty = EggNutrimentManager.getQuantity(ctx, food)
                 if (qty > 0) result[food.name] = qty
             }
         } catch (e: Exception) { Log.w(TAG, "getFoodInventory: ${e.message}"); Sentry.captureException(e) }
@@ -248,9 +248,9 @@ object GameProgressSync {
     private fun restoreFoodInventory(ctx: Context, map: Map<String, Number>) {
         try {
             for ((name, qty) in map) {
-                val food = try { EggFoodManager.EggFood.valueOf(name) } catch (_: Exception) { continue }
-                if (EggFoodManager.getQuantity(ctx, food) == 0 && qty.toInt() > 0) {
-                    EggFoodManager.addQuantity(ctx, food, qty.toInt())
+                val food = try { EggNutrimentManager.EggFood.valueOf(name) } catch (_: Exception) { continue }
+                if (EggNutrimentManager.getQuantity(ctx, food) == 0 && qty.toInt() > 0) {
+                    EggNutrimentManager.addQuantity(ctx, food, qty.toInt())
                 }
             }
         } catch (e: Exception) { Log.w(TAG, "restoreFoodInventory: ${e.message}"); Sentry.captureException(e) }

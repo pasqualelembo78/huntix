@@ -69,7 +69,7 @@ class EggHuntApplication : Application() {
 
         // Starter kit cibo: 5 Mele + 3 Peperoncini (una tantum)
         try {
-            EggFoodManager.giveStarterKit(this)
+            EggNutrimentManager.giveStarterKit(this)
         } catch (e: Exception) {
             Log.e("HuntixApp", "Starter kit failed: ${e.message}")
         }

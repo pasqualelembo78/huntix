@@ -9,10 +9,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-object IncubatorManager {
+object TermocullaManager {
 
-    private const val PREFS = "incubator_prefs_v1"
-    private const val KEY_INCUBATORS = "incubators"
+    private const val PREFS = "termoculla_prefs_v1"
+    private const val KEY_TERMOCULLE = "termocullas"
     private const val KEY_ACTIVE_EGGS = "active_eggs"
 
     // ── Distance requirements per rarity (km) ────────────────────────
@@ -32,33 +32,33 @@ object IncubatorManager {
         EggRarity.LEGENDARY -> "20 km"
     }
 
-    // ── Incubator data ───────────────────────────────────────────────
-    data class Incubator(
+    // ── Termoculla data ───────────────────────────────────────────────
+    data class Termoculla(
         val id: String,
         val type: String,         // "basic" (unlimited) or "super" (limited)
-        val usesRemaining: Int,   // -1 = unlimited
-        val name: String = if (type == "basic") "🧰 Incubatrice Base" else "⚡ Super Incubatrice"
+        val usiRimanenti: Int,   // -1 = unlimited
+        val name: String = if (type == "basic") "🧰 Termocolla Base" else "⚡ Super Termocolla"
     ) {
-        val isUnlimited: Boolean get() = usesRemaining < 0
-        val isBroken: Boolean get() = !isUnlimited && usesRemaining <= 0
+        val isIllimitato: Boolean get() = usiRimanenti < 0
+        val isBroken: Boolean get() = !isIllimitato && usiRimanenti <= 0
 
         fun toJson(): JSONObject = JSONObject().apply {
-            put("id", id); put("type", type); put("usesRemaining", usesRemaining); put("name", name)
+            put("id", id); put("type", type); put("usiRimanenti", usiRimanenti); put("name", name)
         }
 
         companion object {
-            fun fromJson(j: JSONObject) = Incubator(
+            fun fromJson(j: JSONObject) = Termoculla(
                 id = j.optString("id", UUID.randomUUID().toString().take(8)),
                 type = j.optString("type", "basic"),
-                usesRemaining = j.optInt("usesRemaining", -1)
+                usiRimanenti = j.optInt("usiRimanenti", -1)
             )
         }
     }
 
-    // ── Active egg in incubator ──────────────────────────────────────
+    // ── Active egg in termoculla ──────────────────────────────────────
     data class ActiveEgg(
-        val instanceId: String,
-        val incubatorId: String,
+        val istanzaId: String,
+        val termocullaId: String,
         val rarityId: String,
         val distanceRequired: Float,
         val distanceWalked: Float,
@@ -71,7 +71,7 @@ object IncubatorManager {
         val rarity: EggRarity get() = EggRarity.fromId(rarityId)
 
         fun toJson(): JSONObject = JSONObject().apply {
-            put("instanceId", instanceId); put("incubatorId", incubatorId)
+            put("istanzaId", istanzaId); put("termocullaId", termocullaId)
             put("rarityId", rarityId); put("distanceRequired", distanceRequired)
             put("distanceWalked", distanceWalked); put("startMs", startMs)
             put("fantasyName", fantasyName)
@@ -79,8 +79,8 @@ object IncubatorManager {
 
         companion object {
             fun fromJson(j: JSONObject) = ActiveEgg(
-                instanceId = j.optString("instanceId"),
-                incubatorId = j.optString("incubatorId"),
+                istanzaId = j.optString("istanzaId"),
+                termocullaId = j.optString("termocullaId"),
                 rarityId = j.optString("rarityId", "common"),
                 distanceRequired = j.optDouble("distanceRequired", 2.0).toFloat(),
                 distanceWalked = j.optDouble("distanceWalked", 0.0).toFloat(),
@@ -91,23 +91,23 @@ object IncubatorManager {
     }
 
     // ── Init ─────────────────────────────────────────────────────────
-    private fun defaultIncubators(): List<Incubator> = listOf(
-        Incubator("basic_1", "basic", -1),
-        Incubator("super_1", "super", 3),
-        Incubator("super_2", "super", 3)
+    private fun defaultTermocullas(): List<Termoculla> = listOf(
+        Termoculla("basic_1", "basic", -1),
+        Termoculla("super_1", "super", 3),
+        Termoculla("super_2", "super", 3)
     )
 
-    fun getIncubators(ctx: Context): List<Incubator> {
-        val json = prefs(ctx).getString(KEY_INCUBATORS, null)
+    fun getTermocullas(ctx: Context): List<Termoculla> {
+        val json = prefs(ctx).getString(KEY_TERMOCULLE, null)
         if (json == null) {
-            val defaults = defaultIncubators()
-            saveIncubators(ctx, defaults)
+            val defaults = defaultTermocullas()
+            saveTermocullas(ctx, defaults)
             return defaults
         }
         return try {
             val arr = JSONArray(json)
-            (0 until arr.length()).map { Incubator.fromJson(arr.getJSONObject(it)) }
-        } catch (e: Exception) { defaultIncubators() }
+            (0 until arr.length()).map { Termoculla.fromJson(arr.getJSONObject(it)) }
+        } catch (e: Exception) { defaultTermocullas() }
     }
 
     fun getActiveEggs(ctx: Context): List<ActiveEgg> {
@@ -118,27 +118,27 @@ object IncubatorManager {
         } catch (e: Exception) { emptyList() }
     }
 
-    fun getAvailableIncubators(ctx: Context): List<Incubator> =
-        getIncubators(ctx).filter { !it.isBroken }
+    fun getAvailableTermocullas(ctx: Context): List<Termoculla> =
+        getTermocullas(ctx).filter { !it.isBroken }
 
-    fun getFreeIncubators(ctx: Context): List<Incubator> =
-        getAvailableIncubators(ctx).filter { !getActiveEggs(ctx).any { egg -> egg.incubatorId == it.id } }
+    fun getFreeTermocullas(ctx: Context): List<Termoculla> =
+        getAvailableTermocullas(ctx).filter { !getActiveEggs(ctx).any { egg -> egg.termocullaId == it.id } }
 
-    fun hasFreeIncubator(ctx: Context): Boolean = getFreeIncubators(ctx).isNotEmpty()
+    fun hasFreeTermoculla(ctx: Context): Boolean = getFreeTermocullas(ctx).isNotEmpty()
 
-    fun canAddEgg(ctx: Context, item: EggInventoryItem): Boolean = getFreeIncubators(ctx).isNotEmpty()
+    fun canPlaceEgg(ctx: Context, item: EggInventoryItem): Boolean = getFreeTermocullas(ctx).isNotEmpty()
 
-    fun startIncubation(ctx: Context, item: EggInventoryItem, incubatorId: String): Boolean {
-        val incubator = getIncubators(ctx).firstOrNull { it.id == incubatorId } ?: return false
-        if (incubator.isBroken) return false
+    fun startSchiusa(ctx: Context, item: EggInventoryItem, termocullaId: String): Boolean {
+        val termoculla = getTermocullas(ctx).firstOrNull { it.id == termocullaId } ?: return false
+        if (termoculla.isBroken) return false
 
         val activeEggs = getActiveEggs(ctx).toMutableList()
-        if (activeEggs.any { it.incubatorId == incubatorId }) return false
+        if (activeEggs.any { it.termocullaId == termocullaId }) return false
 
         val rarity = EggRarity.fromId(item.rarityId)
         activeEggs.add(ActiveEgg(
-            instanceId = item.instanceId,
-            incubatorId = incubatorId,
+            istanzaId = item.istanzaId,
+            termocullaId = termocullaId,
             rarityId = item.rarityId,
             distanceRequired = distanceKmForRarity(rarity),
             distanceWalked = 0f,
@@ -147,11 +147,11 @@ object IncubatorManager {
         ))
 
         saveActiveEggs(ctx, activeEggs)
-        Log.d("IncubatorManager", "Started incubating ${rarity.displayName} in $incubatorId")
+        Log.d("TermocullaManager", "Started inSchiusa ${rarity.displayName} in $termocullaId")
         return true
     }
 
-    fun addDistanceToIncubators(ctx: Context, km: Float): List<String> {
+    fun addDistanceToTermocullas(ctx: Context, km: Float): List<String> {
         if (km <= 0f) return emptyList()
         val activeEggs = getActiveEggs(ctx).toMutableList()
         val readyIds = mutableListOf<String>()
@@ -159,44 +159,44 @@ object IncubatorManager {
         activeEggs.forEachIndexed { idx, egg ->
             val newWalked = (egg.distanceWalked + km).coerceAtMost(egg.distanceRequired)
             activeEggs[idx] = egg.copy(distanceWalked = newWalked)
-            if (newWalked >= egg.distanceRequired) readyIds.add(egg.instanceId)
+            if (newWalked >= egg.distanceRequired) readyIds.add(egg.istanzaId)
         }
 
         saveActiveEggs(ctx, activeEggs)
 
         if (readyIds.isNotEmpty()) {
-            val incubators = getIncubators(ctx).toMutableList()
+            val termocullas = getTermocullas(ctx).toMutableList()
             activeEggs.filter { it.isReady }.forEach { egg ->
-                val incIdx = incubators.indexOfFirst { it.id == egg.incubatorId }
-                if (incIdx >= 0 && !incubators[incIdx].isUnlimited) {
-                    val old = incubators[incIdx]
-                    incubators[incIdx] = old.copy(usesRemaining = old.usesRemaining - 1)
+                val incIdx = termocullas.indexOfFirst { it.id == egg.termocullaId }
+                if (incIdx >= 0 && !termocullas[incIdx].isIllimitato) {
+                    val old = termocullas[incIdx]
+                    termocullas[incIdx] = old.copy(usiRimanenti = old.usiRimanenti - 1)
                 }
             }
-            saveIncubators(ctx, incubators)
+            saveTermocullas(ctx, termocullas)
         }
 
         return readyIds
     }
 
-    fun collectHatchedEgg(ctx: Context, instanceId: String): ActiveEgg? {
+    fun collectHatchedEgg(ctx: Context, istanzaId: String): ActiveEgg? {
         val activeEggs = getActiveEggs(ctx).toMutableList()
-        val egg = activeEggs.firstOrNull { it.instanceId == instanceId && it.isReady } ?: return null
-        activeEggs.removeAll { it.instanceId == instanceId }
+        val egg = activeEggs.firstOrNull { it.istanzaId == istanzaId && it.isReady } ?: return null
+        activeEggs.removeAll { it.istanzaId == istanzaId }
         saveActiveEggs(ctx, activeEggs)
         return egg
     }
 
-    fun removeEggFromIncubator(ctx: Context, instanceId: String): Boolean {
+    fun removeEggFromTermoculla(ctx: Context, istanzaId: String): Boolean {
         val activeEggs = getActiveEggs(ctx).toMutableList()
-        val removed = activeEggs.removeAll { it.instanceId == instanceId }
+        val removed = activeEggs.removeAll { it.istanzaId == istanzaId }
         if (removed) saveActiveEggs(ctx, activeEggs)
         return removed
     }
 
-    private fun saveIncubators(ctx: Context, list: List<Incubator>) {
+    private fun saveTermocullas(ctx: Context, list: List<Termoculla>) {
         val arr = JSONArray(); list.forEach { arr.put(it.toJson()) }
-        prefs(ctx).edit().putString(KEY_INCUBATORS, arr.toString()).apply()
+        prefs(ctx).edit().putString(KEY_TERMOCULLE, arr.toString()).apply()
     }
 
     private fun saveActiveEggs(ctx: Context, list: List<ActiveEgg>) {

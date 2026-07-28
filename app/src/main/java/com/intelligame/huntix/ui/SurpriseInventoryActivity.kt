@@ -16,7 +16,7 @@ import com.intelligame.huntix.BaseNavActivity
  * SurpriseInventoryActivity — LA BORSA
  * Mostra tutte le creature scoperte (OwnedSurprise).
  * NON mostra il team di combattimento (quello va in BattleActivity).
- * Permette di impostare l'amico fidato (buddy).
+ * Permette di impostare il compagno fidato .
  */
 class SurpriseInventoryActivity : BaseNavActivity() {
 
@@ -232,11 +232,11 @@ class SurpriseInventoryActivity : BaseNavActivity() {
             return
         }
 
-        val buddy = SurpriseManager.getAll(this).firstOrNull { it.isBuddy }
+        val fidato = SurpriseManager.getAll(this).firstOrNull { it.isFidato }
 
         list.forEach { owned ->
             try {
-                listContainer.addView(buildCreatureCard(owned, isBuddy = owned.id == buddy?.id))
+                listContainer.addView(buildCreatureCard(owned, isFidato = owned.id == fidato?.id))
             } catch (e: Exception) {
                 android.util.Log.e("SurpriseInventory", "Errore rendering creatura ${owned.creatureId}: ${e.message}", e)
             }
@@ -272,7 +272,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
         }
     }
 
-    private fun buildCreatureCard(owned: OwnedSurprise, isBuddy: Boolean): androidx.cardview.widget.CardView {
+    private fun buildCreatureCard(owned: OwnedSurprise, isFidato: Boolean): androidx.cardview.widget.CardView {
         val rarity = EggRarity.fromId(owned.rarityId)
         val card = androidx.cardview.widget.CardView(this).apply {
             radius = dp(14).toFloat()
@@ -281,7 +281,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 .also { it.bottomMargin = dp(10) }
             isClickable = true; isFocusable = true
-            setOnClickListener { showCreatureDialog(owned, isBuddy) }
+            setOnClickListener { showCreatureDialog(owned, isFidato) }
         }
 
         val row = LinearLayout(this).apply {
@@ -318,7 +318,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             })
-            if (isBuddy) {
+            if (isFidato) {
                 addView(TextView(this@SurpriseInventoryActivity).apply {
                     text = " ⭐ Amico Fidato"; textSize = 10f; setTextColor(Color.parseColor("#FFC107"))
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
@@ -368,11 +368,11 @@ class SurpriseInventoryActivity : BaseNavActivity() {
         return card
     }
 
-    private fun showCreatureDialog(owned: OwnedSurprise, isBuddy: Boolean) {
+    private fun showCreatureDialog(owned: OwnedSurprise, isFidato: Boolean) {
         val creature = owned.creature
         val rarity = EggRarity.fromId(owned.rarityId)
 
-        val items = if (isBuddy) {
+        val items = if (isFidato) {
             arrayOf(
                 "📋 Dettagli creatura",
                 "⭐ Già il tuo Amico Fidato!",
@@ -394,14 +394,14 @@ class SurpriseInventoryActivity : BaseNavActivity() {
                 "\n\n❤️ HP: ${owned.scaledHp()}   ⚔️ ATK: ${owned.scaledAttack()}" +
                 "\n🛡️ DEF: ${owned.scaledDefense()}   💨 SPD: ${owned.scaledSpeed()}" +
                 "\n\n✨ Mossa Speciale: ${creature?.specialMoveEmoji ?: ""} ${creature?.specialMoveName ?: ""}" +
-                "\n🍬 Caramelle: ${owned.candies}"
+                "\n🍬 Caramelle: ${owned.leccornie}"
             )
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> showDetailDialog(owned)
                     1 -> {
-                        if (!isBuddy) {
-                            SurpriseManager.setBuddy(this, owned.id)
+                        if (!isFidato) {
+                            SurpriseManager.setFidato(this, owned.id)
                             Toast.makeText(this, "⭐ ${owned.displayName} è ora il tuo Amico Fidato!", Toast.LENGTH_LONG).show()
                             refreshList()
                         }
@@ -434,7 +434,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
             )
             .setPositiveButton("OK", null)
             .setNeutralButton("⭐ Imposta Amico Fidato") { _, _ ->
-                SurpriseManager.setBuddy(this, owned.id)
+                SurpriseManager.setFidato(this, owned.id)
                 Toast.makeText(this, "⭐ ${owned.displayName} è ora il tuo Amico Fidato!", Toast.LENGTH_SHORT).show()
                 refreshList()
             }

@@ -46,7 +46,7 @@ class EggInventoryActivity : BaseNavActivity() {
                 },
                 UiKit.button(c, if (item.inBattleTeam) "✓ In squadra" else "➕ Aggiungi a squadra",
                     if (item.inBattleTeam) UiKit.GREEN else UiKit.PURPLE) {
-                    EggInventoryManager.toggleBattleTeam(c, item.instanceId)
+                    EggInventoryManager.toggleBattleTeam(c, item.istanzaId)
                     renderRow(c, box, item)
                 }
             )

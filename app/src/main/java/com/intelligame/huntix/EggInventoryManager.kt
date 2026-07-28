@@ -53,9 +53,9 @@ object EggInventoryManager {
      * Attiva/Disattiva un uovo nel battle team.
      * Restituisce false se il team è già pieno (3) e si tenta di aggiungere.
      */
-    fun toggleBattleTeam(ctx: Context, instanceId: String): Boolean {
+    fun toggleBattleTeam(ctx: Context, istanzaId: String): Boolean {
         val inv = getInventory(ctx)
-        val item = inv.firstOrNull { it.instanceId == instanceId } ?: return false
+        val item = inv.firstOrNull { it.istanzaId == istanzaId } ?: return false
         val teamCount = inv.count { it.inBattleTeam }
         if (!item.inBattleTeam && teamCount >= MAX_BATTLE_TEAM) return false
         item.inBattleTeam = !item.inBattleTeam
@@ -64,8 +64,8 @@ object EggInventoryManager {
     }
 
     /** Elimina un uovo dall'inventario (e dal battle team se presente). */
-    fun removeEgg(ctx: Context, instanceId: String) {
-        val inv = getInventory(ctx).filter { it.instanceId != instanceId }
+    fun removeEgg(ctx: Context, istanzaId: String) {
+        val inv = getInventory(ctx).filter { it.istanzaId != istanzaId }
         saveInventory(ctx, inv)
     }
 

@@ -20,7 +20,7 @@ import org.json.JSONObject
  *  LEGENDARY → 1.00  h/s   (~2.4 MVC/giorno)
  */
 data class HatchedEgg(
-    val instanceId:     String  = java.util.UUID.randomUUID().toString().take(12),
+    val istanzaId:     String  = java.util.UUID.randomUUID().toString().take(12),
     val sourceRarityId: String  = "common",
     val level:          Int     = 1,
     val hatchedAt:      Long    = System.currentTimeMillis(),
@@ -61,7 +61,7 @@ data class HatchedEgg(
     val isMaxLevel: Boolean get() = level >= 4
 
     fun toJson(): JSONObject = JSONObject().apply {
-        put("instanceId", instanceId)
+        put("istanzaId", istanzaId)
         put("sourceRarityId", sourceRarityId)
         put("level", level)
         put("hatchedAt", hatchedAt)
@@ -72,7 +72,7 @@ data class HatchedEgg(
 
     companion object {
         fun fromJson(j: JSONObject) = HatchedEgg(
-            instanceId     = j.optString("instanceId", java.util.UUID.randomUUID().toString().take(12)),
+            istanzaId     = j.optString("istanzaId", java.util.UUID.randomUUID().toString().take(12)),
             sourceRarityId = j.optString("sourceRarityId", "common"),
             level          = j.optInt("level", 1),
             hatchedAt      = j.optLong("hatchedAt", System.currentTimeMillis()),

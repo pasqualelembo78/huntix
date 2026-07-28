@@ -18,14 +18,14 @@ data class SurpriseCreature(
     val specialMoveEmoji: String,
     val specialMoveDamage: Int,
     val specialMoveEffect: String = "",
-    val evolvesTo: String? = null,
-    val candyCost: Int = 0
+    val metamorfosiIn: String? = null,
+    val costMetamorfosi: Int = 0
 ) {
     val rarity: EggRarity get() = EggRarity.fromId(rarityId)
-    val canEvolve: Boolean get() = evolvesTo != null && candyCost > 0
+    val canMetamorfosi: Boolean get() = metamorfosiIn != null && costMetamorfosi > 0
 
-    fun getEvolvedCreature(): SurpriseCreature? =
-        evolvesTo?.let { getById(it) }
+    fun getMetamorfosiCreature(): SurpriseCreature? =
+        metamorfosiIn?.let { getById(it) }
 
     companion object {
         val ALL: List<SurpriseCreature> = listOf(
@@ -35,31 +35,31 @@ data class SurpriseCreature(
                 baseHp = 45, baseAttack = 35, baseDefense = 25, baseSpeed = 50,
                 specialMoveName = "Becco Fulmine", specialMoveEmoji = "\u26A1",
                 specialMoveDamage = 40, specialMoveEffect = "stun",
-                evolvesTo = "gallo_ardito", candyCost = 25),
+                metamorfosiIn = "gallo_ardito", costMetamorfosi = 25),
             SurpriseCreature("coniglietto", "Coniglietto", "\uD83D\uDC30", "Saltella velocissimo tra i prati!",
                 "common", listOf("countryside", "forest"), listOf("clear", "cloudy"),
                 baseHp = 40, baseAttack = 30, baseDefense = 30, baseSpeed = 65,
                 specialMoveName = "Balzo Fulmine", specialMoveEmoji = "\uD83D\uDCA8",
                 specialMoveDamage = 35, specialMoveEffect = "",
-                evolvesTo = "lepre_fulmine", candyCost = 25),
+                metamorfosiIn = "lepre_fulmine", costMetamorfosi = 25),
             SurpriseCreature("agnellino", "Agnellino", "\uD83D\uDC11", "Soffice come una nuvola!",
                 "common", listOf("countryside", "mountain"), listOf("cloudy"),
                 baseHp = 55, baseAttack = 25, baseDefense = 40, baseSpeed = 35,
                 specialMoveName = "Vello d'Acciaio", specialMoveEmoji = "\uD83D\uDEE1\uFE0F",
                 specialMoveDamage = 20, specialMoveEffect = "",
-                evolvesTo = "montone_ferro", candyCost = 25),
+                metamorfosiIn = "montone_ferro", costMetamorfosi = 25),
             SurpriseCreature("farfalla", "Farfalla Arcobaleno", "\uD83E\uDD8B", "Ali che brillano di mille colori.",
                 "common", listOf("forest", "countryside"), listOf("clear"),
                 baseHp = 35, baseAttack = 40, baseDefense = 20, baseSpeed = 70,
                 specialMoveName = "Polvere Incantata", specialMoveEmoji = "\u2728",
                 specialMoveDamage = 45, specialMoveEffect = "confuse",
-                evolvesTo = "falena_arcobaleno", candyCost = 25),
+                metamorfosiIn = "falena_arcobaleno", costMetamorfosi = 25),
             SurpriseCreature("gatto_ombra", "Gatto dell'Ombra", "\uD83D\uDC31", "Scivola silenziosamente tra le ombre.",
                 "common", listOf("city", "forest"), listOf("night"),
                 baseHp = 42, baseAttack = 38, baseDefense = 28, baseSpeed = 62,
                 specialMoveName = "Artigli Oscuri", specialMoveEmoji = "\uD83D\uDDE1\uFE0F",
                 specialMoveDamage = 42, specialMoveEffect = "poison",
-                evolvesTo = "pantera_notte", candyCost = 25),
+                metamorfosiIn = "pantera_notte", costMetamorfosi = 25),
 
             // === UNCOMMON (base forms) ===
             SurpriseCreature("volpe_luna", "Volpe della Luna", "\uD83E\uDD8A", "Compare solo di notte sotto la luna piena.",
@@ -67,25 +67,25 @@ data class SurpriseCreature(
                 baseHp = 65, baseAttack = 60, baseDefense = 45, baseSpeed = 75,
                 specialMoveName = "Morso Lunare", specialMoveEmoji = "\uD83C\uDF19",
                 specialMoveDamage = 70, specialMoveEffect = "poison",
-                evolvesTo = "lupo_lunare", candyCost = 50),
+                metamorfosiIn = "lupo_lunare", costMetamorfosi = 50),
             SurpriseCreature("cerbiatto", "Cerbiatto Magico", "\uD83E\uDEE6", "Corre veloce come il vento tra i boschi.",
                 "uncommon", listOf("forest", "mountain"), listOf("cloudy", "clear"),
                 baseHp = 70, baseAttack = 55, baseDefense = 50, baseSpeed = 80,
                 specialMoveName = "Carica Forestale", specialMoveEmoji = "\uD83C\uDF3F",
                 specialMoveDamage = 65, specialMoveEffect = "",
-                evolvesTo = "alce_foresta", candyCost = 50),
+                metamorfosiIn = "alce_foresta", costMetamorfosi = 50),
             SurpriseCreature("gufo_stellato", "Gufo Stellato", "\uD83E\uDD89", "Veglia sulle stelle nella notte.",
                 "uncommon", listOf("mountain", "forest"), listOf("night", "cloudy"),
                 baseHp = 60, baseAttack = 70, baseDefense = 40, baseSpeed = 60,
                 specialMoveName = "Occhi di Stelle", specialMoveEmoji = "\u2B50",
                 specialMoveDamage = 75, specialMoveEffect = "stun",
-                evolvesTo = "grifone_stellare", candyCost = 50),
+                metamorfosiIn = "grifone_stellare", costMetamorfosi = 50),
             SurpriseCreature("serpente_verde", "Serpente Verde", "\uD83D\uDC0D", "Striscia tra le foglie con eleganza.",
                 "uncommon", listOf("forest", "countryside"), listOf("clear", "rain"),
                 baseHp = 55, baseAttack = 65, baseDefense = 50, baseSpeed = 70,
                 specialMoveName = "Veleno Verde", specialMoveEmoji = "\uD83E\uDDEA",
                 specialMoveDamage = 72, specialMoveEffect = "poison",
-                evolvesTo = "drago_verde", candyCost = 50),
+                metamorfosiIn = "drago_verde", costMetamorfosi = 50),
 
             // === RARE (base forms) ===
             SurpriseCreature("drago_pasquale", "Drago Pasquale", "\uD83D\uDC32", "Un drago dalle uova dorate!",
@@ -93,19 +93,19 @@ data class SurpriseCreature(
                 baseHp = 100, baseAttack = 90, baseDefense = 70, baseSpeed = 60,
                 specialMoveName = "Soffio Dorato", specialMoveEmoji = "\uD83D\uDD25",
                 specialMoveDamage = 110, specialMoveEffect = "burn",
-                evolvesTo = "drago_alba", candyCost = 100),
+                metamorfosiIn = "drago_alba", costMetamorfosi = 100),
             SurpriseCreature("fenice_rosa", "Fenice Rosa", "\uD83E\uDD9C", "Rinasce sempre pi\u00F9 forte dalle fiamme!",
                 "rare", listOf("mountain", "snow"), listOf("clear", "wind"),
                 baseHp = 90, baseAttack = 95, baseDefense = 60, baseSpeed = 85,
                 specialMoveName = "Rinascita di Fuoco", specialMoveEmoji = "\uD83C\uDF05",
                 specialMoveDamage = 100, specialMoveEffect = "burn",
-                evolvesTo = "fenice_aurora", candyCost = 100),
+                metamorfosiIn = "fenice_aurora", costMetamorfosi = 100),
             SurpriseCreature("unicorno", "Unicorno Arcobaleno", "\uD83E\uDD84", "Il suo corno porta fortuna!",
                 "rare", listOf("countryside", "forest"), listOf("rain", "clear"),
                 baseHp = 95, baseAttack = 85, baseDefense = 80, baseSpeed = 75,
                 specialMoveName = "Raggio Arcobaleno", specialMoveEmoji = "\uD83C\uDF08",
                 specialMoveDamage = 95, specialMoveEffect = "confuse",
-                evolvesTo = "alicorno_divino", candyCost = 100),
+                metamorfosiIn = "alicorno_divino", costMetamorfosi = 100),
 
             // === EPIC (evolved forms + base) ===
             SurpriseCreature("gallo_ardito", "Gallo Ardito", "\uD83D\uDC13", "Il suo canto risveglia le foreste!",
@@ -226,8 +226,8 @@ data class OwnedSurprise(
     val catchWeather: String = "clear",
     val caughtAt: Long = System.currentTimeMillis(),
     val inBattleTeam: Boolean = false,
-    val isBuddy: Boolean = false,
-    val candies: Int = 0
+    val isFidato: Boolean = false,
+    val leccornie: Int = 0
 ) {
     val creature: SurpriseCreature? get() = SurpriseCreature.getById(creatureId)
     val displayName: String get() = if (!nickname.isNullOrBlank()) nickname else creature?.name ?: "???"

@@ -206,7 +206,7 @@ object SavedManager {
     // ═══════════════════════════════════════════════════════════════════════
 
     data class HatchingSlot(
-        val instanceId: String,
+        val istanzaId: String,
         val sourceRarityId: String,
         val startMs: Long,
         val endMs: Long,
@@ -222,7 +222,7 @@ object SavedManager {
         val rarity: EggRarity get() = EggRarity.fromId(sourceRarityId)
 
         fun toJson(): JSONObject = JSONObject().apply {
-            put("instanceId", instanceId)
+            put("istanzaId", istanzaId)
             put("sourceRarityId", sourceRarityId)
             put("startMs", startMs)
             put("endMs", endMs)
@@ -231,7 +231,7 @@ object SavedManager {
 
         companion object {
             fun fromJson(j: JSONObject) = HatchingSlot(
-                instanceId = j.optString("instanceId"),
+                istanzaId = j.optString("istanzaId"),
                 sourceRarityId = j.optString("sourceRarityId", "common"),
                 startMs = j.optLong("startMs"),
                 endMs = j.optLong("endMs"),
@@ -268,14 +268,14 @@ object SavedManager {
 
     fun addPendingEgg(ctx: Context, item: EggInventoryItem) {
         val list = getPendingEggs(ctx)
-        if (list.none { it.instanceId == item.instanceId }) {
+        if (list.none { it.istanzaId == item.istanzaId }) {
             list.add(0, item)
             savePendingEggs(ctx, list)
         }
     }
 
-    fun removePendingEgg(ctx: Context, instanceId: String) {
-        val list = getPendingEggs(ctx).filter { it.instanceId != instanceId }
+    fun removePendingEgg(ctx: Context, istanzaId: String) {
+        val list = getPendingEggs(ctx).filter { it.istanzaId != istanzaId }
         savePendingEggs(ctx, list)
     }
 
@@ -300,15 +300,15 @@ object SavedManager {
         val dur = hatchDurationMs(item.rarity)
         val now = System.currentTimeMillis()
         slots.add(HatchingSlot(
-            instanceId = item.instanceId,
+            istanzaId = item.istanzaId,
             sourceRarityId = item.rarityId,
             startMs = now,
             endMs = now + dur,
             fantasyName = item.fantasyName
         ))
         saveHatchingSlots(ctx, slots)
-        removePendingEgg(ctx, item.instanceId)
-        EggInventoryManager.removeEgg(ctx, item.instanceId)
+        removePendingEgg(ctx, item.istanzaId)
+        EggInventoryManager.removeEgg(ctx, item.istanzaId)
         // Track research tasks
         ResearchTaskManager.trackProgress(ctx, "hatch_1")
         ResearchTaskManager.trackProgress(ctx, "hatch_5")
@@ -322,7 +322,7 @@ object SavedManager {
             val creature = SurpriseCreature.pickForHatch(
                 slot.sourceRarityId, ZoneType.UNKNOWN, WeatherType.CLEAR)
             HatchedEgg(
-                instanceId = slot.instanceId,
+                istanzaId = slot.istanzaId,
                 sourceRarityId = slot.sourceRarityId,
                 hatchedAt = System.currentTimeMillis(),
                 creatureId = creature.id
@@ -352,8 +352,8 @@ object SavedManager {
         } catch (e: Exception) { Sentry.captureException(e); mutableListOf() }
     }
 
-    fun removeHatchedEgg(ctx: Context, instanceId: String) {
-        val list = getHatchedEggs(ctx).filter { it.instanceId != instanceId }
+    fun removeHatchedEgg(ctx: Context, istanzaId: String) {
+        val list = getHatchedEggs(ctx).filter { it.istanzaId != istanzaId }
         saveHatchedEggs(ctx, list)
     }
 
@@ -394,7 +394,7 @@ object SavedManager {
         val freeIndex = slots.indexOfFirst { it == null }
         if (freeIndex == -1) return -1
         slots[freeIndex] = egg
-        removeHatchedEgg(ctx, egg.instanceId)
+        removeHatchedEgg(ctx, egg.istanzaId)
         saveFusionSlots(ctx, slots)
         return freeIndex
     }
@@ -431,7 +431,7 @@ object SavedManager {
             sourceRarityId = base.sourceRarityId,
             level = newLevel,
             hatchedAt = System.currentTimeMillis(),
-            fusedFrom = slots.map { it.instanceId },
+            fusedFrom = slots.map { it.istanzaId },
             creatureId = base.creatureId
         )
 
@@ -441,9 +441,9 @@ object SavedManager {
         hatched.add(0, fusedEgg)
         saveHatchedEggs(ctx, hatched)
 
-        slots.forEach { EggInventoryManager.removeEgg(ctx, it.instanceId) }
+        slots.forEach { EggInventoryManager.removeEgg(ctx, it.istanzaId) }
         val fusedItem = EggInventoryItem(
-            instanceId = fusedEgg.instanceId,
+            istanzaId = fusedEgg.istanzaId,
             rarityId = base.sourceRarityId,
             fantasyName = fusedEgg.displayName,
             power = EggRarity.fromId(base.sourceRarityId).basePower * newLevel
@@ -479,14 +479,14 @@ object SavedManager {
             sourceRarityId = rarityId,
             level = level + 1,
             hatchedAt = System.currentTimeMillis(),
-            fusedFrom = toFuse.map { it.instanceId }
+            fusedFrom = toFuse.map { it.istanzaId }
         )
-        toFuse.forEach { fused -> hatched.removeIf { it.instanceId == fused.instanceId } }
+        toFuse.forEach { fused -> hatched.removeIf { it.istanzaId == fused.istanzaId } }
         hatched.add(0, fusedEgg)
         saveHatchedEggs(ctx, hatched)
-        toFuse.forEach { EggInventoryManager.removeEgg(ctx, it.instanceId) }
+        toFuse.forEach { EggInventoryManager.removeEgg(ctx, it.istanzaId) }
         val fusedInvItem = EggInventoryItem(
-            instanceId = fusedEgg.instanceId,
+            istanzaId = fusedEgg.istanzaId,
             rarityId = rarityId,
             fantasyName = fusedEgg.displayName,
             power = EggRarity.fromId(rarityId).basePower * fusedEgg.level
@@ -520,10 +520,10 @@ object SavedManager {
 
     // ── Accelerazione schiusura via energia camminata ────────────
 
-    fun accelerateSlot(ctx: Context, instanceId: String, reduceSec: Long) {
+    fun accelerateSlot(ctx: Context, istanzaId: String, reduceSec: Long) {
         if (reduceSec <= 0) return
         val slots = getHatchingSlots(ctx).toMutableList()
-        val idx = slots.indexOfFirst { it.instanceId == instanceId }
+        val idx = slots.indexOfFirst { it.istanzaId == istanzaId }
         if (idx < 0) return
         val slot = slots[idx]
         val newEnd = (slot.endMs - reduceSec * 1000L).coerceAtLeast(System.currentTimeMillis())
@@ -536,13 +536,13 @@ object SavedManager {
         val slots = getHatchingSlots(ctx)
         if (slots.isEmpty()) return 0L
         val reduceSecPerSlot = (energy / 100.0 * 60.0).toLong().coerceAtLeast(1L)
-        slots.forEach { slot -> accelerateSlot(ctx, slot.instanceId, reduceSecPerSlot) }
+        slots.forEach { slot -> accelerateSlot(ctx, slot.istanzaId, reduceSecPerSlot) }
         return reduceSecPerSlot
     }
 
-    fun speedUpHatching(ctx: Context, instanceId: String, factor: Float) {
+    fun speedUpHatching(ctx: Context, istanzaId: String, factor: Float) {
         val slots = getHatchingSlots(ctx).map { slot ->
-            if (slot.instanceId == instanceId && !slot.isReady) {
+            if (slot.istanzaId == istanzaId && !slot.isReady) {
                 val remaining = slot.endMs - System.currentTimeMillis()
                 slot.copy(endMs = System.currentTimeMillis() + (remaining * factor).toLong())
             } else slot
@@ -559,10 +559,10 @@ object SavedManager {
         val inventoryEggs = EggInventoryManager.getInventory(ctx)
         if (inventoryEggs.isNotEmpty()) {
             val pending = getPendingEggs(ctx)
-            val pendingIds = pending.map { it.instanceId }.toSet()
+            val pendingIds = pending.map { it.istanzaId }.toSet()
             var added = 0
             for (egg in inventoryEggs) {
-                if (egg.instanceId !in pendingIds) {
+                if (egg.istanzaId !in pendingIds) {
                     pending.add(0, egg)
                     added++
                 }

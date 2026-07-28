@@ -303,9 +303,9 @@
             android:textColor="#B0BEC5"
             android:layout_marginBottom="10dp" />
 
-        <!-- Egg incubation progress (shown for eggs in incubator) -->
+        <!-- Progress di schiusa (mostrato per uova in termoculla) -->
         <LinearLayout
-            android:id="@+id/incubationProgress"
+            android:id="@+id/schiusaProgress"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
@@ -320,7 +320,7 @@
                 android:textSize="16sp" />
 
             <TextView
-                android:id="@+id/tvIncubationKm"
+                android:id="@+id/tvSchiusaKm"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0.0 / 5.0 km"
@@ -340,7 +340,7 @@
                     android:background="@drawable/exp_bar_bg" />
 
                 <View
-                    android:id="@+id/incubationBarFill"
+                    android:id="@+id/schiusaBarFill"
                     android:layout_width="0dp"
                     android:layout_height="6dp"
                     android:background="@drawable/exp_bar_fill" />

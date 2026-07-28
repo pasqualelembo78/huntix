@@ -74,7 +74,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private val eggPolygons = mutableMapOf<String, Polygon>()
     private val poiMarkers = mutableMapOf<String, Marker>()
     private var avatarMarker: Marker? = null
-    private var buddyMarker: Marker? = null
+    private var fidatoMarker: Marker? = null
     private var directionMarker: Marker? = null
     private var mapInitialized = false
     private lateinit var tvWeatherEmoji: TextView
@@ -120,9 +120,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var btnCalendar: TextView
     private lateinit var btnLever: TextView
     private lateinit var btnArToggle: TextView
-    private lateinit var incubationProgress: LinearLayout
-    private lateinit var tvIncubationKm: TextView
-    private lateinit var incubationBarFill: View
+    private lateinit var schiusaProgress: LinearLayout
+    private lateinit var tvSchiusaKm: TextView
+    private lateinit var schiusaBarFill: View
     private lateinit var skyOverlay: SkyEventOverlay
 
     // ── Phase 3: sensor + animation state ─────────────────────
@@ -193,9 +193,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnCalendar = findViewById(R.id.btnCalendar)
         btnLever = findViewById(R.id.btnLever)
         btnArToggle = findViewById(R.id.btnArToggle)
-        incubationProgress = findViewById(R.id.incubationProgress)
-        tvIncubationKm = findViewById(R.id.tvIncubationKm)
-        incubationBarFill = findViewById(R.id.incubationBarFill)
+        schiusaProgress = findViewById(R.id.schiusaProgress)
+        tvSchiusaKm = findViewById(R.id.tvSchiusaKm)
+        schiusaBarFill = findViewById(R.id.schiusaBarFill)
         skyOverlay = findViewById(R.id.skyOverlay)
 
         mapView = findViewById(R.id.mapView)
@@ -357,6 +357,11 @@ class OutdoorWorldActivity : BaseNavActivity() {
         AppLog.i(TAG, "onCreate COMPLETE, mapInitialized=$mapInitialized")
     }
 
+    override fun onStart() {
+        super.onStart()
+        mapView?.onStart()
+    }
+
     override fun onResume() {
         super.onResume()
         AppLog.i(TAG, "onResume")
@@ -496,8 +501,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         // Phase 5.2: Proximity hint
         checkProximityHint()
 
-        // Incubation progress in bottom sheet
-        refreshIncubationProgress()
+        // Progress di schiusa in bottom sheet
+        refreshSchiusaProgress()
 
         updateWeatherParticles(w)
 
@@ -647,9 +652,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
             poiCooldownState[poi.id] = onCooldown
         }
 
-        // ── Player avatar + buddy + direction: always remove & re-add ──
+        // ── Player avatar + fidato + direction: always remove & re-add ──
         avatarMarker?.let { map.removeMarker(it); avatarMarker = null }
-        buddyMarker?.let { map.removeMarker(it); buddyMarker = null }
+        fidatoMarker?.let { map.removeMarker(it); fidatoMarker = null }
         directionMarker?.let { map.removeMarker(it); directionMarker = null }
 
         val currentLoc = mgr.currentLocation ?: return
@@ -667,21 +672,21 @@ class OutdoorWorldActivity : BaseNavActivity() {
             .snippet("Lv.$level")
         )
 
-        // Buddy
-        val buddy = com.intelligame.huntix.managers.SurpriseManager.getAll(this)
-            .firstOrNull { it.isBuddy }
-        if (buddy != null) {
+        // Fidato
+        val fidato = com.intelligame.huntix.managers.SurpriseManager.getAll(this)
+            .firstOrNull { it.isFidato }
+        if (fidato != null) {
             val creature = com.intelligame.huntix.SurpriseCreature.ALL
-                .firstOrNull { it.id == buddy.creatureId }
+                .firstOrNull { it.id == fidato.creatureId }
             if (creature != null) {
-                val buddyBitmap = makeBuddyBitmap(creature.emoji)
+                val fidatoBitmap = makeFidatoBitmap(creature.emoji)
                 val offsetLat = currentLoc.latitude + 0.00018
                 val offsetLng = currentLoc.longitude + 0.00012
-                buddyMarker = map.addMarker(MarkerOptions()
+                fidatoMarker = map.addMarker(MarkerOptions()
                     .position(LatLng(offsetLat, offsetLng))
-                    .icon(getCachedIcon("buddy_${creature.id}", buddyBitmap))
+                    .icon(getCachedIcon("fidato_${creature.id}", fidatoBitmap))
                     .title(creature.name)
-                    .snippet("Compagno - ${buddy.candies} caramelle")
+                    .snippet("Compagno - ${fidato.leccornie} caramelle")
                 )
             }
         }
@@ -879,32 +884,32 @@ class OutdoorWorldActivity : BaseNavActivity() {
         }
     }
 
-    // ─── Incubation progress ───────────────────────────────────
+    // ─── Progress di schiusa ───────────────────────────────────
 
-    private fun refreshIncubationProgress() {
-        // Check if any egg in the bottom sheet is being incubated
+    private fun refreshSchiusaProgress() {
+        // Check if any egg in the bottom sheet is in termocolla
         val currentEggId = activeEggId ?: return
         val egg = mgr.getEgg(currentEggId) ?: return
-        refreshIncubationForEgg(egg)
+        refreshSchiusaForEgg(egg)
     }
 
-    private fun refreshIncubationForEgg(egg: com.intelligame.huntix.WorldEgg) {
-        val activeEggs = com.intelligame.huntix.managers.IncubatorManager.getActiveEggs(this)
-        val incubating = activeEggs.firstOrNull {
+    private fun refreshSchiusaForEgg(egg: com.intelligame.huntix.WorldEgg) {
+        val activeEggs = com.intelligame.huntix.managers.TermocullaManager.getActiveEggs(this)
+        val inSchiusa = activeEggs.firstOrNull {
             it.rarityId == egg.rarity.name.lowercase() && !it.isReady
         }
 
-        if (incubating != null) {
-            incubationProgress.visibility = View.VISIBLE
-            tvIncubationKm.text = "%.1f / %.0f km".format(
-                incubating.distanceWalked, incubating.distanceRequired
+        if (inSchiusa != null) {
+            schiusaProgress.visibility = View.VISIBLE
+            tvSchiusaKm.text = "%.1f / %.0f km".format(
+                inSchiusa.distanceWalked, inSchiusa.distanceRequired
             )
-            val lp = incubationBarFill.layoutParams
-            val progressPercent = (incubating.progress * 100).toInt()
+            val lp = schiusaBarFill.layoutParams
+            val progressPercent = (inSchiusa.progress * 100).toInt()
             lp.width = (120 * resources.displayMetrics.density * progressPercent / 100).toInt()
-            incubationBarFill.layoutParams = lp
+            schiusaBarFill.layoutParams = lp
         } else {
-            incubationProgress.visibility = View.GONE
+            schiusaProgress.visibility = View.GONE
         }
     }
 
@@ -1012,8 +1017,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnSheetAr.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
 
-        // Phase 5.1: Show incubation progress if this egg is being incubated
-        refreshIncubationForEgg(egg)
+        // Phase 5.1: Show progress di schiusa if this egg is in termocolla
+        refreshSchiusaForEgg(egg)
     }
 
     private fun showPoiSheet(poi: OutdoorManager.Poi) {
@@ -1297,7 +1302,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Color based on type
         val color = when (type) {
-            "pokestop" -> 0xFF42A5F5.toInt()  // blue
+            "hub" -> 0xFF42A5F5.toInt()  // blue
             "sponsor" -> 0xFFFFD700.toInt()   // gold
             "arena" -> 0xFFFF5722.toInt()     // red-orange
             else -> 0xFF42A5F5.toInt()         // default blue (gym)
@@ -1333,8 +1338,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 c.drawRect(bx - bw + 3f, by - bh + 3f, bx - bw + 7f, by - 3f, p)
                 c.drawRect(bx + bw - 7f, by - bh + 3f, bx + bw - 3f, by - 3f, p)
             }
-            "pokestop" -> {
-                // Pokestop: cube/box shape
+            "hub" -> {
+                // Hub: cube/box shape
                 val bx = w / 2f; val by = headY
                 val bs = 12f
                 c.drawRect(bx - bs, by - bs, bx + bs, by + bs, p)
@@ -1415,7 +1420,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         return bmp
     }
 
-    private fun makeBuddyBitmap(emoji: String): Bitmap {
+    private fun makeFidatoBitmap(emoji: String): Bitmap {
         val w = 56; val h = 56
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)

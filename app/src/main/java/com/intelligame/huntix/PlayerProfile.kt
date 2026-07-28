@@ -16,7 +16,7 @@ package com.intelligame.huntix
  *  - lastLoginDate: per calcolo streak
  *  - playerCharacterId: ID personaggio 3D selezionato dal giocatore
  *  - characterChangesCount: numero di volte che il personaggio è stato cambiato
- *  - buddyCreatureId: ID creatura buddy (dalla schiusura uova sorpresa)
+ *  - fidatoCreatureId: ID creatura fidato (dalla schiusura uova sorpresa)
  */
 data class PlayerProfile(
     val playerId:               String  = "",
@@ -53,7 +53,7 @@ data class PlayerProfile(
     var lastLoginDate:          Long    = 0L,           // Timestamp ultimo login
     var playerCharacterId:      String  = "",           // ID personaggio player (es: "guerriero")
     var characterChangesCount:  Int     = 0,            // Numero cambi personaggio effettuati
-    var buddyCreatureId:        String  = "",            // ID creatura buddy (dalla schiusura uova)
+    var fidatoCreatureId:        String  = "",            // ID creatura fidato (dalla schiusura uova)
 
     // Social Profile
     var country: String = "", var city: String = "",
@@ -179,10 +179,10 @@ data class PlayerProfile(
         "equippedMapThemeId"     to equippedMapThemeId,
         "totalLoginDays"         to totalLoginDays,
         "lastLoginDate"          to lastLoginDate,
-        // Character & Buddy
+        // Character & Fidato
         "playerCharacterId"      to playerCharacterId,
         "characterChangesCount"  to characterChangesCount,
-        "buddyCreatureId"        to buddyCreatureId,
+        "fidatoCreatureId"        to fidatoCreatureId,
         "playerGender"           to playerGender,
         "genderChangesCount"     to genderChangesCount,
         "genderChosenAt"         to genderChosenAt,
@@ -233,10 +233,10 @@ data class PlayerProfile(
                 equippedMapThemeId     = map["equippedMapThemeId"] as? String ?: "theme_default",
                 totalLoginDays         = (map["totalLoginDays"] as? Long)?.toInt() ?: 0,
                 lastLoginDate          = (map["lastLoginDate"] as? Long) ?: 0L,
-                // Character & Buddy
+                // Character & Fidato
                 playerCharacterId      = map["playerCharacterId"] as? String ?: "",
                 characterChangesCount  = (map["characterChangesCount"] as? Long)?.toInt() ?: 0,
-                buddyCreatureId        = map["buddyCreatureId"] as? String ?: "",
+                fidatoCreatureId        = map["fidatoCreatureId"] as? String ?: "",
                 playerGender           = map["playerGender"] as? String ?: "",
                 genderChangesCount     = (map["genderChangesCount"] as? Number)?.toInt() ?: 0,
                 genderChosenAt         = (map["genderChosenAt"] as? Number)?.toLong() ?: 0L,

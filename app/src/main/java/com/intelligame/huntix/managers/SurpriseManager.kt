@@ -12,7 +12,7 @@ import io.sentry.Sentry
 object SurpriseManager {
     private const val PREFS      = "surprise_inventory_v1"
     private const val KEY_LIST   = "owned_surprises"
-    private const val KEY_BUDDY  = "buddy_creature_id"
+    private const val KEY_FIDATO  = "fidato_creature_id"
     private val gson = Gson()
 
     fun getAll(ctx: Context): List<OwnedSurprise> {
@@ -87,22 +87,22 @@ object SurpriseManager {
         saveAll(ctx, list)
     }
 
-    fun getBuddy(ctx: Context): SurpriseCreature? {
-        return getAll(ctx).firstOrNull { it.isBuddy }?.creature
+    fun getFidato(ctx: Context): SurpriseCreature? {
+        return getAll(ctx).firstOrNull { it.isFidato }?.creature
     }
 
-    fun setBuddy(ctx: Context, ownedId: String) {
-        val list = getAll(ctx).map { it.copy(isBuddy = it.id == ownedId) }
+    fun setFidato(ctx: Context, ownedId: String) {
+        val list = getAll(ctx).map { it.copy(isFidato = it.id == ownedId) }
         saveAll(ctx, list)
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(KEY_BUDDY, ownedId).apply()
+            .edit().putString(KEY_FIDATO, ownedId).apply()
     }
 
-    fun addCandies(ctx: Context, ownedId: String, count: Int = 1) {
+    fun addLeccornie(ctx: Context, ownedId: String, count: Int = 1) {
         val list = getAll(ctx).toMutableList()
         val idx = list.indexOfFirst { it.id == ownedId }
         if (idx >= 0) {
-            list[idx] = list[idx].copy(candies = list[idx].candies + count)
+            list[idx] = list[idx].copy(leccornie = list[idx].leccornie + count)
             saveAll(ctx, list)
         }
     }
@@ -114,28 +114,28 @@ object SurpriseManager {
         saveAll(ctx, list)
     }
 
-    // ── Evolution ────────────────────────────────────────────────
+    // ── Metamorfosi ────────────────────────────────────────────────
 
     /** Check if an owned creature can evolve. */
-    fun canEvolve(ctx: Context, ownedId: String): Boolean {
+    fun canMetamorfosi(ctx: Context, ownedId: String): Boolean {
         val owned = getAll(ctx).firstOrNull { it.id == ownedId } ?: return false
         val creature = owned.creature ?: return false
-        return creature.canEvolve && owned.candies >= creature.candyCost
+        return creature.canMetamorfosi && owned.leccornie >= creature.costMetamorfosi
     }
 
     /** Get the evolved creature for an owned creature, or null. */
-    fun getEvolvedCreature(ctx: Context, ownedId: String): SurpriseCreature? {
+    fun getMetamorfosiCreature(ctx: Context, ownedId: String): SurpriseCreature? {
         val owned = getAll(ctx).firstOrNull { it.id == ownedId } ?: return null
-        return owned.creature?.getEvolvedCreature()
+        return owned.creature?.getMetamorfosiCreature()
     }
 
-    /** Get candy cost for evolution, or 0 if not evolvable. */
-    fun getEvolutionCandyCost(ctx: Context, ownedId: String): Int {
+    /** Get candy cost for metamorfosi, or 0 if not evolvable. */
+    fun getMetamorfosiCost(ctx: Context, ownedId: String): Int {
         val creature = getAll(ctx).firstOrNull { it.id == ownedId }?.creature ?: return 0
-        return creature.candyCost
+        return creature.costMetamorfosi
     }
 
-    /** Perform evolution: consume candies, change creatureId, boost level+1. */
+    /** Perform metamorfosi: consume leccornie, change creatureId, boost level+1. */
     fun evolve(ctx: Context, ownedId: String): OwnedSurprise? {
         val list = getAll(ctx).toMutableList()
         val idx = list.indexOfFirst { it.id == ownedId }
@@ -143,15 +143,15 @@ object SurpriseManager {
 
         val owned = list[idx]
         val creature = owned.creature ?: return null
-        if (!creature.canEvolve) return null
-        if (owned.candies < creature.candyCost) return null
+        if (!creature.canMetamorfosi) return null
+        if (owned.leccornie < creature.costMetamorfosi) return null
 
-        val evolved = creature.getEvolvedCreature() ?: return null
+        val evolved = creature.getMetamorfosiCreature() ?: return null
 
-        // Consume candies, change creature, boost level
+        // Consume leccornie, change creature, boost level
         val newOwned = owned.copy(
             creatureId = evolved.id,
-            candies = owned.candies - creature.candyCost,
+            leccornie = owned.leccornie - creature.costMetamorfosi,
             level = owned.level + 1
         )
         list[idx] = newOwned
@@ -165,10 +165,10 @@ object SurpriseManager {
     }
 
     /** Get all creatures that can evolve right now. */
-    fun getEvolvableCreatures(ctx: Context): List<OwnedSurprise> {
+    fun getMetamorfosableCreatures(ctx: Context): List<OwnedSurprise> {
         return getAll(ctx).filter { owned ->
             val creature = owned.creature ?: return@filter false
-            creature.canEvolve && owned.candies >= creature.candyCost
+            creature.canMetamorfosi && owned.leccornie >= creature.costMetamorfosi
         }
     }
 }

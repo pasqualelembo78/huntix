@@ -83,13 +83,13 @@ object DistanceTracker : SensorEventListener {
 
         if (deltaKm > 0.001f) {
             try {
-                val readyEggs = IncubatorManager.addDistanceToIncubators(context, deltaKm)
+                val readyEggs = TermocullaManager.addDistanceToTermocullas(context, deltaKm)
                 if (readyEggs.isNotEmpty()) {
                     Log.d("DistanceTracker", "Eggs ready to hatch: $readyEggs")
                 }
             } catch (e: Exception) { Sentry.captureException(e) }
             try {
-                BuddyManager.addWalkingDistance(context, deltaKm)
+                CompanionManager.addWalkingDistance(context, deltaKm)
             } catch (e: Exception) { Sentry.captureException(e) }
             val totalKm = p.getFloat(KEY_TOTAL_KM, 0f)
             if (totalKm >= 2f) ResearchTaskManager.trackProgress(context, "walk_2km")

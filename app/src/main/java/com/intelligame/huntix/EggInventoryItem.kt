@@ -9,7 +9,7 @@ import org.json.JSONObject
  * [inBattleTeam] = true → uovo selezionato per il futuro "Inventario Combattimento" (max 3).
  */
 data class EggInventoryItem(
-    val instanceId:   String  = java.util.UUID.randomUUID().toString().take(12),
+    val istanzaId:   String  = java.util.UUID.randomUUID().toString().take(12),
     val eggId:        String  = "",
     val rarityId:     String  = "common",
     val fantasyName:  String  = "",
@@ -21,7 +21,7 @@ data class EggInventoryItem(
     val rarity: EggRarity get() = EggRarity.fromId(rarityId)
 
     fun toJson(): JSONObject = JSONObject().apply {
-        put("instanceId",   instanceId)
+        put("istanzaId",   istanzaId)
         put("eggId",        eggId)
         put("rarityId",     rarityId)
         put("fantasyName",  fantasyName)
@@ -33,7 +33,7 @@ data class EggInventoryItem(
 
     companion object {
         fun fromJson(j: JSONObject) = EggInventoryItem(
-            instanceId   = j.optString("instanceId",   java.util.UUID.randomUUID().toString().take(12)),
+            istanzaId   = j.optString("istanzaId",   java.util.UUID.randomUUID().toString().take(12)),
             eggId        = j.optString("eggId",        ""),
             rarityId     = j.optString("rarityId",     "common"),
             fantasyName  = j.optString("fantasyName",  ""),

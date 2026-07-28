@@ -19,19 +19,19 @@ import android.widget.TextView
 import com.intelligame.huntix.SurpriseCreature
 import com.intelligame.huntix.UiKit
 
-object EvolutionDialogHelper {
+object MetamorfosiDialogHelper {
 
-    interface OnEvolutionResult {
-        fun onEvolved(newCreature: SurpriseCreature)
+    interface OnMetamorfosiResult {
+        fun onMetamorfosized(newCreature: SurpriseCreature)
         fun onCancelled()
     }
 
-    fun showEvolutionConfirm(
+    fun showMetamorfosiConfirm(
         ctx: Context,
         currentCreature: SurpriseCreature,
         evolvedCreature: SurpriseCreature,
-        candyCost: Int,
-        onResult: OnEvolutionResult
+        costMetamorfosi: Int,
+        onResult: OnMetamorfosiResult
     ) {
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -56,7 +56,7 @@ object EvolutionDialogHelper {
         }
 
         val arrow = TextView(ctx).apply {
-            text = "⬇️ (${candyCost} caramelle)"
+            text = "⬇️ (${costMetamorfosi} caramelle)"
             textSize = 14f
             setTextColor(Color.parseColor("#FFCC00"))
             gravity = Gravity.CENTER
@@ -98,39 +98,39 @@ object EvolutionDialogHelper {
             .setTitle("Vuoi evolvere?")
             .setView(container)
             .setPositiveButton("Evolvi! ⚡") { _, _ ->
-                showEvolutionAnimation(ctx, currentCreature, evolvedCreature, onResult)
+                showMetamorfosiAnimation(ctx, currentCreature, evolvedCreature, onResult)
             }
             .setNegativeButton("Non ora", { _, _ -> onResult.onCancelled() })
             .setCancelable(false)
             .show()
     }
 
-    private fun showEvolutionAnimation(
+    private fun showMetamorfosiAnimation(
         ctx: Context,
         from: SurpriseCreature,
         to: SurpriseCreature,
-        onResult: OnEvolutionResult
+        onResult: OnMetamorfosiResult
     ) {
-        val evolutionView = EvolutionAnimationView(ctx, from, to)
+        val metamorfosiView = MetamorfosiAnimationView(ctx, from, to)
         val dialog = AlertDialog.Builder(ctx)
-            .setView(evolutionView)
+            .setView(metamorfosiView)
             .setCancelable(false)
             .create()
         dialog.window?.setBackgroundDrawableResource(android.R.color.black)
 
-        evolutionView.onComplete = {
+        metamorfosiView.onComplete = {
             dialog.dismiss()
             showEvolvedResult(ctx, to, onResult)
         }
 
         dialog.show()
-        evolutionView.startAnimation()
+        metamorfosiView.startAnimation()
     }
 
     private fun showEvolvedResult(
         ctx: Context,
         creature: SurpriseCreature,
-        onResult: OnEvolutionResult
+        onResult: OnMetamorfosiResult
     ) {
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -186,7 +186,7 @@ object EvolutionDialogHelper {
             .setTitle("Evoluzione completata!")
             .setView(container)
             .setPositiveButton("Fantastico!") { _, _ ->
-                onResult.onEvolved(creature)
+                onResult.onMetamorfosized(creature)
             }
             .setCancelable(false)
             .show()
@@ -194,7 +194,7 @@ object EvolutionDialogHelper {
 
     // ── Animation View ───────────────────────────────────────────
 
-    private class EvolutionAnimationView(
+    private class MetamorfosiAnimationView(
         context: Context,
         private val from: SurpriseCreature,
         private val to: SurpriseCreature

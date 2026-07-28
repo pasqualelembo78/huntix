@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- ✅ FIX v7.2.1: VIBRATE — richiesto da AR minigames (haptic feedback) -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Step counter for incubator distance tracking -->
+    <!-- Step counter for termoculla distance tracking -->
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
     <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
@@ -197,8 +197,8 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
-        <!-- NEW: Pokédex, Daily Streak, Research Tasks, Raid Battles -->
-        <activity android:name=".PokedexActivity"
+        <!-- NEW: Enciclopedia, Daily Streak, Research Tasks, Raid Battles -->
+        <activity android:name=".CodexActivity"
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".DailyStreakActivity"
             android:exported="false" android:screenOrientation="portrait"/>

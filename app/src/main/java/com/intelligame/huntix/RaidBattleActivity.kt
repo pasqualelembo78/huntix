@@ -13,7 +13,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import com.intelligame.huntix.managers.IncubatorManager
+import com.intelligame.huntix.managers.TermocullaManager
 import com.intelligame.huntix.managers.RaidManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.SurpriseManager
@@ -126,10 +126,10 @@ class RaidBattleActivity : BaseNavActivity() {
                         val rarity = boss.rewardRarity
                         val mvcReward = boss.tier * 100
                         val xpReward = boss.tier * 150
-                        val candiesDropped = 3 + boss.tier * 2
+                        val leccornieDropped = 3 + boss.tier * 2
                         val itemsList = mutableListOf<String>()
                         itemsList.add("🍬 Caramelle")
-                        if (boss.tier >= 3) itemsList.add("🧬 Super Incubatrice")
+                        if (boss.tier >= 3) itemsList.add("🧬 Super Termocolla")
                         if (boss.tier >= 4) itemsList.add("⭐ Stella Rara")
                         if (boss.tier >= 5) itemsList.add("💎 Gemma Leggendaria")
 
@@ -148,7 +148,7 @@ class RaidBattleActivity : BaseNavActivity() {
                             mvcReward = mvcReward,
                             xpReward = xpReward,
                             eggRarityId = rarity.id,
-                            candiesDropped = candiesDropped,
+                            leccornieDropped = leccornieDropped,
                             itemsDropped = itemsList
                         )
                         finish()

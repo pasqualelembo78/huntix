@@ -8,8 +8,8 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.intelligame.huntix.EggFoodManager
-import com.intelligame.huntix.EggFoodManager.EggFood
+import com.intelligame.huntix.EggNutrimentManager
+import com.intelligame.huntix.EggNutrimentManager.EggFood
 import com.intelligame.huntix.EggElement
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.WorldEgg
@@ -25,7 +25,7 @@ object CatchDialogHelper {
         egg: WorldEgg,
         onReady: OnCatchReady
     ) {
-        val foods = EggFoodManager.getAvailableFoods(ctx)
+        val foods = EggNutrimentManager.getAvailableFoods(ctx)
         if (foods.isEmpty()) {
             showSwipeCatch(ctx, egg, 1f, 1f, onReady)
             return
@@ -34,8 +34,8 @@ object CatchDialogHelper {
         val items = mutableListOf<String>()
         items.add("Nessun cibo")
         foods.forEach { (food, qty) ->
-            val bonus = EggFoodManager.calculateCatchBonus(food, egg.element)
-            val reaction = EggFoodManager.getReaction(food, egg.element)
+            val bonus = EggNutrimentManager.calculateCatchBonus(food, egg.element)
+            val reaction = EggNutrimentManager.getReaction(food, egg.element)
             items.add("${food.emoji} ${food.displayName} (×$qty) — ${reaction.emoji} bonus: ×${"%.2f".format(bonus)}")
         }
 
@@ -43,13 +43,13 @@ object CatchDialogHelper {
             .setTitle("Scegli un esca per l'uovo (${egg.element.name})")
             .setItems(items.toTypedArray()) { _, which ->
                 if (which == 0) {
-                    EggFoodManager.resetEncounter()
+                    EggNutrimentManager.resetEncounter()
                     showSwipeCatch(ctx, egg, 1f, 1f, onReady)
                 } else {
                     val food = foods[which - 1].first
-                    val reaction = EggFoodManager.applyFood(ctx, food, egg.element)
-                    val bonus = EggFoodManager.currentFoodBonus
-                    val xpMul = EggFoodManager.currentXpMultiplier
+                    val reaction = EggNutrimentManager.applyFood(ctx, food, egg.element)
+                    val bonus = EggNutrimentManager.currentFoodBonus
+                    val xpMul = EggNutrimentManager.currentXpMultiplier
                     showSwipeCatch(ctx, egg, bonus, xpMul, onReady)
                 }
             }
@@ -113,9 +113,9 @@ object CatchDialogHelper {
 
         swipeView.listener = object : SwipeToCatchView.OnCatchResult {
             override fun onThrowAttempt(attempt: Int, quality: Float) {
-                val reactionText = if (EggFoodManager.currentAppliedFood != null) {
-                    val reaction = EggFoodManager.getReaction(
-                        EggFoodManager.currentAppliedFood!!, egg.element
+                val reactionText = if (EggNutrimentManager.currentAppliedFood != null) {
+                    val reaction = EggNutrimentManager.getReaction(
+                        EggNutrimentManager.currentAppliedFood!!, egg.element
                     )
                     "${reaction.emoji} ${reaction.message}"
                 } else ""

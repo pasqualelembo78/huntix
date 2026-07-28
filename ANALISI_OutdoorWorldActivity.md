@@ -5,7 +5,7 @@
 
 ## 🔍 OVERVIEW
 
-OutdoorWorldActivity è il **cuore del mondo aperto** — la schermata stile "Pokémon GO" dove
+OutdoorWorldActivity è il **cuore del mondo aperto** — la schermata dove
 il giocatore cammina nel mondo reale, vede uova sulla mappa Mapbox, le cattura, visita
 palestre e punti di interesse.
 

@@ -4,9 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * EggFoodManager — gestione cibi-esca per addolcire le uova.
+ * EggNutrimentManager — gestione cibi-esca per addolcire le uova.
  *
- * Stile Pokémon GO Bacche: lanciare cibo all'uovo prima di catturarlo
+ * Bacche: lanciare cibo all'uovo prima di catturarlo
  * aumenta la probabilità di cattura. La compatibilità elemento-cibo
  * determina il bonus:
  *
@@ -17,7 +17,7 @@ import android.content.SharedPreferences
  * Acquistabili SOLO al negozio. Ogni uso consuma 1 unità.
  * Il giocatore inizia SENZA cibi — deve acquistarli.
  */
-object EggFoodManager {
+object EggNutrimentManager {
 
     private const val PREFS = "egg_food_prefs"
 

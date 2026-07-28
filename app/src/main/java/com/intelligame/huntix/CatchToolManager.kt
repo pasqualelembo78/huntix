@@ -5,9 +5,9 @@ import android.content.SharedPreferences
 import android.util.Log
 
 /**
- * CatchToolManager — gestione strumenti di cattura (Secchielli).
+ * Gestione strumenti di cattura (Secchielli).
  *
- * Stile Pokémon GO: il giocatore può scegliere tra diversi strumenti
+ * Il giocatore può scegliere tra diversi strumenti
  * con catch rate crescente. Acquistabili al negozio.
  *
  * 🪣 Secchiello Base  — catch rate ×1.0 (illimitato, sempre disponibile)
@@ -30,7 +30,7 @@ object CatchToolManager {
         val emoji: String,
         val catchMultiplier: Float,
         val colorHex: String,
-        val isUnlimited: Boolean,
+        val isIllimitato: Boolean,
         val shopPrice: Int,    // prezzo per 1 unità, 0 = non acquistabile
         val expiryDays: Int,   // giorni prima che si rompa (0 = nessuna scadenza)
         val capacity: Int      // uova trasportabili prima di dover svuotare il secchiello
@@ -41,7 +41,7 @@ object CatchToolManager {
             emoji = "🪣",
             catchMultiplier = 1.0f,
             colorHex = "#00FF88",
-            isUnlimited = true,
+            isIllimitato = true,
             shopPrice = 0,
             expiryDays = 0,
             capacity = 1
@@ -52,7 +52,7 @@ object CatchToolManager {
             emoji = "🪣✨",
             catchMultiplier = 1.3f,
             colorHex = "#00B4FF",
-            isUnlimited = false,
+            isIllimitato = false,
             shopPrice = 50,
             expiryDays = 10,
             capacity = 5
@@ -63,7 +63,7 @@ object CatchToolManager {
             emoji = "🏆",
             catchMultiplier = 1.6f,
             colorHex = "#FFD700",
-            isUnlimited = false,
+            isIllimitato = false,
             shopPrice = 150,
             expiryDays = 10,
             capacity = 10
@@ -81,7 +81,7 @@ object CatchToolManager {
 
     /** Restituisce la quantità disponibile di un tool. BUCKET_BASE = sempre 99. */
     fun getQuantity(ctx: Context, tool: CatchTool): Int {
-        if (tool.isUnlimited) return 99
+        if (tool.isIllimitato) return 99
         // Prima purga i lotti scaduti, poi conta
         purgeExpiredBatches(ctx, tool)
         return prefs(ctx).getInt("qty_${tool.id}", 0)
@@ -92,7 +92,7 @@ object CatchToolManager {
      * Registra anche il timestamp di acquisto per il tracking scadenza.
      */
     fun addQuantity(ctx: Context, tool: CatchTool, amount: Int) {
-        if (tool.isUnlimited) return
+        if (tool.isIllimitato) return
         val current = prefs(ctx).getInt("qty_${tool.id}", 0)
         prefs(ctx).edit().putInt("qty_${tool.id}", current + amount).apply()
 
@@ -112,7 +112,7 @@ object CatchToolManager {
 
     /** Consuma 1 unità del tool. Restituisce false se non ce ne sono. */
     fun consume(ctx: Context, tool: CatchTool): Boolean {
-        if (tool.isUnlimited) return true
+        if (tool.isIllimitato) return true
         purgeExpiredBatches(ctx, tool)
         val current = prefs(ctx).getInt("qty_${tool.id}", 0)
         if (current <= 0) return false
@@ -134,7 +134,7 @@ object CatchToolManager {
         val id = prefs(ctx).getString("selected_tool", CatchTool.BUCKET_BASE.id)
         val tool = CatchTool.fromId(id ?: CatchTool.BUCKET_BASE.id)
         // Se il tool selezionato non ha più unità, torna al base
-        if (!tool.isUnlimited && getQuantity(ctx, tool) <= 0) {
+        if (!tool.isIllimitato && getQuantity(ctx, tool) <= 0) {
             setSelectedTool(ctx, CatchTool.BUCKET_BASE)
             return CatchTool.BUCKET_BASE
         }
@@ -153,7 +153,7 @@ object CatchToolManager {
      * Restituisce -1 se non ha scadenza o non ha lotti.
      */
     fun getDaysRemaining(ctx: Context, tool: CatchTool): Int {
-        if (tool.expiryDays <= 0 || tool.isUnlimited) return -1
+        if (tool.expiryDays <= 0 || tool.isIllimitato) return -1
         val batches = getBatchKeys(ctx, tool)
         if (batches.isEmpty()) return -1
         val oldestTs = batches.mapNotNull { key ->

@@ -60,7 +60,7 @@ object ResearchTaskManager {
     private val dailyTemplates = listOf(
         QuestTemplate("catch_3", "Cattura 3 uova", "Cattura uova in Outdoor o Indoor", "🥚", 3),
         QuestTemplate("catch_rare", "Cattura un uovo raro", "Cattura un Cristallo Viola o meglio", "🔮", 1),
-        QuestTemplate("hatch_1", "Schiudi 1 uovo", "Metti un uovo in incubatrice e aspetta", "🧬", 1),
+        QuestTemplate("hatch_1", "Schiudi 1 uovo", "Metti un uovo in termocolla e aspetta", "🧬", 1),
         QuestTemplate("walk_2km", "Cammina 2 km", "Cammina per accumulare distanza", "🚶", 2),
         QuestTemplate("play_indoor", "Gioca in Indoor", "Nascondi o cerca uova in AR", "🏠", 1),
         QuestTemplate("play_outdoor", "Gioca in Outdoor", "Esplora la mappa e cattura uova", "🌍", 1),
@@ -72,7 +72,7 @@ object ResearchTaskManager {
 
     private val weeklyTemplates = listOf(
         QuestTemplate("catch_20", "Cattura 20 uova", "Cattura uova in tutta la settimana", "🥚", 20),
-        QuestTemplate("hatch_5", "Schiudi 5 uova", "Metti in incubatrice e raccogli", "🧬", 5),
+        QuestTemplate("hatch_5", "Schiudi 5 uova", "Metti in termocolla e raccogli", "🧬", 5),
         QuestTemplate("walk_10km", "Cammina 10 km", "Cammina per accumulare distanza", "🚶", 10),
         QuestTemplate("win_5_battles", "Vinci 5 battaglie", "Sfida e vinci nemici", "⚔️", 5),
         QuestTemplate("find_epic", "Trova un uovo Epico", "Cattura un Cristallo di Fuoco o meglio", "🔥", 1),

@@ -1,10 +1,10 @@
 ===============================================================
-MAPLIBRE MIGRATION + ROADMAP VERSO POKEMON GO — Huntix
+MAPLIBRE MIGRATION + ROADMAP VERSO HUNTIX — Huntix
 ===============================================================
 
 STATUS: Step 1-5 completati + Fase 1-6 completate
 DATA:   2026-07-22
-REVISIONE: Roadmap completa per raggiungere esperienza Pokémon GO
+REVISIONE: Roadmap completa per raggiungere esperienza Huntix
 
 ===============================================================
 PARTE A — STATO ATTUALE (completato)
@@ -109,7 +109,7 @@ File modificati:
 
 Risultati:
   ✅ 2.1 Animazione "giro" stop (rotazione 360° + reward popup stagger)
-  ✅ 2.2 Distinzione visiva POI tipo (pokestop/gym/sponsor/arena)
+   ✅ 2.2 Distinzione visiva POI tipo (hub/gym/sponsor/arena)
   ✅ 2.3 Popup ricompense strutturato (MVC + XP + item + egg drop 20%)
   ✅ 2.4 Cooldown visivo stop (5 minuti, marker grigio, timer countdown)=
 
@@ -122,7 +122,7 @@ RISULTATO: Rotazione 360° icona POI (600ms). Popup ricompense con
 --- 2.2 Distinzione visiva POI tipo ✅ ---
 FILE: OutdoorWorldActivity.kt (makePoiBitmap + makePoiBitmapGray)
 RISULTATO: 4 tipi di pin con colori/forme diverse:
-  - pokestop: pin blu + cubo bianco
+   - hub: pin blu + cubo bianco
   - gym: pin blu + scudo con dettagli
   - sponsor: pin oro + stella bianca
   - arena: pin arancione + cerchio concentrico
@@ -150,11 +150,11 @@ FASE 3 — AVATAR E COMPAGNO SULLA MAPPA (priorità ALTA) ✅ COMPLETATA
 
 Data completamento: 2026-07-22
 File modificati:
-  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (avatar+buddy+heading)
+  - app/src/main/java/.../ui/OutdoorWorldActivity.kt (avatar+fidato+heading)
 
 Risultati:
   ✅ 3.1 Avatar giocatore con RPM thumbnail + level ring + walking bounce
-  ✅ 3.2 Compagno (buddy) visibile accanto all'avatar con emoji creatura
+  ✅ 3.2 Compagno (fidato) visibile accanto all'avatar con emoji creatura
   ✅ 3.3 Indicatore direzione (triangolo oro che ruota con compass)=
 
 --- 3.1 Avatar giocatore sulla mappa ✅ ---
@@ -163,11 +163,11 @@ RISULTATO: Avatar marker con RPM thumbnail (se disponibile) o fallback
   classico. Ring colorato per livello (verde/blu/arancio/viola/oro).
   Bounce animation camminata (walkTick 0-63). Badge accessori equipaggiati.
 
---- 3.2 Compagno (buddy) visibile ✅ ---
+--- 3.2 Compagno (fidato) visibile ✅ ---
 FILE: OutdoorWorldActivity.kt, managers/BuddyManager.kt
-RISULTATO: Marker secondario con emoji creatura buddy su cerchio viola.
+RISULTATO: Marker secondario con emoji creatura fidato su cerchio viola.
   Mostra nome creature e conteggio caramelle. Posizionato con offset
-  fisso dall'avatar. Visibile solo se PlayerProfile.buddyCreatureId != "".
+  fisso dall'avatar. Visibile solo se PlayerProfile.fidatoCreatureId != "".
 
 --- 3.3 Indicatore direzione utente ✅ ---
 FILE: OutdoorWorldActivity.kt
@@ -228,13 +228,13 @@ File modificati:
   - app/src/main/java/.../ui/OutdoorWorldActivity.kt
 
 Risultati:
-  ✅ 5.1 Barra progresso uova incubatrice in bottom sheet (km percorsi/richiesti)
+  ✅ 5.1 Barra progresso uova termocolla in bottom sheet (km percorsi/richiesti)
   ✅ 5.2 Notifiche proximità (vibrazione + toast quando uova a <50m)=
 
---- 5.1 Barra progresso uova in incubatrice ✅ ---
+--- 5.1 Barra progresso uova in termocolla ✅ ---
 FILE: OutdoorWorldActivity.kt, IncubatorManager.kt
 RISULTATO: Bottom sheet mostra progresso incubazione se l'uovo selezionata
-  è in incubatrice attiva. Formato: "[🥚] 2.4 / 5.0 km [════░░░░] 48%".
+  è in termocolla attiva. Formato: "[🥚] 2.4 / 5.0 km [════░░░░] 48%".
   Dati da IncubatorManager.getActiveEggs(). Aggiornamento ogni tick.
 
 --- 5.2 Livello e EXP giocatore in mappa ---
@@ -263,7 +263,7 @@ FASE 6 — GAMEPLAY CORE (priorità ALTA) ✅ COMPLETATA
 --- 6.1 Lancio Pokéball (meccanica di lancio) ---
 FILE: OutdoorHuntActivity.kt (133 righe, attualmente radar-based)
 PROBLEMA: Attualmente si cattura avvicinandosi e premendo un bottone.
-  Pokémon GO ha il lancio fisico della Pokéball con gesture swipe.
+  Il lancio fisico della Pokéball con gesture swipe.
 SOLUZIONE:
   - Nuovo componente SwipeToCatchView.kt (già esistente nel package)
   - Implementare:
@@ -287,16 +287,16 @@ SOLUZIONE:
   - Effetto visivo: aura colorata intorno alla creatura
   - Durata: 1 lancio solo
 
---- 6.3 Sistema evoluzione creature ---
+--- 6.3 Sistema metamorfosi creature ---
 FILE: SurpriseManager.kt, SurpriseCreature.kt
 SOLUZIONE:
   - Attualmente: fusione 3→stessa = level up (fino a lv4)
-  - Pokémon GO style:
+  - Metamorfosi creature con linee evolutive:
     - Creature hanno linee evoluzione (es. DragoBase → DragoMid → DragoFinal)
     - Costo candele in base alla specie
     - Animazione evoluzione (flash + trasformazione 3D)
     - Aggiungere campo `evolvesTo: String?` a SurpriseCreature
-    - La creatura evoluta ha stats migliori + aspetto diverso
+    - La creatura trasformata ha stats migliori + aspetto diverso
 
 --- 6.4 Ricompense raid strutturate ---
 FILE: RaidBattleActivity.kt, RaidManager.kt (già funzionanti)
@@ -311,7 +311,7 @@ SOLUZIONE:
 RISULTATI FASE 6 ✅:
   ✅ 6.1 SwipeToCatchView riscritto: 3 tentativi, shake animation, capture flash, escape drift
   ✅ 6.2 Sistema cibo/berry (EggFoodManager: 6 tipi + compatibilità elemento + reazione visiva)
-  ✅ 6.3 Sistema evoluzione (15 creature evolute, catene 2 livelli, candyCost, animazione Canvas)
+  ✅ 6.3 Sistema metamorfosi (15 creature con metamorfosi, catene 2 livelli, costMetamorfosi, animazione Canvas)
   ✅ 6.4 Loot screen raid (RaidLootActivity: ricompense animate stagger + badge completati)
   Data: 2026-07-22
 
@@ -433,13 +433,13 @@ SOLUZIONE:
 FILE: managers/DistanceTracker.kt (106 righe, usa step counter)
 SOLUZIONE:
   - Attualmente usa il sensore accelerometro interno
-  - Pokémon GO si integra con Google Fit per distance tracking
+  - Integrazione con Google Fit per distance tracking
     anche quando l'app è chiusa
   - Aggiungere:
     - Google Fit API (com.google.android.gms:play-services-fitness)
     - Richiedere Health Connect permission
     - Sync distance ogni 15 minuti quando app è in background
-    - Aggiornare incubatori anche con app chiusa
+    - Aggiornare termoculle anche con app chiusa
   - Priorità bassa: il step counter attuale funziona
 
 --- 9.3 Achievement / medaglie ---

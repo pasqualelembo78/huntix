@@ -47,7 +47,7 @@ class RaidLootActivity : BaseNavActivity() {
             mvcReward: Int,
             xpReward: Int,
             eggRarityId: String,
-            candiesDropped: Int,
+            leccornieDropped: Int,
             itemsDropped: List<String>
         ) {
             val intent = android.content.Intent(ctx, RaidLootActivity::class.java).apply {
@@ -56,7 +56,7 @@ class RaidLootActivity : BaseNavActivity() {
                 putExtra("mvcReward", mvcReward)
                 putExtra("xpReward", xpReward)
                 putExtra("eggRarityId", eggRarityId)
-                putExtra("candiesDropped", candiesDropped)
+                putExtra("leccornieDropped", leccornieDropped)
                 putStringArrayListExtra("itemsDropped", ArrayList(itemsDropped))
             }
             ctx.startActivity(intent)
@@ -71,7 +71,7 @@ class RaidLootActivity : BaseNavActivity() {
         val mvcReward = intent.getIntExtra("mvcReward", 100)
         val xpReward = intent.getIntExtra("xpReward", 200)
         val eggRarityId = intent.getStringExtra("eggRarityId") ?: "common"
-        val candiesDropped = intent.getIntExtra("candiesDropped", 0)
+        val leccornieDropped = intent.getIntExtra("leccornieDropped", 0)
         val itemsDropped = intent.getStringArrayListExtra("itemsDropped") ?: arrayListOf()
 
         // Build rewards list
@@ -81,8 +81,8 @@ class RaidLootActivity : BaseNavActivity() {
         val rarity = EggRarity.fromId(eggRarityId)
         rewards.add(RewardItem("🥚", "Uovo ${rarity.name}", rarity.randomName(), rarity.colorHex))
 
-        if (candiesDropped > 0) {
-            rewards.add(RewardItem("🍬", "Caramelle", "+$candiesDropped", "#FF6B9D"))
+        if (leccornieDropped > 0) {
+            rewards.add(RewardItem("🍬", "Caramelle", "+$leccornieDropped", "#FF6B9D"))
         }
 
         itemsDropped.forEach { item ->

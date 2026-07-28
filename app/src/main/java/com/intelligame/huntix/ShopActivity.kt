@@ -52,7 +52,7 @@ class ShopActivity : BaseNavActivity() {
         children.add(UiKit.section(c, "🪣 Secchielli (con MVC)"))
         children.add(UiKit.subtitle(c,
             "MVC attuali: ${SavedManager.getMvcBalance(c).toInt()}  🪙"))
-        CatchToolManager.CatchTool.values().filter { !it.isUnlimited }.forEach { tool ->
+        CatchToolManager.CatchTool.values().filter { !it.isIllimitato }.forEach { tool ->
             children.add(bucketRow(tool))
         }
 
