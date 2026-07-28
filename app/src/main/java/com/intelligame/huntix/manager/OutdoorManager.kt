@@ -538,7 +538,10 @@ class OutdoorManager private constructor() : SensorEventListener {
             is Poi -> 30f
             else -> 50f
         }
-        if (targetDist <= thresholdM) return "Gi vicino!"
+        if (targetDist <= thresholdM) {
+            isSimulating = true
+            return "Gi vicino!"
+        }
         val stepM = 30f
         val ratio = if (targetDist > stepM) stepM / targetDist else 1f
         val targetLat = when (target) {
