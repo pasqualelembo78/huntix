@@ -63,7 +63,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     companion object {
         private const val TAG = "OutdoorWorld"
         private const val MIN_REPORT_DISTANCE_M = 200.0
-        private const val REPORT_COOLDOWN_MS = 60_000L
+        private const val REPORT_COOLDOWN_MS = 10_000L
         private const val MAX_REPORTS_PER_SESSION = 10
     }
 
