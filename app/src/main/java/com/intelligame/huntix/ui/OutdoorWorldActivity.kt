@@ -59,6 +59,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     companion object {
         private const val TAG = "OutdoorWorld"
+        private const val MIN_REPORT_DISTANCE_M = 200.0
+        private const val REPORT_COOLDOWN_MS = 60_000L
+        private const val MAX_REPORTS_PER_SESSION = 10
     }
 
     override fun activeTab() = ""
@@ -91,6 +94,11 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var tvSheetAr: TextView
     private var activeEggId: String? = null
     private var activePoiId: String? = null
+    private var lastReportTime = 0L
+    private var lastReportLat = 0.0
+    private var lastReportLng = 0.0
+    private var reportsThisSession = 0
+
     private val refresh = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() { refreshUi(); refresh.postDelayed(this, 3000) }
@@ -1026,8 +1034,43 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activePoiId = null
     }
 
+    private fun haversineM(la1: Double, ln1: Double, la2: Double, ln2: Double): Float {
+        val R = 6371000.0
+        val dLat = Math.toRadians(la2 - la1)
+        val dLng = Math.toRadians(ln2 - ln1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(la1)) * Math.cos(Math.toRadians(la2)) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2)
+        return (R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFloat()
+    }
+
     /** Mostra dialog per segnalare un POI mancante */
     private fun showReportPoiDialog(lat: Double, lng: Double) {
+        val now = System.currentTimeMillis()
+        // Rate-limit: too soon from last report
+        if (now - lastReportTime < REPORT_COOLDOWN_MS) {
+            Toast.makeText(this, "Aspetta un momento prima di segnalare di nuovo", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Max per session
+        if (reportsThisSession >= MAX_REPORTS_PER_SESSION) {
+            Toast.makeText(this, "Limite di ${MAX_REPORTS_PER_SESSION} segnalazioni raggiunto in questa sessione", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Guarda se ci sono POI vicini
+        val tooClose = mgr.getPois().any { haversineM(lat, lng, it.lat, it.lng) < MIN_REPORT_DISTANCE_M }
+        if (tooClose) return
+        // Guarda se l'ultimo report è troppo vicino
+        if (lastReportTime > 0 && haversineM(lat, lng, lastReportLat, lastReportLng) < MIN_REPORT_DISTANCE_M) {
+            Toast.makeText(this, "Troppo vicino all'ultima segnalazione — spostati di almeno 200m", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        reportsThisSession++
+        lastReportTime = now
+        lastReportLat = lat
+        lastReportLng = lng
+
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(UiKit.dp(this@OutdoorWorldActivity, 16),
@@ -1066,12 +1109,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 val name = inputName.text.toString().trim()
                 val cat = spinnerCategory.text.toString().trim()
                 if (name.isEmpty()) {
+                    reportsThisSession--
                     Toast.makeText(this@OutdoorWorldActivity, "Inserisci almeno un nome", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 savePoiSuggestion(name, cat, lat, lng)
             }
-            setNegativeButton("Annulla", null)
+            setNegativeButton("Annulla") { _, _ -> reportsThisSession-- }
             show()
         }
     }
@@ -1079,6 +1123,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
     /** Salva il suggerimento POI in un file cache locale */
     private fun savePoiSuggestion(name: String, category: String, lat: Double, lng: Double) {
         try {
+            // Validate: not too close to any existing POI
+            if (mgr.getPois().any { haversineM(lat, lng, it.lat, it.lng) < MIN_REPORT_DISTANCE_M }) {
+                Toast.makeText(this, "Un POI già esiste nelle vicinanze", Toast.LENGTH_SHORT).show()
+                reportsThisSession--
+                return
+            }
             val suggestionsFile = File(filesDir, "poi_suggestions.json")
             val existing = mutableListOf<JSONObject>()
             if (suggestionsFile.exists()) {
@@ -1088,6 +1138,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
                     existing.add(arr.getJSONObject(i))
                 }
             }
+            // Check proximity to other saved suggestions too
+            if (existing.any { s ->
+                haversineM(lat, lng, s.optDouble("lat", 0.0), s.optDouble("lng", 0.0)) < MIN_REPORT_DISTANCE_M
+            }) {
+                Toast.makeText(this, "Esiste già una segnalazione nelle vicinanze", Toast.LENGTH_SHORT).show()
+                reportsThisSession--
+                return
+            }
             existing.add(JSONObject().apply {
                 put("name", name)
                 put("category", category)
@@ -1095,8 +1153,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 put("lng", lng)
                 put("timestamp", System.currentTimeMillis())
             })
-            val arr = JSONArray(existing)
-            suggestionsFile.writeText(arr.toString(2))
+            val outArr = JSONArray(existing)
+            suggestionsFile.writeText(outArr.toString(2))
             Toast.makeText(this, "Segnalazione inviata: grazie!", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Errore salvataggio", Toast.LENGTH_SHORT).show()
