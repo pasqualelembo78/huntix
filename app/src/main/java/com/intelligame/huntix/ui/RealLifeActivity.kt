@@ -171,10 +171,8 @@ class RealLifeActivity : BaseNavActivity() {
             gravity = Gravity.CENTER
             setPadding(UiKit.dp(c, 10), 0, UiKit.dp(c, 10), 0)
         }
-        actionsGrid.addView(actionButton(c, "🏙️", "Mappa Città", "#FF6D00") {
-            startActivity(Intent(c, OutdoorWorldActivity::class.java).apply {
-                putExtra(OutdoorWorldActivity.EXTRA_MODE, OutdoorWorldActivity.MODE_REALLIFE)
-            })
+        actionsGrid.addView(actionButton(c, "🏙️", "Città 3D", "#FF6D00") {
+            startActivity(Intent(c, CityActivity::class.java))
             (c as? android.app.Activity)?.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
         })
         actionsGrid.addView(actionSpacer(c))

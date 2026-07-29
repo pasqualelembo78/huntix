@@ -123,6 +123,21 @@ async def lifespan(application):
     except Exception as e:
         logger.error(f"init_reallife_tables FAILED (continuing): {e}")
     try:
+        from reallife.venue_assignment import init_venue_tables
+        init_venue_tables()
+    except Exception as e:
+        logger.error(f"init_venue_tables FAILED (continuing): {e}")
+    try:
+        from reallife.orders import init_order_tables
+        init_order_tables()
+    except Exception as e:
+        logger.error(f"init_order_tables FAILED (continuing): {e}")
+    try:
+        from reallife.skills import init_skills_tables
+        init_skills_tables()
+    except Exception as e:
+        logger.error(f"init_skills_tables FAILED (continuing): {e}")
+    try:
         init_provider()
     except Exception as e:
         logger.error(f"init_provider FAILED (continuing): {e}")

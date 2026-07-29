@@ -37,7 +37,23 @@ data class ChatRequest(
     @SerializedName("character") val character: String,
     @SerializedName("text") val text: String,
     @SerializedName("username") val username: String = "Utente",
-    @SerializedName("client_storage") val clientStorage: Boolean = true
+    @SerializedName("client_storage") val clientStorage: Boolean = true,
+    @SerializedName("venue_id") val venueId: String? = null
+)
+
+/** Personaggio assegnato a un locale (da GET /reallife/venue-character). */
+data class VenueCharacterResponse(
+    @SerializedName("id") val id: String = "",
+    @SerializedName("name") val name: String = "",
+    @SerializedName("full_name") val fullName: String? = null,
+    @SerializedName("age") val age: Int = 0,
+    @SerializedName("role") val role: String? = null,
+    @SerializedName("category") val category: String = "",
+    @SerializedName("avatar") val avatar: String? = null,
+    @SerializedName("description") val description: String? = null,
+    @SerializedName("tags") val tags: List<String>? = null,
+    @SerializedName("essence") val essence: String? = null,
+    @SerializedName("knowledge_domains") val knowledgeDomains: Map<String, Any>? = null
 )
 
 /** Risposta di POST /chat. */
@@ -123,4 +139,73 @@ data class InteractResponse(
     @SerializedName("needs") val needs: Needs? = null,
     @SerializedName("skills_leveled_up") val skillsLeveledUp: List<String> = emptyList(),
     @SerializedName("skills") val skills: SkillsResponse? = null
+)
+
+// ── Venue orders ────────────────────────────────────────────
+data class OrderRequest(
+    @SerializedName("venue_id") val venueId: String,
+    @SerializedName("venue_name") val venueName: String = "",
+    @SerializedName("building_type") val buildingType: String = "RESTAURANT",
+    @SerializedName("lat") val lat: Double = 0.0,
+    @SerializedName("lng") val lng: Double = 0.0,
+    @SerializedName("items") val items: List<String> = emptyList(),
+    @SerializedName("user_id") val userId: String? = null
+)
+
+data class OrderResponse(
+    @SerializedName("status") val status: String = "",
+    @SerializedName("order_id") val orderId: Int = 0,
+    @SerializedName("cost") val cost: Int = 0,
+    @SerializedName("balance_after") val balanceAfter: Int = 0,
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("balance") val balance: Int = 0,
+    @SerializedName("character_id") val characterId: String = "",
+    @SerializedName("character_name") val characterName: String = "",
+    @SerializedName("character_avatar") val characterAvatar: String? = null
+)
+
+data class OrderItem(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("order_id") val orderId: Int = 0,
+    @SerializedName("venue_id") val venueId: String = "",
+    @SerializedName("character_id") val characterId: String = "",
+    @SerializedName("items") val items: List<String> = emptyList(),
+    @SerializedName("status") val status: String = "",
+    @SerializedName("total_gain") val totalGain: Map<String, Int> = emptyMap(),
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("wait_seconds") val waitSeconds: Int = 120
+)
+
+data class OrderCompleteResponse(
+    @SerializedName("status") val status: String = "",
+    @SerializedName("gains") val gains: Map<String, Int> = emptyMap(),
+    @SerializedName("needs") val needs: Needs? = null
+)
+
+data class BalanceResponse(
+    @SerializedName("balance") val balance: Int = 0
+)
+
+data class WorkResponse(
+    @SerializedName("status") val status: String = "",
+    @SerializedName("earned") val earned: Int = 0,
+    @SerializedName("balance") val balance: Int = 0,
+    @SerializedName("is_trainee") val isTrainee: Boolean = false,
+    @SerializedName("skill_name") val skillName: String = "",
+    @SerializedName("skill_level") val skillLevel: Int = 0,
+    @SerializedName("base_reward") val baseReward: Int = 0,
+    @SerializedName("skill_bonus") val skillBonus: Double = 0.0,
+    @SerializedName("energy_penalty") val energyPenalty: Double = 0.0,
+    @SerializedName("mood_penalty") val moodPenalty: Double = 0.0
+)
+
+data class UserSkillsResponse(
+    @SerializedName("skills") val skills: Map<String, Int> = emptyMap(),
+    @SerializedName("building_requirements") val buildingRequirements: Map<String, BuildingSkillReq> = emptyMap()
+)
+
+data class BuildingSkillReq(
+    @SerializedName("skill") val skill: String = "",
+    @SerializedName("min_level") val minLevel: Int = 1,
+    @SerializedName("work_reward") val workReward: Int = 0
 )

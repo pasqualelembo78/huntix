@@ -131,12 +131,14 @@ object TermocullaManager {
 
     fun canPlaceEgg(ctx: Context, item: EggInventoryItem): Boolean = getFreeTermocullas(ctx).isNotEmpty()
 
+    @Synchronized
     fun startSchiusa(ctx: Context, item: EggInventoryItem, termocullaId: String): Boolean {
         val termoculla = getTermocullas(ctx).firstOrNull { it.id == termocullaId } ?: return false
         if (termoculla.isBroken) return false
 
         val activeEggs = getActiveEggs(ctx).toMutableList()
         if (activeEggs.any { it.termocullaId == termocullaId }) return false
+        if (activeEggs.any { it.istanzaId == item.istanzaId }) return false
 
         val rarity = EggRarity.fromId(item.rarityId)
         activeEggs.add(ActiveEgg(
@@ -154,22 +156,25 @@ object TermocullaManager {
         return true
     }
 
+    @Synchronized
     fun addDistanceToTermocullas(ctx: Context, km: Float): List<String> {
         if (km <= 0f) return emptyList()
         val activeEggs = getActiveEggs(ctx).toMutableList()
-        val readyIds = mutableListOf<String>()
+        val newReadyIds = mutableListOf<String>()
 
         activeEggs.forEachIndexed { idx, egg ->
             val newWalked = (egg.distanceWalked + km).coerceAtMost(egg.distanceRequired)
+            val wasReady = egg.isReady
             activeEggs[idx] = egg.copy(distanceWalked = newWalked)
-            if (newWalked >= egg.distanceRequired) readyIds.add(egg.istanzaId)
+            if (!wasReady && newWalked >= egg.distanceRequired) newReadyIds.add(egg.istanzaId)
         }
 
         saveActiveEggs(ctx, activeEggs)
 
-        if (readyIds.isNotEmpty()) {
+        if (newReadyIds.isNotEmpty()) {
             val termocullas = getTermocullas(ctx).toMutableList()
-            activeEggs.filter { it.isReady }.forEach { egg ->
+            newReadyIds.forEach { istanzaId ->
+                val egg = activeEggs.firstOrNull { it.istanzaId == istanzaId } ?: return@forEach
                 val incIdx = termocullas.indexOfFirst { it.id == egg.termocullaId }
                 if (incIdx >= 0 && !termocullas[incIdx].isIllimitato) {
                     val old = termocullas[incIdx]
@@ -179,9 +184,10 @@ object TermocullaManager {
             saveTermocullas(ctx, termocullas)
         }
 
-        return readyIds
+        return newReadyIds
     }
 
+    @Synchronized
     fun collectHatchedEgg(ctx: Context, istanzaId: String): ActiveEgg? {
         val activeEggs = getActiveEggs(ctx).toMutableList()
         val egg = activeEggs.firstOrNull { it.istanzaId == istanzaId && it.isReady } ?: return null
@@ -190,6 +196,7 @@ object TermocullaManager {
         return egg
     }
 
+    @Synchronized
     fun removeEggFromTermoculla(ctx: Context, istanzaId: String): Boolean {
         val activeEggs = getActiveEggs(ctx).toMutableList()
         val removed = activeEggs.removeAll { it.istanzaId == istanzaId }

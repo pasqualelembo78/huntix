@@ -446,6 +446,17 @@
             android:textSize="22sp"
             android:background="@drawable/btn_accent" />
 
+        <!-- Capture method picker -->
+        <TextView
+            android:id="@+id/btnCaptureMethod"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="center"
+            android:text="\uD83C\uDFAE"
+            android:textSize="18sp"
+            android:background="@drawable/btn_purple" />
+
         <!-- Calendar event button -->
         <TextView
             android:id="@+id/btnCalendar"

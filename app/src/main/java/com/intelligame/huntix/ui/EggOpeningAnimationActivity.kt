@@ -51,6 +51,8 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
     private var xpReward: Int = 0
     private var phase = 0
     private var upgradeAttempted = false
+    private val animators = mutableListOf<Animator>()
+    private val handlers = mutableListOf<Handler>()
 
     private lateinit var rootLayout: FrameLayout
     private lateinit var overlayView: View
@@ -214,9 +216,9 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         tapHint.text = "Tocca per aprire"
 
         // Phase 1: Fade in darkness + pulsating egg
-        ObjectAnimator.ofFloat(overlayView, "alpha", 0f, 0.85f).apply {
+        trackAnimator(ObjectAnimator.ofFloat(overlayView, "alpha", 0f, 0.85f).apply {
             duration = 600; start()
-        }
+        })
 
         // Pulse animation on egg
         val pulseAnim = ObjectAnimator.ofFloat(eggEmoji, "scaleX", 1f, 1.15f, 1f).apply {
@@ -227,7 +229,7 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
             duration = 800; repeatCount = ObjectAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
-        AnimatorSet().also { it.playTogether(pulseAnim, pulseAnimY); it.start() }
+        trackAnimator(AnimatorSet().also { it.playTogether(pulseAnim, pulseAnimY); it.start() })
 
         hapticLight()
     }
@@ -247,21 +249,21 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         SoundManager.playEggFound()
 
         // Shake animation
-        val shakeAnim = ObjectAnimator.ofFloat(eggEmoji, "translationX",
+        val shakeAnim = trackAnimator(ObjectAnimator.ofFloat(eggEmoji, "translationX",
             0f, -20f, 20f, -15f, 15f, -10f, 10f, 0f).apply {
             duration = 600; interpolator = LinearInterpolator()
-        }
+        })
         shakeAnim.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
                 // Burst scale
-                val burst = AnimatorSet()
+                val burstSet = AnimatorSet()
                 val scaleX = ObjectAnimator.ofFloat(eggEmoji, "scaleX", 1f, 2.5f, 1.8f).apply { duration = 400 }
                 val scaleY = ObjectAnimator.ofFloat(eggEmoji, "scaleY", 1f, 2.5f, 1.8f).apply { duration = 400 }
-                burst.playTogether(scaleX, scaleY)
-                burst.addListener(object : AnimatorListenerAdapter() {
+                burstSet.playTogether(scaleX, scaleY)
+                burstSet.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) { showRarityReveal() }
                 })
-                burst.start()
+                trackAnimator(burstSet).start()
                 hapticHeavy()
             }
         })
@@ -276,19 +278,18 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         val xpAnim = ObjectAnimator.ofFloat(xpLabel, "alpha", 0f, 1f).apply {
             duration = 400; startDelay = 300
         }
-        AnimatorSet().also { it.playTogether(rarityAnim, xpAnim); it.start() }
+        trackAnimator(AnimatorSet().also { it.playTogether(rarityAnim, xpAnim); it.start() })
 
         // Change background color to rarity color
-        ObjectAnimator.ofArgb(overlayView, "backgroundColor",
+        trackAnimator(ObjectAnimator.ofArgb(overlayView, "backgroundColor",
             Color.BLACK, Color.parseColor(rarity.colorHex + "33")).apply {
             duration = 800; start()
-        }
+        })
 
-        Handler(Looper.getMainLooper()).postDelayed({
+        postDelayed({
             tapHint.text = "Tocca per potenziare"
             tapHint.alpha = 1f
-            val tapAnim = ObjectAnimator.ofFloat(tapHint, "alpha", 0f, 1f).apply { duration = 500 }
-            tapAnim.start()
+            trackAnimator(ObjectAnimator.ofFloat(tapHint, "alpha", 0f, 1f).apply { duration = 500; start() })
         }, 800)
     }
 
@@ -323,15 +324,15 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
                 rarityLabel.setTextColor(Color.parseColor(rarity.colorHex))
                 upgradeBtn.isEnabled = false
                 upgradeBtn.text = "🎉 Potenziato!"
-                ObjectAnimator.ofArgb(overlayView, "backgroundColor",
+                trackAnimator(ObjectAnimator.ofArgb(overlayView, "backgroundColor",
                     Color.parseColor(EggRarity.fromId(intent.getStringExtra(EXTRA_RARITY_ID) ?: "common").colorHex + "33"),
-                    Color.parseColor(rarity.colorHex + "55")).apply { duration = 600; start() }
-                Handler(Looper.getMainLooper()).postDelayed({ finishWithResult(rarity) }, 2000)
+                    Color.parseColor(rarity.colorHex + "55")).apply { duration = 600; start() })
+                postDelayed({ finishWithResult(rarity) }, 2000)
             } else {
                 hapticLight()
                 upgradeBtn.text = "❌ Fallito... pity +2% (tot: ${UpgradeChanceManager.formatChance(UpgradeChanceManager.getCurrentChance(this, result.oldRarity))})"
                 upgradeBtn.isEnabled = false
-                Handler(Looper.getMainLooper()).postDelayed({ finishWithResult(rarity) }, 1500)
+                postDelayed({ finishWithResult(rarity) }, 1500)
             }
         }
 
@@ -358,38 +359,62 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         }
         upgradePanel.addView(battleBtn)
 
-        ObjectAnimator.ofFloat(upgradePanel, "alpha", 0f, 1f).apply { duration = 500; start() }
+        trackAnimator(ObjectAnimator.ofFloat(upgradePanel, "alpha", 0f, 1f).apply { duration = 500; start() })
     }
 
     private fun finishWithResult(finalRarity: EggRarity) {
         setResult(RESULT_OK, Intent().putExtra(RESULT_RARITY, finalRarity.id))
-        finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        finish()
     }
 
     // ─── Haptic ───────────────────────────────────────────────────
 
-    private fun hapticLight() {
+    private fun haptic(block: (Vibrator) -> Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.VIBRATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+        try { block(v) } catch (_: Exception) {}
+    }
+
+    private fun hapticLight()  = haptic { v ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             v.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
         } else { @Suppress("DEPRECATION") v.vibrate(30) }
     }
 
-    private fun hapticMedium() {
-        val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    private fun hapticMedium() = haptic { v ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             v.vibrate(VibrationEffect.createOneShot(60, 200))
         } else { @Suppress("DEPRECATION") v.vibrate(60) }
     }
 
-    private fun hapticHeavy() {
-        val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+    private fun hapticHeavy() = haptic { v ->
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 80, 40, 120), -1))
         } else { @Suppress("DEPRECATION") v.vibrate(longArrayOf(0, 80, 40, 120), -1) }
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun trackAnimator(anim: Animator): Animator { animators.add(anim); return anim }
+
+    private fun postDelayed(runnable: () -> Unit, delayMs: Long) {
+        val h = Handler(Looper.getMainLooper())
+        handlers.add(h)
+        h.postDelayed(runnable, delayMs)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        animators.forEach { it.cancel() }
+        handlers.forEach { it.removeCallbacksAndMessages(null) }
+    }
+
+    override fun onDestroy() {
+        animators.forEach { it.cancel() }
+        handlers.forEach { it.removeCallbacksAndMessages(null) }
+        super.onDestroy()
+    }
 }

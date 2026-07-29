@@ -232,11 +232,19 @@ class OsmCityBuilder(
             amenity.contains("kindergarten") -> {
                 return BuildingType.SCHOOL
             }
-            amenity.contains("police") || amenity.contains("fire_station") -> {
+            amenity.contains("police") || amenity.contains("fire_station") ||
+            amenity.contains("townhall") || amenity.contains("courthouse") ||
+            amenity.contains("registration_hall") || amenity.contains("job_centre") -> {
                 return BuildingType.GOVERNMENT
             }
             amenity.contains("bank") || amenity.contains("atm") -> {
                 return BuildingType.BANK
+            }
+            amenity.contains("post_office") -> {
+                return BuildingType.POST_OFFICE
+            }
+            amenity.contains("library") -> {
+                return BuildingType.LIBRARY
             }
             amenity.contains("cinema") || amenity.contains("theatre") || amenity.contains("arts_centre") ||
             amenity.contains("nightclub") || amenity.contains("casino") -> {
@@ -325,12 +333,14 @@ class OsmCityBuilder(
             BuildingType.PARKING -> 0xFFD0D0D0.toInt() to 0xFF696969.toInt() // grigio parcheggio
             BuildingType.INDUSTRIAL -> 0xFFB0B0B0.toInt() to 0xFF404040.toInt() // grigio industriale
             BuildingType.LANDMARK -> 0xFFD4C5A9.toInt() to 0xFFC4B599.toInt() // travertino speciale
+            BuildingType.POST_OFFICE -> 0xFFE3F2FD.toInt() to 0xFF2196F3.toInt() // azzurro postale
+            BuildingType.LIBRARY -> 0xFFF3E5F5.toInt() to 0xFF7B1FA2.toInt() // viola biblioteca
         }
     }
 
     enum class BuildingType {
         RESIDENTIAL, COMMERCIAL, SUPERMARKET, MALL, CLOTHING, ELECTRONICS, BOOKSTORE, HARDWARE, VEHICLE,
-        RESTAURANT, HOSPITAL, SCHOOL, GYM, HOTEL, BANK, GOVERNMENT, ENTERTAINMENT, RELIGIOUS, PARKING, INDUSTRIAL, LANDMARK
+        RESTAURANT, HOSPITAL, SCHOOL, GYM, HOTEL, BANK, GOVERNMENT, ENTERTAINMENT, RELIGIOUS, PARKING, INDUSTRIAL, LANDMARK, POST_OFFICE, LIBRARY
     }
 
     // ══════════════════════════════════════════════════════════════════════

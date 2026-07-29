@@ -22,6 +22,9 @@ import com.intelligame.huntix.R
 import com.intelligame.huntix.SentryDebugManager
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
+import com.intelligame.huntix.manager.OnlinePoi
+import com.intelligame.huntix.manager.OnlinePoiManager
+import com.intelligame.huntix.reallife.BuildingDef
 import com.intelligame.huntix.reallife.BuildingDefs
 import com.intelligame.huntix.reallife.BuildingType
 import com.intelligame.huntix.reallife.CoordinateConverter
@@ -127,6 +130,28 @@ class CityActivity : AppCompatActivity() {
 
     private val buildingAABBs = mutableListOf<com.intelligame.huntix.reallife.AABB>()
     private val roadCenters = mutableListOf<Float>()
+
+    // POI-based buildings (replaces BuildingDefs.BUILDINGS when loaded)
+    private data class PoiBuilding(
+        val id: String,
+        val name: String,
+        val type: BuildingType,
+        val x: Float, val z: Float,
+        val width: Float, val depth: Float, val height: Float,
+        val color3D: Int, val roofColor: Int,
+        val emoji: String,
+        val url: String = "",
+        val pageType: String = ""
+    ) {
+        fun aabb() = com.intelligame.huntix.reallife.AABB(
+            x - width / 2f, x + width / 2f,
+            z - depth / 2f, z + depth / 2f
+        )
+    }
+    private val poiBuildings = mutableListOf<PoiBuilding>()
+    private val poiOccupiedBlocks = mutableSetOf<Pair<Float, Float>>()
+    private var poisLoaded = false
+    private var poiLoadAttempted = false
 
     // OSM data
     private var osmData: OsmData? = null
@@ -244,6 +269,8 @@ class CityActivity : AppCompatActivity() {
         targetLat = intent.getDoubleExtra("TARGET_LAT", OSM_CENTER_LAT)
         targetLon = intent.getDoubleExtra("TARGET_LON", OSM_CENTER_LON)
         AppLog.d(TAG, "Target city: lat=$targetLat, lon=$targetLon")
+
+        loadPoiBuildings()
 
         // Day/Night cycle
         dayNightManager = DayNightManager()
@@ -533,8 +560,7 @@ class CityActivity : AppCompatActivity() {
                         if (kotlin.math.sqrt((deltaX * deltaX + deltaY * deltaY).toDouble()).toFloat() < 20f) {
                             val nearNpc = findNearestNpc()
                             if (nearNpc != null) openChat(nearNpc.mapNode) else {
-                                val nearB = BuildingDefs.findNearest(playerX, playerZ)
-                                if (nearB != null) openBuilding(nearB.first)
+                                openNearestBuilding()
                             }
                         }
                         true
@@ -546,8 +572,7 @@ class CityActivity : AppCompatActivity() {
                 if (nearNpc != null) {
                     openChat(nearNpc.mapNode)
                 } else {
-                    val nearB = BuildingDefs.findNearest(playerX, playerZ)
-                    if (nearB != null) openBuilding(nearB.first)
+                    openNearestBuilding()
                 }
                 true
             } else {
@@ -737,23 +762,70 @@ override fun onPause() {
         }
     }
 
+    private fun findNearestPoiBuilding(): Pair<PoiBuilding, Float>? {
+        var best: PoiBuilding? = null
+        var bestDist = Float.MAX_VALUE
+        for (b in poiBuildings) {
+            val dx = playerX - b.x
+            val dz = playerZ - b.z
+            val d = sqrt(dx * dx + dz * dz)
+            if (d < bestDist) { bestDist = d; best = b }
+        }
+        return if (best != null && bestDist <= BuildingDefs.NEAR_DISTANCE) best to bestDist else null
+    }
+
     private fun updateBuildingLabel() {
-        val nearB = BuildingDefs.findNearest(playerX, playerZ)
-        if (nearB != null) {
-            val (b, dist) = nearB
-            buildingLabel.text = "${b.emoji}  ${b.name}"
-            buildingLabel.alpha = (1f - (dist / BuildingDefs.NEAR_DISTANCE).coerceIn(0f, 1f))
-            enterBtn.alpha = 1f
-            enterBtn.setOnClickListener { openBuilding(b) }
+        if (poiBuildings.isNotEmpty()) {
+            val nearPoi = findNearestPoiBuilding()
+            if (nearPoi != null) {
+                val (b, dist) = nearPoi
+                buildingLabel.text = "${b.emoji}  ${b.name}"
+                buildingLabel.alpha = (1f - (dist / BuildingDefs.NEAR_DISTANCE).coerceIn(0f, 1f))
+                enterBtn.alpha = 1f
+                enterBtn.setOnClickListener { openBuilding(b) }
+            } else {
+                buildingLabel.alpha = 0f
+                enterBtn.alpha = 0f
+            }
         } else {
-            buildingLabel.alpha = 0f
-            enterBtn.alpha = 0f
+            val nearB = BuildingDefs.findNearest(playerX, playerZ)
+            if (nearB != null) {
+                val (b, dist) = nearB
+                buildingLabel.text = "${b.emoji}  ${b.name}"
+                buildingLabel.alpha = (1f - (dist / BuildingDefs.NEAR_DISTANCE).coerceIn(0f, 1f))
+                enterBtn.alpha = 1f
+                enterBtn.setOnClickListener { openBuilding(b) }
+            } else {
+                buildingLabel.alpha = 0f
+                enterBtn.alpha = 0f
+            }
+        }
+    }
+
+    private fun openNearestBuilding() {
+        if (poiBuildings.isNotEmpty()) {
+            val nearPoi = findNearestPoiBuilding()
+            if (nearPoi != null) openBuilding(nearPoi.first)
+        } else {
+            val nearB = BuildingDefs.findNearest(playerX, playerZ)
+            if (nearB != null) openBuilding(nearB.first)
         }
     }
 
     private fun openBuilding(b: com.intelligame.huntix.reallife.BuildingDef) {
         val intent = Intent(this, BuildingInteriorActivity::class.java)
         intent.putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, b.type.ordinal)
+        startActivity(intent)
+        overridePendingTransition(R.anim.scale_in, R.anim.scale_out)
+    }
+
+    private fun openBuilding(b: PoiBuilding) {
+        val intent = Intent(this, BuildingInteriorActivity::class.java)
+        intent.putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, b.type.ordinal)
+        intent.putExtra(BuildingInteriorActivity.EXTRA_POI_NAME, b.name)
+        if (b.url.isNotEmpty()) intent.putExtra(BuildingInteriorActivity.EXTRA_POI_URL, b.url)
+        intent.putExtra(BuildingInteriorActivity.EXTRA_VENUE_ID, b.id)
+        intent.putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE_STR, b.type.name)
         startActivity(intent)
         overridePendingTransition(R.anim.scale_in, R.anim.scale_out)
     }
@@ -1121,7 +1193,7 @@ override fun onPause() {
         )
         val grassDetailMat = ml.createColorInstance(color = Color.rgb(0x66, 0xBB, 0x6A))
 
-        val occupied = BuildingDefs.occupiedBlocks().toSet()
+        val occupied = BuildingDefs.occupiedBlocks().toMutableSet().apply { addAll(poiOccupiedBlocks) }
         val s = 0.4f
         for (i in 0 until roadCenters.size - 1) {
             for (j in 0 until roadCenters.size - 1) {
@@ -1436,6 +1508,11 @@ override fun onPause() {
                         "nodes" to osmCityBuilder!!.getCurrentNodeCount(),
                         "aabbs" to buildingAABBs.size
                     ))
+
+                    // Add POI interactive buildings if loaded
+                    if (poiBuildings.isNotEmpty()) {
+                        addPoiBuildingNodes()
+                    }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     AppLog.d(TAG, "Rebuild cancelled (likely onPause or new rebuild triggered)")
                 } catch (e: Exception) {
@@ -1560,14 +1637,17 @@ override fun onPause() {
     }
 
     private fun buildCityNamedBuildings() {
-        // ── Named buildings (edifici speciali) — GLB con fallback procedurale ──
+        // ── Named buildings (edifici speciali) — POI reali con fallback BuildingDefs ──
         val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
         val awningColors = intArrayOf(
             Color.rgb(0xE5, 0x39, 0x35), Color.rgb(0x1E, 0x88, 0xE5),
             Color.rgb(0xFF, 0xCA, 0x28), Color.rgb(0x4C, 0xAF, 0x50)
         )
 
-        for (bd in BuildingDefs.BUILDINGS) {
+        val buildings = if (poiBuildings.isNotEmpty()) poiBuildings
+            else BuildingDefs.BUILDINGS.map { it.toPoiBuilding() }
+
+        for (bd in buildings) {
             val bMat = ml.createColorInstance(color = bd.color3D)
             val rMat = ml.createColorInstance(color = bd.roofColor)
 
@@ -1600,8 +1680,12 @@ override fun onPause() {
                     position = Position(bd.x + wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
                 }
             )
-            val awningColor = awningColors[BuildingDefs.BUILDINGS.indexOf(bd) % awningColors.size]
-            val awningMat = ml.createColorInstance(color = awningColor)
+            val colorIdx = if (buildings === poiBuildings) {
+                (bd.hashCode() % awningColors.size).let { if (it < 0) -it else it }
+            } else {
+                (BuildingDefs.BUILDINGS.indexOfFirst { it.type == bd.type } % awningColors.size).coerceAtLeast(0)
+            }
+            val awningMat = ml.createColorInstance(color = awningColors[colorIdx])
             sceneView.addChildNode(
                 CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
                     position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
@@ -1611,6 +1695,16 @@ override fun onPause() {
             buildingAABBs.add(bd.aabb())
         }
     }
+
+    private fun BuildingDef.toPoiBuilding() = PoiBuilding(
+        id = "bld_${type.name}",
+        name = name,
+        type = type,
+        x = x, z = z,
+        width = width, depth = depth, height = height,
+        color3D = color3D, roofColor = roofColor,
+        emoji = emoji
+    )
 
     private fun buildCityProceduralBuildings(onDone: () -> Unit) {
         // ── Procedural buildings (fill remaining blocks) — BATCHED ──
@@ -1629,7 +1723,7 @@ override fun onPause() {
             0xFF90A4AE.toInt(), 0xFFBCAAA4.toInt(), 0xFFB0BEC5.toInt(),
             0xFF80CBC4.toInt(), 0xFFC5E1A5.toInt()
         )
-        val occupied = BuildingDefs.occupiedBlocks().toSet()
+        val occupied = BuildingDefs.occupiedBlocks().toMutableSet().apply { addAll(poiOccupiedBlocks) }
         val s = 0.4f
         val proceduralWindowMat = ml.createColorInstance(color = Color.rgb(0xBB, 0xDE, 0xFB))
         windowMaterials.add(proceduralWindowMat)
@@ -1802,6 +1896,143 @@ override fun onPause() {
         loadingLabel?.text = msg
         // Update OSM status label too
         osmStatusLabel?.text = msg
+    }
+
+    // ── POI buildings ──
+
+    private fun loadPoiBuildings() {
+        if (poiLoadAttempted) return
+        poiLoadAttempted = true
+        lifecycleScope.launch {
+            try {
+                val mgr = OnlinePoiManager()
+                val result = mgr.fetchPoiForLocation(
+                    this@CityActivity, targetLat, targetLon, maxPois = 100
+                )
+                result.onSuccess { pois ->
+                    AppLog.d(TAG, "POI loaded: ${pois.size} from OnlinePoiManager")
+                    assignPoiPositions(pois)
+                    poisLoaded = true
+                }
+                result.onFailure { e ->
+                    AppLog.w(TAG, "POI load failed: ${e.message}")
+                }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "POI load failed: ${e.message}")
+            }
+        }
+    }
+
+    private fun assignPoiPositions(pois: List<OnlinePoi>) {
+        poiBuildings.clear()
+        poiOccupiedBlocks.clear()
+
+        val buildingPois = pois.mapNotNull { poi ->
+            val type = BuildingDefs.resolveBuildingType(poi.buildingType, poi.poiType)
+            if (type != null) poi to type else null
+        }
+        if (buildingPois.isEmpty()) return
+
+        val positions = generatePoiPositions(buildingPois.size)
+        buildingPois.forEachIndexed { idx, (poi, type) ->
+            if (idx >= positions.size) return@forEachIndexed
+            val (x, z) = positions[idx]
+            val bd = BuildingDefs.BUILDINGS.firstOrNull { it.type == type }
+            val w = bd?.width ?: 3.5f
+            val d = bd?.depth ?: 3.5f
+            val h = bd?.height ?: 2.5f
+            val c = bd?.color3D ?: 0xFFB3D9FF.toInt()
+            val rc = bd?.roofColor ?: 0xFF8D6E63.toInt()
+            val e = bd?.emoji ?: "\uD83C\uDFEA"
+
+            poiBuildings.add(PoiBuilding(
+                id = poi.id, name = poi.name, type = type,
+                x = x, z = z, width = w, depth = d, height = h,
+                color3D = c, roofColor = rc, emoji = e,
+                url = poi.url, pageType = poi.pageType
+            ))
+            poiOccupiedBlocks.add(Math.round(x / 10f) * 10f to Math.round(z / 10f) * 10f)
+        }
+        AppLog.d(TAG, "Assigned ${poiBuildings.size} POI buildings to city positions")
+    }
+
+    private fun generatePoiPositions(count: Int): List<Pair<Float, Float>> {
+        val base = BuildingDefs.BUILDINGS.map { it.x to it.z }
+        if (count <= base.size) return base.take(count)
+
+        val result = base.toMutableList()
+        val occupied = mutableSetOf<Pair<Float, Float>>()
+        for (b in BuildingDefs.BUILDINGS) {
+            occupied.add(Math.round(b.x / 10f) * 10f to Math.round(b.z / 10f) * 10f)
+        }
+
+        val rng = java.util.Random(42)
+        val extra = mutableListOf<Pair<Float, Float>>()
+        for (radius in 10..120 step 10) {
+            for (dx in -radius..radius step 10) {
+                for (dz in -radius..radius step 10) {
+                    if (kotlin.math.abs(dx) == radius || kotlin.math.abs(dz) == radius) {
+                        val block = dx.toFloat() to dz.toFloat()
+                        if (block !in occupied) {
+                            extra.add(block)
+                            occupied.add(block)
+                        }
+                    }
+                }
+            }
+        }
+        extra.shuffle(rng)
+        result.addAll(extra.take(count - base.size))
+        return result
+    }
+
+    private fun addPoiBuildingNodes() {
+        val doorMat = ml.createColorInstance(color = Color.rgb(0x3E, 0x27, 0x23))
+        val awningColors = intArrayOf(
+            Color.rgb(0xE5, 0x39, 0x35), Color.rgb(0x1E, 0x88, 0xE5),
+            Color.rgb(0xFF, 0xCA, 0x28), Color.rgb(0x4C, 0xAF, 0x50)
+        )
+        for (bd in poiBuildings) {
+            val bMat = ml.createColorInstance(color = bd.color3D)
+            val rMat = ml.createColorInstance(color = bd.roofColor)
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width, bd.height, bd.depth), materialInstance = bMat).apply {
+                    position = Position(bd.x, bd.height / 2f, bd.z)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width + 0.4f, 0.35f, bd.depth + 0.4f), materialInstance = rMat).apply {
+                    position = Position(bd.x, bd.height + 0.18f, bd.z)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.7f, 1.2f, 0.1f), materialInstance = doorMat).apply {
+                    position = Position(bd.x, 0.6f, bd.z + bd.depth / 2f + 0.05f)
+                }
+            )
+            val winMat = ml.createColorInstance(color = Color.rgb(0x90, 0xCA, 0xF9))
+            val wxOff = bd.width * 0.28f
+            val wyBase = bd.height * 0.55f
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                    position = Position(bd.x - wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
+                }
+            )
+            sceneView.addChildNode(
+                CubeNode(engine, Size(0.35f, 0.35f, 0.08f), materialInstance = winMat).apply {
+                    position = Position(bd.x + wxOff, wyBase, bd.z + bd.depth / 2f + 0.04f)
+                }
+            )
+            val awningColor = awningColors[((bd.hashCode() % awningColors.size).let { if (it < 0) -it else it })]
+            val awningMat = ml.createColorInstance(color = awningColor)
+            sceneView.addChildNode(
+                CubeNode(engine, Size(bd.width * 0.8f, 0.06f, 0.5f), materialInstance = awningMat).apply {
+                    position = Position(bd.x, 1.5f, bd.z + bd.depth / 2f + 0.3f)
+                }
+            )
+            buildingAABBs.add(bd.aabb())
+        }
+        AppLog.d(TAG, "Added ${poiBuildings.size} POI building nodes to scene")
     }
 
     private fun dismissLoading() {

@@ -28,7 +28,7 @@ import kotlin.math.sin
  */
 class SwipeToCatchView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : View(context, attrs, defStyleAttr) {
+) : View(context, attrs, defStyleAttr), CaptureMiniGame {
 
     companion object {
         const val MAX_ATTEMPTS = 3
@@ -44,6 +44,7 @@ class SwipeToCatchView @JvmOverloads constructor(
     }
 
     var listener: OnCatchResult? = null
+    private var miniGameListener: CaptureMiniGame.Listener? = null
 
     private val eggPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#FFCC00")
@@ -120,13 +121,13 @@ class SwipeToCatchView @JvmOverloads constructor(
         IDLE, THROWING, SHAKE, CAPTURED, ESCAPED, FAILED_ALL
     }
 
-    fun setEggColor(color: Int) {
+    override fun setEggColor(color: Int) {
         eggColor = color
         eggPaint.color = color
         invalidate()
     }
 
-    fun reset() {
+    override fun reset() {
         state = State.IDLE
         currentAttempt = 0
         throwProgress = 0f
@@ -361,6 +362,7 @@ class SwipeToCatchView @JvmOverloads constructor(
         invalidate()
 
         listener?.onThrowAttempt(currentAttempt, throwQuality)
+        miniGameListener?.onThrowAttempt(currentAttempt, throwQuality)
 
         ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 600
@@ -456,6 +458,7 @@ class SwipeToCatchView @JvmOverloads constructor(
             addListener(object : android.animation.AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: android.animation.Animator) {
                     listener?.onCaptured(currentAttempt)
+                    miniGameListener?.onCaptured(currentAttempt)
                 }
             })
             start()
@@ -484,6 +487,7 @@ class SwipeToCatchView @JvmOverloads constructor(
                         state = State.FAILED_ALL
                         invalidate()
                         listener?.onEscaped(currentAttempt)
+                        miniGameListener?.onEscaped(currentAttempt)
                     } else {
                         state = State.IDLE
                         shakeProgress = 0f
@@ -495,5 +499,16 @@ class SwipeToCatchView @JvmOverloads constructor(
             })
             start()
         }
+    }
+
+    override fun getView(): View = this
+
+    override fun release() {
+        listener = null
+        miniGameListener = null
+    }
+
+    override fun setListener(listener: CaptureMiniGame.Listener) {
+        miniGameListener = listener
     }
 }

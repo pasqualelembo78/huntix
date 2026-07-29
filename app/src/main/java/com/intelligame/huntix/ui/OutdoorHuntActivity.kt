@@ -120,6 +120,12 @@ class OutdoorHuntActivity : BaseNavActivity() {
             Toast.makeText(this, "Già catturato", Toast.LENGTH_SHORT).show()
             return
         }
+        val d = mgr.distanceMeters(egg)
+        val radius = mgr.getCatchRadiusM(egg)
+        if (d > radius) {
+            Toast.makeText(this, "Avvicinati: mancano ${d.toInt()} m (raggio: ${radius.toInt()} m)", Toast.LENGTH_SHORT).show()
+            return
+        }
         CatchDialogHelper.showFoodSelection(this, egg, object : CatchDialogHelper.OnCatchReady {
             override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
                 if (foodBonus <= 0f && xpMultiplier <= 0f) {

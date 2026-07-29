@@ -126,6 +126,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var btnCompass: TextView
     private lateinit var btnPhoto: TextView
     private lateinit var btnCalendar: TextView
+    private lateinit var btnCaptureMethod: TextView
     private lateinit var btnLever: TextView
     private lateinit var btnArToggle: TextView
     private lateinit var schiusaProgress: LinearLayout
@@ -206,6 +207,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnCompass = findViewById(R.id.btnCompass)
         btnPhoto = findViewById(R.id.btnPhoto)
         btnCalendar = findViewById(R.id.btnCalendar)
+        btnCaptureMethod = findViewById(R.id.btnCaptureMethod)
         btnLever = findViewById(R.id.btnLever)
         btnArToggle = findViewById(R.id.btnArToggle)
         schiusaProgress = findViewById(R.id.schiusaProgress)
@@ -336,6 +338,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
             startActivity(Intent(this, com.intelligame.huntix.ui.LiveEventsActivity::class.java))
         }
 
+        // Capture method picker
+        btnCaptureMethod.setOnClickListener {
+            CaptureMethodPickerDialog.show(this) {
+                Toast.makeText(this, "Metodo cambiato", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // Lever: dash toward nearest egg
         btnLever.setOnClickListener {
             if (mgr.isSimulating) {
@@ -361,8 +370,11 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 .minByOrNull { mgr.distanceMeters(it) }
             if (nearestEgg != null && mgr.distanceMeters(nearestEgg) <= mgr.getCatchRadiusM(nearestEgg)) {
                 showEggSheet(nearestEgg)
+            } else if (nearestEgg != null) {
+                val d = mgr.distanceMeters(nearestEgg).toInt()
+                Toast.makeText(this, "Avvicinati: mancano $d m", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Nessuna uova in raggio", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Nessuna uova nelle vicinanze", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -1466,6 +1478,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
             hideBottomSheet()
             return
         }
+        val d = mgr.distanceMeters(egg)
+        val radius = mgr.getCatchRadiusM(egg)
+        if (d > radius) {
+            Toast.makeText(this, "Avvicinati: mancano ${d.toInt()} m (raggio: ${radius.toInt()} m)", Toast.LENGTH_SHORT).show()
+            return
+        }
         startActivity(Intent(this, OutdoorHuntActivity::class.java).apply {
             putExtra("eggId", eggId)
         })
@@ -1491,6 +1509,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
             putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, bDef.type.ordinal)
             putExtra(BuildingInteriorActivity.EXTRA_POI_NAME, poi.name)
             if (poi.url.isNotBlank()) putExtra(BuildingInteriorActivity.EXTRA_POI_URL, poi.url)
+            putExtra(BuildingInteriorActivity.EXTRA_VENUE_ID, poi.id)
+            putExtra(BuildingInteriorActivity.EXTRA_VENUE_LAT, poi.lat)
+            putExtra(BuildingInteriorActivity.EXTRA_VENUE_LNG, poi.lng)
+            putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE_STR, poi.buildingType)
         })
         hideBottomSheet()
     }

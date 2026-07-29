@@ -88,7 +88,7 @@ def process_message(user_id, character_id, text, username="Utente",
                      memory_context=None, user_memory=None,
                      character_data=None, image_base64="", image_mime="image/jpeg",
                      client_storage=False, client_state=None, is_favorite=False,
-                     tone=None):
+                     tone=None, venue_id=None):
     client_state = client_state or {}
     character = get_character(character_id)
     if character_data:
@@ -105,6 +105,26 @@ def process_message(user_id, character_id, text, username="Utente",
         for key, value in character_data.items():
             if key in SAFE_CHARACTER_FIELDS:
                 character[key] = value
+
+    # Venue context injection: if venue_id is provided, overwrite character
+    # knowledge with venue-specific expertise/ignorance.
+    if venue_id:
+        try:
+            from reallife.venue_assignment import get_venue_knowledge
+            vk = get_venue_knowledge(venue_id)
+            if vk and vk.get("knowledge_domains"):
+                character["knowledge_domains"] = vk["knowledge_domains"]
+                bt = vk.get("building_type", "").lower()
+                name = character.get("name", "l'addetto/a")
+                character["system_prompt"] = (
+                    f"Sei {name}, lavori in un {bt}. "
+                    f"Conosci tutto cio' che riguarda questo settore. "
+                    f"Non hai competenze al di fuori di questo ambito. "
+                    f"Se ti chiedono di altri argomenti, ammetti di non saperne."
+                )
+        except Exception as e:
+            logger.warning(f"Venue context injection failed for venue_id={venue_id}: {e}")
+
     if not character:
         return None
     if not _check_character_access(user_id, character):

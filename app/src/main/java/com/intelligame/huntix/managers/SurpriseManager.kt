@@ -39,11 +39,13 @@ object SurpriseManager {
         }
     }
 
+    @Synchronized
     fun saveAll(ctx: Context, list: List<OwnedSurprise>) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY_LIST, gson.toJson(list)).apply()
     }
 
+    @Synchronized
     fun addFromHatch(ctx: Context, rarityId: String,
                      zone: ZoneType = ZoneType.UNKNOWN,
                      weather: WeatherType = WeatherType.CLEAR): OwnedSurprise {
@@ -64,6 +66,7 @@ object SurpriseManager {
      * Usato quando l'utente tocca un'uova schiusa per spostarla in borsa.
      */
     @Suppress("UNUSED_PARAMETER")
+    @Synchronized
     fun addCreatureToInventory(
         ctx: Context,
         creatureId: String,
@@ -85,6 +88,7 @@ object SurpriseManager {
     fun getBattleTeam(ctx: Context): List<OwnedSurprise> =
         getAll(ctx).filter { it.inBattleTeam }.take(3)
 
+    @Synchronized
     fun setBattleTeam(ctx: Context, ids: Set<String>) {
         val list = getAll(ctx).map { it.copy(inBattleTeam = ids.contains(it.id)) }
         saveAll(ctx, list)
@@ -94,6 +98,7 @@ object SurpriseManager {
         return getAll(ctx).firstOrNull { it.isFidato }?.creature
     }
 
+    @Synchronized
     fun setFidato(ctx: Context, ownedId: String) {
         val list = getAll(ctx).map { it.copy(isFidato = it.id == ownedId) }
         saveAll(ctx, list)
@@ -101,6 +106,7 @@ object SurpriseManager {
             .edit().putString(KEY_FIDATO, ownedId).apply()
     }
 
+    @Synchronized
     fun addLeccornie(ctx: Context, ownedId: String, count: Int = 1) {
         val list = getAll(ctx).toMutableList()
         val idx = list.indexOfFirst { it.id == ownedId }
@@ -110,6 +116,7 @@ object SurpriseManager {
         }
     }
 
+    @Synchronized
     fun updateOwned(ctx: Context, updated: OwnedSurprise) {
         val list = getAll(ctx).toMutableList()
         val idx = list.indexOfFirst { it.id == updated.id }
@@ -139,6 +146,7 @@ object SurpriseManager {
     }
 
     /** Perform metamorfosi: consume leccornie, change creatureId, boost level+1. */
+    @Synchronized
     fun evolve(ctx: Context, ownedId: String): OwnedSurprise? {
         val list = getAll(ctx).toMutableList()
         val idx = list.indexOfFirst { it.id == ownedId }

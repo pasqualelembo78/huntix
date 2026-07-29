@@ -110,6 +110,126 @@ object RealLifeClient {
             }.getOrElse { Result.failure(it) }
         }
 
+    // ── Venue character ────────────────────────────────────────
+
+    /** Recupera il personaggio assegnato a un locale. */
+    suspend fun getVenueCharacter(
+        venueId: String,
+        venueName: String = "",
+        buildingType: String = "RESTAURANT",
+        lat: Double = 0.0,
+        lng: Double = 0.0
+    ): Result<VenueCharacterResponse> = withContext(Dispatchers.IO) {
+        val url = buildString {
+            append("${RealLifeConfig.BASE_URL}/reallife/venue-character")
+            append("?venue_id=").append(java.net.URLEncoder.encode(venueId, "UTF-8"))
+            if (venueName.isNotBlank()) append("&venue_name=").append(java.net.URLEncoder.encode(venueName, "UTF-8"))
+            append("&building_type=").append(java.net.URLEncoder.encode(buildingType, "UTF-8"))
+            append("&lat=$lat&lng=$lng")
+        }
+        val req = Request.Builder().url(url).get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), VenueCharacterResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    // ── Venue orders ─────────────────────────────────────────
+
+    /** Crea un ordine per un locale. */
+    suspend fun createOrder(
+        venueId: String,
+        venueName: String = "",
+        buildingType: String = "RESTAURANT",
+        lat: Double = 0.0,
+        lng: Double = 0.0,
+        items: List<String>,
+        userId: String? = null
+    ): Result<OrderResponse> = withContext(Dispatchers.IO) {
+        val body = OrderRequest(venueId, venueName, buildingType, lat, lng, items, userId)
+        val bodyStr = gson.toJson(body)
+        val req = Request.Builder()
+            .url("${RealLifeConfig.BASE_URL}/reallife/order")
+            .post(bodyStr.toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), OrderResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Ottiene gli ordini pendenti. */
+    suspend fun getOrders(venueId: String? = null): Result<List<OrderItem>> = withContext(Dispatchers.IO) {
+        val url = buildString {
+            append("${RealLifeConfig.BASE_URL}/reallife/orders")
+            if (!venueId.isNullOrBlank()) append("?venue_id=").append(java.net.URLEncoder.encode(venueId, "UTF-8"))
+        }
+        val req = Request.Builder().url(url).get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                val arr = gson.fromJson(resp.body!!.string(), Array<OrderItem>::class.java)
+                Result.success(arr?.toList() ?: emptyList())
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Completa un ordine e applica i gain. */
+    suspend fun completeOrder(orderId: Int, characterId: String = "", userId: String? = null): Result<OrderCompleteResponse> = withContext(Dispatchers.IO) {
+        val body = gson.toJson(mapOf("order_id" to orderId, "character_id" to characterId, "user_id" to userId))
+        val req = Request.Builder()
+            .url("${RealLifeConfig.BASE_URL}/reallife/order/complete")
+            .post(body.toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), OrderCompleteResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Restituisce il saldo MVC. */
+    suspend fun getBalance(): Result<BalanceResponse> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("${RealLifeConfig.BASE_URL}/reallife/balance").get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), BalanceResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Guadagna MVC lavorando. */
+    suspend fun work(userId: String? = null, buildingType: String = "RESTAURANT"): Result<WorkResponse> = withContext(Dispatchers.IO) {
+        val body = gson.toJson(mapOf("user_id" to userId, "building_type" to buildingType))
+        val req = Request.Builder()
+            .url("${RealLifeConfig.BASE_URL}/reallife/work")
+            .post(body.toRequestBody(JSON))
+            .build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), WorkResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
+    /** Restituisce le capacità dell'utente. */
+    suspend fun getUserSkills(): Result<UserSkillsResponse> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("${RealLifeConfig.BASE_URL}/reallife/skills").get().build()
+        runCatching {
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code}"))
+                Result.success(gson.fromJson(resp.body!!.string(), UserSkillsResponse::class.java))
+            }
+        }.getOrElse { Result.failure(it) }
+    }
+
     // ── Chat ─────────────────────────────────────────────────────
 
     /**
@@ -120,12 +240,13 @@ object RealLifeClient {
         context: Context,
         characterId: String,
         text: String,
-        username: String
+        username: String,
+        venueId: String? = null
     ): Result<ChatResponse> = withContext(Dispatchers.IO) {
         if (!ensureTokens(context)) {
             return@withContext Result.failure(Exception("Auth fallita: impossibile ottenere token"))
         }
-        val payload = ChatRequest(character = characterId, text = text, username = username)
+        val payload = ChatRequest(character = characterId, text = text, username = username, venueId = venueId)
         val bodyStr = gson.toJson(payload)
 
         suspend fun doCall(token: String): Pair<Int, String?> {

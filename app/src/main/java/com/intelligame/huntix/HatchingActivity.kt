@@ -17,8 +17,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.managers.DistanceTracker
-import com.intelligame.huntix.managers.TermocullaManager
 import com.intelligame.huntix.managers.SavedManager
+import com.intelligame.huntix.managers.SurpriseManager
+import com.intelligame.huntix.managers.TermocullaManager
 import com.intelligame.huntix.ui.EggOpeningAnimationActivity
 
 class HatchingActivity : BaseNavActivity() {
@@ -81,7 +82,7 @@ class HatchingActivity : BaseNavActivity() {
 
         val totalKm = DistanceTracker.getTotalKm(c)
         val sessionSteps = DistanceTracker.getSessionSteps(c)
-        kmLabel.text = "🚶 %.2f km totali · %d passi sessione".format(totalKm, sessionSteps)
+        kmLabel.text = java.lang.String.format(java.util.Locale.US, "🚶 %.2f km totali · %d passi sessione", totalKm, sessionSteps)
 
         // Termocullas
         val termocullas = TermocullaManager.getTermocullas(c)
@@ -91,7 +92,7 @@ class HatchingActivity : BaseNavActivity() {
             val status = when {
                 inc.isBroken && activeEgg == null -> "❌ Rotta"
                 activeEgg != null && activeEgg.isReady -> "✅ Pronta!"
-                activeEgg != null -> "🚶 %.1f/%.1f km".format(activeEgg.distanceWalked, activeEgg.distanceRequired)
+                activeEgg != null -> java.lang.String.format(java.util.Locale.US, "🚶 %.1f/%.1f km", activeEgg.distanceWalked, activeEgg.distanceRequired)
                 else -> "🟢 Libera"
             }
             val usesText = if (inc.isIllimitato) "∞ usi" else "${inc.usiRimanenti} usi"
@@ -130,7 +131,7 @@ class HatchingActivity : BaseNavActivity() {
                 },
                 TextView(c).apply {
                     text = if (ready) "✅ Pronta da raccogliere!"
-                    else "🚶 %.1f / %.1f km".format(egg.distanceWalked, egg.distanceRequired)
+                    else java.lang.String.format(java.util.Locale.US, "🚶 %.1f / %.1f km", egg.distanceWalked, egg.distanceRequired)
                     textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
                     setPadding(0, UiKit.dp(c, 4), 0, 0)
                 },
@@ -141,12 +142,13 @@ class HatchingActivity : BaseNavActivity() {
                 card.addView(UiKit.button(c, "🎉 Raccogli", UiKit.GREEN) {
                     val collected = TermocullaManager.collectHatchedEgg(c, egg.istanzaId)
                     if (collected != null) {
-                        val rarity2 = EggRarity.fromId(collected.rarityId)
-                        SavedManager.addPendingEgg(c, EggInventoryItem(
+                        val creature = SurpriseCreature.pickForHatch(collected.rarityId, ZoneType.UNKNOWN, WeatherType.CLEAR)
+                        SurpriseManager.addCreatureToInventory(c, creature.id, collected.rarityId)
+                        SavedManager.addHatchedEgg(c, HatchedEgg(
                             istanzaId = collected.istanzaId,
-                            rarityId = collected.rarityId,
-                            fantasyName = collected.fantasyName,
-                            power = rarity2.basePower
+                            sourceRarityId = collected.rarityId,
+                            hatchedAt = System.currentTimeMillis(),
+                            creatureId = creature.id
                         ))
                         startActivity(Intent(c, EggOpeningAnimationActivity::class.java)
                             .putExtra(EggOpeningAnimationActivity.EXTRA_RARITY_ID, collected.rarityId))

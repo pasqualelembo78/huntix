@@ -10,7 +10,8 @@ import android.graphics.Color
  * I rimanenti blocchi vengono riempiti con edifici procedurali generici.
  */
 enum class BuildingType {
-    HOUSE, RESTAURANT, SUPERMARKET, HOSPITAL, GYM, MONUMENT, MUSEUM
+    HOUSE, RESTAURANT, SUPERMARKET, HOSPITAL, GYM, MONUMENT, MUSEUM,
+    GOVERNMENT, BANK, POST_OFFICE, LIBRARY, SCHOOL
 }
 
 data class BuildingAction(
@@ -146,9 +147,9 @@ object BuildingDefs {
         BuildingDef(
             type = BuildingType.MUSEUM,
             name = "Museo",
-            emoji = "\uD83C\uDFDB\uFE0F",
-            color3D = 0xFF78909C.toInt(),    // grigio azzurro
-            roofColor = 0xFF455A64.toInt(),   // grigio scuro
+            emoji = "\uD83C\uDFA6",
+            color3D = 0xFF78909C.toInt(),
+            roofColor = 0xFF455A64.toInt(),
             x = 20f, z = -5f,
             width = 4f, depth = 3.5f, height = 3f,
             actions = listOf(
@@ -156,6 +157,88 @@ object BuildingDefs {
                 BuildingAction("\uD83D\uDCD6", "Studia", "fun", 15f),
                 BuildingAction("\uD83D\uDCDC", "Guida", "fun", 10f)
             )
+        ),
+        BuildingDef(
+            type = BuildingType.GOVERNMENT,
+            name = "Comune",
+            emoji = "\uD83C\uDFE1",
+            color3D = 0xFFECEFF1.toInt(),
+            roofColor = 0xFF90A4AE.toInt(),
+            x = -15f, z = 20f,
+            width = 4f, depth = 4f, height = 3.5f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCDD", "Pratiche", "social", 20f),
+                BuildingAction("\uD83D\uDCBC", "Certificati", "social", 15f),
+                BuildingAction("\uD83D\uDEE9\ufe0f", "Sportelli", "social", 10f)
+            ),
+            glbModel = "city_models/government.glb",
+            modelScale = 0.04f
+        ),
+        BuildingDef(
+            type = BuildingType.BANK,
+            name = "Banca",
+            emoji = "\uD83C\uDEF0\uD83D\uDCB�",
+            color3D = 0xFFE8EAF6.toInt(),
+            roofColor = 0xFF607D8B.toInt(),
+            x = 15f, z = 20f,
+            width = 4f, depth = 3.5f, height = 3f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCB5", "Deposita", "money", 0f),
+                BuildingAction("\uD83D\uDCB6", "Prelievo", "money", 0f),
+                BuildingAction("\uD83D\uDCB�", "Converti", "money", 0f)
+            ),
+            glbModel = "city_models/bank.glb",
+            modelScale = 0.035f
+        ),
+        BuildingDef(
+            type = BuildingType.POST_OFFICE,
+            name = "Posta",
+            emoji = "\uD83D\uDCEC",
+            color3D = 0xFFE3F2FD.toInt(),
+            roofColor = 0xFF2196F3.toInt(),
+            x = 0f, z = 20f,
+            width = 3.5f, depth = 3.5f, height = 2.8f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCEC", "Posta", "social", 15f),
+                BuildingAction("\uD83D\uDCB0", "Pacchi", "social", 10f),
+                BuildingAction("\u270F\ufe0f", "Documenti", "social", 10f)
+            ),
+            glbModel = "city_models/post_office.glb",
+            modelScale = 0.03f
+        ),
+        BuildingDef(
+            type = BuildingType.LIBRARY,
+            name = "Biblioteca",
+            emoji = "\uD83D\uDCDA",
+            color3D = 0xFFF3E5F5.toInt(),
+            roofColor = 0xFF7B1FA2.toInt(),
+            x = -5f, z = 20f,
+            width = 3.5f, depth = 3.5f, height = 3f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCDA", "Leggi", "fun", 20f),
+                BuildingAction("\uD83D\uDC49", "Cerca", "fun", 15f),
+                BuildingAction("\u270F\ufe0f", "Studio", "fun", 10f)
+            ),
+            glbModel = "city_models/library.glb",
+            modelScale = 0.03f
+        ),
+        BuildingDef(
+            type = BuildingType.SCHOOL,
+            name = "Scuola",
+            emoji = "\uD83C\uDFEB",
+            color3D = 0xFFFFF9C4.toInt(),
+            roofColor = 0xFFF9A825.toInt(),
+            x = 25f, z = 0f,
+            width = 4f, depth = 4f, height = 3.5f,
+            actions = listOf(
+                BuildingAction("\uD83D\uDCD5", "Lezione", "fun", 20f),
+                BuildingAction("\uD83D\uDC4D", "Esercizio", "fun", 15f),
+                BuildingAction("\uD83D\uDC9C", "Ricreazione", "fun", 10f)
+            ),
+            glbModel = "city_models/school.glb",
+            modelScale = 0.04f
+        )
+    )
         )
     )
 
@@ -212,6 +295,27 @@ object BuildingDefs {
             "monument" to BuildingType.MONUMENT,
             "museo" to BuildingType.MUSEUM,
             "museum" to BuildingType.MUSEUM,
+            "government" to BuildingType.GOVERNMENT,
+            "ufficio_pubblico" to BuildingType.GOVERNMENT,
+            "townhall" to BuildingType.GOVERNMENT,
+            "courthouse" to BuildingType.GOVERNMENT,
+            "registration_hall" to BuildingType.GOVERNMENT,
+            "job_centre" to BuildingType.GOVERNMENT,
+            "comune" to BuildingType.GOVERNMENT,
+            "anagrafe" to BuildingType.GOVERNMENT,
+            "centro_collocamento" to BuildingType.GOVERNMENT,
+            "bank" to BuildingType.BANK,
+            "banca" to BuildingType.BANK,
+            "banks" to BuildingType.BANK,
+            "post_office" to BuildingType.POST_OFFICE,
+            "ufficio_postale" to BuildingType.POST_OFFICE,
+            "post_offices" to BuildingType.POST_OFFICE,
+            "library" to BuildingType.LIBRARY,
+            "biblioteca" to BuildingType.LIBRARY,
+            "libraries" to BuildingType.LIBRARY,
+            "school" to BuildingType.SCHOOL,
+            "scuola" to BuildingType.SCHOOL,
+            "schools" to BuildingType.SCHOOL,
         )[poiType.lowercase().trim()]
     }
 

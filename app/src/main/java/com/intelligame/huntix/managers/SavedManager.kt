@@ -61,15 +61,18 @@ object SavedManager {
     @Synchronized
     fun addMvc(ctx: Context, amount: Double): Double {
         if (amount <= 0) return getMvcBalance(ctx)
+        val whole = floor(amount)
+        val frac = amount - whole
         val p = prefs(ctx)
-        val current = p.getLong(KEY_MVC, 0L) + amount.toLong()
-        val earned = p.getLong(KEY_TOTAL_EARNED, 0L) + max(0L, amount.toLong())
+        val current = p.getLong(KEY_MVC, 0L) + whole.toLong()
+        val earned = p.getLong(KEY_TOTAL_EARNED, 0L) + max(0L, whole.toLong())
         p.edit()
             .putLong(KEY_MVC, current)
             .putLong(KEY_TOTAL_EARNED, earned)
             .apply()
-        Log.d("SavedManager", "addMvc +$amount → balance=$current")
-        return current.toDouble()
+        if (frac > 0) creditFractional(ctx, frac)
+        Log.d("SavedManager", "addMvc +$amount → balance=$current (frac=${frac})")
+        return current.toDouble() + frac
     }
 
     @Synchronized
@@ -101,6 +104,7 @@ object SavedManager {
     // ── Accredito frazionario ──────────────────────────────────
     // Il saldo MVC è intero (Long): accumula la parte frazionaria in un
     // apposito pref e versala al saldo solo quando supera 1 MVC.
+    @Synchronized
     private fun creditFractional(ctx: Context, amount: Double): Double {
         if (amount <= 0) return 0.0
         val p = prefs(ctx)
@@ -352,6 +356,12 @@ object SavedManager {
         } catch (e: Exception) { Sentry.captureException(e); mutableListOf() }
     }
 
+    fun addHatchedEgg(ctx: Context, egg: HatchedEgg) {
+        val list = getHatchedEggs(ctx)
+        list.add(0, egg)
+        saveHatchedEggs(ctx, list)
+    }
+
     fun removeHatchedEgg(ctx: Context, istanzaId: String) {
         val list = getHatchedEggs(ctx).filter { it.istanzaId != istanzaId }
         saveHatchedEggs(ctx, list)
@@ -479,7 +489,8 @@ object SavedManager {
             sourceRarityId = rarityId,
             level = level + 1,
             hatchedAt = System.currentTimeMillis(),
-            fusedFrom = toFuse.map { it.istanzaId }
+            fusedFrom = toFuse.map { it.istanzaId },
+            creatureId = toFuse.firstOrNull()?.creatureId ?: ""
         )
         toFuse.forEach { fused -> hatched.removeIf { it.istanzaId == fused.istanzaId } }
         hatched.add(0, fusedEgg)
@@ -500,20 +511,24 @@ object SavedManager {
     fun getTotalMiningHps(ctx: Context): Double =
         getHatchedEggs(ctx).sumOf { it.miningPowerHps }
 
+    @Synchronized
     fun accrueMiningRewards(ctx: Context): Double {
         val now = System.currentTimeMillis()
         val lastCalcMs = prefs(ctx).getLong(KEY_LAST_CALC_MS, now)
-        prefs(ctx).edit().putLong(KEY_LAST_CALC_MS, now).apply()
 
         collectReady(ctx)
 
         val elapsedSec = ((now - lastCalcMs) / 1000L)
             .coerceAtMost((MAX_OFFLINE_H * 3600).toLong())
             .toDouble()
-        if (elapsedSec <= 0) return 0.0
+        if (elapsedSec <= 0) {
+            prefs(ctx).edit().putLong(KEY_LAST_CALC_MS, now).apply()
+            return 0.0
+        }
 
         val hps = getTotalMiningHps(ctx)
         val earned = hps * elapsedSec
+        prefs(ctx).edit().putLong(KEY_LAST_CALC_MS, now).apply()
         if (earned > 0) return creditFractional(ctx, earned)
         return 0.0
     }

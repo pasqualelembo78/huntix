@@ -69,6 +69,7 @@ class ChatRequest(BaseModel):
     evolution_state: Optional[dict] = None
     shifts: Optional[list] = None
     summaries: Optional[list] = None
+    venue_id: Optional[str] = None
 
 
 class TtsRequest(BaseModel):
@@ -127,7 +128,8 @@ async def api_chat(request: Request, body: ChatRequest, user: AuthUser = Depends
                              image_mime=body.image_mime,
                              client_storage=body.client_storage,
                              client_state=client_state,
-                             is_favorite=body.is_favorite)
+                             is_favorite=body.is_favorite,
+                             venue_id=body.venue_id)
     if not result:
         refund_message(user.user_id)
         raise HTTPException(404, "character not found")

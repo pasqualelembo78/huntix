@@ -22,10 +22,16 @@ object EggInventoryManager {
     fun getInventory(ctx: Context): MutableList<EggInventoryItem> {
         val json = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             .getString(KEY_INV, "[]") ?: "[]"
-        return try {
-            val arr = JSONArray(json)
-            (0 until arr.length()).map { EggInventoryItem.fromJson(arr.getJSONObject(it)) }.toMutableList()
-        } catch (e: Exception) { mutableListOf() }
+        val arr = try { JSONArray(json) } catch (e: Exception) { return mutableListOf() }
+        val result = mutableListOf<EggInventoryItem>()
+        for (i in 0 until arr.length()) {
+            try {
+                result.add(EggInventoryItem.fromJson(arr.getJSONObject(i)))
+            } catch (_: Exception) {
+                // skip malformed entries instead of losing all inventory
+            }
+        }
+        return result
     }
 
     fun getInventoryCount(ctx: Context) = getInventory(ctx).size
@@ -53,6 +59,7 @@ object EggInventoryManager {
      * Attiva/Disattiva un uovo nel battle team.
      * Restituisce false se il team è già pieno (3) e si tenta di aggiungere.
      */
+    @Synchronized
     fun toggleBattleTeam(ctx: Context, istanzaId: String): Boolean {
         val inv = getInventory(ctx)
         val item = inv.firstOrNull { it.istanzaId == istanzaId } ?: return false
