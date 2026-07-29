@@ -38,6 +38,21 @@ class OutdoorManager private constructor() : SensorEventListener {
     // Declare online POI manager
     private var onlinePoiManager: OnlinePoiManager? = null
 
+    /** true = Real Life mode (solo edifici/negozi), false = Outdoor mode (uova + palestre) */
+    var isReallifeMode: Boolean = false
+        set(v) { field = v; filterPois() }
+
+    private var rawPois = mutableListOf<Poi>()
+    private val filteredPois = mutableListOf<Poi>()
+
+    private fun filterPois() {
+        filteredPois.clear()
+        filteredPois.addAll(
+            if (isReallifeMode) rawPois.filter { it.type == "building" && it.buildingType.isNotEmpty() }
+            else rawPois.filter { it.type != "building" || it.buildingType.isEmpty() }
+        )
+    }
+
     class Poi(
         val id: String,
         val name: String,
@@ -571,7 +586,9 @@ class OutdoorManager private constructor() : SensorEventListener {
     }
 
     fun getEggs(): List<WorldEgg> = eggs.toList()
-    fun getPois(): List<Poi> = pois.toList()
+    fun getPois(): List<Poi> = pois
+        .filter { if (isReallifeMode) it.type == "building" && it.buildingType.isNotEmpty() else it.type != "building" || it.buildingType.isEmpty() }
+        .toList()
 
     fun nearestUnfoundEgg(): WorldEgg? =
         eggs.filter { !it.found }.minByOrNull { distanceMeters(it) }

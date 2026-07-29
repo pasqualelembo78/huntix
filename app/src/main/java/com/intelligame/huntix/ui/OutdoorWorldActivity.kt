@@ -65,6 +65,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
         private const val MIN_REPORT_DISTANCE_M = 10.0
         private const val REPORT_COOLDOWN_MS = 10_000L
         private const val MAX_REPORTS_PER_SESSION = 10
+
+        const val EXTRA_MODE = "mode"
+        const val MODE_OUTDOOR = "outdoor"
+        const val MODE_REALLIFE = "reallife"
     }
 
     override fun activeTab() = ""
@@ -151,9 +155,15 @@ class OutdoorWorldActivity : BaseNavActivity() {
         override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) {}
     }
 
+    private var currentMode: String = MODE_OUTDOOR
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLog.i(TAG, "onCreate START")
+
+        currentMode = intent.getStringExtra(EXTRA_MODE) ?: MODE_OUTDOOR
+        mgr.isReallifeMode = currentMode == MODE_REALLIFE
+        AppLog.i(TAG, "Mode: $currentMode")
 
         MapLibre.getInstance(this)
 
@@ -239,7 +249,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
                     return@addOnMapClickListener true
                 }
                 hideBottomSheet()
-                showReportPoiDialog(point.latitude, point.longitude)
+                if (currentMode != MODE_REALLIFE) {
+                    showReportPoiDialog(point.latitude, point.longitude)
+                }
                 true
             }
 
@@ -249,17 +261,29 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 val poi = mgr.getPois().firstOrNull { it.name == title }
                 if (egg != null) showEggSheet(egg)
                 else if (poi != null) {
-                    when (poi.pageType) {
-                        "web" -> if (poi.url.isNotBlank()) openWebView(poi) else showPoiSheet(poi)
-                        "custom" -> if (poi.url.isNotBlank()) openCustomPage(poi) else showPoiSheet(poi)
-                        else -> {
-                            val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
-                            if (bt != null) {
-                                openBuilding(poi, bt)
-                            } else if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
-                                openBuilding(poi, null)
-                            } else {
-                                showPoiSheet(poi)
+                    if (currentMode == MODE_REALLIFE) {
+                        // Reallife: open building interior directly
+                        val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
+                        if (bt != null) {
+                            openBuilding(poi, bt)
+                        } else if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+                            openBuilding(poi, null)
+                        } else {
+                            showPoiSheet(poi)
+                        }
+                    } else {
+                        when (poi.pageType) {
+                            "web" -> if (poi.url.isNotBlank()) openWebView(poi) else showPoiSheet(poi)
+                            "custom" -> if (poi.url.isNotBlank()) openCustomPage(poi) else showPoiSheet(poi)
+                            else -> {
+                                val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
+                                if (bt != null) {
+                                    openBuilding(poi, bt)
+                                } else if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+                                    openBuilding(poi, null)
+                                } else {
+                                    showPoiSheet(poi)
+                                }
                             }
                         }
                     }
@@ -344,8 +368,20 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Bottom sheet buttons
         btnSheetHunt.setOnClickListener {
-            activeEggId?.let { doHunt(it) }
-            activePoiId?.let { openPoi(it) }
+            if (currentMode == MODE_REALLIFE) {
+                activePoiId?.let { poiId ->
+                    val poi = mgr.getPois().firstOrNull { it.id == poiId }
+                    if (poi != null) {
+                        val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
+                        if (bt != null) openBuilding(poi, bt)
+                        else if (poi.type == "building" && poi.buildingType.isNotEmpty()) openBuilding(poi, null)
+                        else openPoi(poiId)
+                    }
+                }
+            } else {
+                activeEggId?.let { doHunt(it) }
+                activePoiId?.let { openPoi(it) }
+            }
         }
 
         btnSheetAr.setOnClickListener {
@@ -366,6 +402,30 @@ class OutdoorWorldActivity : BaseNavActivity() {
         // Post refresh with initial delay to allow map initialization
         refresh.postDelayed(tick, 1000L)
         AppLog.d(TAG, "Tick scheduled (1s delay)")
+
+        // Mode-specific UI adjustments
+        if (currentMode == MODE_REALLIFE) {
+            // Reallife: hide egg/gym hunt UI, show building-focused UI
+            findViewById<View>(R.id.badgeEggs)?.visibility = View.GONE
+            findViewById<View>(R.id.badgeGyms)?.visibility = View.GONE
+            findViewById<View>(R.id.btnCatch)?.visibility = View.GONE
+            findViewById<View>(R.id.tvCatchHint)?.visibility = View.GONE
+            findViewById<View>(R.id.btnLever)?.visibility = View.GONE
+            findViewById<View>(R.id.btnArToggle)?.visibility = View.GONE
+            findViewById<View>(R.id.btnPhoto)?.visibility = View.GONE
+            findViewById<View>(R.id.btnSettings)?.visibility = View.GONE
+            findViewById<View>(R.id.radarView)?.visibility = View.GONE
+            findViewById<View>(R.id.schiusaProgress)?.visibility = View.GONE
+            tvSheetHunt.text = "Entra"
+            tvSheetAr.visibility = View.GONE
+            val title = findViewById<TextView>(R.id.tvWeatherEmoji)
+            title?.let { t ->
+                t.textSize = 14f
+                t.text = "🏙️ RL"
+            }
+        } else {
+            findViewById<View>(R.id.btnReportPosition)?.visibility = View.GONE
+        }
 
         // Phase 3: compass sensor
         sensorManager = getSystemService(SENSOR_SERVICE) as? android.hardware.SensorManager
@@ -388,6 +448,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     override fun onResume() {
         super.onResume()
         AppLog.i(TAG, "onResume")
+        mgr.isReallifeMode = currentMode == MODE_REALLIFE
         mgr.start(this)
         checkGpsEnabled()
         mapView?.onResume()
@@ -499,9 +560,11 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val boostDesc = w.rarityBoost.entries.joinToString("\n") { (r, b) -> "$r  x${"%.1f".format(b)}" }
         tvWeatherBonus.text = "Bonus rarita:\n$boostDesc"
 
-        val eggCount = mgr.getEggs().count { !it.found }
-        tvEggCount.text = "$eggCount"
-        tvGymCount.text = "${mgr.getPois().size}"
+        if (currentMode != MODE_REALLIFE) {
+            val eggCount = mgr.getEggs().count { !it.found }
+            tvEggCount.text = "$eggCount"
+            tvGymCount.text = "${mgr.getPois().size}"
+        }
 
         // Phase 1.1: Player level + EXP bar
         refreshPlayerHud()
@@ -510,32 +573,34 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val mvc = SavedManager.getMvcBalance(this)
         tvMvcCount.text = "${mvc.toLong()}"
 
-        // Phase 1.6: Live event badge
-        refreshEventBadge()
+        if (currentMode != MODE_REALLIFE) {
+            // Phase 1.6: Live event badge
+            refreshEventBadge()
 
-        // Phase 1.5: Radar view
-        refreshRadar()
+            // Phase 1.5: Radar view
+            refreshRadar()
+
+            // Phase 1.4: Catch button state
+            refreshCatchButton()
+
+            // Phase 1.7: Lever state indicator
+            if (mgr.isSimulating) {
+                btnLever.setBackgroundResource(R.drawable.btn_accent)
+                btnLever.text = "⏹"
+            } else {
+                btnLever.setBackgroundResource(R.drawable.btn_purple)
+                btnLever.text = "⛓"
+            }
+
+            // Phase 5.2: Proximity hint
+            checkProximityHint()
+
+            // Progress di schiusa in bottom sheet
+            refreshSchiusaProgress()
+        }
 
         // Phase 4.1: Sky event overlay
         refreshSkyOverlay()
-
-        // Phase 1.4: Catch button state
-        refreshCatchButton()
-
-        // Phase 1.7: Lever state indicator
-        if (mgr.isSimulating) {
-            btnLever.setBackgroundResource(R.drawable.btn_accent)
-            btnLever.text = "⏹"
-        } else {
-            btnLever.setBackgroundResource(R.drawable.btn_purple)
-            btnLever.text = "⛓"
-        }
-
-        // Phase 5.2: Proximity hint
-        checkProximityHint()
-
-        // Progress di schiusa in bottom sheet
-        refreshSchiusaProgress()
 
         updateWeatherParticles(w)
 
@@ -586,41 +651,49 @@ class OutdoorWorldActivity : BaseNavActivity() {
         AppLog.d(TAG, "refreshMapMarkers: START (force=$force) mem=${availMb}MB iconCache=${iconCache.size}")
 
         // ── Eggs: incremental add/remove ──
-        val visibleEggs = mgr.getEggs().filter { !it.found }
-        val visibleEggIds = visibleEggs.map { it.id }.toSet()
+        if (currentMode != MODE_REALLIFE) {
+            val visibleEggs = mgr.getEggs().filter { !it.found }
+            val visibleEggIds = visibleEggs.map { it.id }.toSet()
 
-        // Remove eggs that are no longer visible
-        eggMarkers.keys.toList().forEach { id ->
-            if (id !in visibleEggIds) {
-                AppLog.d(TAG, "Egg $id removed (found or out of range)")
+            // Remove eggs that are no longer visible
+            eggMarkers.keys.toList().forEach { id ->
+                if (id !in visibleEggIds) {
+                    AppLog.d(TAG, "Egg $id removed (found or out of range)")
+                    eggMarkers.remove(id)?.let { map.removeMarker(it) }
+                    eggPolygons.remove(id)?.let { map.removePolygon(it) }
+                }
+            }
+
+            // Add new eggs
+            visibleEggs.forEach { egg ->
+                if (egg.id !in eggMarkers) {
+                    AppLog.d(TAG, "Egg ${egg.id} added (${egg.rarity.displayName} ${egg.element.name})")
+                    val color = rarityColor(egg.rarity)
+                    val center = LatLng(egg.lat, egg.lng)
+                    val points = createCirclePoints(center, mgr.getCatchRadiusM(egg).toDouble())
+                    val poly = map.addPolygon(PolygonOptions()
+                        .addAll(points)
+                        .strokeColor(color)
+                        .fillColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)))
+                    )
+                    eggPolygons[egg.id] = poly
+
+                    val eggKey = "egg_${egg.id}"
+                    val bitmap = makeMarkerBitmap(egg.rarity)
+                    val marker = map.addMarker(MarkerOptions()
+                        .position(center)
+                        .icon(getCachedIcon(eggKey, bitmap))
+                        .title(egg.displayLabel)
+                        .snippet("${egg.rarity.displayName} — ${egg.element.name}")
+                    )
+                    eggMarkers[egg.id] = marker
+                }
+            }
+        } else {
+            // Reallife: remove any leftover egg markers
+            eggMarkers.keys.toList().forEach { id ->
                 eggMarkers.remove(id)?.let { map.removeMarker(it) }
                 eggPolygons.remove(id)?.let { map.removePolygon(it) }
-            }
-        }
-
-        // Add new eggs
-        visibleEggs.forEach { egg ->
-            if (egg.id !in eggMarkers) {
-                AppLog.d(TAG, "Egg ${egg.id} added (${egg.rarity.displayName} ${egg.element.name})")
-                val color = rarityColor(egg.rarity)
-                val center = LatLng(egg.lat, egg.lng)
-                val points = createCirclePoints(center, mgr.getCatchRadiusM(egg).toDouble())
-                val poly = map.addPolygon(PolygonOptions()
-                    .addAll(points)
-                    .strokeColor(color)
-                    .fillColor(Color.argb(35, Color.red(color), Color.green(color), Color.blue(color)))
-                )
-                eggPolygons[egg.id] = poly
-
-                val eggKey = "egg_${egg.id}"
-                val bitmap = makeMarkerBitmap(egg.rarity)
-                val marker = map.addMarker(MarkerOptions()
-                    .position(center)
-                    .icon(getCachedIcon(eggKey, bitmap))
-                    .title(egg.displayLabel)
-                    .snippet("${egg.rarity.displayName} — ${egg.element.name}")
-                )
-                eggMarkers[egg.id] = marker
             }
         }
 
@@ -1061,10 +1134,16 @@ class OutdoorWorldActivity : BaseNavActivity() {
         activeEggId = null
         tvSheetTitle.text = "\uD83C\uDFDF\uFE0F ${poi.name}"
         tvSheetInfo.text = "${d.toInt()} m"
-        tvSheetHunt.text = "Spinna"
+        if (currentMode == MODE_REALLIFE) {
+            tvSheetHunt.text = "Entra"
+            btnSheetAr.visibility = View.GONE
+            btnReportPosition.visibility = View.GONE
+        } else {
+            tvSheetHunt.text = "Spinna"
+            btnSheetAr.visibility = View.GONE
+            btnReportPosition.visibility = View.VISIBLE
+        }
         btnSheetHunt.visibility = View.VISIBLE
-        btnSheetAr.visibility = View.GONE
-        btnReportPosition.visibility = View.VISIBLE
         bottomSheet.visibility = View.VISIBLE
     }
 
