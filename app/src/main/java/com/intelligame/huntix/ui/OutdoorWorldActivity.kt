@@ -1283,7 +1283,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
             hint = "Categoria"
             setTextColor(Color.WHITE)
             setHintTextColor(0x88FFFFFF.toInt())
-            val categories = arrayOf("ristorante", "bar", "palestra", "ospedale", "monumento", "museo", "supermercato", "altro")
+            val categories = arrayOf("ristorante", "bar", "palestra", "ospedale", "monumento", "museo", "supermercato", "comune", "banca", "ufficio_postale", "biblioteca", "altro")
             setAdapter(ArrayAdapter(this@OutdoorWorldActivity, android.R.layout.simple_dropdown_item_1line, categories))
         }
         container.addView(spinnerCategory)

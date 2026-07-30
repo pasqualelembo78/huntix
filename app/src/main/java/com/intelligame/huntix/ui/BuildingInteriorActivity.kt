@@ -532,7 +532,7 @@ class BuildingInteriorActivity : AppCompatActivity() {
                 }
                 workBtnRef?.isEnabled = true
                 result.onSuccess { resp ->
-                    addChatMessage(false, "💼 Lavora ottenuto: ${resp.workReward} MVC!")
+                    addChatMessage(false, "💼 Lavora ottenuto: ${resp.earned} MVC!")
                 }.onFailure {
                     addChatMessage(false, "⚠️ Errore: ${it.message}")
                 }
@@ -910,9 +910,9 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawCircle(w * 0.23f, baseY, 4f, objectPaint)
                     canvas.drawCircle(w * 0.77f, baseY, 4f, objectPaint)
                     objectPaint.color = 0xFFFFEB3B.toInt()
-                    canvas.drawRect(w * 0.5f, baseY - h * 0.06f, w * 0.65f, baseY, 4f, 4f, objectPaint)
+                    canvas.drawRoundRect(w * 0.5f, baseY - h * 0.06f, w * 0.65f, baseY, 4f, 4f, objectPaint)
                     textPaint.textSize = w * 0.04f
-                    canvas.drawText("\uD83C\uDEF0\uD83D\uDCB�", cx, h * 0.08f, textPaint)
+                    canvas.drawText("\uD83C\uDFE6", cx, h * 0.08f, textPaint)
                 }
                 BuildingType.POST_OFFICE -> {
                     objectPaint.color = 0xFFE3F2FD.toInt()
@@ -941,6 +941,23 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     }
                     textPaint.textSize = w * 0.04f
                     canvas.drawText("\uD83D\uDCDA", cx, h * 0.08f, textPaint)
+                }
+                BuildingType.SCHOOL -> {
+                    objectPaint.color = 0xFFFFF9C4.toInt()
+                    canvas.drawRoundRect(w * 0.1f, baseY - h * 0.08f, w * 0.7f, baseY, 4f, 4f, objectPaint)
+                    objectPaint.color = 0xFFF9A825.toInt()
+                    canvas.drawRect(w * 0.12f, baseY - h * 0.06f, w * 0.68f, baseY - h * 0.02f, objectPaint)
+                    objectPaint.color = 0xFF90CAF9.toInt()
+                    canvas.drawRect(w * 0.4f, h * 0.2f, w * 0.6f, baseY - h * 0.2f, objectPaint)
+                    objectPaint.color = 0xFFE53935.toInt()
+                    canvas.drawRect(w * 0.42f, h * 0.22f, w * 0.58f, h * 0.28f, objectPaint)
+                    for (d in 0..1) {
+                        val dx = w * (0.2f + d * 0.5f)
+                        objectPaint.color = 0xFF6D4C41.toInt()
+                        canvas.drawRect(dx - 2f, baseY - h * 0.04f, dx + 2f, baseY, objectPaint)
+                    }
+                    textPaint.textSize = w * 0.04f
+                    canvas.drawText("\uD83C\uDFEB", cx, h * 0.08f, textPaint)
                 }
             }
         }
