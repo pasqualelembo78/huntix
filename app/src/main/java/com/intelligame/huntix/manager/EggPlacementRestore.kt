@@ -35,7 +35,7 @@ internal fun EggPlacementManager.restoreEggsFromCloud(safeAnchorNode: AnchorNode
             if (safeCloudId.isNotBlank() && sv.session != null) {
                 activity.runOnUiThread { binding.tvStatus.text = "Risoluzione cassaforte dal cloud..." }
                 try {
-                    IndoorArSync.resolveSafeAnchor(sv.session!!, safeCloudId)
+                    IndoorArSync.resolveSafeAnchor(sv.session ?: return@runOnUiThread, safeCloudId)
                     IndoorArSync.onSafeResolved = { resolvedSafeAnchor ->
                         android.util.Log.d("EggPlacement", "Cassaforte risolto da Cloud")
                         restoreEggsWithSafeAnchor(snap, resolvedSafeAnchor)

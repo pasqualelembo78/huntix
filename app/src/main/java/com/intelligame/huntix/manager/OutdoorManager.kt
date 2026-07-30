@@ -143,7 +143,6 @@ class OutdoorManager private constructor() : SensorEventListener {
         activeClients++
         appCtx = ctx.applicationContext
         registerCompass(ctx)
-        this.appCtx = ctx
         if (onlinePoiManager == null) {
             onlinePoiManager = OnlinePoiManager()
         }

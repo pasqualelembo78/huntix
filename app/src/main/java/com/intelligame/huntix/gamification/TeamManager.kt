@@ -143,7 +143,7 @@ object TeamManager {
             tx.update(db.collection("players").document(uid), mapOf("teamId" to teamId))
             team
         }.addOnSuccessListener { team ->
-            onSuccess(team as Team)
+            onSuccess(team as? Team ?: return@addOnSuccessListener)
             // Manda messaggio di benvenuto in chat
             sendMessage(teamId, "Sistema", "🎉 $playerName si è unito alla squadra!", "🎉") {}
         }.addOnFailureListener { onError(it.message ?: "Errore iscrizione") }

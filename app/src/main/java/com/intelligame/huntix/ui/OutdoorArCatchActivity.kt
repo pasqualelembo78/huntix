@@ -334,7 +334,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
             clearAllEggNodes()
             return
         }
-        val nearest = eggs.minByOrNull { mgr.distanceMeters(it) }!!
+        val nearest = eggs.minByOrNull { mgr.distanceMeters(it) } ?: return
         val dist = mgr.distanceMeters(nearest)
         val loc = mgr.currentLocation
 

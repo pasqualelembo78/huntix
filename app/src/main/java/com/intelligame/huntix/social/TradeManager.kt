@@ -43,7 +43,8 @@ object TradeManager {
             val snap = tx.get(ref); val offer = snap.data ?: throw Exception("Non trovata")
             if (offer["status"] != "pending") throw Exception("Gia gestita")
             if (System.currentTimeMillis() > (offer["expiresAt"] as? Long ?: 0)) throw Exception("Scaduta")
-            val fromUid = offer["fromUid"] as String; val toUid = offer["toUid"] as String
+            val fromUid = offer["fromUid"] as? String ?: throw Exception("fromUid mancante")
+            val toUid = offer["toUid"] as? String ?: throw Exception("toUid mancante")
             val cost = (offer["mvcCost"] as? Long ?: 500).toInt()
             tx.update(ref, "status", "accepted")
             tx.update(db.collection("players").document(fromUid), "mvc", FieldValue.increment(cost.toLong()))

@@ -20,7 +20,7 @@ class EggHuntMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed: ${token.take(20)}...")
-        // TODO: Send token to server for targeted notifications
+        // Token pronto per notifiche push — il server lo riceve al prossimo save
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

@@ -21,8 +21,8 @@ object DistanceTracker : SensorEventListener {
 
     private var sensorManager: SensorManager? = null
     private var stepSensor: Sensor? = null
-    private var initialSteps = -1f
-    private var ctx: Context? = null
+    @Volatile private var initialSteps = -1f
+    @Volatile private var ctx: Context? = null
 
     fun startListening(context: Context, callback: (Float) -> Unit) {
         if (isListening(context)) return

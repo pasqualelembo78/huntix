@@ -12,6 +12,7 @@ import android.hardware.SensorManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.AttributeSet
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import com.intelligame.huntix.EggElement
@@ -92,7 +93,7 @@ class ElementShieldCatchView @JvmOverloads constructor(
     private var resultLabel = ""
     private var resultColor = Color.WHITE
     private var quality = 0f
-    private var gauge = 0f
+    @Volatile private var gauge = 0f
     private var gaugeFlashing = false
     private var shieldBroken = false
     private var cx = 0f
@@ -508,10 +509,10 @@ class ElementShieldCatchView @JvmOverloads constructor(
         try { sensorManager?.unregisterListener(this) } catch (_: Exception) {}
         try {
             mediaRecorder?.apply {
-                stop()
+                try { stop() } catch (e: Exception) { Log.w("ElementShield", "stop MediaRecorder", e) }
                 release()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { Log.w("ElementShield", "release MediaRecorder", e) }
         mediaRecorder = null
     }
 

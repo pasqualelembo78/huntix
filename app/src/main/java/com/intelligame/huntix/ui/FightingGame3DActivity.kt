@@ -222,16 +222,16 @@ class FightingGame3DActivity : BaseNavActivity() {
     }
 
     private fun update3D(dt: Float) {
-        if (!use3D || player3D == null || enemy3D == null) return
+        val p3d = player3D ?: return; val e3d = enemy3D ?: return
         val p = engine.player; val e = engine.enemy
 
-        player3D!!.setPosition((p.x - 0.5f) * 3.5f, -0.1f + p.y * 0.01f, 0f)
-        player3D!!.setFacing(p.facing > 0)
-        player3D!!.playAnimation(engine.playerAnimEvent)
+        p3d.setPosition((p.x - 0.5f) * 3.5f, -0.1f + p.y * 0.01f, 0f)
+        p3d.setFacing(p.facing > 0)
+        p3d.playAnimation(engine.playerAnimEvent)
 
-        enemy3D!!.setPosition((e.x - 0.5f) * 3.5f, -0.1f + e.y * 0.01f, 0f)
-        enemy3D!!.setFacing(e.facing > 0)
-        enemy3D!!.playAnimation(engine.enemyAnimEvent)
+        e3d.setPosition((e.x - 0.5f) * 3.5f, -0.1f + e.y * 0.01f, 0f)
+        e3d.setFacing(e.facing > 0)
+        e3d.playAnimation(engine.enemyAnimEvent)
     }
 
     private fun createControls(): View {
