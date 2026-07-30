@@ -261,7 +261,7 @@ class OutdoorArCatchActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildEggNode(egg: WorldEgg, heading: Float): Node {
+    private fun buildEggNode(egg: WorldEgg, @Suppress("UNUSED_PARAMETER") heading: Float): Node {
         val mat = sceneView.materialLoader.createColorInstance(egg.rarity.color)
         val body = SphereNode(sceneView.engine, 0.15f, materialInstance = mat).apply {
             position = Position(0f, 0f, 0f)

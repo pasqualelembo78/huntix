@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.intelligame.huntix.ui
 
 import android.graphics.Color

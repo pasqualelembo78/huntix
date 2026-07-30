@@ -181,8 +181,6 @@ object SavedManager {
     fun getInstallRatePerHour(): Double = INSTALL_MVC_PER_HOUR
 
     fun syncWithProfile(ctx: Context) {
-        val profile = PlayerProfileManager.myProfile
-        val local = getMvcBalance(ctx)
         // MVC is stored separately in SavedManager, not in PlayerProfile (which uses gems)
         prefs(ctx).edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply()
     }

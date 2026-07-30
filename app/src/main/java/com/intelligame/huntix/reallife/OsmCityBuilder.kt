@@ -407,7 +407,7 @@ class OsmCityBuilder(
             })
 
             if (isDetailed) {
-                val darkBodyMatInst = cachedMaterials.getOrPut((bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) { ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) }
+                cachedMaterials.getOrPut((bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) { ml.createColorInstance(color = (bodyColor and 0xFFFFFF.toInt()) or 0xCC000000.toInt()) }
                 val corniceMat = cachedMaterials.getOrPut(0xFFDDCCAA.toInt()) { ml.createColorInstance(color = 0xFFDDCCAA.toInt()) }
 
                 if (floor == 0 || floor == levels - 1) {
@@ -493,7 +493,6 @@ class OsmCityBuilder(
                 })
                 if (isDetailed) {
                     val windowGlassMat = cachedMaterials.getOrPut(0xFF88CCEE.toInt()) { ml.createColorInstance(color = 0xFF88CCEE.toInt()) }
-                    val windowFrameMat = cachedMaterials.getOrPut(0xFF443322.toInt()) { ml.createColorInstance(color = 0xFF443322.toInt()) }
                     val entranceW = (w * 0.6f).coerceIn(1.5f, 4f)
                     for (side in listOf(-1, 1)) {
                         val sx = fp.centerX + side * (entranceW / 2f + 1.5f)
