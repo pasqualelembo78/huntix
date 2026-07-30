@@ -532,7 +532,7 @@ class BuildingInteriorActivity : AppCompatActivity() {
                 }
                 workBtnRef?.isEnabled = true
                 result.onSuccess { resp ->
-                    addChatMessage(false, "💼 Lavora ottenuto: ${resp.workReward} MVC!")
+                    addChatMessage(false, "💼 Lavora ottenuto: ${resp.earned} MVC!")
                 }.onFailure {
                     addChatMessage(false, "⚠️ Errore: ${it.message}")
                 }
@@ -759,6 +759,23 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     textPaint.textSize = w * 0.04f
                     canvas.drawText("\uD83C\uDFE0", cx, h * 0.08f, textPaint)
                 }
+                BuildingType.SCHOOL -> {
+                    objectPaint.color = 0xFFFFFFC4.toInt()
+                    canvas.drawRoundRect(w * 0.1f, baseY - h * 0.1f, w * 0.9f, baseY, 4f, 4f, objectPaint)
+                    objectPaint.color = 0xFFF9A825.toInt()
+                    canvas.drawRect(w * 0.12f, baseY - h * 0.08f, w * 0.88f, baseY - h * 0.02f, objectPaint)
+                    objectPaint.color = 0xFF5D4037.toInt()
+                    canvas.drawRect(w * 0.15f, baseY - h * 0.15f, w * 0.35f, baseY - h * 0.1f, objectPaint)
+                    objectPaint.color = 0xFF212121.toInt()
+                    canvas.drawRect(w * 0.15f, baseY - h * 0.13f, w * 0.35f, baseY - h * 0.1f, objectPaint)
+                    objectPaint.color = 0xFF8D6E63.toInt()
+                    for (d in 0..2) {
+                        val dx = w * (0.5f + d * 0.14f)
+                        canvas.drawRoundRect(dx - w * 0.05f, baseY - h * 0.06f, dx + w * 0.05f, baseY, 3f, 3f, objectPaint)
+                    }
+                    textPaint.textSize = w * 0.04f
+                    canvas.drawText("\uD83C\uDFEB", cx, h * 0.08f, textPaint)
+                }
                 BuildingType.RESTAURANT -> {
                     for (t in 0..1) {
                         val tx = w * (0.2f + t * 0.4f)
@@ -910,9 +927,9 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     canvas.drawCircle(w * 0.23f, baseY, 4f, objectPaint)
                     canvas.drawCircle(w * 0.77f, baseY, 4f, objectPaint)
                     objectPaint.color = 0xFFFFEB3B.toInt()
-                    canvas.drawRect(w * 0.5f, baseY - h * 0.06f, w * 0.65f, baseY, 4f, 4f, objectPaint)
+                    canvas.drawRect(w * 0.5f, baseY - h * 0.06f, w * 0.65f, baseY, objectPaint)
                     textPaint.textSize = w * 0.04f
-                    canvas.drawText("\uD83C\uDEF0\uD83D\uDCB�", cx, h * 0.08f, textPaint)
+                    canvas.drawText("\uD83C\uDEF0\uD83D\uDCB0", cx, h * 0.08f, textPaint)
                 }
                 BuildingType.POST_OFFICE -> {
                     objectPaint.color = 0xFFE3F2FD.toInt()

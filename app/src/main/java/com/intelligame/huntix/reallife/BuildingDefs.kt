@@ -177,7 +177,7 @@ object BuildingDefs {
         BuildingDef(
             type = BuildingType.BANK,
             name = "Banca",
-            emoji = "\uD83C\uDEF0\uD83D\uDCB�",
+            emoji = "\uD83C\uDEF0\uD83D\uDCB0",
             color3D = 0xFFE8EAF6.toInt(),
             roofColor = 0xFF607D8B.toInt(),
             x = 15f, z = 20f,
@@ -185,7 +185,7 @@ object BuildingDefs {
             actions = listOf(
                 BuildingAction("\uD83D\uDCB5", "Deposita", "money", 0f),
                 BuildingAction("\uD83D\uDCB6", "Prelievo", "money", 0f),
-                BuildingAction("\uD83D\uDCB�", "Converti", "money", 0f)
+                BuildingAction("\uD83D\uDCB0", "Converti", "money", 0f)
             ),
             glbModel = "city_models/bank.glb",
             modelScale = 0.035f
@@ -237,8 +237,6 @@ object BuildingDefs {
             ),
             glbModel = "city_models/school.glb",
             modelScale = 0.04f
-        )
-    )
         )
     )
 
