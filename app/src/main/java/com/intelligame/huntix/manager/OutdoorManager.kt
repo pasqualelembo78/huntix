@@ -48,7 +48,10 @@ class OutdoorManager private constructor() : SensorEventListener {
     private fun filterPois() {
         filteredPois.clear()
         filteredPois.addAll(
-            if (isReallifeMode) rawPois.filter { it.type == "building" && it.buildingType.isNotEmpty() }
+            if (isReallifeMode) rawPois.filter {
+                (it.type == "building" && it.buildingType.isNotEmpty()) ||
+                (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null)
+            }
             else rawPois.filter { it.type != "building" || it.buildingType.isEmpty() }
         )
     }
@@ -537,7 +540,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         val loc = currentLocation ?: return "Posizione sconosciuta"
         val nearestEgg = targetEgg()
         val nearestBuildingPoi = pois
-            .filter { it.type == "building" && it.buildingType.isNotEmpty() }
+            .filter { (it.type == "building" && it.buildingType.isNotEmpty()) || (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null) }
             .minByOrNull { distanceMeters(it) }
         val targetEntry = when {
             nearestEgg == null && nearestBuildingPoi == null -> return "Nessuna uova o edifici nelle vicinanze"
@@ -587,7 +590,7 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     fun getEggs(): List<WorldEgg> = eggs.toList()
     fun getPois(): List<Poi> = pois
-        .filter { if (isReallifeMode) it.type == "building" && it.buildingType.isNotEmpty() else it.type != "building" || it.buildingType.isEmpty() }
+        .filter { if (isReallifeMode) (it.type == "building" && it.buildingType.isNotEmpty()) || (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null) else it.type != "building" || it.buildingType.isEmpty() }
         .toList()
 
     fun nearestUnfoundEgg(): WorldEgg? =

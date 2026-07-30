@@ -75,14 +75,31 @@ class OnlinePoiManager {
     ): Result<List<OnlinePoi>> = withContext(Dispatchers.IO) {
         try {
             // 1. Se la città non è cambiata e cache valida (< 24h), usa cache
-            val regionSlug = findRegion(lat, lng)
+            var regionSlug = findRegion(lat, lng)
             if (regionSlug == null) {
-                return@withContext Result.success(fetchFromGlobal(lat, lng, maxPois))
+                AppLog.d("OnlinePoi", "Fuori Italia, fallbackPois")
+                return@withContext Result.success(fallbackPois())
             }
 
-            // 2. Trova la città più vicina
-            val cities = fetchCittaIndex(context, regionSlug)
+            AppLog.d("OnlinePoi", "Initial region: $regionSlug")
+
+            // 2. Trova la città più vicina — se il primo match non ha dati, prova altre regioni
+            var cities = fetchCittaIndex(context, regionSlug)
+            if (cities.isEmpty()) {
+                val altRegion = findAltRegion(lat, lng, regionSlug)
+                if (altRegion != null) {
+                    AppLog.d("OnlinePoi", "No cities for $regionSlug, trying $altRegion")
+                    regionSlug = altRegion
+                    cities = fetchCittaIndex(context, regionSlug)
+                }
+            }
+            if (cities.isEmpty()) {
+                AppLog.d("OnlinePoi", "Nessuna città per nessuna regione, fallbackPois")
+                return@withContext Result.success(fallbackPois())
+            }
+            AppLog.d("OnlinePoi", "Final region: $regionSlug, ${cities.size} cities")
             val nearestCity = findNearestCity(cities, lat, lng)
+            AppLog.d("OnlinePoi", "Nearest: ${nearestCity?.name} (${nearestCity?.slug})")
 
             if (nearestCity != null && nearestCity.slug == cachedCitySlug && cachedPois != null
                 && System.currentTimeMillis() - cachedTime < 24 * 60 * 60 * 1000L) {
@@ -97,17 +114,25 @@ class OnlinePoiManager {
 
             // 3. Scarica POI della città (già filtrati per distanza)
             val pois = if (nearestCity != null) {
-                fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
+                AppLog.d("OnlinePoi", "Fetching city POIs: $regionSlug/${nearestCity.slug}")
+                val cityPois = fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
+                if (cityPois.isEmpty()) {
+                    AppLog.d("OnlinePoi", "City POIs empty, fallback to region: $regionSlug")
+                    fetchRegionPois(regionSlug, lat, lng, maxPois)
+                } else cityPois
             } else {
-                // Fallback: scarica tutta la regione
+                AppLog.d("OnlinePoi", "No nearest city — fetching region POIs: $regionSlug")
                 fetchRegionPois(regionSlug, lat, lng, maxPois)
             }
+            AppLog.d("OnlinePoi", "Got ${pois.size} POIs")
 
-            // 4. Salva in cache (filtered list for offline use)
-            cachedCitySlug = nearestCity?.slug
-            cachedPois = pois
-            cachedTime = System.currentTimeMillis()
-            savePoisToCache(context, regionSlug, nearestCity?.slug, pois)
+            // 4. Salva in cache solo se ci sono POI
+            if (pois.isNotEmpty()) {
+                cachedCitySlug = nearestCity?.slug
+                cachedPois = pois
+                cachedTime = System.currentTimeMillis()
+                savePoisToCache(context, regionSlug, nearestCity?.slug, pois)
+            }
 
             Result.success(pois)
         } catch (e: Exception) {
@@ -146,6 +171,17 @@ class OnlinePoiManager {
         return null
     }
 
+    /** Se la prima regione non ha dati (e.g. bbox troppo largo), prova altre regioni */
+    private fun findAltRegion(lat: Double, lng: Double, excludeSlug: String): String? {
+        for ((slug, bbox) in REGION_MAP) {
+            if (slug == excludeSlug) continue
+            if (lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]) {
+                return slug
+            }
+        }
+        return null
+    }
+
     /** Fetch italia/{regione}/_citta.csv e parsifica */
     private fun fetchCittaIndex(context: Context, regionSlug: String): List<CityEntry> {
         val cacheKey = "citta_index_$regionSlug"
@@ -159,7 +195,11 @@ class OnlinePoiManager {
         }
 
         val url = "$BASE_URL/italia/$regionSlug/_citta.csv"
-        val text = httpGet(url) ?: return emptyList()
+        val text = httpGet(url)
+        if (text == null) {
+            AppLog.w("OnlinePoi", "Failed to fetch _citta.csv for $regionSlug")
+            return emptyList()
+        }
         prefs.edit().putString(cacheKey, text).putLong("${cacheKey}_time", System.currentTimeMillis()).apply()
         return parseCittaIndex(text)
     }
@@ -223,12 +263,19 @@ class OnlinePoiManager {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
+            conn.connectTimeout = 30000
+            conn.readTimeout = 30000
             conn.setRequestProperty("User-Agent", "Huntix/2.0")
-            if (conn.responseCode != 200) return null
-            return conn.inputStream.bufferedReader().readText()
-        } catch (_: Exception) {
+            val code = conn.responseCode
+            if (code != 200) {
+                AppLog.w("OnlinePoi", "HTTP $code for $url")
+                return null
+            }
+            val text = conn.inputStream.bufferedReader().readText()
+            AppLog.d("OnlinePoi", "Downloaded ${text.length} bytes from $url")
+            return text
+        } catch (e: Exception) {
+            AppLog.w("OnlinePoi", "httpGet failed: $url — ${e.message}")
             return null
         }
     }
