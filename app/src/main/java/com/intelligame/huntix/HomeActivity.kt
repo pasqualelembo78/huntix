@@ -375,7 +375,7 @@ class HomeActivity : BaseNavActivity() {
             layoutParams = LinearLayout.LayoutParams(LP_MW, dp(200))
             background = GradientDrawable().apply {
                 cornerRadius = dp(8).toFloat()
-                setColor(0xDD1A1030)
+                setColor(Color.parseColor("#DD1A1030"))
             }
             isScrollContainer = true
         }
@@ -424,7 +424,7 @@ class HomeActivity : BaseNavActivity() {
                             val url = PoiSearchManager().getJsonPageUrl(r)
                             startActivity(Intent(this@HomeActivity, com.intelligame.huntix.ui.POICustomPageActivity::class.java).apply {
                                 putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_JSON_URL, url)
-                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_TITLE, r.name)
+                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_POI_NAME, r.name)
                             })
                         }
                         poiResultsBox.addView(item)
