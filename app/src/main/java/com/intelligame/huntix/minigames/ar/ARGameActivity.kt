@@ -80,7 +80,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         hud = findViewById(R.id.arOverlay)
         buildHud()
 
-        sceneView.configureSession { session, config ->
+        sceneView.configureSession { _, config ->
             config.planeFindingMode = Config.PlaneFindingMode.DISABLED
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
             config.focusMode = Config.FocusMode.AUTO

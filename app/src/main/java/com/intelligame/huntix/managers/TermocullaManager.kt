@@ -129,7 +129,7 @@ object TermocullaManager {
 
     fun hasFreeTermoculla(ctx: Context): Boolean = getFreeTermocullas(ctx).isNotEmpty()
 
-    fun canPlaceEgg(ctx: Context, item: EggInventoryItem): Boolean = getFreeTermocullas(ctx).isNotEmpty()
+    fun canPlaceEgg(ctx: Context, @Suppress("UNUSED_PARAMETER") item: EggInventoryItem): Boolean = getFreeTermocullas(ctx).isNotEmpty()
 
     @Synchronized
     fun startSchiusa(ctx: Context, item: EggInventoryItem, termocullaId: String): Boolean {

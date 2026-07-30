@@ -379,7 +379,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         )
     }
 
-    private fun fetchOnlinePoisAsync(loc: Location, radiusMeters: Double) {
+    private fun fetchOnlinePoisAsync(loc: Location, @Suppress("UNUSED_PARAMETER") radiusMeters: Double) {
         val mgr = onlinePoiManager ?: return
         val ctx = appCtx ?: return
         scope?.launch {
@@ -405,9 +405,9 @@ class OutdoorManager private constructor() : SensorEventListener {
                         pois.removeAll { it.id in onlineIds }
                         pois.addAll(newPois)
                         if (pois.size > MAX_POIS) {
-                            val loc = currentLocation
-                            if (loc != null) {
-                                pois.sortBy { haversine(loc.latitude, loc.longitude, it.lat, it.lng) }
+                            val curLoc = currentLocation
+                            if (curLoc != null) {
+                                pois.sortBy { haversine(curLoc.latitude, curLoc.longitude, it.lat, it.lng) }
                             }
                             while (pois.size > MAX_POIS) {
                                 pois.removeAt(pois.lastIndex)
@@ -430,7 +430,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         return lat + dLat * kotlin.math.cos(ang) to lng + dLng * kotlin.math.sin(ang)
     }
 
-    private fun pickRarity(rng: java.util.Random, boostMultiplier: Float = 1.0f): EggRarity {
+    private fun pickRarity(@Suppress("UNUSED_PARAMETER") rng: java.util.Random, boostMultiplier: Float = 1.0f): EggRarity {
         val weights = WeatherZoneManager.getRaritySpawnWeights(
             WeatherZoneManager.currentWeather, WeatherZoneManager.currentZone
         )
