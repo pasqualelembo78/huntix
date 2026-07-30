@@ -26,6 +26,7 @@ import com.intelligame.huntix.ui.*
 import com.intelligame.huntix.billing.VipManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.DistanceTracker
+import com.intelligame.huntix.managers.PoiSearchManager
 import android.widget.Toast
 import io.sentry.Sentry
 
@@ -338,6 +339,99 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
+
+        // ═══ POI SEARCH ═══
+        val poiSearchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
+        }
+        val poiSearchEdit = EditText(this).apply {
+            hint = "🔍 Cerca POI per città..."
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(0x22FFFFFF)
+                setStroke(dp(1), Color.parseColor("#446688"))
+            }
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            layoutParams = LinearLayout.LayoutParams(0, LP_WW, 1f)
+        }
+        val poiSearchBtn = Button(this).apply {
+            text = "Cerca"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(Color.parseColor("#43A047"))
+            }
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            layoutParams = LinearLayout.LayoutParams(LP_WW, LP_WW).also { it.leftMargin = dp(6) }
+            isAllCaps = false
+        }
+        val poiResultsBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, dp(200))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(0xDD1A1030)
+            }
+            isScrollContainer = true
+        }
+        poiSearchRow.addView(poiSearchEdit)
+        poiSearchRow.addView(poiSearchBtn)
+        root.addView(poiSearchRow)
+        root.addView(poiResultsBox)
+
+        poiSearchBtn.setOnClickListener {
+            val query = poiSearchEdit.text.toString()
+            if (query.length < 2) return@setOnClickListener
+            poiResultsBox.removeAllViews()
+            poiResultsBox.addView(TextView(this).apply {
+                text = "Cerca in corso..."
+                textSize = 12f; setTextColor(Color.GRAY); setPadding(dp(8), dp(4), dp(8), dp(4))
+            })
+            PoiSearchManager().searchByName(query, this) { results ->
+                poiResultsBox.removeAllViews()
+                if (results.isEmpty()) {
+                    poiResultsBox.addView(TextView(this).apply {
+                        text = "Nessun POI trovato"
+                        textSize = 12f; setTextColor(Color.GRAY); setPadding(dp(8), dp(4), dp(8), dp(4))
+                    })
+                } else {
+                    for (r in results.take(20)) {
+                        val item = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            setPadding(dp(8), dp(8), dp(8), dp(8))
+                            isClickable = true; isFocusable = true
+                            background = GradientDrawable().apply {
+                                cornerRadius = dp(4).toFloat()
+                                setColor(0x33FFFFFF)
+                            }
+                            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(2) }
+                        }
+                        item.addView(TextView(this).apply {
+                            text = "📍 ${r.name}"
+                            textSize = 13f; setTextColor(Color.WHITE)
+                            layoutParams = LinearLayout.LayoutParams(0, LP_WW, 1f)
+                        })
+                        item.addView(TextView(this).apply {
+                            text = r.buildingType.ifEmpty { r.poiType }
+                            textSize = 10f; setTextColor(Color.parseColor("#88CCFF"))
+                        })
+                        item.setOnClickListener {
+                            val url = PoiSearchManager().getJsonPageUrl(r)
+                            startActivity(Intent(this@HomeActivity, com.intelligame.huntix.ui.POICustomPageActivity::class.java).apply {
+                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_JSON_URL, url)
+                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_TITLE, r.name)
+                            })
+                        }
+                        poiResultsBox.addView(item)
+                    }
+                }
+            }
+        }
 
         // Debug log (hidden but accessible)
         root.addView(TextView(this).apply {
