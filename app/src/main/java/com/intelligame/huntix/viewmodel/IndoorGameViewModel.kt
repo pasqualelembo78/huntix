@@ -117,6 +117,7 @@ class IndoorGameViewModel : ViewModel() {
 
     fun startHunt(totalEggs: Int) {
         val players = _uiState.value.activePlayers
+        if (players.isEmpty()) return
         val owners = when (turnMode) {
             "alternating" -> (0 until totalEggs).map { players[it % players.size] }
             else -> players.map { _ -> _uiState.value.currentPlayer }
@@ -208,10 +209,11 @@ class IndoorGameViewModel : ViewModel() {
 
     fun nextTurn() {
         _uiState.update { state ->
-            val idx = state.currentPlayerIdx + 1
+            if (state.activePlayers.isEmpty()) return@update state
+            val idx = (state.currentPlayerIdx + 1) % state.activePlayers.size
             state.copy(
                 currentPlayerIdx = idx,
-                currentPlayer = state.activePlayers.getOrElse(idx) { state.currentPlayer }
+                currentPlayer = state.activePlayers[idx]
             )
         }
     }
@@ -339,7 +341,7 @@ class IndoorGameViewModel : ViewModel() {
 
     // ── Utility ─────────────────────────────────────────────────
 
-    private fun currentTimeMs(): Long = System.currentTimeMillis()
+    private fun currentTimeMs(): Long = android.os.SystemClock.elapsedRealtime()
 
     fun formatTime(ms: Long): String {
         val secs = ms / 1000

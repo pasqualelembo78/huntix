@@ -115,18 +115,21 @@ internal fun MainActivity.onThrowHit() {
     // ─── Secchiello: raccogli l'uovo e gestisci la capacità ───
     bucketHeld++
     refreshBucketModel()
+    val caughtEggIdx = currentEggIdx
+    eggTimesByIndex[caughtEggIdx] = elapsed
     val isLast = (currentEggIdx + 1) >= eggs.size
     if (bucketHeld >= getBucketCapacity() || isLast) {
         keyInPocket = true
         playState = PlayState.KEY_OBTAINED
     } else {
         currentEggIdx++
+        eggStartMs = SystemClock.elapsedRealtime()
         playState = PlayState.SEARCHING
     }
 
     binding.catchBurst.visibility = View.VISIBLE; binding.catchBurst.alpha = 1f
     binding.catchBurst.setTextColor(AndroidColor.parseColor("#E0E0FF"))
-    val label = MainActivity.EGG_LABELS[currentEggIdx % MainActivity.EGG_LABELS.size]
+    val label = MainActivity.EGG_LABELS[caughtEggIdx % MainActivity.EGG_LABELS.size]
     binding.catchBurst.text = "$label\nPRESA!\n${fmtMs(elapsed)}"
     binding.catchBurst.animate().alpha(0f).setStartDelay(400).setDuration(1600)
         .withEndAction { binding.catchBurst.visibility = View.GONE }.start()
@@ -186,13 +189,13 @@ internal fun MainActivity.finishGame() {
             val snapPlayers = activePlayers.toList()
             val snapOwners  = eggOwners.toList()
             val snapEggs    = eggs.map { it.isTrap }
-            val snapTimes   = eggTimesMs.toList()
+            val snapTimesByIndex = eggTimesByIndex.toMap()
             lifecycleScope.launch(Dispatchers.IO) {
                 try {
                     snapPlayers.forEach { player ->
                         val myEggs = snapOwners.indices.filter { snapOwners[it] == player && !snapEggs[it] }
                         val stats  = myEggs.mapIndexed { si, ei ->
-                            GameDataManager.EggStat(si + 1, snapTimes.getOrElse(ei) { 0L })
+                            GameDataManager.EggStat(si + 1, snapTimesByIndex[ei] ?: 0L)
                         }
                         val myTotal = stats.sumOf { it.timeMs }
                         if (stats.isNotEmpty()) dm.addRun(GameDataManager.GameRun(
@@ -314,7 +317,7 @@ internal fun MainActivity.renderStats() {
             activePlayers.forEach { player ->
                 val myIdxs = eggOwners.indices.filter { eggOwners[it] == player && !eggs[it].isTrap }
                 if (myIdxs.isEmpty()) return@forEach
-                val times  = myIdxs.map { eggTimesMs.getOrElse(it) { 0L } }
+                val times  = myIdxs.map { eggTimesByIndex[it] ?: 0L }
                 val total  = times.sum()
                 playerTotals.add(player to total)
                 sb.append("$player\n")

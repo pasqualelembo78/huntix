@@ -45,6 +45,7 @@ object IndoorSessionManager {
     }
 
     fun markEggFound(code: String, eggIdx: Int, playerUid: String, playerName: String, eggsFound: Int, totalMs: Long) {
+        rooms.child(code).child("setup/eggs/$eggIdx/found").setValue(true)
         rooms.child(code).child("found/$playerUid")
             .setValue(mapOf("eggIdx" to eggIdx, "playerName" to playerName, "eggsFound" to eggsFound, "totalMs" to totalMs))
     }

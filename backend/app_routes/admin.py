@@ -282,7 +282,10 @@ async def admin_list_characters(user: AuthUser = Depends(admin_required)):
 
 @router.delete("/characters/{char_id}")
 async def admin_delete_character(char_id: str, request: Request, user: AuthUser = Depends(admin_required)):
-    delete_user_character(char_id)
+    from storage import get_user_character
+    char = get_user_character(char_id)
+    owner_id = char["user_id"] if char else None
+    delete_user_character(char_id, owner_id)
     audit_log(user.user_id, "admin.delete_character", f"char_id={char_id}",
               request.client.host if request.client else "",
               request.headers.get("User-Agent", ""))

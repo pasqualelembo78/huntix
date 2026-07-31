@@ -1,5 +1,7 @@
 package com.intelligame.huntix
 
+import android.util.Log
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.FirebaseFirestore
 
 object FirestoreGameSync {
@@ -34,10 +36,21 @@ object FirestoreGameSync {
         scores: List<IndoorRoomManager.PlayerScore>
     ): IndoorMpSession = IndoorMpSession(roomCode, hostName, config, scores)
 
-    fun saveSession(data: IndoorMpSession) {
-        FirebaseFirestore.getInstance()
-            .collection("indoor_sessions")
-            .document(data.roomCode)
-            .set(data.toMap())
+    fun saveSession(data: IndoorMpSession, onDone: ((Boolean) -> Unit)? = null) {
+        val totalFound = data.scores.sumOf { it.eggsFound }
+        val totalMs = data.scores.sumOf { it.totalMs }
+        CloudFunctions.syncServerScore(data.roomCode, totalFound, totalMs) { ok, error ->
+            if (!ok) {
+                Log.w(TAG, "Server score sync failed: $error — proceeding with local save only (offline fallback)")
+            }
+            FirebaseFirestore.getInstance()
+                .collection("indoor_sessions")
+                .document(data.roomCode)
+                .set(data.toMap(), SetOptions.merge())
+                .addOnSuccessListener { onDone?.invoke(true) }
+                .addOnFailureListener { onDone?.invoke(false) }
+        }
     }
+
+    private const val TAG = "FirestoreGameSync"
 }

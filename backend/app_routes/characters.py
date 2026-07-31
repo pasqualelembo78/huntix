@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Request, Query, Depends, HTTPException
@@ -18,7 +19,7 @@ from storage import (
 from storage.relationships import get_user_intimacies, describe_intimacy_level
 from ai_engine import get_active_config, set_active, clear_model_cache, rebuild_free_model_chain, test_provider_connection
 import ai_engine
-from auth_fastapi import jwt_required, jwt_optional, AuthUser
+from auth_fastapi import jwt_required, jwt_optional, admin_required, AuthUser
 
 router = APIRouter()
 
@@ -80,14 +81,14 @@ async def api_set_config(body: ConfigRequest, user: AuthUser = Depends(jwt_requi
 
 
 @router.post("/refresh-models")
-async def api_refresh_models(user: AuthUser = Depends(jwt_required)):
+async def api_refresh_models(user: AuthUser = Depends(admin_required)):
     clear_model_cache()
     rebuild_free_model_chain()
     return {"status": "ok", "chain": [f"{p}/{m}" for p, m in ai_engine.FREE_MODEL_CHAIN]}
 
 
 @router.post("/api/test")
-async def api_test(body: TestRequest, user: AuthUser = Depends(jwt_required)):
+async def api_test(body: TestRequest, user: AuthUser = Depends(admin_required)):
     if not body.provider:
         raise HTTPException(400, "provider richiesto")
     success, message = test_provider_connection(body.provider, body.api_key)
@@ -101,6 +102,8 @@ async def api_premium_check(user: AuthUser = Depends(jwt_required)):
 
 @router.post("/premium/activate")
 async def api_premium_activate(body: PremiumRequest, request: Request, user: AuthUser = Depends(jwt_required)):
+    if not body.purchase_token:
+        raise HTTPException(400, "purchase_token richiesto")
     set_user_premium(user.user_id, True, body.sku, body.purchase_token)
     audit_log(user.user_id, "premium.activate", f"sku={body.sku}",
               request.client.host if request.client else "",
@@ -110,10 +113,14 @@ async def api_premium_activate(body: PremiumRequest, request: Request, user: Aut
 
 @router.get("/avatars/{char_id}")
 async def api_avatar(char_id: str):
+    if not re.match(r"^[A-Za-z0-9_-]+$", char_id):
+        raise HTTPException(400, "invalid character id")
     char = get_character(char_id)
     if not char:
         raise HTTPException(404, "not found")
     category = char.get("category", "")
+    if not re.match(r"^[A-Za-z0-9_-]+$", category):
+        raise HTTPException(400, "invalid category")
     avatar_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "avatars", category, f"{char_id}.png")
     if not os.path.isfile(avatar_path):
         raise HTTPException(404, "avatar not found")
@@ -363,6 +370,6 @@ async def api_character_core(
 async def api_delete_character(char_id: str, user: AuthUser = Depends(jwt_required)):
     char = get_character(char_id)
     if char and char.get("user_created"):
-        delete_user_character(char_id)
+        delete_user_character(char_id, user.user_id)
         return {"status": "deleted"}
     raise HTTPException(404, "not found or not deletable")

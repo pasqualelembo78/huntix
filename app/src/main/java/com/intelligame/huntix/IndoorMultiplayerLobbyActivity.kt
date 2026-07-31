@@ -114,7 +114,7 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
             ).apply { bottomMargin = UiKit.dp(c, 10) }
         }
 
-        fun joinRoom(code: String, asHost: Boolean) {
+            fun joinRoom(code: String, asHost: Boolean) {
             if (code.length < 3) { Toast.makeText(c, "Codice stanza non valido", Toast.LENGTH_SHORT).show(); return }
             val me = nameInput.text.toString().trim().ifBlank { playerName }
             playerName = me
@@ -134,9 +134,14 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
             UiKit.section(c, "Il tuo nome"),
             nameInput,
             UiKit.button(c, "➕  Crea stanza online", UiKit.ACCENT) {
-                val code = (1000..9999).random().toString()
-                joinRoom(code, asHost = true)
-                Toast.makeText(c, "Stanza creata: $code", Toast.LENGTH_SHORT).show()
+                CloudFunctions.createMatchRoom("indoor") { success, code, error ->
+                    if (success && code != null) {
+                        joinRoom(code, asHost = true)
+                        Toast.makeText(c, "Stanza creata: $code", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(c, "Errore creazione: $error", Toast.LENGTH_LONG).show()
+                    }
+                }
             },
             UiKit.section(c, "Unisciti a una stanza"),
             codeInput,

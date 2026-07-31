@@ -1,8 +1,8 @@
 import json
 import logging
 import re
-import uuid
 import time
+import hashlib
 from collections import defaultdict
 
 from characters import get_character, list_characters, get_categories
@@ -78,7 +78,9 @@ def register_socket_handlers(sio):
                 user_id = payload["user_id"]
                 role = payload.get("role", "user")
         if not user_id:
-            user_id = "anon_" + uuid.uuid4().hex[:12]
+            ip = environ.get("REMOTE_ADDR", "") or ""
+            ua = environ.get("HTTP_USER_AGENT", "") or ""
+            user_id = "anon_" + hashlib.sha256(f"{ip}{ua}".encode()).hexdigest()[:16]
         socket_auth_map[sid] = {"user_id": user_id, "role": role}
         user_sessions[user_id] = sid
 

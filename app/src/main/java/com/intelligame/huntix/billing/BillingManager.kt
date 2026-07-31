@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.*
+import com.intelligame.huntix.CloudFunctions
 
 /**
  * BillingManager — Gestione acquisti Google Play Billing Library v7.
@@ -19,7 +20,26 @@ object BillingManager {
     private var billingClient: BillingClient? = null
     private var appContext: Context? = null
     private val onPurchaseComplete = java.util.concurrent.ConcurrentHashMap<String, (Boolean, String) -> Unit>()
-    @Volatile private var pendingProductId: String? = null
+    private val pendingProductIds = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    // ── Token già processati (anti doppio accredito) ───────────
+    private const val PREFS_BILLING = "billing_prefs"
+    private const val KEY_PROCESSED_TOKENS = "processed_purchase_tokens"
+
+    private fun processedTokens(): Set<String> =
+        appContext?.getSharedPreferences(PREFS_BILLING, Context.MODE_PRIVATE)
+            ?.getStringSet(KEY_PROCESSED_TOKENS, emptySet()) ?: emptySet()
+
+    private fun isTokenProcessed(token: String): Boolean = processedTokens().contains(token)
+
+    private fun markTokenProcessed(token: String) {
+        val tokens = processedTokens().toMutableSet()
+        tokens.add(token)
+        appContext?.getSharedPreferences(PREFS_BILLING, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putStringSet(KEY_PROCESSED_TOKENS, tokens)
+            ?.apply()
+    }
 
     // ── Product IDs (da creare su Google Play Console) ──────────
     data class MvcPackage(
@@ -60,6 +80,7 @@ object BillingManager {
                     Log.d(TAG, "Billing connected")
                     // Una volta pronti, sincronizza lo stato VIP persistito.
                     appContext?.let { VipManager.syncVipStatus(it) }
+                    restoreOneTimePurchases()
                 } else {
                     Log.e(TAG, "Billing setup failed: ${result.debugMessage}")
                 }
@@ -74,7 +95,7 @@ object BillingManager {
 
     fun purchaseMvcPackage(activity: Activity, productId: String, onComplete: (Boolean, String) -> Unit) {
         onPurchaseComplete[productId] = onComplete
-        pendingProductId = productId
+        pendingProductIds[productId] = true
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()
@@ -107,7 +128,7 @@ object BillingManager {
 
     fun purchaseVip(activity: Activity, onComplete: (Boolean, String) -> Unit) {
         onPurchaseComplete[PRODUCT_VIP_MONTHLY] = onComplete
-        pendingProductId = PRODUCT_VIP_MONTHLY
+        pendingProductIds[PRODUCT_VIP_MONTHLY] = true
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()
@@ -149,12 +170,16 @@ object BillingManager {
                 }
             }
             BillingClient.BillingResponseCode.USER_CANCELED -> {
-                pendingProductId?.let { pid -> onPurchaseComplete.remove(pid)?.invoke(false, "Acquisto annullato") }
-                pendingProductId = null
+                pendingProductIds.keys.forEach { pid ->
+                    pendingProductIds.remove(pid)
+                    onPurchaseComplete.remove(pid)?.invoke(false, "Acquisto annullato")
+                }
             }
             else -> {
-                pendingProductId?.let { pid -> onPurchaseComplete.remove(pid)?.invoke(false, "Errore: ${result.debugMessage}") }
-                pendingProductId = null
+                pendingProductIds.keys.forEach { pid ->
+                    pendingProductIds.remove(pid)
+                    onPurchaseComplete.remove(pid)?.invoke(false, "Errore: ${result.debugMessage}")
+                }
             }
         }
     }
@@ -162,46 +187,96 @@ object BillingManager {
     private fun handlePurchase(purchase: Purchase) {
         if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
 
-        // Acknowledge the purchase
-        if (!purchase.isAcknowledged) {
-            val ackParams = AcknowledgePurchaseParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
-                .build()
-            billingClient?.acknowledgePurchase(ackParams) { /* acknowledged */ }
-        }
-
         val productId = purchase.products.firstOrNull() ?: ""
+        val token = purchase.purchaseToken
 
-        // Check if it's a consumable MVC package
+        // Consumable MVC package -> consume, poi verifica server-side prima di accreditare
         val mvcPack = MVC_PACKAGES.find { it.productId == productId }
         if (mvcPack != null) {
-            // Consume it so it can be bought again
             val consumeParams = ConsumeParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
+                .setPurchaseToken(token)
                 .build()
-            billingClient?.consumeAsync(consumeParams) { _, _ ->
-                onPurchaseComplete.remove(productId)?.invoke(true, "mvc:${mvcPack.mvcAmount}")
+            billingClient?.consumeAsync(consumeParams) { result, _ ->
+                if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+                    Log.e(TAG, "Consume fallito: ${result.debugMessage}")
+                    pendingProductIds.remove(productId)
+                    onPurchaseComplete.remove(productId)?.invoke(false, "Consumo non riuscito")
+                    return@consumeAsync
+                }
+                if (isTokenProcessed(token)) {
+                    Log.w(TAG, "Token già processato, accredito ignorato")
+                    pendingProductIds.remove(productId)
+                    return@consumeAsync
+                }
+                pendingProductIds.remove(productId)
+                // Verifica server-side prima di accreditare
+                verifyAndActivate(token, productId, true, mvcPack.mvcAmount)
             }
             return
         }
 
-        // VIP subscription or one-time purchase -> activate the related perks
-        when (productId) {
-            PRODUCT_VIP_MONTHLY -> {
-                appContext?.let { VipManager.syncVipStatus(it) }
-                onPurchaseComplete.remove(productId)?.invoke(true, "vip")
+        // VIP subscription o one-time -> attiva i perk SOLO dopo l'acknowledge + verifica server
+        val activate = {
+            if (purchase.isAcknowledged) {
+                verifyAndActivate(token, productId, false, 0)
+            } else {
+                val ackParams = AcknowledgePurchaseParams.newBuilder()
+                    .setPurchaseToken(token)
+                    .build()
+                billingClient?.acknowledgePurchase(ackParams) { ackResult ->
+                    if (ackResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        verifyAndActivate(token, productId, false, 0)
+                    } else {
+                        Log.e(TAG, "Acknowledge fallito: ${ackResult.debugMessage}")
+                        pendingProductIds.remove(productId)
+                        onPurchaseComplete.remove(productId)?.invoke(false, "Conferma acquisto non riuscita")
+                    }
+                }
             }
-            PRODUCT_SEASON_PASS -> {
-                appContext?.let { SeasonPassManager.activate(it) }
-                onPurchaseComplete.remove(productId)?.invoke(true, "season")
-            }
-            PRODUCT_MULTIPLAYER -> {
-                appContext?.let { MultiplayerProManager.activate(it) }
-                onPurchaseComplete.remove(productId)?.invoke(true, "multiplayer")
-            }
-            else -> onPurchaseComplete.remove(productId)?.invoke(true, productId)
         }
-        pendingProductId = null
+        activate()
+    }
+
+    private fun verifyAndActivate(
+        token: String,
+        productId: String,
+        isConsumable: Boolean,
+        mvcAmount: Int
+    ) {
+        CloudFunctions.verifyPurchase(token, productId) { verified, status, error ->
+            if (!verified) {
+                Log.w(TAG, "Server verification failed: $error, status=$status")
+                pendingProductIds.remove(productId)
+                onPurchaseComplete.remove(productId)?.invoke(false, "Verifica server fallita")
+            } else if (status == "already_consumed" || status == "already_pending") {
+                pendingProductIds.remove(productId)
+                onPurchaseComplete.remove(productId)?.invoke(true, " già processato")
+            } else {
+                markTokenProcessed(token)
+                val productIdFinal = productId
+                pendingProductIds.remove(productIdFinal)
+
+                if (isConsumable) {
+                    onPurchaseComplete.remove(productIdFinal)?.invoke(true, "mvc:$mvcAmount")
+                } else {
+                    when (productIdFinal) {
+                        PRODUCT_VIP_MONTHLY -> {
+                            appContext?.let { VipManager.syncVipStatus(it) }
+                            onPurchaseComplete.remove(productIdFinal)?.invoke(true, "vip")
+                        }
+                        PRODUCT_SEASON_PASS -> {
+                            appContext?.let { SeasonPassManager.activate(it) }
+                            onPurchaseComplete.remove(productIdFinal)?.invoke(true, "season")
+                        }
+                        PRODUCT_MULTIPLAYER -> {
+                            appContext?.let { MultiplayerProManager.activate(it) }
+                            onPurchaseComplete.remove(productIdFinal)?.invoke(true, "multiplayer")
+                        }
+                        else -> onPurchaseComplete.remove(productIdFinal)?.invoke(true, productIdFinal)
+                    }
+                }
+            }
+        }
     }
 
     // ── Verifica abbonamento attivo ──────────────────────────────
@@ -226,13 +301,38 @@ object BillingManager {
         }
     }
 
+    // ── Restore acquisti one-time (Season Pass, Multiplayer Pro) ─
+
+    private fun restoreOneTimePurchases() {
+        val client = billingClient ?: return
+        if (!client.isReady) return
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.INAPP)
+            .build()
+        client.queryPurchasesAsync(params) { result, purchases ->
+            if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryPurchasesAsync
+            purchases?.forEach { purchase ->
+                if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return@forEach
+                val productId = purchase.products.firstOrNull() ?: return@forEach
+                if (productId != PRODUCT_SEASON_PASS && productId != PRODUCT_MULTIPLAYER) return@forEach
+                if (isTokenProcessed(purchase.purchaseToken)) return@forEach
+                when (productId) {
+                    PRODUCT_SEASON_PASS -> appContext?.let { SeasonPassManager.activate(it) }
+                    PRODUCT_MULTIPLAYER -> appContext?.let { MultiplayerProManager.activate(it) }
+                }
+                markTokenProcessed(purchase.purchaseToken)
+                Log.d(TAG, "Perk one-time riattivato: $productId")
+            }
+        }
+    }
+
 
 
     // ── Acquisto one-time (Season Pass, Multiplayer Pro) ────────
 
     fun purchaseOneTime(activity: Activity, productId: String, onComplete: (Boolean, String) -> Unit) {
         onPurchaseComplete[productId] = onComplete
-        pendingProductId = productId
+        pendingProductIds[productId] = true
         val client = billingClient ?: run { onComplete(false, "Billing non inizializzato"); return }
 
         val params = QueryProductDetailsParams.newBuilder()

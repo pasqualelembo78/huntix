@@ -76,11 +76,14 @@ def get_all_user_characters():
         put_conn(conn)
 
 
-def delete_user_character(char_id):
+def delete_user_character(char_id, user_id):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM user_characters WHERE id=%s", (char_id,))
+        cur.execute(
+            "DELETE FROM user_characters WHERE id=%s AND user_id=%s",
+            (char_id, user_id)
+        )
         conn.commit()
     finally:
         put_conn(conn)

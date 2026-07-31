@@ -84,10 +84,10 @@ class RoomMapRepository private constructor() {
         fun SemanticPlane.toMap(): Map<String, Any?> = mapOf(
             "planeId" to planeId,
             "semanticLabel" to semanticLabel,
-            "centerPose" to centerPose,
+            "centerPose" to centerPose.toList().map { it.toDouble() },
             "extentX" to extentX,
             "extentZ" to extentZ,
-            "polygon" to polygon
+            "polygon" to polygon.map { it.toList().map { v -> v.toDouble() } }
         )
 
         fun PersistentAnchor.toMap(): Map<String, Any?> = mapOf(
@@ -97,8 +97,8 @@ class RoomMapRepository private constructor() {
             "semanticLabel" to semanticLabel,
             "customName" to customName,
             "roomName" to roomName,
-            "worldPose" to worldPose,
-            "relativeToSafe" to relativeToSafe,
+            "worldPose" to worldPose.toList().map { it.toDouble() },
+            "relativeToSafe" to relativeToSafe.toList().map { it.toDouble() },
             "metadata" to metadata,
             "createdAt" to createdAt,
             "ttlDays" to ttlDays

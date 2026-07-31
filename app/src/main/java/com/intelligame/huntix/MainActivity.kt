@@ -207,6 +207,7 @@ class MainActivity : AppCompatActivity() {
 
     val eggs      = mutableListOf<EggObject>()
     val eggTimesMs = mutableListOf<Long>()
+    val eggTimesByIndex = mutableMapOf<Int, Long>()
     var safeObject: SafeObject? = null
     var selectedEgg: EggObject? = null
     private var rewardPendingExit = false
@@ -227,7 +228,6 @@ class MainActivity : AppCompatActivity() {
     // Cloud Anchors (indoor MP)
     var pendingCloudRestore = false
     var pendingRoomSnapshot: IndoorSessionManager.RoomSnapshot? = null
-    private var indoorEggsListener: com.google.firebase.database.ValueEventListener? = null
 
     // Room Scan
     val roomScanManager    = RoomScanManager()
@@ -329,7 +329,7 @@ class MainActivity : AppCompatActivity() {
         initAdMob(); setupButtons(); setupBackHandler(); checkCameraPermission()
 
         // Multiplayer setup
-        val mpRoomCode = intent.getStringExtra(MultiplayerManager.EXTRA_ROOM_CODE) ?: ""
+        mpRoomCode = intent.getStringExtra(MultiplayerManager.EXTRA_ROOM_CODE) ?: ""
         if (isMultiplayer && mpRoomCode.isNotEmpty()) {
             val roomName = intent.getStringExtra(MultiplayerManager.EXTRA_ROOM_NAME) ?: mpRoomCode
             binding.mpLeaderboardCard.visibility = android.view.View.VISIBLE
@@ -383,16 +383,19 @@ class MainActivity : AppCompatActivity() {
         IndoorArSync.clearCallbacks()
         IndoorArSync.reset()
         viewModel.stopTimer()
-        indoorEggsListener?.let {
-            if (viewModel.indoorRoomCode.isNotEmpty())
-                IndoorSessionManager.removeListener(viewModel.indoorRoomCode, "setup/eggs", it)
-        }
         if (viewModel.isIndoorMp) IndoorArSync.reset()
         val copy = eggs.toList(); eggs.clear()
         copy.forEach { egg -> egg.pulseAnim?.cancel(); try { egg.anchorNode.destroy() } catch (_: Exception) {} }
         try { safeObject?.anchorNode?.destroy() } catch (_: Exception) {}
         roomScanManager.reset()
-        if (viewModel.isMultiplayer) { try { mpManager.disconnect() } catch (_: Exception) {} }
+        if (viewModel.isMultiplayer) {
+            try {
+                mpManager.onScoresChanged = null
+                mpManager.onChatMessage = null
+                mpManager.onError = null
+                mpManager.disconnect()
+            } catch (_: Exception) {}
+        }
     }
 
     private fun setupBackHandler() {

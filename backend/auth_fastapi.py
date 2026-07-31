@@ -29,6 +29,13 @@ REFRESH_TOKEN_EXPIRE = 604800   # 7 giorni
 _token_blacklist = set()
 _blacklist_lock = threading.Lock()
 
+
+def _prune_blacklist():
+    now = time.time()
+    with _blacklist_lock:
+        for entry in [e for e in _token_blacklist if e[1] < now]:
+            _token_blacklist.discard(entry)
+
 # ─── Age verification (no minors) ─────────────────────────────────
 # Huntix contains adult/NSFW companion content. Users must be adults.
 MIN_AGE = 18
@@ -205,7 +212,7 @@ def _verify_jwt(token):
         if payload.get("exp", 0) < time.time():
             return None
         with _blacklist_lock:
-            if payload.get("jti") in _token_blacklist:
+            if any(t[0] == payload.get("jti") and t[1] > time.time() for t in _token_blacklist):
                 return None
         return payload
     except Exception:
@@ -257,17 +264,24 @@ def revoke_refresh_token(refresh_token):
         put_conn(conn)
 
 # ─── Persistent Token (API Key) ────────────────────────────────
+def _hash_persistent_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
 def ensure_persistent_token(user_id: str) -> str:
-    """Get or create a persistent API key for the user. Never expires."""
+    """Create (or rotate) a persistent API key for the user. Never expires.
+
+    Only the sha256 hash is stored; the plaintext is returned once so the
+    client can keep using it for re-auth.
+    """
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT persistent_token FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-        if row and row["persistent_token"]:
-            return row["persistent_token"]
         token = "ptk_" + str(uuid.uuid4()).replace("-", "")
-        cur.execute("UPDATE users SET persistent_token = %s WHERE id = %s", (token, user_id))
+        cur.execute(
+            "UPDATE users SET persistent_token = %s WHERE id = %s",
+            (_hash_persistent_token(token), user_id)
+        )
         conn.commit()
         return token
     finally:
@@ -277,10 +291,14 @@ def validate_persistent_token(token: str) -> Optional[str]:
     """Validate persistent token and return user_id. Never expires."""
     if not token or not token.startswith("ptk_"):
         return None
+    token_hash = _hash_persistent_token(token)
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT id FROM users WHERE persistent_token = %s", (token,))
+        cur.execute(
+            "SELECT id FROM users WHERE persistent_token = %s OR persistent_token = %s",
+            (token_hash, token)
+        )
         row = cur.fetchone()
         if row:
             return row["id"]

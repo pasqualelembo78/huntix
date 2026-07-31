@@ -155,12 +155,21 @@ object GameProgressSync {
         // ✅ BLOCK salvataggi durante il restore
         isRestoring = true
         Log.d(TAG, "Starting restore for $userId...")
-
+        val timeoutMsg = "Restore timeout"
+        val timeoutRunnable = Runnable {
+            if (isRestoring) {
+                Log.w(TAG, timeoutMsg)
+                isRestoring = false
+                onDone?.invoke(false)
+            }
+        }
+        handler.postDelayed(timeoutRunnable, 15_000L)
         try {
-        db.collection(COL).document(userId).get()
-            .addOnSuccessListener { doc ->
-                try {
-                    if (!doc.exists()) {
+            db.collection(COL).document(userId).get()
+                .addOnSuccessListener { doc ->
+                    handler.removeCallbacks(timeoutRunnable)
+                    try {
+                        if (!doc.exists()) {
                         Log.d(TAG, "No cloud progress — first time user")
                         isRestoring = false
                         onDone?.invoke(false)

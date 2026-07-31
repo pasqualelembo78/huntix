@@ -118,6 +118,9 @@ object IndoorArSync {
 
     // ── Eggs ─────────────────────────────────────────────────────
 
+    private val pendingHosts = mutableListOf<Triple<Int, Anchor, () -> Unit>>()
+    private var hostingEgg = false
+
     fun hostEggAnchor(session: Session, anchor: Anchor, idx: Int, colorIdx: Int, shape: String, isTrap: Boolean) {
         if (BuildConfig.ARCORE_API_KEY.isBlank()) { onApiKeyMissing?.invoke(); return }
         hasPendingOperations = true
@@ -126,32 +129,29 @@ object IndoorArSync {
             onHostingError?.invoke(idx, e.message ?: "host egg failed")
             return
         }
-        hostedEgg = idx to hosted
-        pollHostEgg()
+        pendingHosts.add(Triple(idx, hosted, { onEggHosted?.invoke(idx, hosted.cloudAnchorId) }))
+        if (!hostingEgg) pollNextHost()
     }
 
-    private fun pollHostEgg() {
-        val (idx, a) = hostedEgg ?: return
+    private fun pollNextHost() {
+        if (pendingHosts.isEmpty()) { hostingEgg = false; hasPendingOperations = false; return }
+        hostingEgg = true
+        val (idx, a) = pendingHosts[0]
         when (val st = a.cloudAnchorState) {
             CloudAnchorState.SUCCESS -> {
-                hasPendingOperations = false
+                pendingHosts.removeAt(0)
                 onEggHosted?.invoke(idx, a.cloudAnchorId)
-                hostedEgg = null
+                pollNextHost()
             }
             CloudAnchorState.ERROR_NOT_AUTHORIZED, CloudAnchorState.ERROR_RESOURCE_EXHAUSTED -> {
-                hasPendingOperations = false
-                onApiKeyMissing?.invoke()
-                hostedEgg = null
+                hasPendingOperations = false; hostingEgg = false
+                onApiKeyMissing?.invoke(); pendingHosts.removeAt(0)
             }
-            CloudAnchorState.NONE -> handler.postDelayed({ pollHostEgg() }, 250)
+            CloudAnchorState.NONE -> handler.postDelayed({ pollNextHost() }, 250)
             else -> {
-                if (st.name.startsWith("ERROR")) {
-                    hasPendingOperations = false
-                    onHostingError?.invoke(idx, st.name)
-                    hostedEgg = null
-                } else {
-                    handler.postDelayed({ pollHostEgg() }, 250)
-                }
+                if (st.name.startsWith("ERROR")) { hasPendingOperations = false; hostingEgg = false; onHostingError?.invoke(idx, st.name) }
+                else handler.postDelayed({ pollNextHost() }, 250)
+                pendingHosts.removeAt(0)
             }
         }
     }

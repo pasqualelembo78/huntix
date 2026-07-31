@@ -8,6 +8,9 @@ import com.google.android.gms.ads.AdView
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.google.android.gms.ads.OnUserEarnedRewardListener
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
@@ -37,7 +40,7 @@ internal fun MainActivity.loadBannerAd() {
 
 internal fun MainActivity.loadRewardedAd() {
     RewardedAd.load(
-        this,
+        applicationContext,
         MainActivity.ADMOB_REWARDED_ID,
         AdRequest.Builder().build(),
         object : RewardedAdLoadCallback() {
@@ -60,7 +63,10 @@ internal fun MainActivity.loadRewardedAd() {
 
             override fun onAdFailedToLoad(loadAdError: LoadAdError) {
                 rewardedAd = null
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ loadRewardedAd() }, 130_000)
+                lifecycleScope.launch {
+                    delay(130_000)
+                    if (isActive && !isFinishing) loadRewardedAd()
+                }
             }
         }
     )

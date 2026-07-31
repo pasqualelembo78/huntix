@@ -22,7 +22,7 @@ object MultiplayerProManager {
 
     fun hasPro(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_HAS_PRO, false)
 
-    fun activate(ctx: Context) {
+    internal fun activate(ctx: Context) {
         prefs(ctx).edit().putBoolean(KEY_HAS_PRO, true).apply()
     }
 

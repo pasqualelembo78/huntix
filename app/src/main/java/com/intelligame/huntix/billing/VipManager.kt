@@ -30,7 +30,7 @@ object VipManager {
 
     fun isVip(ctx: Context): Boolean = prefs(ctx).getBoolean(KEY_IS_VIP, false)
 
-    fun setVip(ctx: Context, active: Boolean) {
+    private fun setVip(ctx: Context, active: Boolean) {
         prefs(ctx).edit().putBoolean(KEY_IS_VIP, active).apply()
     }
 

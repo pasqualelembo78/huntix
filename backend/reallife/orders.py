@@ -83,15 +83,13 @@ def deduct_balance(user_id, amount):
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT balance FROM user_balances WHERE user_id=%s", (user_id,))
-        row = cur.fetchone()
-        if not row:
-            cur.execute("INSERT INTO user_balances (user_id, balance) VALUES (%s, %s)", (user_id, 100))
-            conn.commit()
-            row = {"balance": 100}
-        if row["balance"] < amount:
+        cur.execute(
+            "UPDATE user_balances SET balance = balance - %s WHERE user_id = %s AND balance >= %s",
+            (amount, user_id, amount)
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
             return False
-        cur.execute("UPDATE user_balances SET balance=balance-%s WHERE user_id=%s", (amount, user_id))
         conn.commit()
         return True
     finally:

@@ -17,8 +17,17 @@ object IndoorRoomManager {
     fun getRoomInfo(code: String, onSuccess: (RoomInfo) -> Unit, onError: (String) -> Unit) {
         rooms.child(code).child("info").get()
             .addOnSuccessListener { snap ->
-                val eggCount = snap.child("eggCount").getValue(Int::class.java) ?: 0
-                onSuccess(RoomInfo(RoomConfig(eggCount)))
+                var eggCount = snap.child("eggCount").getValue(Int::class.java) ?: 0
+                if (eggCount == 0) {
+                    rooms.child(code).child("setup/eggs").get()
+                        .addOnSuccessListener { eg ->
+                            eggCount = eg.childrenCount.toInt()
+                            onSuccess(RoomInfo(RoomConfig(eggCount)))
+                        }
+                        .addOnFailureListener { onSuccess(RoomInfo(RoomConfig(eggCount))) }
+                } else {
+                    onSuccess(RoomInfo(RoomConfig(eggCount)))
+                }
             }
             .addOnFailureListener { onError(it.message ?: "Errore info stanza") }
     }

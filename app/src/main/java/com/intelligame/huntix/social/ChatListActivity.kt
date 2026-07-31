@@ -93,7 +93,7 @@ class ChatListActivity : BaseNavActivity() {
                         val name = f["name"] as? String ?: "?"
                         val uid = f["uid"] as? String ?: return@forEach
                         chatsContainer.addView(chatRow(
-                            initial = name.first().uppercase(),
+                            initial = name.firstOrNull()?.uppercase() ?: "?",
                             initialColor = "#128C7E",
                             name = name,
                             subtitle = "Tocca per chattare"

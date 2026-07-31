@@ -65,7 +65,8 @@ object AppLog {
         log(Level.E, tag, fullMsg)
     }
 
-    private fun log(level: Level, tag: String, msg: String) {
+private val logExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+private fun log(level: Level, tag: String, msg: String) {
         val ts = System.currentTimeMillis()
         when (level) {
             Level.D -> Log.d(tag, msg)
@@ -78,9 +79,10 @@ object AppLog {
             entries.add(entry)
             if (entries.size > MAX_ENTRIES) entries.removeAt(0)
         }
-        try { logFile?.appendText("${sdf.format(Date(ts))} ${level.name} $tag: $msg\n") }
-        catch (_: Exception) {}
+        logExecutor.execute { runCatching { logFile?.appendText("${sdf.format(Date(ts))} ${level.name} $tag: $msg\n") } }
     }
+
+
 
     fun getAll(): List<Entry> = synchronized(lock) { entries.toList() }
 

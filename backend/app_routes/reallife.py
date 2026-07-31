@@ -16,6 +16,9 @@ from typing import Optional
 from fastapi import APIRouter, Request, Query, Body, Depends, HTTPException
 from pydantic import BaseModel
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
 from reallife.store import (
     get_world_state, get_needs, recharge_needs, get_skills, add_skill_xp, get_map_state,
 )
@@ -23,12 +26,13 @@ from auth_fastapi import jwt_optional, jwt_required, AuthUser
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
-def _user_id(user: AuthUser, fallback: Optional[str]) -> str:
-    if user and getattr(user, "user_id", None):
-        return user.user_id
-    return fallback or "anon"
+def _user_id(user: AuthUser) -> str:
+    if not user or not getattr(user, "user_id", None):
+        raise HTTPException(401, "autenticazione richiesta")
+    return user.user_id
 
 
 class InteractRequest(BaseModel):
@@ -49,16 +53,18 @@ async def api_needs(
     user_id: Optional[str] = Query(None),
     user: AuthUser = Depends(jwt_optional),
 ):
-    uid = _user_id(user, user_id)
+    uid = _user_id(user)
     return get_needs(uid, character_id)
 
 
 @router.post("/reallife/interact")
+@limiter.limit("10/minute")
 async def api_interact(
+    request: Request,
     body: InteractRequest,
     user: AuthUser = Depends(jwt_optional),
 ):
-    uid = _user_id(user, body.user_id)
+    uid = _user_id(user)
     needs = recharge_needs(uid, body.character_id, body.interaction)
     leveled = add_skill_xp(uid, body.character_tags, amount=20)
     skills = get_skills(uid)
@@ -70,7 +76,7 @@ async def api_skills(
     user_id: Optional[str] = Query(None),
     user: AuthUser = Depends(jwt_optional),
 ):
-    uid = _user_id(user, user_id)
+    uid = _user_id(user)
     return get_skills(uid)
 
 
@@ -139,7 +145,7 @@ async def api_create_order(body: OrderRequest, user: AuthUser = Depends(jwt_opti
     """Crea un ordine per un locale."""
     from reallife.orders import create_order, get_user_balance
     from reallife.venue_assignment import get_venue_character
-    uid = _user_id(user, body.user_id)
+    uid = _user_id(user)
     char = get_venue_character(body.venue_id, body.venue_name, body.building_type, body.lat, body.lng)
     if not char:
         raise HTTPException(404, "Nessun personaggio disponibile per questo locale")
@@ -170,7 +176,7 @@ async def api_get_orders(
 ):
     """Ottiene gli ordini pendenti."""
     from reallife.orders import get_pending_orders
-    uid = _user_id(user, None)
+    uid = _user_id(user)
     return get_pending_orders(uid, venue_id)
 
 
@@ -178,7 +184,7 @@ async def api_get_orders(
 async def api_complete_order(body: OrderCompleteRequest, user: AuthUser = Depends(jwt_optional)):
     """Completa un ordine e applica i gain."""
     from reallife.orders import complete_order
-    uid = _user_id(user, body.user_id)
+    uid = _user_id(user)
     result = complete_order(body.order_id, uid)
     if not result:
         raise HTTPException(404, "Ordine non trovato o già completato")
@@ -189,7 +195,7 @@ async def api_complete_order(body: OrderCompleteRequest, user: AuthUser = Depend
 async def api_balance(user: AuthUser = Depends(jwt_optional)):
     """Restituisce il saldo MVC dell'utente."""
     from reallife.orders import get_user_balance
-    uid = _user_id(user, None)
+    uid = _user_id(user)
     return {"balance": get_user_balance(uid)}
 
 
@@ -197,7 +203,7 @@ async def api_balance(user: AuthUser = Depends(jwt_optional)):
 async def api_user_skills(user: AuthUser = Depends(jwt_optional)):
     """Restituisce le capacità dell'utente."""
     from reallife.skills import get_user_skills, BUILDING_SKILLS
-    uid = _user_id(user, None)
+    uid = _user_id(user)
     skills = get_user_skills(uid)
     return {
         "skills": skills,
@@ -214,7 +220,7 @@ class WorkRequest(BaseModel):
 async def api_work(body: WorkRequest, user: AuthUser = Depends(jwt_optional)):
     """Guadagna MVC lavorando. La paga dipende da energia, umore e capacità."""
     from reallife.orders import work, get_user_balance
-    uid = _user_id(user, body.user_id)
+    uid = _user_id(user)
     result = work(uid, body.building_type)
     return {
         "status": "ok",

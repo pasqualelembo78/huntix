@@ -29,7 +29,7 @@ object SeasonPassManager {
         return System.currentTimeMillis() - purchasedAt < SEASON_DURATION_MS
     }
 
-    fun activate(ctx: Context) {
+    internal fun activate(ctx: Context) {
         prefs(ctx).edit()
             .putBoolean(KEY_HAS_PASS, true)
             .putLong(KEY_PURCHASE_TIME, System.currentTimeMillis())

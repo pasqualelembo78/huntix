@@ -27,6 +27,7 @@ def _pollinations_generate(messages, model, uid=None):
         if system_msg:
             prompt = f"{system_msg}\n\n{prompt}"
 
+        prompt = prompt[:2000]
         encoded = urllib.parse.quote(prompt)
         params = {"model": model, "seed": 42}
         if key:
@@ -59,6 +60,7 @@ def _pollinations_generate_stream(messages, model, uid=None):
     if system_msg:
         prompt = f"{system_msg}\n\n{prompt}"
 
+    prompt = prompt[:2000]
     encoded = urllib.parse.quote(prompt)
     params = {"model": model, "seed": 42, "stream": "true"}
     if key:

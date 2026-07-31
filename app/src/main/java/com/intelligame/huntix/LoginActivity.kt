@@ -142,7 +142,6 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(context, "Login Google fallito: ${e.message}", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Google Sign-In non disponibile: ${e.message}", Toast.LENGTH_SHORT).show()
-                loginAsGuest()
             }
         }
     }
@@ -272,8 +271,29 @@ class LoginActivity : AppCompatActivity() {
 
     // ── Guest ───────────────────────────────────────────────
     private fun loginAsGuest() {
-        val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val current = auth.currentUser
+        if (current != null && !current.isAnonymous) {
+            goToProfile()
+            return
+        }
+        if (current != null) {
+            val uid = current.uid
+            val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
+            PlayerProfileManager.saveLoginMethod(this, "guest", name, uid)
+            PlayerProfileManager.initMyProfile(
+                context = this,
+                name = name,
+                firebaseUid = uid,
+                onReady = { goToProfile() },
+                onError = { msg ->
+                    if (isFinishing || isDestroyed) return@initMyProfile
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                }
+            )
+            return
+        }
+        val name = "Cacciatore${System.currentTimeMillis().rem(10000)}"
         auth.signInAnonymously()
             .addOnSuccessListener { result ->
                 if (isFinishing || isDestroyed) return@addOnSuccessListener

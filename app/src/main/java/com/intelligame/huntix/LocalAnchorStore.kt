@@ -55,7 +55,7 @@ class LocalAnchorStore private constructor() {
     fun purgeExpired() {
         val ctx = appContext ?: return
         val prefs = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        val arr = JSONArray(prefs.getString(KEY_SESSIONS, "[]") ?: "[]")
+        val arr = try { JSONArray(prefs.getString(KEY_SESSIONS, "[]") ?: "[]") } catch (_: Exception) { JSONArray() }
         val out = JSONArray()
         val now = System.currentTimeMillis()
         for (i in 0 until arr.length()) {

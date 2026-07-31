@@ -21,12 +21,15 @@ internal fun MainActivity.onHintRequested() {
     if (now < hintCooldownUntilMs) return
     hintCooldownUntilMs = now + 3_000L
 
-    val ad = rewardedAd
-    if (ad != null) {
-        ad.show(this, OnUserEarnedRewardListener { _ ->
-            runOnUiThread { showHint() }
-        })
-    } else {
+                val ad = rewardedAd
+                if (ad != null) {
+                    try {
+                        ad.show(this, OnUserEarnedRewardListener { runOnUiThread { showHint() } })
+                    } catch (_: Exception) {
+                        rewardedAd = null; loadRewardedAd()
+                        Toast.makeText(this, "Pubblicità non disponibile, riprova tra poco!", Toast.LENGTH_LONG).show()
+                    }
+                } else {
         Toast.makeText(this, "Pubblicita' non pronta, riprova tra poco!", Toast.LENGTH_LONG).show()
         loadRewardedAd()
     }

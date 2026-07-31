@@ -1,6 +1,7 @@
 package com.intelligame.huntix.social
 
 import android.content.Context
+import com.intelligame.huntix.CloudFunctions
 import com.intelligame.huntix.managers.SavedManager
 import android.content.Intent
 import com.google.firebase.auth.FirebaseAuth
@@ -26,22 +27,14 @@ object ReferralManager {
 
     fun applyCode(ctx: Context, code: String, onResult: (Boolean, String) -> Unit) {
         val myUid = auth.currentUser?.uid ?: run { onResult(false, "Non autenticato"); return }
-        val c = code.trim().uppercase()
-        db.collection("referral_codes").document(c).get().addOnSuccessListener { doc ->
-            if (!doc.exists()) { onResult(false, "Codice non valido"); return@addOnSuccessListener }
-            val ownerUid = doc.getString("ownerUid") ?: ""
-            if (ownerUid == myUid) { onResult(false, "Non puoi usare il tuo codice!"); return@addOnSuccessListener }
-            db.collection("players").document(myUid).get().addOnSuccessListener { myDoc ->
-                if (!myDoc.getString("referredBy").isNullOrBlank()) { onResult(false, "Hai gia usato un codice"); return@addOnSuccessListener }
-                val batch = db.batch()
-                batch.update(db.collection("players").document(myUid), mapOf("referredBy" to c))
-                batch.update(db.collection("players").document(ownerUid), "referralCount", FieldValue.increment(1))
-                batch.commit().addOnSuccessListener {
-                    SavedManager.addMvc(ctx, 500.0)
-                    onResult(true, "+500 MVC!")
-                }.addOnFailureListener { onResult(false, "Errore") }
+        CloudFunctions.redeemReferral(code.trim().uppercase()) { success, message ->
+            if (success) {
+                SavedManager.addMvc(ctx, 500.0)
+                onResult(true, message ?: "+500 MVC!")
+            } else {
+                onResult(false, message ?: "Errore durante il redeem")
             }
-        }.addOnFailureListener { onResult(false, "Errore di rete") }
+        }
     }
 
     fun shareCode(ctx: Context, code: String) {
