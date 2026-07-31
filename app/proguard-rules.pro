@@ -51,3 +51,16 @@
     public *;
 }
 -keep class com.intelligame.huntix.social.** { <fields>; <init>(...); }
+
+# ── Activities started via Intent (must keep class names from R8 obfuscation) ─
+-keep class com.intelligame.huntix.ui.POICustomPageActivity { *; }
+-keep class com.intelligame.huntix.ui.POIWebViewActivity { *; }
+-keep class com.intelligame.huntix.ui.POIInteractionActivity { *; }
+-keep class com.intelligame.huntix.ui.BuildingInteriorActivity { *; }
+-keep class com.intelligame.huntix.ui.OutdoorWorldActivity { *; }
+-keep class com.intelligame.huntix.ui.OutdoorArCatchActivity { *; }
+-keep class com.intelligame.huntix.ui.ArNavigationActivity { *; }
+-keep class com.intelligame.huntix.ui.OutdoorHuntActivity { *; }
+-keep class com.intelligame.huntix.ui.OutdoorGuestActivity { *; }
+-keep class * extends android.app.Activity
+-keep class * extends androidx.appcompat.app.AppCompatActivity

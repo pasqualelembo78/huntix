@@ -5,6 +5,7 @@ package com.intelligame.huntix.ui
 
 import android.Manifest
 import android.app.ActivityManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -107,7 +108,23 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
     private val refresh = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
-        override fun run() { refreshUi(); refresh.postDelayed(this, 3000) }
+        override fun run() {
+            try {
+                refreshUi()
+            } catch (e: OutOfMemoryError) {
+                AppLog.e(TAG, "OOM in refreshUi", e)
+                try {
+                    mapView?.onLowMemory()
+                } catch (_: Exception) {
+                    // ignore
+                }
+            } catch (e: Error) {
+                AppLog.e(TAG, "Error in refreshUi", e)
+            } catch (e: Exception) {
+                AppLog.e(TAG, "Error in refreshUi", e)
+            }
+            refresh.postDelayed(this, 3000)
+        }
     }
 
     // ── Phase 1: new HUD elements ─────────────────────────────
@@ -429,6 +446,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
                 styleReady = true
                 AppLog.d(TAG, "Style loaded, layers added, zoom=17 tilt=60")
+
+                addStaticStyleImages(style)
             }
 
             map.addOnMapClickListener { point ->
@@ -799,7 +818,18 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         updateWeatherParticles(w)
 
-        refreshMapMarkers()
+        try {
+            refreshMapMarkers()
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "OOM in refreshMapMarkers", e)
+            try {
+                mapView?.onLowMemory()
+            } catch (_: Exception) {
+                // ignore
+            }
+        } catch (e: Error) {
+            AppLog.e(TAG, "Error in refreshMapMarkers", e)
+        }
     }
 
     private val poiCooldownState = mutableMapOf<String, Boolean>()
@@ -828,6 +858,26 @@ class OutdoorWorldActivity : BaseNavActivity() {
         }
     }
 
+    private fun addStaticStyleImages(style: Style) {
+        try {
+            EggRarity.entries.forEach { rarity ->
+                style.addImage("egg_${rarity.name.lowercase()}", makeMarkerBitmap(rarity))
+            }
+            listOf("gym", "hub", "sponsor", "arena").forEach { type ->
+                style.addImage("poi_$type", makePoiBitmap(type))
+                style.addImage("poi_${type}_gray", makePoiBitmapGray(type))
+            }
+            BuildingDefs.BUILDINGS.forEach { bDef ->
+                style.addImage("building_${bDef.type.name.lowercase()}", makeBuildingBitmap(bDef.emoji, bDef.color3D))
+            }
+            AppLog.d(TAG, "Static style images added to style")
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "OOM while adding static style images", e)
+        } catch (e: Error) {
+            AppLog.e(TAG, "Error adding static style images", e)
+        }
+    }
+
     private fun refreshMapMarkers(force: Boolean = false) {
         if (!styleReady) return
         if (isCameraMoving) {
@@ -848,10 +898,6 @@ class OutdoorWorldActivity : BaseNavActivity() {
         // ── Eggs ──
         if (currentMode != MODE_REALLIFE) {
             val visibleEggs = mgr.getEggs().filter { !it.found }
-
-            EggRarity.entries.forEach { rarity ->
-                style.addImage("egg_${rarity.name.lowercase()}", makeMarkerBitmap(rarity))
-            }
 
             val eggFeatures = visibleEggs.map { egg ->
                 val f = Feature.fromGeometry(Point.fromLngLat(egg.lng, egg.lat))
@@ -897,14 +943,6 @@ class OutdoorWorldActivity : BaseNavActivity() {
             if (id !in currentPoiIds) poiCooldownState.remove(id)
         }
 
-        listOf("gym", "hub", "sponsor", "arena").forEach { type ->
-            style.addImage("poi_$type", makePoiBitmap(type))
-            style.addImage("poi_${type}_gray", makePoiBitmapGray(type))
-        }
-        BuildingDefs.BUILDINGS.forEach { bDef ->
-            style.addImage("building_${bDef.type.name.lowercase()}", makeBuildingBitmap(bDef.emoji, bDef.color3D))
-        }
-
         val poiFeatures = currentPois.map { poi ->
             val onCooldown = mgr.isPoiOnCooldown(poi)
             poiCooldownState[poi.id] = onCooldown
@@ -927,9 +965,15 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val profile = PlayerProfileManager.myProfile
         val level = profile?.level ?: 1
 
-        val avatarDrawable = com.intelligame.huntix.avatar.AvatarMapRenderer
-            .makeAvatarMarkerDrawable(resources, 104, walkTick, level, currentHeading, this)
-        style.addImage("avatar", avatarDrawable.bitmap)
+        try {
+            val avatarDrawable = com.intelligame.huntix.avatar.AvatarMapRenderer
+                .makeAvatarMarkerDrawable(resources, 104, walkTick, level, currentHeading, this)
+            style.addImage("avatar", avatarDrawable.bitmap)
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "OOM creating avatar bitmap", e)
+        } catch (e: Error) {
+            AppLog.e(TAG, "Error creating avatar bitmap", e)
+        }
 
         val avatarFeat = Feature.fromGeometry(Point.fromLngLat(currentLoc.longitude, currentLoc.latitude))
         avatarFeat.addStringProperty("icon-id", "avatar")
@@ -944,7 +988,13 @@ class OutdoorWorldActivity : BaseNavActivity() {
             val creature = com.intelligame.huntix.SurpriseCreature.ALL
                 .firstOrNull { it.id == fidato.creatureId }
             if (creature != null) {
-                style.addImage("fidato", makeFidatoBitmap(creature.emoji))
+                try {
+                    style.addImage("fidato", makeFidatoBitmap(creature.emoji))
+                } catch (e: OutOfMemoryError) {
+                    AppLog.e(TAG, "OOM creating fidato bitmap", e)
+                } catch (e: Error) {
+                    AppLog.e(TAG, "Error creating fidato bitmap", e)
+                }
                 val offsetLat = currentLoc.latitude + 0.00018
                 val offsetLng = currentLoc.longitude + 0.00012
                 val fidatoFeat = Feature.fromGeometry(Point.fromLngLat(offsetLng, offsetLat))
@@ -959,7 +1009,14 @@ class OutdoorWorldActivity : BaseNavActivity() {
         }
 
         // ── Direction indicator ──
-        style.addImage("direction", makeDirectionBitmap(currentHeading))
+        try {
+            val dirBitmap = makeDirectionBitmap(currentHeading)
+            style.addImage("direction", dirBitmap)
+        } catch (e: OutOfMemoryError) {
+            AppLog.e(TAG, "OOM creating direction bitmap", e)
+        } catch (e: Error) {
+            AppLog.e(TAG, "Error creating direction bitmap", e)
+        }
         val dirFeat = Feature.fromGeometry(Point.fromLngLat(currentLoc.longitude, currentLoc.latitude))
         dirFeat.addStringProperty("icon-id", "direction")
         dirFeat.addStringProperty("type", "direction")
@@ -1638,16 +1695,21 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val bDef = bt?.let { t -> BuildingDefs.BUILDINGS.find { it.type == t } }
             ?: BuildingDefs.BUILDINGS.firstOrNull { it.type.name == poi.buildingType }
             ?: return
-        startActivity(Intent(this, BuildingInteriorActivity::class.java).apply {
-            putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, bDef.type.ordinal)
-            putExtra(BuildingInteriorActivity.EXTRA_POI_NAME, poi.name)
-            if (poi.url.isNotBlank()) putExtra(BuildingInteriorActivity.EXTRA_POI_URL, poi.url)
-            putExtra(BuildingInteriorActivity.EXTRA_VENUE_ID, poi.id)
-            putExtra(BuildingInteriorActivity.EXTRA_VENUE_LAT, poi.lat)
-            putExtra(BuildingInteriorActivity.EXTRA_VENUE_LNG, poi.lng)
-            putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE_STR, poi.buildingType)
-        })
-        hideBottomSheet()
+        try {
+            startActivity(Intent(this, BuildingInteriorActivity::class.java).apply {
+                putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE, bDef.type.ordinal)
+                putExtra(BuildingInteriorActivity.EXTRA_POI_NAME, poi.name)
+                if (poi.url.isNotBlank()) putExtra(BuildingInteriorActivity.EXTRA_POI_URL, poi.url)
+                putExtra(BuildingInteriorActivity.EXTRA_VENUE_ID, poi.id)
+                putExtra(BuildingInteriorActivity.EXTRA_VENUE_LAT, poi.lat)
+                putExtra(BuildingInteriorActivity.EXTRA_VENUE_LNG, poi.lng)
+                putExtra(BuildingInteriorActivity.EXTRA_BUILDING_TYPE_STR, poi.buildingType)
+            })
+            hideBottomSheet()
+        } catch (e: ActivityNotFoundException) {
+            AppLog.e(TAG, "Activity not found: ${BuildingInteriorActivity::class.java.name}", e)
+            Toast.makeText(this, "Edificio non disponibile", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun openWebView(poi: OutdoorManager.Poi) {
