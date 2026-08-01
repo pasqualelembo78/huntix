@@ -21,6 +21,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.ar.core.Config
+import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.R
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
@@ -68,6 +69,7 @@ abstract class ARGameActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var trackingReady = false
     private var pendingAction: (() -> Unit)? = null
+    private var lastTrackingState: TrackingState? = null
 
     /** Motore audio 3D (sintesi PCM + panning distanza). */
     protected val spatialAudio = SpatialAudio()
@@ -110,9 +112,13 @@ abstract class ARGameActivity : AppCompatActivity() {
         android.util.Log.d("ARGameActivity", "SceneView found: ${sceneView != null}, SceneView class: ${sceneView?.javaClass?.name}")
         android.util.Log.d("ARGameActivity", "HUD found: ${hud != null}")
         android.util.Log.d("ARGameActivity", "SceneView initialized: ${sceneView != null}")
+        sceneView.lifecycle = lifecycle
         buildHud()
         android.util.Log.d("ARGameActivity", "Checking CAMERA permission")
 
+        sceneView.onSessionCreated = { session ->
+            AppLog.i("ARGameActivity", "ARCore session created, paused=${session.isPaused}")
+        }
         sceneView.configureSession { _, config ->
             config.planeFindingMode = if (usePlaneDetection) Config.PlaneFindingMode.HORIZONTAL else Config.PlaneFindingMode.DISABLED
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
@@ -124,11 +130,15 @@ abstract class ARGameActivity : AppCompatActivity() {
         sceneView.onSessionUpdated = { s, f ->
             lastSession = s
             lastFrame = f
-            android.util.Log.d("ARGameActivity", "Session updated, tracking=${f.camera.trackingState}")
-            if (!trackingReady && f.camera.trackingState == TrackingState.TRACKING) {
+            val tracking = f.camera.trackingState
+            if (tracking != lastTrackingState) {
+                lastTrackingState = tracking
+                AppLog.i("ARGameActivity", "Tracking state: $tracking")
+            }
+            if (!trackingReady && tracking == TrackingState.TRACKING) {
                 trackingReady = true
-                android.util.Log.d("ARGameActivity", "TRACKING READY!")
-                pendingAction?.let { it() }; pendingAction = null
+                AppLog.i("ARGameActivity", "TRACKING READY — starting game content")
+                runPendingAction()
                 onTrackingReady()
             }
             onArFrame(s, f)
@@ -159,13 +169,14 @@ abstract class ARGameActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1001)
         }
 
-        // Fallback: se dopo 5 secondi non c'è tracking, forziamo l'inizio
+        // Nessun tracking dopo 5s: NON forziamo l'avvio (le uova si ancorano solo
+        // con un frame TRACKING, quindi un finto avvio le farebbe spawnare in modo
+        // silenzioso e mai comparire). Mostriamo un suggerimento all'utente; il
+        // pending action viene rieseguito automaticamente al primo frame TRACKING.
         handler.postDelayed({
             if (!trackingReady && !isFinishing) {
-                android.util.Log.w("ARGameActivity", "Tracking timeout, forcing start")
-                trackingReady = true
-                pendingAction?.let { it() }; pendingAction = null
-                onTrackingReady()
+                AppLog.w("ARGameActivity", "Tracking not ready after 5s — waiting for real TRACKING")
+                statusText.text = "⚠️ Muovi lentamente il telefono finché il tracking non si attiva…"
             }
         }, 5000)
     }
@@ -239,14 +250,17 @@ abstract class ARGameActivity : AppCompatActivity() {
     ): AREgg? {
         val session = lastSession ?: run {
             android.util.Log.w("ARGameActivity", "spawnEgg: session is null")
+            AppLog.w("ARGameActivity", "spawnEgg: session is null")
             return null
         }
         val frame = lastFrame ?: run {
             android.util.Log.w("ARGameActivity", "spawnEgg: frame is null")
+            AppLog.w("ARGameActivity", "spawnEgg: frame is null")
             return null
         }
         if (frame.camera.trackingState != TrackingState.TRACKING) {
             android.util.Log.w("ARGameActivity", "spawnEgg: not tracking")
+            AppLog.w("ARGameActivity", "spawnEgg: not tracking (${frame.camera.trackingState})")
             return null
         }
         val camPose = frame.camera.pose
@@ -255,7 +269,10 @@ abstract class ARGameActivity : AppCompatActivity() {
             floatArrayOf(0f, 0f, 0f, 1f)
         )
         val pose = camPose.compose(offset)
-        val anchor = session.createAnchor(pose)
+        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
+            AppLog.e("ARGameActivity", "spawnEgg: createAnchor failed", it)
+            return null
+        }
         val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
         val mat = sceneView.materialLoader.createColorInstance(color = eggColor(type))
         val node = SphereNode(sceneView.engine, radius, materialInstance = mat).apply {
@@ -267,6 +284,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         val egg = AREgg(an, node, type, phase = Math.random().toFloat() * 6.28f)
         eggs[node] = egg
         android.util.Log.d("ARGameActivity", "spawnEgg: spawned type=$type at ($right, $up, $forward)")
+        AppLog.i("ARGameActivity", "Egg spawned type=$type, scene nodes=${sceneView.childNodes.size}")
         onEggSpawned(egg)
         return egg
     }
@@ -312,14 +330,17 @@ abstract class ARGameActivity : AppCompatActivity() {
     protected fun spawnAnchor(forward: Float, right: Float, up: Float): AnchorNode? {
         val session = lastSession ?: run {
             android.util.Log.w("ARGameActivity", "spawnAnchor: session is null")
+            AppLog.w("ARGameActivity", "spawnAnchor: session is null")
             return null
         }
         val frame = lastFrame ?: run {
             android.util.Log.w("ARGameActivity", "spawnAnchor: frame is null")
+            AppLog.w("ARGameActivity", "spawnAnchor: frame is null")
             return null
         }
         if (frame.camera.trackingState != TrackingState.TRACKING) {
             android.util.Log.w("ARGameActivity", "spawnAnchor: not tracking")
+            AppLog.w("ARGameActivity", "spawnAnchor: not tracking (${frame.camera.trackingState})")
             return null
         }
         val camPose = frame.camera.pose
@@ -328,11 +349,15 @@ abstract class ARGameActivity : AppCompatActivity() {
             floatArrayOf(0f, 0f, 0f, 1f)
         )
         val pose = camPose.compose(offset)
-        val anchor = session.createAnchor(pose)
+        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
+            AppLog.e("ARGameActivity", "spawnAnchor: createAnchor failed", it)
+            return null
+        }
         android.util.Log.d("ARGameActivity", "spawnAnchor: creating AnchorNode, engine=${sceneView.engine != null}")
         val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
         sceneView.addChildNode(an)
         sharedAnchors.add(an)
+        AppLog.i("ARGameActivity", "Arena anchor spawned, scene nodes=${sceneView.childNodes.size}")
         return an
     }
 
@@ -503,11 +528,39 @@ abstract class ARGameActivity : AppCompatActivity() {
     /**
      * Esegue [action] non appena ARCore ha un frame TRACKING (necessario perché
      * le uova si ancorano allo spazio reale). Se il tracking è già pronto viene
-     * eseguita subito (utile anche nei restart).
+     * eseguita subito; altrimenti viene ritentata finché un frame TRACKING non
+     * arriva davvero (non viene consumata da un timeout).
      */
     protected fun whenReady(action: () -> Unit) {
         android.util.Log.d("ARGameActivity", "whenReady called, trackingReady=$trackingReady")
-        if (trackingReady) action() else pendingAction = action
+        if (trackingReady && lastFrame?.camera?.trackingState == TrackingState.TRACKING) {
+            action()
+        } else {
+            pendingAction = action
+            handler.removeCallbacks(retryPending)
+            handler.postDelayed(retryPending, 250)
+        }
+    }
+
+    private fun runPendingAction() {
+        val action = pendingAction
+        pendingAction = null
+        action?.let {
+            runCatching { it() }.onFailure { e ->
+                AppLog.e("ARGameActivity", "Error executing pending action", e)
+            }
+        }
+    }
+
+    private val retryPending = object : Runnable {
+        override fun run() {
+            if (isFinishing) return
+            if (pendingAction != null && lastFrame?.camera?.trackingState == TrackingState.TRACKING) {
+                runPendingAction()
+            } else if (pendingAction != null) {
+                handler.postDelayed(this, 500)
+            }
+        }
     }
 
     protected fun startGame() { running = true }
@@ -547,6 +600,8 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     protected fun restart() {
         removeInputCapture()
+        pendingAction = null
+        handler.removeCallbacks(retryPending)
         eggs.values.forEach { it.anchorNode.destroy() }
         eggs.clear()
         fx.forEach { removeNode(it.node) }
@@ -562,6 +617,8 @@ abstract class ARGameActivity : AppCompatActivity() {
         super.onDestroy()
         android.util.Log.d("ARGameActivity", "onDestroy called")
         running = false
+        pendingAction = null
+        handler.removeCallbacks(retryPending)
         eggs.values.forEach { it.anchorNode.destroy() }
         eggs.clear()
         fx.forEach { removeNode(it.node) }
