@@ -620,6 +620,7 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         android.util.Log.d("ARGameActivity", "onDestroy called")
+        AppLog.i("ARGameActivity", "onDestroy begin (eggs=${eggs.size}, fx=${fx.size}, anchors=${sharedAnchors.size})")
         running = false
         pendingAction = null
         handler.removeCallbacks(retryPending)
@@ -640,16 +641,28 @@ abstract class ARGameActivity : AppCompatActivity() {
         // back. Destroy una volta sola, qui, rende il detach successivo un no-op.
         runCatching { sceneView.destroy() }
         super.onDestroy()
+        // Marker critico: se il processo muore di crash nativo durante/giusto dopo
+        // il teardown, questo log NON apparirà -> il log esportato ci dice esattamente
+        // dove il processo è morto (prima di onDestroy, durante il teardown, o mai).
+        AppLog.i("ARGameActivity", "onDestroy end — graceful exit")
+        AppLog.flush()
     }
 
     override fun onPause() {
         super.onPause()
         android.util.Log.d("ARGameActivity", "onPause called, running=$running")
+        AppLog.i("ARGameActivity", "onPause called, running=$running")
     }
 
     override fun onResume() {
         super.onResume()
         android.util.Log.d("ARGameActivity", "onResume called")
+        AppLog.i("ARGameActivity", "onResume called")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppLog.i("ARGameActivity", "onStop called")
     }
 }
 

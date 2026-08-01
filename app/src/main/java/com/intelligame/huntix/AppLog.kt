@@ -54,7 +54,10 @@ object AppLog {
                 f.writeBytes(bytes.copyOfRange(half, bytes.size))
             }
         } catch (_: Exception) {}
-        log(Level.I, "AppLog", "=== NEW SESSION ===")
+        log(
+            Level.I, "AppLog",
+            "=== NEW SESSION === ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})"
+        )
     }
 
     fun installCrashHandler() {
@@ -68,6 +71,22 @@ object AppLog {
             } catch (_: Exception) {}
             default?.uncaughtException(thread, throwable)
                 ?: Runtime.getRuntime().halt(1)
+        }
+    }
+
+    /**
+     * Attende che tutte le scritture su disco pendenti vengano completate.
+     * Da chiamare nei punti critici (es. fine teardown onDestroy) perché la
+     * scrittura è asincrona e un processo che muore subito dopo rischierebbe
+     * di perdere l'ultimo marker.
+     */
+    fun flush() {
+        val barrier = java.util.concurrent.CountDownLatch(1)
+        logExecutor.execute { barrier.countDown() }
+        try {
+            barrier.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
         }
     }
 
