@@ -16,9 +16,9 @@ import kotlin.math.sqrt
  *
  * Flusso:
  *   1. GPS/levetta fornisce lat/lng
- *   2. Trova regione dal bounding box
+ *   2. Trova le regioni candidate dal bounding box (i bbox si sovrappongono)
  *   3. Scarica italia/{regione}/_citta.csv → elenco città con lat/lng
- *   4. Trova città più vicina
+ *   4. Tra le candidate sceglie la regione la cui città più vicina è la più vicina
  *   5. Scarica italia/{regione}/{citta}/_all.csv
  *   6. Cache per città (24h)
  */
@@ -32,7 +32,7 @@ class OnlinePoiManager {
         "calabria"         to listOf(37.5, 15.5, 40.0, 17.5),
         "campania"         to listOf(39.5, 13.5, 41.5, 16.5),
         "emilia-romagna"   to listOf(43.5, 10.5, 45.5, 13.0),
-        "friuli_v_g"       to listOf(45.5, 12.0, 47.0, 14.0),
+        "friuli_vg"        to listOf(45.5, 12.0, 47.0, 14.0),
         "lazio"            to listOf(40.5, 11.5, 43.0, 14.0),
         "liguria"          to listOf(43.5, 7.5, 44.8, 10.0),
         "lombardia"        to listOf(44.5, 8.5, 46.5, 11.5),
@@ -43,9 +43,9 @@ class OnlinePoiManager {
         "sardegna"         to listOf(38.5, 8.0, 41.5, 10.0),
         "sicilia"          to listOf(36.5, 12.0, 38.5, 15.5),
         "toscana"          to listOf(42.0, 9.5, 44.0, 12.5),
-        "trentino-a_a"     to listOf(45.5, 10.5, 47.0, 12.5),
+        "trentino-aa"      to listOf(45.5, 10.5, 47.0, 12.5),
         "umbria"           to listOf(42.0, 12.0, 43.5, 13.5),
-        "valle_d_aosta"    to listOf(45.5, 6.5, 46.5, 8.0),
+        "valle_daosta"     to listOf(45.5, 6.5, 46.5, 8.0),
         "veneto"           to listOf(44.5, 10.5, 47.0, 13.5),
     )
 
@@ -74,34 +74,37 @@ class OnlinePoiManager {
         category: String? = null
     ): Result<List<OnlinePoi>> = withContext(Dispatchers.IO) {
         try {
-            // 1. Se la città non è cambiata e cache valida (< 24h), usa cache
-            var regionSlug = findRegion(lat, lng)
-            if (regionSlug == null) {
+            // 1. Candidate regioni dal bbox (i bbox si sovrappongono: puglia copre mezzo Sud)
+            val candidates = findRegionCandidates(lat, lng)
+            if (candidates.isEmpty()) {
                 AppLog.d("OnlinePoi", "Fuori Italia, fallbackPois")
                 return@withContext Result.success(fallbackPois())
             }
 
-            AppLog.d("OnlinePoi", "Initial region: $regionSlug")
-
-            // 2. Trova la città più vicina — se il primo match non ha dati, prova altre regioni
-            var cities = fetchCittaIndex(context, regionSlug)
-            if (cities.isEmpty()) {
-                val altRegion = findAltRegion(lat, lng, regionSlug)
-                if (altRegion != null) {
-                    AppLog.d("OnlinePoi", "No cities for $regionSlug, trying $altRegion")
-                    regionSlug = altRegion
-                    cities = fetchCittaIndex(context, regionSlug)
+            // 2. Tra le candidate scegli la regione la cui città più vicina è davvero la più vicina
+            var regionSlug: String? = null
+            var nearestCity: CityEntry? = null
+            var cities: List<CityEntry> = emptyList()
+            var bestDist = Float.MAX_VALUE
+            for (cand in candidates) {
+                val cs = fetchCittaIndex(context, cand)
+                if (cs.isEmpty()) continue
+                val nearest = findNearestCity(cs, lat, lng) ?: continue
+                val d = haversine(lat, lng, nearest.lat, nearest.lng)
+                if (d < bestDist) {
+                    bestDist = d
+                    regionSlug = cand
+                    cities = cs
+                    nearestCity = nearest
                 }
             }
-            if (cities.isEmpty()) {
+            if (regionSlug == null || nearestCity == null) {
                 AppLog.d("OnlinePoi", "Nessuna città per nessuna regione, fallbackPois")
                 return@withContext Result.success(fallbackPois())
             }
-            AppLog.d("OnlinePoi", "Final region: $regionSlug, ${cities.size} cities")
-            val nearestCity = findNearestCity(cities, lat, lng)
-            AppLog.d("OnlinePoi", "Nearest: ${nearestCity?.name} (${nearestCity?.slug})")
+            AppLog.d("OnlinePoi", "Region: $regionSlug, ${cities.size} cities, nearest: ${nearestCity.name} (${nearestCity.slug})")
 
-            if (nearestCity != null && nearestCity.slug == cachedCitySlug && cachedPois != null
+            if (nearestCity.slug == cachedCitySlug && cachedPois != null
                 && System.currentTimeMillis() - cachedTime < 24 * 60 * 60 * 1000L) {
                 AppLog.d("OnlinePoi", "Cache hit: ${nearestCity.name} (${cachedPois!!.size} POIs)")
                 val cached = cachedPois!!
@@ -113,25 +116,19 @@ class OnlinePoiManager {
             }
 
             // 3. Scarica POI della città (già filtrati per distanza)
-            val pois = if (nearestCity != null) {
-                AppLog.d("OnlinePoi", "Fetching city POIs: $regionSlug/${nearestCity.slug}")
-                val cityPois = fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
-                if (cityPois.isEmpty()) {
-                    AppLog.d("OnlinePoi", "City POIs empty, fallback to region: $regionSlug")
-                    fetchRegionPois(regionSlug, lat, lng, maxPois)
-                } else cityPois
-            } else {
-                AppLog.d("OnlinePoi", "No nearest city — fetching region POIs: $regionSlug")
+            val pois = fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
+            if (pois.isEmpty()) {
+                AppLog.d("OnlinePoi", "City POIs empty, fallback to region: $regionSlug")
                 fetchRegionPois(regionSlug, lat, lng, maxPois)
-            }
+            } else pois
             AppLog.d("OnlinePoi", "Got ${pois.size} POIs")
 
             // 4. Salva in cache solo se ci sono POI
             if (pois.isNotEmpty()) {
-                cachedCitySlug = nearestCity?.slug
+                cachedCitySlug = nearestCity.slug
                 cachedPois = pois
                 cachedTime = System.currentTimeMillis()
-                savePoisToCache(context, regionSlug, nearestCity?.slug, pois)
+                savePoisToCache(context, regionSlug, nearestCity.slug, pois)
             }
 
             Result.success(pois)
@@ -162,24 +159,11 @@ class OnlinePoiManager {
 
     // --- PRIVATE ---
 
-    private fun findRegion(lat: Double, lng: Double): String? {
-        for ((slug, bbox) in REGION_MAP) {
-            if (lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]) {
-                return slug
-            }
-        }
-        return null
-    }
-
-    /** Se la prima regione non ha dati (e.g. bbox troppo largo), prova altre regioni */
-    private fun findAltRegion(lat: Double, lng: Double, excludeSlug: String): String? {
-        for ((slug, bbox) in REGION_MAP) {
-            if (slug == excludeSlug) continue
-            if (lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]) {
-                return slug
-            }
-        }
-        return null
+    /** Tutte le regioni il cui bbox contiene il punto (i bbox si sovrappongono) */
+    private fun findRegionCandidates(lat: Double, lng: Double): List<String> {
+        return REGION_MAP.filter { (_, bbox) ->
+            lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
+        }.map { it.first }
     }
 
     /** Fetch italia/{regione}/_citta.csv e parsifica */
