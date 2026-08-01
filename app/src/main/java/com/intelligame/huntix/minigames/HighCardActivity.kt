@@ -44,14 +44,8 @@ class HighCardActivity : MiniGameBase() {
         isBusy = false
         gameArea.removeAllViews()
 
-        val remaining = MiniGameManager.remainingPlays(c, MiniGameManager.GAME_HIGH_CARD)
-        if (remaining <= 0) {
-            showGameOver()
-            return
-        }
-
         val remainText = TextView(c).apply {
-            text = "Partite rimaste: $remaining"
+            text = "Partite: illimitate"
             textSize = 13f
             setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, UiKit.dp(c, 4), 0, UiKit.dp(c, 8))
@@ -135,10 +129,8 @@ class HighCardActivity : MiniGameBase() {
 
             scoreText.text = "Vittorie: $wins  |  Sconfitte: $losses  |  Pareggi: $ties"
 
-            val remaining = MiniGameManager.remainingPlays(c, MiniGameManager.GAME_HIGH_CARD)
-            val btnLabel = if (remaining > 0) "Nuova Partita" else "Risultato Finale"
-            actionButton = UiKit.button(c, btnLabel, UiKit.ACCENT) {
-                if (remaining > 0) showStartScreen() else showGameOver()
+            actionButton = UiKit.button(c, "Nuova Partita", UiKit.ACCENT) {
+                showStartScreen()
             }
             gameArea.addView(actionButton)
         }, 800)

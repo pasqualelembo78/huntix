@@ -53,14 +53,8 @@ class MemoryGameActivity : MiniGameBase() {
         cardViews.clear()
         gameArea.removeAllViews()
 
-        val remaining = MiniGameManager.remainingPlays(c, MiniGameManager.GAME_MEMORY)
-        if (remaining <= 0) {
-            showGameOver()
-            return
-        }
-
         val remainText = TextView(c).apply {
-            text = "Partite rimaste: $remaining"
+            text = "Partite: illimitate"
             textSize = 13f
             setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, UiKit.dp(c, 4), 0, UiKit.dp(c, 6))
@@ -222,10 +216,8 @@ class MemoryGameActivity : MiniGameBase() {
         statusText.setTextColor(Color.parseColor(UiKit.GREEN))
         movesText.text = "Mosse: $moves | Coppie trovate: $matchedPairs"
 
-        val remaining = MiniGameManager.remainingPlays(c, MiniGameManager.GAME_MEMORY)
-        val btnLabel = if (remaining > 0) "Gioca Ancora" else "Risultato Finale"
-        gameArea.addView(UiKit.button(c, btnLabel, UiKit.ACCENT) {
-            if (remaining > 0) showStartScreen() else showGameOver()
+        gameArea.addView(UiKit.button(c, "Gioca Ancora", UiKit.ACCENT) {
+            showStartScreen()
         })
     }
 

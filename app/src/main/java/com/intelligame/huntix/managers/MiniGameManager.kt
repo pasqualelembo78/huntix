@@ -13,22 +13,21 @@ import java.util.Locale
  * MiniGameManager — gestore centrale per tutti i mini giochi.
  *
  * Responsabilità:
- *  - Tenere traccia dei tentativi giornalieri per gioco
  *  - Gestire lo streak multiplier (×1, ×1.5, ×2)
  *  - Applicare i premi (MVC, XP, gemme) tramite i manager esistenti
  *  - Verificare il bonus giornaliero (ogni 5 giochi → +500 MVC, +250 XP, +1 Gem)
+ *  - Contare le partite giornaliere (senza limiti di giocate: tutti i giochi liberi)
  *
  * I dati sono in SharedPreferences "minigames_v1" per persistenza locale.
  * Zero dipendenze di rete — funziona completamente offline.
  *
  * === v6: Rimossi giochi gambling (Wheel of Fortune, Slot, Bingo, Scratch) ===
+ * === v8: Rimossi i limiti di giocate giornalieri — tutti i giochi liberi ===
  */
 object MiniGameManager {
 
     private const val TAG   = "MiniGameManager"
     private const val PREFS = "minigames_v1"
-
-    const val MAX_DAILY_PLAYS = 5
 
     // ─── MiniGame ID enum ────────────────────────────────────────
     enum class MiniGameId(val key: String) {
@@ -87,29 +86,6 @@ object MiniGameManager {
         GAME_AR_SHOOTER, GAME_AR_BOMB, GAME_AR_RADAR, GAME_SLINGSHOT
     )
 
-    private val MAX_PLAYS_MAP = mapOf(
-        GAME_MEMORY        to 3,
-        GAME_NUMBER_PICK   to 3,
-        GAME_HIGH_CARD     to 5,
-
-        GAME_CATCH_EGG     to 3,
-        GAME_MATCH3        to 3,
-        // Nuovi giochi classici
-        GAME_2048          to 3,
-        GAME_SNAKE         to 3,
-        GAME_MINESWEEPER   to 3,
-        GAME_FLAPPY        to 3,
-        GAME_CONNECT4      to 3,
-        GAME_HANGMAN       to 3,
-        GAME_TIC_TAC_TOE   to 3,
-        GAME_SIMON         to 3,
-        // AR-Native exclusives
-        GAME_AR_SHOOTER    to 3,
-        GAME_AR_BOMB       to 3,
-        GAME_AR_RADAR      to 3,
-        GAME_SLINGSHOT     to 3
-    )
-
     // ─── Key helpers ─────────────────────────────────────────────
     private fun todayStr() = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
     private fun playsKey(gameId: String, day: String)  = "plays_${gameId}_$day"
@@ -118,12 +94,6 @@ object MiniGameManager {
     private fun bonusClaimedKey(day: String, nth: Int) = "daily_bonus_claimed_${day}_$nth"
 
     // ─── Enum-based API ─────────────────────────────────────────
-
-    fun playsRemaining(ctx: Context, gameId: MiniGameId): Int =
-        remainingPlays(ctx, gameId.key)
-
-    fun canPlay(ctx: Context, gameId: MiniGameId): Boolean =
-        playsRemaining(ctx, gameId) > 0
 
     fun recordPlay(ctx: Context, gameId: MiniGameId) {
         consumePlay(ctx, gameId.key)
@@ -177,17 +147,7 @@ object MiniGameManager {
 
     // ─── String-based API (backward compat) ──────────────────────
 
-    fun remainingPlays(ctx: Context, gameId: String): Int {
-        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val used  = prefs.getInt(playsKey(gameId, todayStr()), 0)
-        val max   = MAX_PLAYS_MAP[gameId] ?: 3
-        return (max - used).coerceAtLeast(0)
-    }
-
-    fun canPlay(ctx: Context, gameId: String) = remainingPlays(ctx, gameId) > 0
-
     fun consumePlay(ctx: Context, gameId: String): Boolean {
-        if (!canPlay(ctx, gameId)) return false
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val key   = playsKey(gameId, todayStr())
         prefs.edit().putInt(key, prefs.getInt(key, 0) + 1).apply()
@@ -200,8 +160,6 @@ object MiniGameManager {
         checkDailyBonus(ctx, prevGames + 1)
         return true
     }
-
-    fun maxPlays(gameId: String) = MAX_PLAYS_MAP[gameId] ?: 3
 
     // ─── Old GameReward (backward compat for other activities) ───
     data class GameReward(
@@ -332,11 +290,6 @@ object MiniGameManager {
     }
 
     // ─── Utilità ──────────────────────────────────────────────────
-    fun formatRemainingPlays(ctx: Context, gameId: String): String {
-        val rem = remainingPlays(ctx, gameId)
-        return if (rem > 0) "$rem rimast${if (rem == 1) "o" else "i"}" else "Esauriti per oggi"
-    }
-
     fun dailySummary(ctx: Context): String {
         val mvc    = totalMvcEarnedToday(ctx)
         val games  = totalGamesPlayedToday(ctx)

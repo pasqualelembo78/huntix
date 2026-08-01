@@ -10,7 +10,6 @@ import android.view.View
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import com.intelligame.huntix.managers.MiniGameManager
 import com.intelligame.huntix.managers.ResearchTaskManager
 import com.intelligame.huntix.minigames.*
@@ -30,14 +29,14 @@ class MiniGamesHubActivity : BaseNavActivity() {
 
     data class GameEntry(
         val id: String, val label: String, val emoji: String,
-        val cls: Class<*>?, val arCls: Class<*>?, val limitPlays: Boolean = true
+        val cls: Class<*>?, val arCls: Class<*>?
     ) {
         val hasNormal: Boolean get() = cls != null
         val hasAr: Boolean get() = arCls != null
     }
 
     private val games = listOf(
-        GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, null, limitPlays = false),
+        GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, null),
         GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, ARMemoryActivity::class.java),
         GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, ARNumberPickActivity::class.java),
         GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, ARHighCardActivity::class.java),
@@ -161,14 +160,11 @@ class MiniGamesHubActivity : BaseNavActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
 
-        val remaining = if (g.limitPlays) {
-            try { MiniGameManager.remainingPlays(c, g.id) } catch (_: Exception) { 3 }
-        } else null
         nameRow.addView(TextView(c).apply {
-            text = remaining?.let { "⚡ $it" } ?: "∞"
+            text = "∞"
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.parseColor(if (remaining == null || remaining > 0) UiKit.GREEN else "#FF5A5A"))
+            setTextColor(Color.parseColor(UiKit.GREEN))
         })
         card.addView(nameRow)
 
@@ -206,13 +202,6 @@ class MiniGamesHubActivity : BaseNavActivity() {
     }
 
     private fun launch(cls: Class<*>, g: GameEntry) {
-        if (g.limitPlays) {
-            val remaining = try { MiniGameManager.remainingPlays(this, g.id) } catch (_: Exception) { 3 }
-            if (remaining <= 0) {
-                Toast.makeText(this, "Giocate esaurite per oggi! Torna domani 🌙", Toast.LENGTH_SHORT).show()
-                return
-            }
-        }
         try { ResearchTaskManager.trackProgress(this, "play_minigame") } catch (_: Exception) {}
         // Il consumo della giocata è gestito dall'activity stessa.
         startActivity(Intent(this, cls))
