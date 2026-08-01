@@ -634,6 +634,11 @@ abstract class ARGameActivity : AppCompatActivity() {
         runCatching { spatialAudio.release() }
         sharedAnchors.forEach { runCatching { it.destroy() } }
         sharedAnchors.clear()
+        // Teardown esplicito dello SceneView PRIMA di super.onDestroy(): il destroy
+        // di libreria (in onDetachedFromWindow, dopo onDestroy) chiude la sessione
+        // ARCore in background in gara con il destroy dell'engine -> crash nativo su
+        // back. Destroy una volta sola, qui, rende il detach successivo un no-op.
+        runCatching { sceneView.destroy() }
         super.onDestroy()
     }
 
