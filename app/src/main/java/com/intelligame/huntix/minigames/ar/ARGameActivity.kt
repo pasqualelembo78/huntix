@@ -31,7 +31,7 @@ import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.node.AnchorNode
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Scale
 import io.github.sceneview.node.CubeNode
@@ -124,10 +124,6 @@ abstract class ARGameActivity : AppCompatActivity() {
         sceneView.onSessionUpdated = { s, f ->
             lastSession = s
             lastFrame = f
-            // Protezione: assicuriamoci che il renderer sia disponibile
-            if (sceneView.view?.renderer == null) {
-                return@onSessionUpdated
-            }
             android.util.Log.d("ARGameActivity", "Session updated, tracking=${f.camera.trackingState}")
             if (!trackingReady && f.camera.trackingState == TrackingState.TRACKING) {
                 trackingReady = true

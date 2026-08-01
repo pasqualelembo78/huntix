@@ -254,7 +254,7 @@ class PoiSearchPanel @JvmOverloads constructor(
         val pois = loadedPois
         Thread {
             val results = mgr.filterPois(q, pois)
-            handler.post {
+            handler?.post {
                 if (currentGen != generation) return@post
                 renderResults(results, q)
             }

@@ -4,7 +4,7 @@ import android.os.SystemClock
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import dev.romainguy.kotlin.math.Float3
-import io.github.sceneview.node.AnchorNode
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry

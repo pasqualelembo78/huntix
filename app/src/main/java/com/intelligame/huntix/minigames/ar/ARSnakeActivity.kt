@@ -5,7 +5,7 @@ import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
-import io.github.sceneview.node.AnchorNode
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
