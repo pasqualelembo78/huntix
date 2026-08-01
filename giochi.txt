@@ -1,0 +1,67 @@
+# MiniGiochi Huntix — inventario completo (normale + AR)
+# Stato: tutti i giochi sono implementati e presenti nell'hub (MiniGamesHubActivity).
+# Formato per riga: posizione | nome | modalità | classe | stato | note
+
+================================================================
+ PARTE 1 — GIOCHI CLASSICI (modo normale, 2D)
+================================================================
+1   | 2048              | Normale   | Game2048Activity.kt        | ✅ completo | griglia 4x4, fusione swipe, +MVC/Xp
+2   | Snake             | Normale   | SnakeActivity.kt           | ✅ completo | serpente su griglia, cibo, crescita
+3   | Campo Minato       | Normale   | MinesweeperActivity.kt     | ✅ completo | 9x9, 10 mine, bandiera, flood reveal
+4   | Flappy Egg         | Normale   | FlappyEggActivity.kt       | ✅ completo | gravity/tap, tubi, collisioni
+5   | Forza 4           | Normale   | ConnectFourActivity.kt     | ✅ completo | 7x6, 2P vs CPU, heuristica vinci/blocca
+6   | Impiccato         | Normale   | HangmanActivity.kt         | ✅ completo | parole IT, 7 stadi, tastiera A-Z
+7   | Tris              | Normale   | TicTacToeActivity.kt       | ✅ completo | 3x3, vs CPU, heuristica perfetta
+8   | Simon             | Normale   | SimonActivity.kt           | ✅ completo | sequenza colori, input utente
+
+================================================================
+ PARTE 2 — GIOCHI CLASSICI IN REALTÀ APPROFONDATA (ARCore 3D)
+================================================================
+9   | AR 2048            | AR        | AR2048Activity.kt          | ✅ completo | uova fuse in arena 3D, colore+dimensione= valore, suono alla fusione
+10  | AR Snake           | AR        | ARSnakeActivity.kt         | ✅ completo | serpente di uova luminose nella stanza, caccia uova dorate
+11  | AR Campo Minato    | AR        | ARMinesweeperActivity.kt   | ✅ completo | 9x9 di uova in AR, colori classici, modalità bandiera HUD
+12  | AR Flappy Egg      | AR        | ARFlappyEggActivity.kt     | ✅ completo | uovo tra tubi 3D che avanzano nella stanza
+13  | AR Forza 4        | AR        | ARConnectFourActivity.kt   | ✅ completo | 7 colonne di uova in aria, caduta gravità
+14  | AR Impiccato      | AR        | ARHangmanActivity.kt       | ✅ completo | forca 3D con uovo che cade, lettere-uova
+15  | AR Tris           | AR        | ARTicTacToeActivity.kt     | ✅ completo | 3x3 di uova in aria (verde=TU, viola=CPU)
+16  | AR Simon          | AR        | ARSimonActivity.kt         | ✅ completo | 4 uova colorate sospese che lampeggiano
+17  | AR Memory         | AR        | ARMemoryActivity.kt        | ✅ esistente (legacy) |
+18  | AR Scegli Numero  | AR        | ARNumberPickActivity.kt    | ✅ esistente (legacy) |
+19  | AR Carta Alta     | AR        | ARHighCardActivity.kt      | ✅ esistente (legacy) |
+20  | AR Prendi Uovo    | AR        | ARCatchEggActivity.kt      | ✅ esistente (legacy) |
+21  | AR Match 3        | AR        | ARMatch3Activity.kt        | ✅ esistente (legacy) |
+
+================================================================
+ PARTE 3 — GIOCHI EXCLUSIVI AR (non hanno versione normale)
+================================================================
+22  | AR Egg Shooter    | AR-only   | AREggShooterActivity.kt    | ✅ esistente (legacy) |
+23  | AR Color Bomb     | AR-only   | ARColorBombActivity.kt     | ✅ esistente (legacy) |
+24  | AR Egg Radar      | AR-only   | AREggRadarActivity.kt      | ✅ esistente (legacy) |
+25  | AR Egg Slingshot  | AR-only   | AREggSlingshotActivity.kt  | ✅ NUOVO (showcase) | catapulta su piano reale, traiettoria balistica, audio 3D, esplosioni, haptic
+
+================================================================
+ PARTE 4 — GIOCHI DI BATTAGLIA (sempre disponibili, nessun limite)
+================================================================
+26  | Battaglia 3D      | Normale   | FighterSelectActivity.kt   | ✅ esistente | AR battle, nessun play-limit
+
+================================================================
+ MOTORE IMMERSIVO — feature aggiunte a ARGameActivity
+================================================================
+- Audio spaziale (SpatialAudio.kt): panning + attutimento distanza, suoni generati PCM
+- Rilevamento piani + depth (Config.PlaneFindingMode.HORIZONTAL + DepthMode.AUTOMATIC)
+- tryAnchorToPlane(): ancorare al centro su un piano reale (tavolo/pavimento)
+- Haptics (vibrazione light/heavy)
+- Particelle esplosione (burst/fx) animate ogni frame (tickEngine)
+- Input gesture (premi/trascina) per slingshot
+- NOTA: ARCore 1.47 in bundle NON espone getHands() → hand-tracking vero non disponibile;
+  implementata interazione a gestore (hold-to-grip). Depth API pronta come base per proximity.
+
+================================================================
+ REGISTRI — dove vivono
+================================================================
+- Elenco giochi + toggle Normale/AR + griglia con mini-preview → MiniGamesHubActivity.kt
+- Mini preview Canvas → GamePreviewView.kt (icona per ogni gameId)
+- Base AR → ARGameActivity.kt (+ SpatialAudio.kt)
+- Limiti di gioco/giorno → MiniGameManager.kt (MAX_PLAYS_MAP, GAME_*_id)
+- Activity registrate → AndroidManifest.xml (sezione "AR Minigames")
+- Ricompensi/MVC → MiniGameManager.applyReward (consumo giocata dentro l'activity)

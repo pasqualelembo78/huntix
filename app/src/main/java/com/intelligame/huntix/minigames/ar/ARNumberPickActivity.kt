@@ -11,10 +11,14 @@ class ARNumberPickActivity : ARGameActivity() {
     private val slots = mutableListOf<AREgg>()
 
     override fun onGameCreate() {
+        android.util.Log.d("ARNumberPickActivity", "onGameCreate called")
         lives = 3; score = 0; round = 0
         statusText.text = "Number Pick AR: scegli l'uovo giusto! 🔢"
         startGame()
-        whenReady { nextRound() }
+        whenReady { 
+            android.util.Log.d("ARNumberPickActivity", "Tracking ready, starting rounds")
+            nextRound() 
+        }
     }
 
     private fun nextRound() {

@@ -58,19 +58,33 @@ object MiniGameManager {
     const val GAME_CATCH_EGG   = "catch_egg"
     const val GAME_MATCH3      = "match3"
 
+    // ─── Nuovi giochi classici (v7) ──────────────────────────────
+    const val GAME_2048        = "2048"
+    const val GAME_SNAKE       = "snake"
+    const val GAME_MINESWEEPER = "minesweeper"
+    const val GAME_FLAPPY      = "flappy_egg"
+    const val GAME_CONNECT4    = "connect4"
+    const val GAME_HANGMAN     = "hangman"
+    const val GAME_TIC_TAC_TOE = "tic_tac_toe"
+    const val GAME_SIMON       = "simon"
+
     // ─── AR-Native exclusive game IDs ────────────────────────────
     const val GAME_AR_SHOOTER   = "ar_egg_shooter"
     const val GAME_AR_BOMB      = "ar_color_bomb"
     const val GAME_AR_RADAR     = "ar_egg_radar"
+    const val GAME_SLINGSHOT    = "ar_slingshot"
 
     val ALL_GAME_IDS = listOf(
         GAME_MEMORY,
         GAME_NUMBER_PICK, GAME_HIGH_CARD,
-        GAME_CATCH_EGG, GAME_MATCH3
+        GAME_CATCH_EGG, GAME_MATCH3,
+        GAME_2048, GAME_SNAKE, GAME_MINESWEEPER, GAME_FLAPPY,
+        GAME_CONNECT4, GAME_HANGMAN, GAME_TIC_TAC_TOE, GAME_SIMON,
+        GAME_SLINGSHOT
     )
 
     val AR_NATIVE_GAME_IDS = listOf(
-        GAME_AR_SHOOTER, GAME_AR_BOMB, GAME_AR_RADAR
+        GAME_AR_SHOOTER, GAME_AR_BOMB, GAME_AR_RADAR, GAME_SLINGSHOT
     )
 
     private val MAX_PLAYS_MAP = mapOf(
@@ -80,10 +94,20 @@ object MiniGameManager {
 
         GAME_CATCH_EGG     to 3,
         GAME_MATCH3        to 3,
+        // Nuovi giochi classici
+        GAME_2048          to 3,
+        GAME_SNAKE         to 3,
+        GAME_MINESWEEPER   to 3,
+        GAME_FLAPPY        to 3,
+        GAME_CONNECT4      to 3,
+        GAME_HANGMAN       to 3,
+        GAME_TIC_TAC_TOE   to 3,
+        GAME_SIMON         to 3,
         // AR-Native exclusives
         GAME_AR_SHOOTER    to 3,
         GAME_AR_BOMB       to 3,
-        GAME_AR_RADAR      to 3
+        GAME_AR_RADAR      to 3,
+        GAME_SLINGSHOT     to 3
     )
 
     // ─── Key helpers ─────────────────────────────────────────────

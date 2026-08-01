@@ -54,7 +54,11 @@ class PoiSearchPanel @JvmOverloads constructor(
     private var loadingPois = false
     private var generation = 0
 
-    private val handler = Handler(Looper.getMainLooper())
+    private val handler: Handler? = try {
+        Handler(Looper.getMainLooper())
+    } catch (e: Exception) {
+        null
+    }
     private var debounceRunnable: Runnable? = null
 
     private lateinit var regionSpinner: Spinner
@@ -111,10 +115,12 @@ class PoiSearchPanel @JvmOverloads constructor(
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    debounceRunnable?.let(handler::removeCallbacks)
                     val query = s?.toString() ?: ""
-                    debounceRunnable = Runnable { runQuery(query) }
-                    handler.postDelayed(debounceRunnable!!, 250)
+                    val h = handler ?: return
+                    h.removeCallbacksAndMessages(null)
+
+                    val runnable = Runnable { runQuery(query) }
+                    h.postDelayed(runnable, 250)
                 }
             })
         }

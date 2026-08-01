@@ -1,14 +1,28 @@
 package com.intelligame.huntix
 
+import android.app.Dialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.widget.GridLayout
 import android.widget.LinearLayout
-import androidx.appcompat.app.AppCompatActivity
+import android.widget.TextView
+import android.widget.Toast
 import com.intelligame.huntix.managers.MiniGameManager
+import com.intelligame.huntix.managers.ResearchTaskManager
 import com.intelligame.huntix.minigames.*
+import com.intelligame.huntix.minigames.ar.*
 
 /**
- * MiniGamesHubActivity — hub centrale di tutti i minigiochi (classici + AR).
+ * MiniGamesHubActivity — hub centrale dei minigiochi.
+ *
+ * Ristrutturato con una levetta di filtro (Tutti / Normali / AR), una
+ * griglia ordinata di schede e una mini-antePRIMA grafica per ogni gioco.
+ * Ogni gioco che ha sia la versione normale che quella AR mostra una scelta
+ * di modalità all'apertura.
  */
 class MiniGamesHubActivity : BaseNavActivity() {
 
@@ -16,55 +30,234 @@ class MiniGamesHubActivity : BaseNavActivity() {
 
     data class GameEntry(
         val id: String, val label: String, val emoji: String,
-        val cls: Class<*>, val isAr: Boolean, val limitPlays: Boolean = true
-    )
+        val cls: Class<*>?, val arCls: Class<*>?, val limitPlays: Boolean = true
+    ) {
+        val hasNormal: Boolean get() = cls != null
+        val hasAr: Boolean get() = arCls != null
+    }
 
     private val games = listOf(
-        GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, false, limitPlays = false),
-        GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, false),
-        GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, false),
-        GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, false),
-        GameEntry(MiniGameManager.GAME_CATCH_EGG, "Prendi l'Uovo", "🥚", CatchEggActivity::class.java, false),
-        GameEntry(MiniGameManager.GAME_MATCH3, "Match 3", "💎", Match3Activity::class.java, false),
-        GameEntry(MiniGameManager.GAME_AR_SHOOTER, "AR Egg Shooter", "🔫", com.intelligame.huntix.minigames.ar.AREggShooterActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_AR_BOMB, "AR Color Bomb", "💣", com.intelligame.huntix.minigames.ar.ARColorBombActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_AR_RADAR, "AR Egg Radar", "📡", com.intelligame.huntix.minigames.ar.AREggRadarActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_HIGH_CARD, "AR Carta Alta", "🃏", com.intelligame.huntix.minigames.ar.ARHighCardActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_MATCH3, "AR Match 3", "💎", com.intelligame.huntix.minigames.ar.ARMatch3Activity::class.java, true),
-        GameEntry(MiniGameManager.GAME_MEMORY, "AR Memory", "🧠", com.intelligame.huntix.minigames.ar.ARMemoryActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_NUMBER_PICK, "AR Numero", "🔢", com.intelligame.huntix.minigames.ar.ARNumberPickActivity::class.java, true),
-        GameEntry(MiniGameManager.GAME_CATCH_EGG, "AR Prendi Uovo", "🥚", com.intelligame.huntix.minigames.ar.ARCatchEggActivity::class.java, true)
+        GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, null, limitPlays = false),
+        GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, ARMemoryActivity::class.java),
+        GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, ARNumberPickActivity::class.java),
+        GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, ARHighCardActivity::class.java),
+        GameEntry(MiniGameManager.GAME_CATCH_EGG, "Prendi l'Uovo", "🥚", CatchEggActivity::class.java, ARCatchEggActivity::class.java),
+        GameEntry(MiniGameManager.GAME_MATCH3, "Match 3", "💎", Match3Activity::class.java, ARMatch3Activity::class.java),
+        GameEntry(MiniGameManager.GAME_2048, "2048", "🧩", Game2048Activity::class.java, AR2048Activity::class.java),
+        GameEntry(MiniGameManager.GAME_SNAKE, "Snake", "🐍", SnakeActivity::class.java, ARSnakeActivity::class.java),
+        GameEntry(MiniGameManager.GAME_MINESWEEPER, "Campo Minato", "💣", MinesweeperActivity::class.java, ARMinesweeperActivity::class.java),
+        GameEntry(MiniGameManager.GAME_FLAPPY, "Flappy Egg", "🐣", FlappyEggActivity::class.java, ARFlappyEggActivity::class.java),
+        GameEntry(MiniGameManager.GAME_CONNECT4, "Forza 4", "🔵", ConnectFourActivity::class.java, ARConnectFourActivity::class.java),
+        GameEntry(MiniGameManager.GAME_HANGMAN, "Impiccato", "🙈", HangmanActivity::class.java, ARHangmanActivity::class.java),
+        GameEntry(MiniGameManager.GAME_TIC_TAC_TOE, "Tris", "⭕", TicTacToeActivity::class.java, ARTicTacToeActivity::class.java),
+        GameEntry(MiniGameManager.GAME_SIMON, "Simon", "🎨", SimonActivity::class.java, ARSimonActivity::class.java),
+        GameEntry(MiniGameManager.GAME_AR_SHOOTER, "Egg Shooter", "🔫", null, AREggShooterActivity::class.java),
+        GameEntry(MiniGameManager.GAME_AR_BOMB, "Color Bomb", "💣", null, ARColorBombActivity::class.java),
+        GameEntry(MiniGameManager.GAME_AR_RADAR, "Egg Radar", "📡", null, AREggRadarActivity::class.java),
+        GameEntry(MiniGameManager.GAME_SLINGSHOT, "Egg Slingshot", "🎯", null, AREggSlingshotActivity::class.java)
     )
+
+    private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR
+    private lateinit var gridBox: GridLayout
+    private val filterButtons = mutableListOf<TextView>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = this
-        val box = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        render(box)
-        setContentView(UiKit.scroll(c, UiKit.title(c, "Minigiochi", "🎮"), UiKit.section(c, "Scegli un gioco"), box))
+        val content = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+
+        val filterRow = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, UiKit.dp(c, 4), 0, UiKit.dp(c, 8))
+        }
+        val labels = listOf("Tutti", "Normali", "AR")
+        for (i in 0 until 3) {
+            val btn = TextView(c).apply {
+                text = labels[i]
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setPadding(UiKit.dp(c, 16), UiKit.dp(c, 7), UiKit.dp(c, 16), UiKit.dp(c, 7))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener { setFilter(i) }
+            }
+            filterButtons.add(btn)
+            filterRow.addView(btn)
+        }
+        content.addView(filterRow)
+
+        gridBox = GridLayout(c).apply {
+            columnCount = 2
+        }
+        content.addView(gridBox)
+
+        setContentView(UiKit.scroll(c, UiKit.title(c, "Minigiochi", "🎮"), UiKit.section(c, "Scegli un gioco"), content))
+        render()
     }
 
-    private fun render(box: LinearLayout) {
-        box.removeAllViews()
+    private fun setFilter(i: Int) {
+        if (filter == i) return
+        filter = i
+        render()
+    }
+
+    private fun visibleGames(): List<GameEntry> = when (filter) {
+        1 -> games.filter { it.hasNormal }
+        2 -> games.filter { it.hasAr }
+        else -> games
+    }
+
+    private fun render() {
         val c = this
-        games.forEach { g ->
-            if (!g.limitPlays) {
-            box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}", UiKit.PURPLE) {
-                com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(c, "play_minigame")
-                startActivity(Intent(c, g.cls))
-            })
-                return@forEach
-            }
-            val remaining = try { MiniGameManager.remainingPlays(c, g.id) } catch (_: Exception) { 3 }
-            val can = remaining > 0
-            box.addView(UiKit.button(c, "${if (g.isAr) "📱 " else ""}${g.emoji}  ${g.label}  (${remaining})",
-                if (can) UiKit.PURPLE else "#444") {
-                if (!can) return@button
-                // Il consumo della giocata è gestito dall'activity stessa
-                // (così conta anche i "Gioca Ancora"), non qui, per evitare
-                // doppi conteggi. L'hub mostra solo le rimanenti.
-                startActivity(Intent(c, g.cls))
+        for (i in 0 until 3) {
+            val active = i == filter
+            val btn = filterButtons[i]
+            btn.setTextColor(Color.WHITE)
+            btn.setBackgroundColor(Color.parseColor(if (active) UiKit.ACCENT else "#20224A"))
+        }
+        gridBox.removeAllViews()
+        val list = visibleGames()
+        list.forEach { g ->
+            gridBox.addView(buildCard(g), GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            ).apply {
+                width = 0
+                height = GridLayout.LayoutParams.WRAP_CONTENT
+                setMargins(UiKit.dp(c, 4), UiKit.dp(c, 4), UiKit.dp(c, 4), UiKit.dp(c, 4))
             })
         }
+    }
+
+    private fun buildCard(g: GameEntry): View {
+        val c = this
+        val card = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(UiKit.dp(c, 8), UiKit.dp(c, 8), UiKit.dp(c, 8), UiKit.dp(c, 6))
+            isClickable = true
+            setBackgroundColor(Color.parseColor("#161838"))
+            setOnClickListener { openGame(g) }
+        }
+
+        val preview = GamePreviewView(c).apply {
+            setGame(g.id, g.hasAr)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, UiKit.dp(c, 78)
+            )
+        }
+        card.addView(preview)
+
+        val nameRow = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, UiKit.dp(c, 6), 0, 0)
+        }
+        nameRow.addView(TextView(c).apply {
+            text = "${g.emoji}  ${g.label}"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+
+        val remaining = if (g.limitPlays) {
+            try { MiniGameManager.remainingPlays(c, g.id) } catch (_: Exception) { 3 }
+        } else null
+        nameRow.addView(TextView(c).apply {
+            text = remaining?.let { "⚡ $it" } ?: "∞"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor(if (remaining == null || remaining > 0) UiKit.GREEN else "#FF5A5A"))
+        })
+        card.addView(nameRow)
+
+        val chips = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, UiKit.dp(c, 4), 0, 0)
+        }
+        if (g.hasNormal) chips.addView(chip(c, "📱 Normale"))
+        if (g.hasAr) chips.addView(chip(c, "🔮 AR"))
+        card.addView(chips)
+
+        return card
+    }
+
+    private fun chip(c: MiniGamesHubActivity, text: String): TextView =
+        TextView(c).apply {
+            this.text = text
+            textSize = 10f
+            setTextColor(Color.parseColor(UiKit.ACCENT))
+            setBackgroundColor(0x33A78BFA.toInt())
+            setPadding(UiKit.dp(c, 7), UiKit.dp(c, 2), UiKit.dp(c, 7), UiKit.dp(c, 2))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginEnd = UiKit.dp(c, 5) }
+        }
+
+    private fun openGame(g: GameEntry) {
+        val normal = g.cls
+        val ar = g.arCls
+        when {
+            normal != null && ar != null -> showModeDialog(g)
+            normal != null -> launch(normal, g)
+            ar != null -> launch(ar, g)
+        }
+    }
+
+    private fun launch(cls: Class<*>, g: GameEntry) {
+        if (g.limitPlays) {
+            val remaining = try { MiniGameManager.remainingPlays(this, g.id) } catch (_: Exception) { 3 }
+            if (remaining <= 0) {
+                Toast.makeText(this, "Giocate esaurite per oggi! Torna domani 🌙", Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+        try { ResearchTaskManager.trackProgress(this, "play_minigame") } catch (_: Exception) {}
+        // Il consumo della giocata è gestito dall'activity stessa.
+        startActivity(Intent(this, cls))
+    }
+
+    private fun showModeDialog(g: GameEntry) {
+        val c = this
+        val dialog = Dialog(c)
+        val box = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(UiKit.dp(c, 22), UiKit.dp(c, 22), UiKit.dp(c, 22), UiKit.dp(c, 18))
+        }
+        box.addView(TextView(c).apply {
+            text = "${g.emoji}  ${g.label}"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        })
+        box.addView(TextView(c).apply {
+            text = "Scegli la modalità"
+            textSize = 12f
+            setTextColor(Color.parseColor(UiKit.TEXT_DIM))
+            gravity = Gravity.CENTER
+            setPadding(0, UiKit.dp(c, 4), 0, UiKit.dp(c, 12))
+        })
+        box.addView(UiKit.button(c, "📱  Normale", UiKit.ACCENT) {
+            dialog.dismiss()
+            launch(g.cls!!, g)
+        })
+        box.addView(UiKit.button(c, "🔮  Realtà Aumentata", UiKit.GREEN) {
+            dialog.dismiss()
+            launch(g.arCls!!, g)
+        })
+        box.addView(UiKit.button(c, "✕  Annulla", UiKit.TEXT_DIM) { dialog.dismiss() })
+
+        dialog.setContentView(box)
+        if (dialog.window != null) {
+            dialog.window!!.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.parseColor("#120D26")))
+            dialog.window!!.setLayout(
+                (resources.displayMetrics.widthPixels * 0.88f).toInt(),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        dialog.setCancelable(true)
+        dialog.show()
     }
 }

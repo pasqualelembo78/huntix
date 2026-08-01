@@ -319,25 +319,34 @@
             android:screenOrientation="portrait"/>
 
         <!-- AR Minigames -->
-        <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.ARMatch3Activity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.ARHighCardActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.ARNumberPickActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARMatch3Activity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARHighCardActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARNumberPickActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <!-- AR Native exclusive games -->
-        <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
-        <activity android:name=".minigames.ar.AREggRadarActivity" android:screenOrientation="portrait" android:theme="@style/Theme.AppCompat.NoActionBar"/>
+        <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.AREggRadarActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARSnakeActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARSimonActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARTicTacToeActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.AR2048Activity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARFlappyEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARConnectFourActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARMinesweeperActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARHangmanActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.AREggSlingshotActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
 
             <activity android:name=".TutorialActivity"
-            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:theme="@style/Theme.ARProto.Fullscreen"
             android:screenOrientation="portrait" />
     
         <!-- ── Ready Player Me Avatar Creator ─────────────────────── -->
         <activity
             android:name=".avatar.ReadyPlayerMeActivity"
             android:label="Crea Avatar"
-            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:theme="@style/Theme.ARProto.Fullscreen"
             android:screenOrientation="portrait"
             android:exported="false" />
 
@@ -379,15 +388,15 @@
 
     <activity
         android:name=".social.ChatActivity"
-        android:theme="@style/Theme.AppCompat.NoActionBar"
+        android:theme="@style/Theme.ARProto.Fullscreen"
         android:screenOrientation="portrait"
         android:exported="false" />
 
 
-    <activity android:name=".ProfileSetupActivity" android:theme="@style/Theme.AppCompat.NoActionBar" android:screenOrientation="portrait" android:exported="false" />
+    <activity android:name=".ProfileSetupActivity" android:theme="@style/Theme.ARProto.Fullscreen" android:screenOrientation="portrait" android:exported="false" />
 
 
-    <activity android:name=".social.ChatListActivity" android:theme="@style/Theme.AppCompat.NoActionBar" android:screenOrientation="portrait" android:exported="false" />
+    <activity android:name=".social.ChatListActivity" android:theme="@style/Theme.ARProto.Fullscreen" android:screenOrientation="portrait" android:exported="false" />
 
         <!-- ═══ EVENTI SPECIALI — Caccia dell'Elfo ════════════ -->
         <activity android:name=".ui.SpecialEventsActivity"
@@ -397,22 +406,22 @@
         <activity android:name=".ui.ElfHuntActivity"
             android:exported="false"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.NoActionBar"/>
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <activity android:name=".ui.TombolataActivity"
             android:exported="false"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.NoActionBar"/>
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <activity android:name=".ui.TombolaRapidaActivity"
             android:exported="false"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.NoActionBar"/>
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <activity android:name=".ui.BriscolaActivity"
             android:exported="false"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.NoActionBar"/>
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <receiver android:name=".gamification.DailyEventReceiver"
             android:exported="false"/>
