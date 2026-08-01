@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
@@ -34,33 +35,33 @@ class ARTicTacToeActivity : ARGameActivity() {
     private var cpuThinking = false
     private var cpuCb: Runnable? = null
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         board.fill(EMPTY)
         gameOver = false
         cpuThinking = false
         nodeMap.clear()
-        statusText.text = "Tocca un'uovo per giocare… ⭕"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Tu = verde"
         timerText.text = "🤖 CPU = viola"
         scoreText.text = "Tris"
         handler.removeCallbacksAndMessages(null)
         startGame()
-        whenReady { build() }
+        whenReady { placeArena { build(it) } }
     }
 
-    private fun build() {
-        val a = spawnAnchor(0.95f, 0f, 0f)
-        if (a == null) {
-            if (running) postDelayed(400) { build() }
-            return
-        }
+    private fun build(a: AnchorNode) {
         val cell = 0.30f
         for (i in 0 until 9) {
             val x = (i % 3 - 1) * cell
             val y = (1 - i / 3) * cell
             val node = eggNode(C_EMPTY, 0.13f)
-            node.position = Position(x, y, 0f)
+            node.position = Position(x, 0.13f, -y)
             a.addChildNode(node)
             cells[i] = node
             nodeMap[node] = i
@@ -99,7 +100,7 @@ class ARTicTacToeActivity : ARGameActivity() {
         node.scale = io.github.sceneview.math.Scale(1.25f, 1.5f, 1.25f)
         val color = if (who == PLAYER) C_X else C_O
         val newNode = eggNode(color, 0.13f)
-        newNode.position = Position(node.position.x, node.position.y, node.position.z)
+        newNode.position = Position(node.position.x, node.position.y + 0.03f, node.position.z)
         nodeMap.remove(node)
         val parent = node.parent
         node.destroy()

@@ -52,6 +52,11 @@ class ARSnakeActivity : ARGameActivity() {
     private var lastNow = 0L
     private var phase = 0f
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         score = 0
         tickMs = TICK_START
@@ -61,23 +66,19 @@ class ARSnakeActivity : ARGameActivity() {
         body.clear()
         segments.clear()
         lastNow = SystemClock.elapsedRealtime()
-        statusText.text = "Scorri per guidare il serpente… 🐍"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Caccia alle Uova"
         timerText.text = "Lunghezza: 3"
         scoreText.text = "0 pt"
         buildSwipeLayer()
         startGame()
-        whenReady { buildArena() }
+        whenReady { placeArena { buildArena(it) } }
     }
 
     // ── arena e nodi ─────────────────────────────────────────────
 
-    private fun buildArena() {
-        val anchor = spawnAnchor(1.1f, 0f, -0.15f) ?: run {
-            if (running) postDelayed(400) { buildArena() }
-            return
-        }
+    private fun buildArena(anchor: AnchorNode) {
         arena = anchor
 
         val hx = COLS / 2
@@ -117,7 +118,7 @@ class ARSnakeActivity : ARGameActivity() {
         )
         for ((x, y) in corners) {
             val m = eggNode(C_MARKER, 0.03f)
-            m.position = Position(x, y, 0f)
+            m.position = Position(x, 0.03f, -y)
             anchor.addChildNode(m)
         }
     }
@@ -130,7 +131,7 @@ class ARSnakeActivity : ARGameActivity() {
         foodCell = free.random()
         val f = eggNode(C_GOLD, 0.09f)
         val (cx, cy) = cellPos(foodCell)
-        f.position = Position(cx, cy, 0f)
+        f.position = Position(cx, 0.09f, -cy)
         anchor.addChildNode(f)
         food = f
     }
@@ -197,14 +198,14 @@ class ARSnakeActivity : ARGameActivity() {
             if (i >= segments.size) break
             val (x, y) = cellPos(body.elementAt(i))
             val bob = sin(phase + i * 0.6f) * 0.015f
-            segments[i].position = Position(x, y, bob)
+            segments[i].position = Position(x, 0.075f + bob, -y)
         }
     }
 
     private fun animateNodes() {
         val f = food ?: return
         val (fx, fy) = cellPos(foodCell)
-        f.position = Position(fx, fy, sin(phase * 1.6f) * 0.04f)
+        f.position = Position(fx, 0.09f + sin(phase * 1.6f) * 0.04f, -fy)
     }
 
     // ── controlli ────────────────────────────────────────────────

@@ -45,6 +45,11 @@ class AR2048Activity : ARGameActivity() {
     private var gameOver = false
     private var arena: AnchorNode? = null
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         android.util.Log.d("AR2048Activity", "onGameCreate called")
         board.fill(0)
@@ -54,32 +59,23 @@ class AR2048Activity : ARGameActivity() {
         emptyCells.clear()
         score = 0
         gameOver = false
-        statusText.text = "Scorri per fondere le uova… 🧩"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Uova 2048"
         timerText.text = "Max: 2"
         scoreText.text = "Punti: 0"
         startGame()
-        whenReady { 
-            android.util.Log.d("AR2048Activity", "Tracking ready, building arena")
-            build() 
-        }
+        whenReady { placeArena { build(it) } }
     }
 
-    private fun build() {
+    private fun build(a: AnchorNode) {
         android.util.Log.d("AR2048Activity", "build() called")
-        val a = spawnAnchor(1.0f, 0f, -0.1f)
-        if (a == null) {
-            android.util.Log.w("AR2048Activity", "spawnAnchor returned null, retrying...")
-            postDelayed(400) { build() }
-            return
-        }
         arena = a
         android.util.Log.d("AR2048Activity", "Arena anchor created, spawning cells")
         for (i in 0 until 16) {
             val (x, y) = cellPos(i)
             val e = eggNode(C_EMPTY, 0.13f)
-            e.position = Position(x, y, -0.02f)
+            e.position = Position(x, 0.13f, -y)
             a.addChildNode(e)
             emptyCells[i] = e
         }
@@ -189,7 +185,7 @@ class AR2048Activity : ARGameActivity() {
             tiles.remove(i)
             val (x, y) = cellPos(i)
             val node = eggNode(wantColor, wantRadius).apply {
-                position = Position(x, y, 0.02f)
+                position = Position(x, wantRadius + 0.04f, -y)
                 scale = io.github.sceneview.math.Scale(1f, 0.75f, 1f)
             }
             arenaRef.addChildNode(node)

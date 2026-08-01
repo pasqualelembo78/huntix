@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Scale
 import io.github.sceneview.node.Node
@@ -33,6 +34,11 @@ class ARSimonActivity : ARGameActivity() {
     private var playing = false
     private var gameOver = false
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         sequence.clear()
         sequence.add(Random.nextInt(4))
@@ -41,27 +47,22 @@ class ARSimonActivity : ARGameActivity() {
         playing = false
         gameOver = false
         nodeMap.clear()
-        statusText.text = "Inquadra lo spazio davanti a te… 🎨"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Uova luminose"
         timerText.text = ""
         scoreText.text = "Punti: 0"
         handler.removeCallbacksAndMessages(null)
         startGame()
-        whenReady { build() }
+        whenReady { placeArena { build(it) } }
     }
 
-    private fun build() {
-        val a = spawnAnchor(0.95f, 0f, 0f)
-        if (a == null) {
-            if (running) postDelayed(400) { build() }
-            return
-        }
+    private fun build(a: AnchorNode) {
         val layout = listOf(-0.38f to 0.38f, 0.38f to 0.38f, -0.38f to -0.38f, 0.38f to -0.38f)
         for (i in 0 until 4) {
             val (x, y) = layout[i]
             val node = eggNode(COLORS[i], 0.14f)
-            node.position = Position(x, y, 0f)
+            node.position = Position(x, 0.14f, -y)
             a.addChildNode(node)
             eggs[i] = node
             nodeMap[node] = i

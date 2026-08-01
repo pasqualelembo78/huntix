@@ -1,6 +1,8 @@
 package com.intelligame.huntix.minigames.ar
 
+import com.google.ar.core.Pose
 import com.intelligame.huntix.managers.MiniGameManager
+import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Scale
 
 class ARMatch3Activity : ARGameActivity() {
@@ -13,18 +15,29 @@ class ARMatch3Activity : ARGameActivity() {
     private var lock = false
     private var round = 0
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         score = 0; selected = -1; lock = false; round = 0
         nodes.forEach { it?.let { e -> removeEgg(e) } }
-        statusText.text = "Match 3 AR: allinea 3 cristalli uguali! 💎"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         startGame(); startTimer()
-        whenReady {
-            for (i in 0 until N) {
-                val col = i % 3; val row = i / 3
-                val egg = spawnEgg(grid[i], 1.0f, (col - 1) * 0.3f, (1 - row) * 0.28f, radius = 0.095f)
-                egg?.phase = i.toFloat()
-                nodes[i] = egg
-            }
+        whenReady { placeArena { build(it) } }
+    }
+
+    private fun build(a: AnchorNode) {
+        for (i in 0 until N) {
+            val col = i % 3; val row = i / 3
+            val local = Pose(
+                floatArrayOf((col - 1) * 0.3f, 0.095f, -(1 - row) * 0.28f),
+                floatArrayOf(0f, 0f, 0f, 1f)
+            )
+            val egg = spawnEggAt(a.anchor.pose.compose(local), grid[i], radius = 0.095f)
+            egg?.phase = i.toFloat()
+            nodes[i] = egg
         }
     }
 

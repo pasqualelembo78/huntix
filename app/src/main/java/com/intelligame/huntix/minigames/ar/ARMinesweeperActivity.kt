@@ -48,6 +48,11 @@ class ARMinesweeperActivity : ARGameActivity() {
     private var revealedCount = 0
     private var flagToggle: TextView? = null
 
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
     override fun onGameCreate() {
         cells.clear()
         nodeMap.clear()
@@ -56,26 +61,21 @@ class ARMinesweeperActivity : ARGameActivity() {
         flagMode = false
         minesPlaced = false
         revealedCount = 0
-        statusText.text = "Tocca un'uovo per rivelare 💣"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Campo Minato"
         timerText.text = "💣 $MINES"
         scoreText.text = "9×9"
         startGame()
-        whenReady { build() }
+        whenReady { placeArena { build(it) } }
     }
 
-    private fun build() {
-        val a = spawnAnchor(0.95f, 0f, -0.15f)
-        if (a == null) {
-            if (running) postDelayed(400) { build() }
-            return
-        }
+    private fun build(a: AnchorNode) {
         arena = a
         for (i in 0 until GRID * GRID) {
             val (x, y) = cellPos(i)
             val node = eggNode(C_EMPTY, 0.085f)
-            node.position = Position(x, y, 0f)
+            node.position = Position(x, 0.085f, -y)
             a.addChildNode(node)
             val cell = Cell(node)
             cells[i] = cell
@@ -190,7 +190,7 @@ class ARMinesweeperActivity : ARGameActivity() {
         if (old != null) removeNode(old)
         val (x, y) = cellPos(i)
         val node = eggNode(color, radius)
-        node.position = Position(x, y, 0.02f)
+        node.position = Position(x, radius + 0.03f, -y)
         node.scale = io.github.sceneview.math.Scale(1f, ry, 1f)
         parent?.addChildNode(node)
         cell.node = node

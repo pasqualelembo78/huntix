@@ -1,6 +1,7 @@
 package com.intelligame.huntix.minigames.ar
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -39,6 +40,7 @@ import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -51,8 +53,25 @@ import kotlin.math.sin
  * pose della camera corrente, quindi resta sospeso nell'aria della stanza e
  * viene tracciato dal mondo reale. Il tocco viene risolto tramite l'hit-test
  * della scena ([ARSceneView.onTouchEvent]) che restituisce il nodo toccato.
+ *
+ * I giochi "posizionati" (griglie su tavolo, forca, Memory, ecc.) mostrano
+ * all'avvio un dialogo che permette di scegliere la [ARGameMode] con cui
+ * ancorare l'arena: 3D meshing (geometria reale via depth), rilevamento
+ * superfici (piani ARCore) o modalità libera (oggetti sospesi). La scelta
+ * viene ricordata tra un avvio e l'altro. I giochi "liberi" (uova volanti)
+ * restano sempre fluttuanti e non mostrano il dialogo.
  */
 abstract class ARGameActivity : AppCompatActivity() {
+
+    /** Modalità di posizionamento AR dello spazio di gioco. */
+    enum class ARGameMode { MESHING, PLANE, FREE }
+
+    /** Modalità attiva, ricordata tra un avvio e l'altro. */
+    protected var gameMode: ARGameMode = ARGameMode.PLANE
+        private set
+
+    /** Se true, all'avvio del gioco viene mostrato il dialogo di scelta modalità. */
+    protected var showsModeDialog = false
 
     protected lateinit var sceneView: ARSceneView
     protected lateinit var hud: FrameLayout
@@ -73,8 +92,6 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     /** Motore audio 3D (sintesi PCM + panning distanza). */
     protected val spatialAudio = SpatialAudio()
-    /** Se true, il gioco usa il rilevamento piani + depth (es. ambienti appoggiati). */
-    protected var usePlaneDetection = false
     /** Effetti di rottura/particelle animati ogni frame. */
     private val fx = mutableListOf<FxParticle>()
     private var fxLast = 0L
@@ -120,10 +137,10 @@ abstract class ARGameActivity : AppCompatActivity() {
             AppLog.i("ARGameActivity", "ARCore session created")
         }
         sceneView.configureSession { _, config ->
-            config.planeFindingMode = if (usePlaneDetection) Config.PlaneFindingMode.HORIZONTAL else Config.PlaneFindingMode.DISABLED
+            config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
             config.focusMode = Config.FocusMode.AUTO
-            config.depthMode = if (usePlaneDetection) Config.DepthMode.AUTOMATIC else Config.DepthMode.DISABLED
+            config.depthMode = Config.DepthMode.AUTOMATIC
             config.cloudAnchorMode = Config.CloudAnchorMode.DISABLED
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
         }
@@ -162,7 +179,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             android.util.Log.d("ARGameActivity", "Permission granted, calling onGameCreate")
             // Delay per permettere al display di stabilizzarsi
             handler.postDelayed({
-                onGameCreate()
+                onGameCreateWithMode()
             }, 200)
         } else {
             android.util.Log.d("ARGameActivity", "Requesting camera permission")
@@ -185,7 +202,54 @@ abstract class ARGameActivity : AppCompatActivity() {
         req: Int, permissions: Array<out String>, results: IntArray
     ) {
         super.onRequestPermissionsResult(req, permissions, results)
-        if (req == 1001) onGameCreate()
+        if (req == 1001) onGameCreateWithMode()
+    }
+
+    // ── modalità di gioco (scelta + persistenza) ─────────────────
+
+    private val modePrefs
+        get() = getSharedPreferences("ar_game_mode", Context.MODE_PRIVATE)
+
+    private fun loadGameMode() {
+        val name = modePrefs.getString("mode", ARGameMode.PLANE.name) ?: ARGameMode.PLANE.name
+        gameMode = runCatching { ARGameMode.valueOf(name) }.getOrDefault(ARGameMode.PLANE)
+    }
+
+    private fun persistGameMode() {
+        modePrefs.edit().putString("mode", gameMode.name).apply()
+    }
+
+    /**
+     * Punto d'ingresso del gioco: se la modalità è selezionabile mostra il
+     * dialogo di scelta (con l'ultima scelta pre-selezionata), poi costruisce
+     * il contenuto di gioco con [onGameCreate]. Se il dialogo viene chiuso
+     * senza conferma si parte comunque con la modalità corrente.
+     */
+    private fun onGameCreateWithMode() {
+        loadGameMode()
+        if (showsModeDialog) chooseGameMode { onGameCreate() }
+        else onGameCreate()
+    }
+
+    /** Dialogo di scelta della [ARGameMode], con l'ultima scelta pre-selezionata. */
+    protected fun chooseGameMode(onChosen: () -> Unit) {
+        val labels = arrayOf("🌍 3D Meshing", "📐 Rilevamento superfici", "🕊️ Modalità libera")
+        val modes = arrayOf(ARGameMode.MESHING, ARGameMode.PLANE, ARGameMode.FREE)
+        var picked = gameMode
+        AlertDialog.Builder(this)
+            .setTitle("🎮 Modalità di gioco")
+            .setMessage("Come vuoi posizionare il gioco nella stanza?")
+            .setSingleChoiceItems(labels, modes.indexOf(gameMode).coerceAtLeast(0)) { _, which ->
+                picked = modes[which]
+            }
+            .setPositiveButton("▶ Inizia") { _, _ ->
+                gameMode = picked
+                persistGameMode()
+                onChosen()
+            }
+            .setOnCancelListener { onChosen() }
+            .setCanceledOnTouchOutside(false)
+            .show()
     }
 
     private fun buildHud() {
@@ -355,16 +419,28 @@ abstract class ARGameActivity : AppCompatActivity() {
     private val sharedAnchors = mutableListOf<AnchorNode>()
 
     /**
+     * Crea un [AnchorNode] a partire da una [pose] assoluta, lo aggiunge alla
+     * scena e lo registra (verrà distrutto in restart()/onDestroy()). Restituisce
+     * null se la sessione non è disponibile o la creazione dell'anchor fallisce.
+     */
+    protected fun createAnchorNode(pose: Pose): AnchorNode? {
+        val session = lastSession ?: return null
+        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
+            AppLog.e("ARGameActivity", "createAnchorNode: createAnchor failed", it)
+            return null
+        }
+        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
+        sceneView.addChildNode(an)
+        sharedAnchors.add(an)
+        return an
+    }
+
+    /**
      * Crea un'ancora "arena" unica davanti alla camera (come [spawnEgg] ma senza
      * uovo): tutti i nodi del gioco vanno aggiunti come figli dell'[AnchorNode]
      * restituito, così condividono lo stesso sistema di coordinate locali.
      */
     protected fun spawnAnchor(forward: Float, right: Float, up: Float): AnchorNode? {
-        val session = lastSession ?: run {
-            android.util.Log.w("ARGameActivity", "spawnAnchor: session is null")
-            AppLog.w("ARGameActivity", "spawnAnchor: session is null")
-            return null
-        }
         val frame = lastFrame ?: run {
             android.util.Log.w("ARGameActivity", "spawnAnchor: frame is null")
             AppLog.w("ARGameActivity", "spawnAnchor: frame is null")
@@ -380,16 +456,10 @@ abstract class ARGameActivity : AppCompatActivity() {
             floatArrayOf(right, up, -forward),
             floatArrayOf(0f, 0f, 0f, 1f)
         )
-        val pose = camPose.compose(offset)
-        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
-            AppLog.e("ARGameActivity", "spawnAnchor: createAnchor failed", it)
-            return null
+        val an = createAnchorNode(camPose.compose(offset))
+        if (an != null) {
+            AppLog.i("ARGameActivity", "Arena anchor spawned, scene nodes=${sceneView.childNodes.size}")
         }
-        android.util.Log.d("ARGameActivity", "spawnAnchor: creating AnchorNode, engine=${sceneView.engine != null}")
-        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
-        sceneView.addChildNode(an)
-        sharedAnchors.add(an)
-        AppLog.i("ARGameActivity", "Arena anchor spawned, scene nodes=${sceneView.childNodes.size}")
         return an
     }
 
@@ -402,12 +472,14 @@ abstract class ARGameActivity : AppCompatActivity() {
         get() = lastFrame?.camera?.pose
 
     /**
-     * Ancora lanciata al centro dello schermo su un piano rilevato (floor/table).
-     * Necessita di [usePlaneDetection] = true. Restituisce null se nessun
-     * piano è stato inquadrato (ARCore depth-aided hitTest).
+     * Ancora lanciata al centro dello schermo su un piano rilevato (floor/table),
+     * depth-aided hitTest. Restituisce null se nessun piano è stato inquadrato.
+     *
+     * Nota: in [ARGameMode.MESHING] si preferisce [tryAnchorToMesh], che accetta
+     * anche geometria non-planare; [tryAnchorToPlane] è mantenuta come fallback
+     * e usata internamente da [tryArenaByMode].
      */
     protected fun tryAnchorToPlane(): AnchorNode? {
-        val session = lastSession ?: return null
         val frame = lastFrame ?: return null
         if (frame.camera.trackingState != TrackingState.TRACKING) return null
         val cx = (sceneView.width / 2f).toFloat()
@@ -417,11 +489,77 @@ abstract class ARGameActivity : AppCompatActivity() {
             val tr = h.trackable
             tr is Plane && tr.isPoseInPolygon(h.hitPose)
         } ?: return null
-        val anchor = session.createAnchor(planeHit.hitPose)
-        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
-        sceneView.addChildNode(an)
-        sharedAnchors.add(an)
-        return an
+        return createAnchorNode(planeHit.hitPose)
+    }
+
+    /**
+     * Ancora lanciata al centro dello schermo sulla geometria REALE (depth):
+     * accetta qualunque punto 3D restituito dall'hitTest (piani, point cloud,
+     * mesh di profondità) entro 0.15–5 m. Restituisce null se non c'è
+     * geometria inquadrata.
+     */
+    protected fun tryAnchorToMesh(): AnchorNode? {
+        val frame = lastFrame ?: return null
+        if (frame.camera.trackingState != TrackingState.TRACKING) return null
+        val cx = (sceneView.width / 2f).toFloat()
+        val cy = (sceneView.height / 2f).toFloat()
+        val hit = frame.hitTest(cx, cy)
+        val h = hit.firstOrNull() ?: return null
+        val dist = h.distance
+        if (dist < 0.15f || dist > 5f) return null
+        return createAnchorNode(h.hitPose)
+    }
+
+    /**
+     * Ancora unica dell'arena secondo la [gameMode] attiva:
+     * - [ARGameMode.MESHING] → geometria reale via depth ([tryAnchorToMesh]);
+     * - [ARGameMode.PLANE] → piano rilevato ([tryAnchorToPlane]);
+     * - [ARGameMode.FREE] → davanti alla camera, sospesa ([spawnAnchor]).
+     * [elevation] (m) solleva l'ancora sopra la superficie (per giochi verticali
+     * tipo Flappy poggiati su un tavolo); ignorata in [ARGameMode.FREE].
+     */
+    protected fun tryArenaByMode(elevation: Float = 0f): AnchorNode? {
+        val base = when (gameMode) {
+            ARGameMode.MESHING -> tryAnchorToMesh()
+            ARGameMode.PLANE -> tryAnchorToPlane()
+            ARGameMode.FREE -> spawnAnchor(1.05f, 0f, 0f)
+        } ?: return null
+        if (elevation == 0f || gameMode == ARGameMode.FREE) return base
+        val raisedPose = base.anchor.pose.compose(
+            Pose(floatArrayOf(0f, elevation, 0f), floatArrayOf(0f, 0f, 0f, 1f))
+        )
+        sharedAnchors.remove(base)
+        base.destroy()
+        return createAnchorNode(raisedPose)
+    }
+
+    /**
+     * Piazza l'arena secondo la modalità attiva, ritentando finché non trova una
+     * posizione valida (piano/mesh davanti alla camera). Mostra suggerimenti nello
+     * statusText e chiama [onReady] con l'ancora appena creata.
+     */
+    protected fun placeArena(onReady: (AnchorNode) -> Unit) {
+        val a = tryArenaByMode()
+        if (a == null) {
+            statusText.text = if (gameMode == ARGameMode.FREE)
+                "⚠️ Inquadra la stanza davanti a te…"
+            else
+                "⚠️ Nessuna superficie rilevata: muovi il telefono e inquadra un tavolo o il pavimento."
+            if (running) postDelayed(500) { placeArena(onReady) }
+            return
+        }
+        onReady(a)
+    }
+
+    /**
+     * Angolo yaw (radianti) per far fronteggiare la camera a un anchor: la
+     * direzione locale +Z dell'anchor viene allineata alla proiezione orizzontale
+     * della camera. Usato dai giochi a lavagna verticale appoggiata al piano.
+     */
+    protected fun yawToFaceCamera(anchor: AnchorNode): Float {
+        val cam = lastFrame?.camera?.pose ?: return 0f
+        val local = anchor.anchor.pose.inverse().compose(cam)
+        return atan2(local.tx(), local.tz())
     }
 
     // ── impressività (haptics / suono / parti) ────────────────────

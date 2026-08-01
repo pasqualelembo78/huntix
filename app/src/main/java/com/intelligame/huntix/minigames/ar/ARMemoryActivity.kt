@@ -36,9 +36,9 @@ class ARMemoryActivity : ARGameActivity() {
     private var scanStart = 0L
 
     init {
-        // Plane detection (pavimento/tavolo): deve essere attivo PRIMA che la
-        // sessione ARCore venga configurata in ARGameActivity.onCreate.
-        usePlaneDetection = true
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di
+        // scelta modalità all'avvio.
+        showsModeDialog = true
     }
 
     override fun onGameCreate() {
@@ -62,7 +62,7 @@ class ARMemoryActivity : ARGameActivity() {
      */
     override fun onArFrame(session: Session, frame: Frame) {
         if (!scanning || placed) return
-        val arena = tryAnchorToPlane()
+        val arena = tryArenaByMode()
         if (arena != null) {
             scanning = false
             placed = true

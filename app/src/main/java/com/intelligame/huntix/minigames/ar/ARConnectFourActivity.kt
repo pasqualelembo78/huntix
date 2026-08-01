@@ -9,6 +9,8 @@ import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
@@ -40,6 +42,16 @@ class ARConnectFourActivity : ARGameActivity() {
     private var cpuThinking = false
     private var playerDiscs = 0
     private var cpuDiscs = 0
+    private var yawCos = 1f
+    private var yawSin = 0f
+
+    init {
+        // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
+        showsModeDialog = true
+    }
+
+    private fun rotOffset(x: Float, z: Float): Pair<Float, Float> =
+        (x * yawCos + z * yawSin) to (-x * yawSin + z * yawCos)
 
     override fun onGameCreate() {
         board.forEach { it.fill(EMPTY) }
@@ -47,36 +59,34 @@ class ARConnectFourActivity : ARGameActivity() {
         cpuThinking = false
         playerDiscs = 0
         cpuDiscs = 0
-        statusText.text = "Tocca una colonna per far cadere l'uovo 🔵"
+        statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = "🥚 Tu = rosso"
         timerText.text = "🤖 CPU = giallo"
         scoreText.text = "0-0"
         startGame()
-        whenReady { build() }
+        whenReady { placeArena { build(it) } }
     }
 
-    private fun build() {
-        val a = spawnAnchor(1.0f, 0f, -0.25f)
-        if (a == null) {
-            if (running) postDelayed(400) { build() }
-            return
-        }
+    private fun build(a: AnchorNode) {
+        val yaw = yawToFaceCamera(a)
+        yawCos = cos(yaw); yawSin = sin(yaw)
         slotNodes.clear()
         baseNodes.clear()
         baseMap.clear()
         for (col in 0 until COLS) {
             val x = (col - (COLS - 1) / 2f) * CELL
+            val (rx, rz) = rotOffset(x, 0f)
             val slots = Array<SphereNode?>(ROWS) { row ->
                 val s = eggNode(C_SLOT, 0.08f)
-                s.position = Position(x, -1.35f / 2f + row * CELL, 0f)
+                s.position = Position(rx, 0.13f + row * CELL, rz)
                 a.addChildNode(s)
                 s
             }
             slotNodes[col] = slots
             val base = eggNode(C_BASE, 0.11f).apply {
                 scale = io.github.sceneview.math.Scale(1f, 0.35f, 1f)
-                position = Position(x, -1.35f / 2f - 0.13f, 0f)
+                position = Position(rx, 0.05f, rz)
             }
             a.addChildNode(base)
             baseNodes[col] = base
@@ -122,7 +132,8 @@ class ARConnectFourActivity : ARGameActivity() {
         if (old != null) removeNode(old)
         val disc = eggNode(color, 0.1f)
         val x = (col - (COLS - 1) / 2f) * CELL
-        disc.position = Position(x, -1.35f / 2f + row * CELL, 0.04f)
+        val (rx, rz) = rotOffset(x, 0.04f)
+        disc.position = Position(rx, 0.13f + row * CELL, rz)
         parent?.addChildNode(disc)
         slots[row] = disc
         if (who == PLAYER) playerDiscs++ else cpuDiscs++

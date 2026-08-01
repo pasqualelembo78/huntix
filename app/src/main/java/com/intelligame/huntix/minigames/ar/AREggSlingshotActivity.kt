@@ -35,6 +35,10 @@ class AREggSlingshotActivity : ARGameActivity() {
         private val ANGLE_RANGE = 12
     }
 
+    init {
+        showsModeDialog = true
+    }
+
     private var arena: AnchorNode? = null
     private var groundY = 0f
     private val targets = mutableListOf<Target>()
@@ -65,23 +69,16 @@ class AREggSlingshotActivity : ARGameActivity() {
         flying = false
         score = 0
         gameOver = false
-        usePlaneDetection = true
         statusText.text = "Inquadra una superficie piano… 📱"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
         livesText.text = ""
         timerText.text = "🥚 Obiettivi: 0/$WIN_HITS"
         scoreText.text = "0 pt"
         startGame()
-        whenReady { placeArena() }
+        whenReady { placeArena { arenaPlaced(it) } }
     }
 
-    private fun placeArena() {
-        val a = tryAnchorToPlane()
-        if (a == null) {
-            statusText.text = "Nessun piano inquadrato. Muovi il telefono… 📱"
-            if (running) postDelayed(500) { placeArena() }
-            return
-        }
+    private fun arenaPlaced(a: AnchorNode) {
         arena = a
         groundY = -0.05f
         // piazza un disco visivo del suolo reale

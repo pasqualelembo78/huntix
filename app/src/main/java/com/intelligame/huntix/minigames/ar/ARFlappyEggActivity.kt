@@ -33,6 +33,10 @@ class ARFlappyEggActivity : ARGameActivity() {
         private val C_PIPE_EDGE = 0xFF2FA96B.toInt()
     }
 
+    init {
+        showsModeDialog = true
+    }
+
     private class PipePair(
         val top: CubeNode, val topCap: CubeNode,
         val bottom: CubeNode, val bottomCap: CubeNode,
@@ -72,7 +76,9 @@ class ARFlappyEggActivity : ARGameActivity() {
     }
 
     private fun build() {
-        val a = spawnAnchor(1.05f, 0f, 0f)
+        // In modalità superficie l'arena viene sollevata di 1.2 m sopra il tavolo
+        // così il campo di gioco verticale resta all'altezza degli occhi.
+        val a = tryArenaByMode(elevation = 1.2f)
         if (a == null) {
             if (running) postDelayed(400) { build() }
             return

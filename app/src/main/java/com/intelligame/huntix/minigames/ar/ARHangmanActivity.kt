@@ -33,6 +33,10 @@ class ARHangmanActivity : ARGameActivity() {
         private val C_GOLD = 0xFFFFD700.toInt()
     }
 
+    init {
+        showsModeDialog = true
+    }
+
     private var arena: AnchorNode? = null
     private val letterEggs = mutableListOf<SphereNode>()
     private val gallowsEgg = arrayOfNulls<SphereNode>(1)
@@ -63,7 +67,7 @@ class ARHangmanActivity : ARGameActivity() {
     }
 
     private fun build() {
-        val a = spawnAnchor(0.95f, 0f, -0.1f)
+        val a = tryArenaByMode()
         if (a == null) {
             if (running) postDelayed(400) { build() }
             return
