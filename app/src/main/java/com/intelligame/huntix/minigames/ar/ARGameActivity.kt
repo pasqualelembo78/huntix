@@ -124,6 +124,10 @@ abstract class ARGameActivity : AppCompatActivity() {
         sceneView.onSessionUpdated = { s, f ->
             lastSession = s
             lastFrame = f
+            // Protezione: assicuriamoci che il renderer sia disponibile
+            if (sceneView.view?.renderer == null) {
+                return@onSessionUpdated
+            }
             android.util.Log.d("ARGameActivity", "Session updated, tracking=${f.camera.trackingState}")
             if (!trackingReady && f.camera.trackingState == TrackingState.TRACKING) {
                 trackingReady = true
@@ -150,7 +154,10 @@ abstract class ARGameActivity : AppCompatActivity() {
             == PackageManager.PERMISSION_GRANTED
         ) {
             android.util.Log.d("ARGameActivity", "Permission granted, calling onGameCreate")
-            onGameCreate()
+            // Delay per permettere al display di stabilizzarsi
+            handler.postDelayed({
+                onGameCreate()
+            }, 200)
         } else {
             android.util.Log.d("ARGameActivity", "Requesting camera permission")
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1001)
