@@ -251,11 +251,11 @@ APK_DIR="app/build/outputs/apk/release"
 rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
-./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --no-daemon --console=plain
+./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=plain
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 echo ">> Building AAB (bundleRelease)..."
-./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --no-daemon --console=plain
+./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=plain
 AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
 
 if [ -f "$AAB_FILE" ]; then
