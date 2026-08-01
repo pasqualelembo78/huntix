@@ -263,7 +263,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             AppLog.w("ARGameActivity", "spawnEgg: not tracking (${frame.camera.trackingState})")
             return null
         }
-        val camPose = frame.camera.pose
+        val camPose = frame.camera.displayOrientedPose
         val offset = Pose(
             floatArrayOf(right, up, -forward),
             floatArrayOf(0f, 0f, 0f, 1f)
@@ -284,7 +284,12 @@ abstract class ARGameActivity : AppCompatActivity() {
         val egg = AREgg(an, node, type, phase = Math.random().toFloat() * 6.28f)
         eggs[node] = egg
         android.util.Log.d("ARGameActivity", "spawnEgg: spawned type=$type at ($right, $up, $forward)")
-        AppLog.i("ARGameActivity", "Egg spawned type=$type, scene nodes=${sceneView.childNodes.size}")
+        AppLog.i(
+            "ARGameActivity",
+            "Egg spawned type=$type, scene nodes=${sceneView.childNodes.size}, " +
+                "cam=(${camPose.tx()},${camPose.ty()},${camPose.tz()}) " +
+                "egg=(${pose.tx()},${pose.ty()},${pose.tz()}) anchor=${anchor.trackingState}"
+        )
         onEggSpawned(egg)
         return egg
     }
@@ -343,7 +348,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             AppLog.w("ARGameActivity", "spawnAnchor: not tracking (${frame.camera.trackingState})")
             return null
         }
-        val camPose = frame.camera.pose
+        val camPose = frame.camera.displayOrientedPose
         val offset = Pose(
             floatArrayOf(right, up, -forward),
             floatArrayOf(0f, 0f, 0f, 1f)
@@ -614,19 +619,22 @@ abstract class ARGameActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         android.util.Log.d("ARGameActivity", "onDestroy called")
         running = false
         pendingAction = null
         handler.removeCallbacks(retryPending)
-        eggs.values.forEach { it.anchorNode.destroy() }
-        eggs.clear()
-        fx.forEach { removeNode(it.node) }
-        fx.clear()
-        spatialAudio.release()
-        sharedAnchors.forEach { it.destroy() }
-        sharedAnchors.clear()
         handler.removeCallbacksAndMessages(null)
+        // Cleanup PRIMA di super.onDestroy(): il DESTROYED lifecycle event chiuso
+        // da super chiude la sessione ARCore in background, e AnchorNode.destroy()
+        // fa anchor.detach() che fallirebbe su una sessione già chiusa.
+        eggs.values.forEach { runCatching { it.anchorNode.destroy() } }
+        eggs.clear()
+        fx.forEach { runCatching { removeNode(it.node) } }
+        fx.clear()
+        runCatching { spatialAudio.release() }
+        sharedAnchors.forEach { runCatching { it.destroy() } }
+        sharedAnchors.clear()
+        super.onDestroy()
     }
 
     override fun onPause() {

@@ -19,6 +19,7 @@ class EggHuntApplication : Application() {
 
         // AppLog — must be first so all other init logs are captured
         AppLog.init(this)
+        AppLog.installCrashHandler()
 
         // Firebase
         try {

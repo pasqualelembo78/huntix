@@ -57,6 +57,20 @@ object AppLog {
         log(Level.I, "AppLog", "=== NEW SESSION ===")
     }
 
+    fun installCrashHandler() {
+        val default = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                log(Level.E, "AppLog", "UNCAUGHT ${throwable.javaClass.name}: ${throwable.message}")
+                throwable.stackTrace.take(25).forEach {
+                    log(Level.E, "AppLog", "    at $it")
+                }
+            } catch (_: Exception) {}
+            default?.uncaughtException(thread, throwable)
+                ?: Runtime.getRuntime().halt(1)
+        }
+    }
+
     fun d(tag: String, msg: String) = log(Level.D, tag, msg)
     fun i(tag: String, msg: String) = log(Level.I, tag, msg)
     fun w(tag: String, msg: String) = log(Level.W, tag, msg)
