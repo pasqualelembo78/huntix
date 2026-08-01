@@ -294,6 +294,33 @@ abstract class ARGameActivity : AppCompatActivity() {
         return egg
     }
 
+    /**
+     * Crea un'uovo ancorato a una [pose] assoluta nello spazio reale (non relativa
+     * alla camera). Usato dai giochi a griglia posizionata su una superficie
+     * rilevata: ogni carta/oggetto ha il proprio AR Anchor e resta fermo nel punto
+     * reale mentre il giocatore si muove nella stanza.
+     */
+    protected fun spawnEggAt(pose: Pose, type: Int, radius: Float = 0.07f): AREgg? {
+        val session = lastSession ?: return null
+        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
+            AppLog.e("ARGameActivity", "spawnEggAt: createAnchor failed", it)
+            return null
+        }
+        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
+        val mat = sceneView.materialLoader.createColorInstance(color = eggColor(type))
+        val node = SphereNode(sceneView.engine, radius, materialInstance = mat).apply {
+            position = Position(0f, 0f, 0f)
+            scale = Scale(1f, 1.4f, 1f)
+        }
+        an.addChildNode(node)
+        sceneView.addChildNode(an)
+        val egg = AREgg(an, node, type, phase = Math.random().toFloat() * 6.28f)
+        eggs[node] = egg
+        AppLog.i("ARGameActivity", "Egg spawned at world pose type=$type, anchor=${anchor.trackingState}")
+        onEggSpawned(egg)
+        return egg
+    }
+
     /** Riposiziona l'uovo (bobbing/movimento) tramite offset locale rispetto all'anchor. */
     protected fun moveEggLocal(egg: AREgg, x: Float, y: Float, z: Float) {
         egg.node.position = Position(x, y, z)

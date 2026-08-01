@@ -1,7 +1,24 @@
 package com.intelligame.huntix.minigames.ar
 
+import android.os.SystemClock
+import com.google.ar.core.Frame
+import com.google.ar.core.Pose
+import com.google.ar.core.Session
+import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.managers.MiniGameManager
+import io.github.sceneview.ar.node.AnchorNode
 
+/**
+ * AR Memory immersivo.
+ *
+ * Le carte non appaiono in una posizione fissa davanti alla fotocamera: vengono
+ * posizionate come una griglia 3D su una superficie reale rilevata con il Plane
+ * Detection di ARCore (pavimento, tavolo...). A inizio partita c'è una breve fase
+ * di scansione (raycast AR sul piano dal centro dello schermo); poi ogni carta ha
+ * il proprio AR Anchor, quindi resta ferma nello spazio mentre il giocatore si
+ * muove e cammina intorno alla griglia. Il tocco di selezione usa il raycast AR
+ * della scena (già gestito in ARGameActivity.onTouchEvent).
+ */
 class ARMemoryActivity : ARGameActivity() {
 
     private val N = 6
@@ -13,31 +30,76 @@ class ARMemoryActivity : ARGameActivity() {
     private var pairsFound = 0
     private var lock = false
     private var moves = 0
+    private var scanning = false
+    private var placed = false
+    private var scanHintShown = false
+    private var scanStart = 0L
+
+    init {
+        // Plane detection (pavimento/tavolo): deve essere attivo PRIMA che la
+        // sessione ARCore venga configurata in ARGameActivity.onCreate.
+        usePlaneDetection = true
+    }
 
     override fun onGameCreate() {
         pairsFound = 0; firstPick = -1; moves = 0; lock = false
         matched.fill(false); revealed.fill(false)
         types.shuffle()
         nodes.forEach { it?.let { e -> removeEgg(e) } }
-        statusText.text = "Memory AR: trova le coppie! 🧠"
+        nodes.fill(null)
+        scanning = true
+        placed = false
+        scanHintShown = false
+        scanStart = SystemClock.elapsedRealtime()
+        statusText.text = "🔍 Scansiona l'ambiente: punta la fotocamera su una superficie piana…"
         updateHud()
         startGame()
-        whenReady {
-            val cols = 3
-            for (i in 0 until N) {
-                val col = i % cols
-                val row = i / cols
-                val egg = spawnEgg(5, 1.0f, (col - 1) * 0.32f, if (row == 0) 0.22f else -0.18f, radius = 0.1f)
-                egg?.phase = i.toFloat()
-                nodes[i] = egg
-            }
+    }
+
+    /**
+     * Fase di scansione: a ogni frame TRACKING proviamo un raycast AR dal centro
+     * dello schermo; appena colpiamo un piano orizzontale posizioniamo la griglia.
+     */
+    override fun onArFrame(session: Session, frame: Frame) {
+        if (!scanning || placed) return
+        val arena = tryAnchorToPlane()
+        if (arena != null) {
+            scanning = false
+            placed = true
+            statusText.text = "Memory AR: trova le coppie! 🧠"
+            AppLog.i("ARMemoryActivity", "Plane found — placing grid")
+            placeGrid(arena)
+        } else if (!scanHintShown && SystemClock.elapsedRealtime() - scanStart > 8000) {
+            scanHintShown = true
+            statusText.text = "⚠️ Nessuna superficie rilevata: muovi il telefono e inquadra il pavimento o un tavolo."
         }
+    }
+
+    private fun placeGrid(arena: AnchorNode) {
+        val cols = 3
+        val spacing = 0.34f
+        val radius = 0.1f
+        for (i in 0 until N) {
+            val col = i % cols
+            val row = i / cols
+            // Offset locale rispetto all'anchor del piano: la griglia giace sulla
+            // superficie (y=radius così le carte si appoggiano, non affondano).
+            val local = Pose(
+                floatArrayOf((col - 1) * spacing, radius, row * spacing),
+                floatArrayOf(0f, 0f, 0f, 1f)
+            )
+            val pose = arena.anchor.pose.compose(local)
+            val egg = spawnEggAt(pose, 5, radius = radius)
+            egg?.phase = i.toFloat()
+            nodes[i] = egg
+        }
+        AppLog.i("ARMemoryActivity", "Grid placed (${nodes.count { it != null }}/$N cards)")
     }
 
     override fun onEggTapped(egg: AREgg) {
         if (!running || lock || !egg.alive) return
         val i = egg.phase.toInt()
-        if (matched[i] || revealed[i]) return
+        if (i !in 0 until N || matched[i] || revealed[i]) return
         recolorEgg(egg, types[i]); revealed[i] = true
         if (firstPick == -1) {
             firstPick = i
