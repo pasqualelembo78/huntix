@@ -635,11 +635,20 @@ abstract class ARGameActivity : AppCompatActivity() {
         runCatching { spatialAudio.release() }
         sharedAnchors.forEach { runCatching { it.destroy() } }
         sharedAnchors.clear()
+        // FIX crash nativo su back: la libreria chiude la sessione ARCore su un
+        // thread background (destroyArCore -> session.close()) IN CONCORRENZA con
+        // il destroy dell'engine Filament/EGL sul main thread -> SIGSEGV.
+        // Chiudiamo la sessione QUI, in modo sincrono e PRIMA di qualunque teardown
+        // dell'engine; la destroyArCore() della libreria troverà poi session==null
+        // (guardia synchronized in ARCore.destroy) e sarà un no-op: niente race.
+        runCatching { sceneView.arCore.destroy() }
+        AppLog.i("ARGameActivity", "session closed (arCore.destroy)")
         // Teardown esplicito dello SceneView PRIMA di super.onDestroy(): il destroy
         // di libreria (in onDetachedFromWindow, dopo onDestroy) chiude la sessione
         // ARCore in background in gara con il destroy dell'engine -> crash nativo su
         // back. Destroy una volta sola, qui, rende il detach successivo un no-op.
         runCatching { sceneView.destroy() }
+        AppLog.i("ARGameActivity", "sceneView destroyed")
         super.onDestroy()
         // Marker critico: se il processo muore di crash nativo durante/giusto dopo
         // il teardown, questo log NON apparirà -> il log esportato ci dice esattamente
