@@ -157,6 +157,35 @@ class OnlinePoiManager {
         return fetchPoiForLocation(context, centerLat, centerLng, category = category)
     }
 
+    /**
+     * ✋ Manuale: POI della città scelta (citySlug vuota = tutta la regione), senza geolocalizzazione.
+     * Centro di riferimento = centro città (o centro regione se citySlug vuota).
+     */
+    suspend fun fetchPoiForCity(
+        context: Context,
+        regionSlug: String,
+        citySlug: String,
+        maxPois: Int = 500
+    ): Result<List<OnlinePoi>> = withContext(Dispatchers.IO) {
+        try {
+            val ref = resolveCityLocationInternal(context, regionSlug, citySlug)
+            val pois = if (citySlug.isBlank()) {
+                fetchRegionPois(regionSlug, ref.first, ref.second, maxPois)
+            } else {
+                fetchCityPois(regionSlug, citySlug, ref.first, ref.second, maxPois)
+            }
+            AppLog.d("OnlinePoi", "Manual override: $regionSlug/$citySlug — ${pois.size} POIs")
+            Result.success(pois)
+        } catch (e: Exception) {
+            AppLog.w("OnlinePoi", "fetchPoiForCity failed: ${e.message}")
+            Result.success(fallbackPois())
+        }
+    }
+
+    /** 📍 Coordinate della città scelta (o centro regione se citySlug vuota). */
+    suspend fun resolveCityLocation(context: Context, regionSlug: String, citySlug: String): Pair<Double, Double>? =
+        withContext(Dispatchers.IO) { resolveCityLocationInternal(context, regionSlug, citySlug) }
+
     // --- PRIVATE ---
 
     /** Tutte le regioni il cui bbox contiene il punto (i bbox si sovrappongono) */
@@ -164,6 +193,20 @@ class OnlinePoiManager {
         return REGION_MAP.filter { (_, bbox) ->
             lat >= bbox[0] && lat <= bbox[2] && lng >= bbox[1] && lng <= bbox[3]
         }.map { it.first }
+    }
+
+    /** Centro città (da _citta.csv) o centro regione (da bbox) come riferimento */
+    private fun resolveCityLocationInternal(context: Context, regionSlug: String, citySlug: String): Pair<Double, Double> {
+        if (citySlug.isNotBlank()) {
+            val city = fetchCittaIndex(context, regionSlug).firstOrNull { it.slug == citySlug }
+            if (city != null) return city.lat to city.lng
+        }
+        val bbox = REGION_MAP.firstOrNull { it.first == regionSlug }?.second
+        return if (bbox != null) {
+            ((bbox[0] + bbox[2]) / 2) to ((bbox[1] + bbox[3]) / 2)
+        } else {
+            42.0 to 12.5
+        }
     }
 
     /** Fetch italia/{regione}/_citta.csv e parsifica */

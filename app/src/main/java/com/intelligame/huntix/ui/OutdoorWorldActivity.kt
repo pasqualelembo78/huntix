@@ -195,7 +195,45 @@ class OutdoorWorldActivity : BaseNavActivity() {
             )
             setPadding(dp8, dp8, dp8, 0)
         }
-        poiSearchRoot.addView(PoiSearchPanel(this).apply {
+
+        // ─── Toggle Auto / Manuale (override GPS) ───
+        val manualToggleBtn = Button(this).apply {
+            text = if (mgr.isManualOverrideActive()) "✋ Manuale" else "📍 Auto"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                cornerRadius = (resources.displayMetrics.density * 8).toFloat()
+                setColor(
+                    if (mgr.isManualOverrideActive()) Color.parseColor("#E65100")
+                    else Color.parseColor("#43A047")
+                )
+            }
+            setPadding(
+                (resources.displayMetrics.density * 12).toInt(),
+                (resources.displayMetrics.density * 6).toInt(),
+                (resources.displayMetrics.density * 12).toInt(),
+                (resources.displayMetrics.density * 6).toInt()
+            )
+            isAllCaps = false
+        }
+        val toggleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        toggleRow.addView(manualToggleBtn)
+        toggleRow.addView(TextView(this).apply {
+            text = "  GPS: auto · Manuale: scegli città qui sotto"
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        poiSearchRoot.addView(toggleRow)
+
+        val poiSearchPanel = PoiSearchPanel(this).apply {
             onOpenPoi = { r ->
                 val url = PoiSearchManager().getJsonPageUrl(r)
                 startActivity(Intent(this@OutdoorWorldActivity, POICustomPageActivity::class.java).apply {
@@ -204,7 +242,40 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 })
                 mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(r.lat, r.lng), 18.0))
             }
-        })
+            // Se il manuale è attivo, ogni cambio regione/città forzato ricarica la mappa
+            onSelectionChanged = { region, city ->
+                if (mgr.isManualOverrideActive() && region.isNotBlank()) {
+                    mgr.setManualOverride(region, city)
+                }
+            }
+        }
+        poiSearchRoot.addView(poiSearchPanel)
+
+        mgr.onLocationOverrideApplied = { centerOnUser() }
+
+        manualToggleBtn.setOnClickListener {
+            if (mgr.isManualOverrideActive()) {
+                mgr.clearManualOverride()
+                manualToggleBtn.text = "📍 Auto"
+                manualToggleBtn.background = GradientDrawable().apply {
+                    cornerRadius = (resources.displayMetrics.density * 8).toFloat()
+                    setColor(Color.parseColor("#43A047"))
+                }
+            } else {
+                val region = poiSearchPanel.currentRegionSlug
+                if (region.isBlank()) {
+                    Toast.makeText(this, "Scegli prima regione e città nei menu sotto", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                mgr.setManualOverride(region, poiSearchPanel.currentCitySlug)
+                manualToggleBtn.text = "✋ Manuale"
+                manualToggleBtn.background = GradientDrawable().apply {
+                    cornerRadius = (resources.displayMetrics.density * 8).toFloat()
+                    setColor(Color.parseColor("#E65100"))
+                }
+            }
+        }
+
         val contentFrame = findViewById<ViewGroup>(android.R.id.content)
         contentFrame.addView(poiSearchRoot)
 
@@ -576,6 +647,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         refresh.removeCallbacks(tick)
         poiCooldownState.clear()
         mapView?.onDestroy()
+        mgr.onLocationOverrideApplied = null
         mgr.stop()
         super.onDestroy()
     }

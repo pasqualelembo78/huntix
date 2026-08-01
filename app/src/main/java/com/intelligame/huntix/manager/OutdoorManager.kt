@@ -120,6 +120,47 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     private var scope: CoroutineScope? = null
 
+    // ─── Override manuale (regione/città) ───
+    private var manualOverride: Pair<String, String>? = null
+    var onLocationOverrideApplied: (() -> Unit)? = null
+
+    fun isManualOverrideActive(): Boolean = manualOverride != null
+
+    /** ✋ Forza i POI della regione/città scelta, ignorando il GPS. */
+    fun setManualOverride(region: String, city: String) {
+        manualOverride = region to city
+        applyManualLocation()
+    }
+
+    /** 📍 Torna all'auto (GPS/levetta) e rigenera sulla posizione attuale. */
+    fun clearManualOverride() {
+        manualOverride = null
+        currentLocation?.let { regenerate(it) }
+    }
+
+    /** Posiziona la mappa sul centro della città forzata e rigenera lì. */
+    private fun applyManualLocation() {
+        val o = manualOverride ?: return
+        val mgr = onlinePoiManager ?: return
+        val ctx = appCtx ?: return
+        val sc = scope ?: return
+        sc.launch {
+            val coord = mgr.resolveCityLocation(ctx, o.first, o.second) ?: run {
+                withContext(Dispatchers.Main) { onLocationOverrideApplied?.invoke() }
+                return@launch
+            }
+            val loc = Location("manual").apply {
+                latitude = coord.first
+                longitude = coord.second
+            }
+            withContext(Dispatchers.Main) {
+                currentLocation = loc
+                regenerate(loc)
+                onLocationOverrideApplied?.invoke()
+            }
+        }
+    }
+
     private val providerReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val lm = locationManager ?: return
@@ -254,6 +295,8 @@ class OutdoorManager private constructor() : SensorEventListener {
     }
 
     private fun ensureSpawns(loc: Location) {
+        // In modalità manuale il GPS/levetta non deve rigenerare (i POI sono forzati)
+        if (manualOverride != null) return
         if (eggs.isEmpty()) {
             regenerate(loc)
             return
@@ -384,10 +427,15 @@ class OutdoorManager private constructor() : SensorEventListener {
     private fun fetchOnlinePoisAsync(loc: Location, @Suppress("UNUSED_PARAMETER") radiusMeters: Double) {
         val mgr = onlinePoiManager ?: return
         val ctx = appCtx ?: return
+        val override = manualOverride
         scope?.launch {
             try {
-                // Usa la posizione corrente (reale o simulata dalla levetta)
-                val result = mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude, maxPois = MAX_POIS)
+                // Manuale: usa regione/città scelta; altrimenti posizione GPS (reale o levetta)
+                val result = if (override != null) {
+                    mgr.fetchPoiForCity(ctx, override.first, override.second, maxPois = MAX_POIS)
+                } else {
+                    mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude, maxPois = MAX_POIS)
+                }
                 result.onSuccess { onlinePois ->
                     val newPois = onlinePois.mapNotNull { op ->
                         if (op.id == "house_player") return@mapNotNull null

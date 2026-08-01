@@ -38,6 +38,15 @@ class PoiSearchPanel @JvmOverloads constructor(
 
     var onOpenPoi: ((PoiSearchManager.SearchResult) -> Unit)? = null
 
+    /** Notificato a ogni cambio di selezione regione/città. */
+    var onSelectionChanged: ((regionSlug: String, citySlug: String) -> Unit)? = null
+
+    /** Selezione corrente (aggiornata in modo sincrono al cambio dei menu). */
+    var currentRegionSlug: String = ""
+        private set
+    var currentCitySlug: String = ""
+        private set
+
     private val mgr = PoiSearchManager()
     private val regions = mgr.getRegions()
     private val cities = mutableListOf<PoiSearchManager.City>()
@@ -64,7 +73,7 @@ class PoiSearchPanel @JvmOverloads constructor(
         orientation = VERTICAL
 
         // ─── Regione ───
-        regionSpinner = themedSpinner("🌍 Regione")
+        regionSpinner = themedSpinner()
         setSpinner(regionSpinner, listOf("🌍 Regione") + regions.map { it.name }, true)
         regionSpinner.onItemSelectedListener = object : OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
@@ -79,7 +88,7 @@ class PoiSearchPanel @JvmOverloads constructor(
         addView(regionSpinner, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
         // ─── Città ───
-        citySpinner = themedSpinner("🏙️ Città")
+        citySpinner = themedSpinner()
         citySpinner.isEnabled = false
         citySpinner.onItemSelectedListener = object : OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, pos: Int, id: Long) {
@@ -126,8 +135,8 @@ class PoiSearchPanel @JvmOverloads constructor(
         showMessage("Scegli una regione per iniziare la ricerca.")
     }
 
-    // ─── Spinner stilizzato con hint ───
-    private fun themedSpinner(hint: String): Spinner {
+    // ─── Spinner stilizzato ───
+    private fun themedSpinner(): Spinner {
         val itemLayout = android.R.layout.simple_spinner_item
         val items = mutableListOf<String>()
         return Spinner(context).apply {
@@ -160,6 +169,10 @@ class PoiSearchPanel @JvmOverloads constructor(
         loadedPois = emptyList()
         loadingPois = false
         cities.clear()
+
+        currentCitySlug = ""
+        currentRegionSlug = region?.slug ?: ""
+        onSelectionChanged?.invoke(currentRegionSlug, currentCitySlug)
 
         ignoreCityChange = true
         citySpinner.isEnabled = region != null
@@ -203,6 +216,9 @@ class PoiSearchPanel @JvmOverloads constructor(
         val currentGen = generation
         loadedPois = emptyList()
         loadingPois = true
+
+        currentCitySlug = citySlug
+        onSelectionChanged?.invoke(currentRegionSlug, currentCitySlug)
         showMessage("Caricamento POI...")
 
         mgr.loadPois(region.slug, citySlug, context) { pois ->
