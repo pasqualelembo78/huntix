@@ -116,8 +116,8 @@ abstract class ARGameActivity : AppCompatActivity() {
         buildHud()
         android.util.Log.d("ARGameActivity", "Checking CAMERA permission")
 
-        sceneView.onSessionCreated = { session ->
-            AppLog.i("ARGameActivity", "ARCore session created, paused=${session.isPaused}")
+        sceneView.onSessionCreated = { _ ->
+            AppLog.i("ARGameActivity", "ARCore session created")
         }
         sceneView.configureSession { _, config ->
             config.planeFindingMode = if (usePlaneDetection) Config.PlaneFindingMode.HORIZONTAL else Config.PlaneFindingMode.DISABLED
