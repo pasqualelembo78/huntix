@@ -625,16 +625,24 @@ abstract class ARGameActivity : AppCompatActivity() {
         pendingAction = null
         handler.removeCallbacks(retryPending)
         handler.removeCallbacksAndMessages(null)
-        // Cleanup PRIMA di super.onDestroy(): il DESTROYED lifecycle event chiuso
-        // da super chiude la sessione ARCore in background, e AnchorNode.destroy()
-        // fa anchor.detach() che fallirebbe su una sessione già chiusa.
-        eggs.values.forEach { runCatching { it.anchorNode.destroy() } }
+        // Cleanup uova SENZA anchor.detach(): la sessione viene chiusa subito
+        // dopo (arCore.destroy) e rilascia tutti gli anchor; il detach individuale
+        // (dentro AnchorNode.destroy) può essere il trigger del crash nativo su
+        // back. Rimuoviamo solo i nodi dalla scena e lasciamo l'engine destroy
+        // liberare le entità Filament.
+        eggs.values.forEach { egg ->
+            runCatching { egg.anchorNode.parent?.removeChildNode(egg.anchorNode) }
+        }
         eggs.clear()
+        AppLog.i("ARGameActivity", "eggs cleaned")
         fx.forEach { runCatching { removeNode(it.node) } }
         fx.clear()
+        AppLog.i("ARGameActivity", "fx cleaned")
         runCatching { spatialAudio.release() }
-        sharedAnchors.forEach { runCatching { it.destroy() } }
+        AppLog.i("ARGameActivity", "spatialAudio released")
+        sharedAnchors.forEach { runCatching { it.parent?.removeChildNode(it) } }
         sharedAnchors.clear()
+        AppLog.i("ARGameActivity", "shared anchors cleaned")
         // FIX crash nativo su back: la libreria chiude la sessione ARCore su un
         // thread background (destroyArCore -> session.close()) IN CONCORRENZA con
         // il destroy dell'engine Filament/EGL sul main thread -> SIGSEGV.
