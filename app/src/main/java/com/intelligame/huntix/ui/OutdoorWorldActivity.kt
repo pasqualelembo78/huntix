@@ -185,13 +185,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         setContentView(R.layout.activity_outdoor_world)
 
-        // ═══ POI SEARCH OVERLAY ═══
+        // ═══ POI SEARCH OVERLAY (regione + città + ricerca realtime) ═══
         val dp8 = (resources.displayMetrics.density * 8).toInt()
-        val dp10 = (resources.displayMetrics.density * 10).toInt()
-        val dp12 = (resources.displayMetrics.density * 12).toInt()
-        val dp6 = (resources.displayMetrics.density * 6).toInt()
-        val dp4 = (resources.displayMetrics.density * 4).toInt()
-        val dp220 = (resources.displayMetrics.density * 220).toInt()
         val poiSearchRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(
@@ -200,139 +195,18 @@ class OutdoorWorldActivity : BaseNavActivity() {
             )
             setPadding(dp8, dp8, dp8, 0)
         }
-        val poiSearchRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-        val poiSearchEdit = EditText(this).apply {
-            hint = "🔍 Cerca POI per città..."
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            background = GradientDrawable().apply {
-                cornerRadius = (resources.displayMetrics.density * 8).toFloat()
-                setColor(0x22FFFFFF)
-                setStroke((resources.displayMetrics.density * 1).toInt(), Color.parseColor("#446688"))
+        poiSearchRoot.addView(PoiSearchPanel(this).apply {
+            onOpenPoi = { r ->
+                val url = PoiSearchManager().getJsonPageUrl(r)
+                startActivity(Intent(this@OutdoorWorldActivity, POICustomPageActivity::class.java).apply {
+                    putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
+                    putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
+                })
+                mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(r.lat, r.lng), 18.0))
             }
-            setPadding(
-                (resources.displayMetrics.density * 12).toInt(),
-                (resources.displayMetrics.density * 10).toInt(),
-                (resources.displayMetrics.density * 12).toInt(),
-                (resources.displayMetrics.density * 10).toInt()
-            )
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val poiSearchBtn = Button(this).apply {
-            text = "Cerca"
-            textSize = 12f
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                cornerRadius = (resources.displayMetrics.density * 8).toFloat()
-                setColor(Color.parseColor("#43A047"))
-            }
-            setPadding(
-                (resources.displayMetrics.density * 12).toInt(),
-                (resources.displayMetrics.density * 8).toInt(),
-                (resources.displayMetrics.density * 12).toInt(),
-                (resources.displayMetrics.density * 8).toInt()
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).also { it.leftMargin = (resources.displayMetrics.density * 6).toInt() }
-            isAllCaps = false
-        }
-        val poiResultsBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                (resources.displayMetrics.density * 220).toInt()
-            )
-            background = GradientDrawable().apply {
-                cornerRadius = (resources.displayMetrics.density * 8).toFloat()
-                setColor(Color.parseColor("#DD1A1030"))
-            }
-            isScrollContainer = true
-            visibility = View.GONE
-        }
-        poiSearchRow.addView(poiSearchEdit)
-        poiSearchRow.addView(poiSearchBtn)
-        poiSearchRoot.addView(poiSearchRow)
-        poiSearchRoot.addView(poiResultsBox)
+        })
         val contentFrame = findViewById<ViewGroup>(android.R.id.content)
         contentFrame.addView(poiSearchRoot)
-
-        poiSearchBtn.setOnClickListener {
-            val query = poiSearchEdit.text.toString()
-            if (query.length < 2) return@setOnClickListener
-            poiResultsBox.removeAllViews()
-            poiResultsBox.visibility = View.VISIBLE
-            poiResultsBox.addView(TextView(this).apply {
-                text = "Cerca in corso..."
-                textSize = 12f; setTextColor(Color.GRAY); setPadding(
-                    (resources.displayMetrics.density * 8).toInt(),
-                    (resources.displayMetrics.density * 4).toInt(),
-                    (resources.displayMetrics.density * 8).toInt(),
-                    (resources.displayMetrics.density * 4).toInt()
-                )
-            })
-            PoiSearchManager().searchByName(query, this) { results ->
-                poiResultsBox.removeAllViews()
-                if (results.isEmpty()) {
-                    poiResultsBox.addView(TextView(this).apply {
-                        text = "Nessun POI trovato"
-                        textSize = 12f; setTextColor(Color.GRAY); setPadding(
-                            (resources.displayMetrics.density * 8).toInt(),
-                            (resources.displayMetrics.density * 4).toInt(),
-                            (resources.displayMetrics.density * 8).toInt(),
-                            (resources.displayMetrics.density * 4).toInt()
-                        )
-                    })
-                } else {
-                    for (r in results.take(20)) {
-                        val item = LinearLayout(this).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                            setPadding(
-                                (resources.displayMetrics.density * 8).toInt(),
-                                (resources.displayMetrics.density * 8).toInt(),
-                                (resources.displayMetrics.density * 8).toInt(),
-                                (resources.displayMetrics.density * 8).toInt()
-                            )
-                            isClickable = true; isFocusable = true
-                            background = GradientDrawable().apply {
-                                cornerRadius = (resources.displayMetrics.density * 4).toFloat()
-                                setColor(0x33FFFFFF)
-                            }
-                            layoutParams = LinearLayout.LayoutParams(
-                                LinearLayout.LayoutParams.MATCH_PARENT,
-                                LinearLayout.LayoutParams.WRAP_CONTENT
-                            ).also { it.bottomMargin = (resources.displayMetrics.density * 2).toInt() }
-                        }
-                        item.addView(TextView(this).apply {
-                            text = "📍 ${r.name}"
-                            textSize = 13f; setTextColor(Color.WHITE)
-                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                        })
-                        item.addView(TextView(this).apply {
-                            text = r.buildingType.ifEmpty { r.poiType }
-                            textSize = 10f; setTextColor(Color.parseColor("#88CCFF"))
-                        })
-                        item.setOnClickListener {
-                            val url = PoiSearchManager().getJsonPageUrl(r)
-                            startActivity(Intent(this@OutdoorWorldActivity, com.intelligame.huntix.ui.POICustomPageActivity::class.java).apply {
-                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_JSON_URL, url)
-                                putExtra(com.intelligame.huntix.ui.POICustomPageActivity.EXTRA_POI_NAME, r.name)
-                            })
-                            mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(r.lat, r.lng), 18.0))
-                        }
-                        poiResultsBox.addView(item)
-                    }
-                }
-            }
-        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED

@@ -1,159 +1,215 @@
 package com.intelligame.huntix.managers
 
 import android.content.Context
-import org.json.JSONObject
+import android.os.Handler
+import android.os.Looper
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.Normalizer
+import java.util.Locale
 
+/**
+ * 📡 PoiSearchManager — ricerca POI con selezione regione/città.
+ *
+ * La ricerca è in tempo reale su frazioni di parola:
+ *   "bar"          → tutti i bar (tipo bar_cafe + nomi contenenti "bar"), in ordine alfabetico
+ *   "bar onofr"    → Bar Onofrio (ogni parola della query deve combaciare)
+ *   "onofrio" / "matteo" → Bar Onofrio di Matteo
+ *
+ * I dati (indice città e POI) vengono scaricati dal repo huntix-poi e
+ * memorizzati su disco (poi_search_cache) per la ricerca offline ripetuta.
+ */
 class PoiSearchManager {
+
+    data class Region(val name: String, val slug: String)
+
+    data class City(val name: String, val slug: String)
+
+    data class SearchResult(
+        val id: String,
+        val name: String,
+        val lat: Double,
+        val lng: Double,
+        val buildingType: String,
+        val poiType: String,
+        val url: String,
+        val pageType: String,
+        val city: String,
+        val region: String,
+        val category: String
+    )
 
     companion object {
         private const val BASE_URL = "https://raw.githubusercontent.com/pasqualelembo78/huntix-poi/main"
         private const val CACHE_DIR = "poi_search_cache"
+        const val MIN_QUERY_LENGTH = 2
 
-        data class SearchResult(
-            val id: String,
-            val name: String,
-            val lat: Double,
-            val lng: Double,
-            val buildingType: String,
-            val poiType: String,
-            val url: String,
-            val pageType: String,
-            val city: String,
-            val region: String,
-            val category: String
+        private val REGIONS = listOf(
+            Region("Abruzzo", "abruzzo"),
+            Region("Basilicata", "basilicata"),
+            Region("Calabria", "calabria"),
+            Region("Campania", "campania"),
+            Region("Emilia-Romagna", "emilia-romagna"),
+            Region("Friuli V.G.", "friuli_vg"),
+            Region("Lazio", "lazio"),
+            Region("Liguria", "liguria"),
+            Region("Lombardia", "lombardia"),
+            Region("Marche", "marche"),
+            Region("Molise", "molise"),
+            Region("Piemonte", "piemonte"),
+            Region("Puglia", "puglia"),
+            Region("Sardegna", "sardegna"),
+            Region("Sicilia", "sicilia"),
+            Region("Toscana", "toscana"),
+            Region("Trentino-A.A.", "trentino-aa"),
+            Region("Umbria", "umbria"),
+            Region("Valle d'Aosta", "valle_daosta"),
+            Region("Veneto", "veneto")
         )
     }
 
-    fun searchByName(query: String, context: Context, callback: (List<SearchResult>) -> Unit) {
-        if (query.length < 2) { callback(emptyList()); return }
-        val q = query.trim().lowercase()
+    fun getRegions(): List<Region> = REGIONS
+
+    /** Città della regione (slug) — prima voce sempre "Tutte le città". */
+    fun getCitiesForRegion(regionSlug: String, context: Context, callback: (List<City>) -> Unit) {
         Thread {
-            val results = mutableListOf<SearchResult>()
+            val cities = mutableListOf<City>()
             try {
-                val cityIndex = loadCityIndex(context)
-                for ((regionSlug, citySlug, cityName) in cityIndex) {
-                    val pois = loadCityPois(context, regionSlug, citySlug)
-                    for (p in pois) {
-                        val n = p.name.lowercase()
-                        val t = p.poiType.lowercase()
-                        if (n.contains(q) || t.contains(q)) {
-                            results.add(SearchResult(
-                                id = p.id, name = p.name, lat = p.lat, lng = p.lng,
-                                buildingType = p.buildingType, poiType = p.poiType,
-                                url = p.url, pageType = p.pageType,
-                                city = cityName, region = regionSlug, category = p.poiType
-                            ))
+                val cached = citiesCacheFile(context, regionSlug)
+                val text = if (cached.exists()) cached.readText()
+                else httpGet("$BASE_URL/italia/$regionSlug/_citta.csv")?.also {
+                    cached.parentFile?.mkdirs()
+                    cached.writeText(it)
+                }
+                if (text != null) {
+                    for (line in text.lines()) {
+                        if (line.startsWith("#") || line.isBlank()) continue
+                        val p = splitCsv(line)
+                        if (p.size >= 4) {
+                            cities.add(City(p[2], p[3]))
                         }
                     }
                 }
             } catch (_: Exception) {}
-            android.os.Handler(android.os.Looper.getMainLooper()).post { callback(results) }
+            Handler(Looper.getMainLooper()).post { callback(cities) }
         }.start()
     }
 
-    fun fetchCitiesForRegion(regionSlug: String, context: Context, callback: (List<Triple<String, String, String>>) -> Unit) {
-        Thread {
-            val cities = mutableListOf<Triple<String, String, String>>()
-            try {
-                val url = "$BASE_URL/italia/$regionSlug/_citta.csv"
-                val text = httpGet(url) ?: run { callback(emptyList()); return@Thread }
-                for (line in text.lines().drop(1)) {
-                    val p = line.split(",")
-                    if (p.size >= 3) {
-                        cities.add(Triple(p[0].trim(), p[1].trim(), p[2].trim().removeSurrounding("\"")))
-                    }
-                }
-            } catch (_: Exception) {}
-            android.os.Handler(android.os.Looper.getMainLooper()).post { callback(cities) }
-        }.start()
-    }
-
-    fun fetchPoisForCity(regionSlug: String, citySlug: String, context: Context, callback: (List<SearchResult>) -> Unit) {
+    /**
+     * POI di una città (citySlug non vuota) oppure dell'intera regione (citySlug vuota).
+     * city di ogni SearchResult viene derivata dall'url quando disponibile.
+     */
+    fun loadPois(regionSlug: String, citySlug: String, context: Context, callback: (List<SearchResult>) -> Unit) {
         Thread {
             val results = mutableListOf<SearchResult>()
             try {
-                val url = "$BASE_URL/italia/$regionSlug/$citySlug/_all.csv"
-                val text = httpGet(url) ?: run { callback(emptyList()); return@Thread }
-                for (line in text.lines().drop(1)) {
-                    if (line.startsWith("#") || line.isBlank()) continue
-                    val parts = line.split(",")
-                    if (parts.size < 6) continue
-                    val lat = parts[0].toDoubleOrNull() ?: continue
-                    val lng = parts[1].toDoubleOrNull() ?: continue
-                    results.add(SearchResult(
-                        id = parts[2].trim(), name = parts[3].trim().removeSurrounding("\""),
-                        lat = lat, lng = lng,
-                        buildingType = parts[4].trim(), poiType = parts[5].trim(),
-                        url = if (parts.size >= 7) parts[6].trim().removeSurrounding("\"") else "",
-                        pageType = if (parts.size >= 8) parts[7].trim().removeSurrounding("\"") else "",
-                        city = citySlug, region = regionSlug, category = parts[5].trim()
-                    ))
+                val cached = poisCacheFile(context, regionSlug, citySlug)
+                val text = if (cached.exists()) cached.readText()
+                else {
+                    val url = if (citySlug.isBlank()) "$BASE_URL/italia/$regionSlug/_all.csv"
+                    else "$BASE_URL/italia/$regionSlug/$citySlug/_all.csv"
+                    httpGet(url)?.also {
+                        cached.parentFile?.mkdirs()
+                        cached.writeText(it)
+                    }
+                }
+                if (text != null) {
+                    for (line in text.lines()) {
+                        if (line.startsWith("#") || line.isBlank()) continue
+                        val parts = splitCsv(line)
+                        if (parts.size < 6) continue
+                        val lat = parts[0].toDoubleOrNull() ?: continue
+                        val lng = parts[1].toDoubleOrNull() ?: continue
+                        val url = if (parts.size >= 7) parts[6] else ""
+                        val city = if (citySlug.isBlank()) cityFromUrl(regionSlug, url) else citySlug
+                        results.add(SearchResult(
+                            id = parts[2],
+                            name = parts[3],
+                            lat = lat, lng = lng,
+                            buildingType = parts[4],
+                            poiType = parts[5],
+                            url = url,
+                            pageType = if (parts.size >= 8) parts[7] else "",
+                            city = city, region = regionSlug,
+                            category = parts[5]
+                        ))
+                    }
                 }
             } catch (_: Exception) {}
-            android.os.Handler(android.os.Looper.getMainLooper()).post { callback(results) }
+            Handler(Looper.getMainLooper()).post { callback(results) }
         }.start()
     }
 
-    fun getJsonPageUrl(result: SearchResult): String {
-        if (result.pageType == "custom" && result.url.isNotBlank()) return result.url
-        val slug = result.name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
-        return "$BASE_URL/output/pages/${result.city}/${result.category}/$slug.json"
+    /**
+     * Filtro in tempo reale su frazioni di parola:
+     * ogni token della query deve essere sottostringa (senza accenti, case-insensitive)
+     * del nome o del tipo (buildingType + poiType) del POI.
+     */
+    fun filterPois(query: String, pois: List<SearchResult>): List<SearchResult> {
+        val tokens = query.trim().split(Regex("\\s+")).map(::normalize).filter { it.isNotBlank() }
+        if (tokens.isEmpty() || query.trim().length < MIN_QUERY_LENGTH) return emptyList()
+        return pois.asSequence()
+            .filter { p ->
+                val n = normalize(p.name)
+                val t = normalize("${p.buildingType} ${p.poiType}")
+                tokens.all { n.contains(it) || t.contains(it) }
+            }
+            .sortedBy { normalize(it.name) }
+            .toList()
     }
 
-    private fun loadCityIndex(context: Context): List<Triple<String, String, String>> {
-        val result = mutableListOf<Triple<String, String, String>>()
-        val cacheDir = File(context.filesDir, CACHE_DIR)
-        if (!cacheDir.exists()) return result
-        cacheDir.listFiles()?.forEach { regionDir ->
-            if (regionDir.isDirectory) {
-                regionDir.listFiles()?.forEach { f ->
-                    if (f.name.endsWith("_citta.csv")) {
-                        try {
-                            for (line in f.readLines().drop(1)) {
-                                val p = line.split(",")
-                                if (p.size >= 3) {
-                                    result.add(Triple(regionDir.name, f.name.removeSuffix("_citta.csv"), p[2].trim().removeSurrounding("\"")))
-                                }
-                            }
-                        } catch (_: Exception) {}
-                    }
-                }
+    /** URL della pagina del POI. */
+    fun getJsonPageUrl(result: SearchResult): String {
+        if (result.url.isNotBlank()) return result.url
+        val slug = result.name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        return "$BASE_URL/italia/${result.region}/${result.city}/pages/$slug.json"
+    }
+
+    // --- PRIVATE ---
+
+    private fun normalize(s: String): String =
+        Normalizer.normalize(s.lowercase(Locale.ROOT), Normalizer.Form.NFD).replace(Regex("\\p{M}"), "")
+
+    private fun splitCsv(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        for (c in line) {
+            when {
+                c == '"' -> inQuotes = !inQuotes
+                c == ',' && !inQuotes -> { fields.add(sb.toString().trim()); sb.setLength(0) }
+                else -> sb.append(c)
             }
         }
-        return result
+        fields.add(sb.toString().trim())
+        return fields
     }
 
-    private fun loadCityPois(context: Context, region: String, city: String): List<SearchResult> {
-        val cacheDir = File(context.filesDir, CACHE_DIR)
-        val regionDir = File(cacheDir, region)
-        val cached = File(regionDir, "${city}_all.csv")
-        if (cached.exists()) {
-            try {
-                val results = mutableListOf<SearchResult>()
-                for (line in cached.readLines().drop(1)) {
-                    if (line.startsWith("#") || line.isBlank()) continue
-                    val parts = line.split(",")
-                    if (parts.size < 6) continue
-                    val lat = parts[0].toDoubleOrNull() ?: continue
-                    val lng = parts[1].toDoubleOrNull() ?: continue
-                    results.add(SearchResult(
-                        id = parts[2].trim(), name = parts[3].trim().removeSurrounding("\""),
-                        lat = lat, lng = lng,
-                        buildingType = parts[4].trim(), poiType = parts[5].trim(),
-                        url = if (parts.size >= 7) parts[6].trim().removeSurrounding("\"") else "",
-                        pageType = if (parts.size >= 8) parts[7].trim().removeSurrounding("\"") else "",
-                        city = city, region = region, category = parts[5].trim()
-                    ))
-                }
-                return results
-            } catch (_: Exception) {}
+    private fun cityFromUrl(region: String, url: String): String {
+        val marker = "/italia/$region/"
+        val idx = url.indexOf(marker)
+        if (idx >= 0) {
+            val rest = url.substring(idx + marker.length)
+            val slash = rest.indexOf('/')
+            if (slash > 0) return rest.substring(0, slash)
         }
-        return emptyList()
+        return ""
+    }
+
+    private fun citiesCacheFile(context: Context, region: String): File {
+        val dir = File(File(context.filesDir, CACHE_DIR), region)
+        dir.mkdirs()
+        return File(dir, "_citta.csv")
+    }
+
+    private fun poisCacheFile(context: Context, region: String, citySlug: String): File {
+        val dir = File(File(context.filesDir, CACHE_DIR), region)
+        dir.mkdirs()
+        val name = if (citySlug.isBlank()) "_all.csv" else "${citySlug}_all.csv"
+        return File(dir, name)
     }
 
     private fun httpGet(urlString: String): String? {
@@ -161,8 +217,8 @@ class PoiSearchManager {
             val url = URL(urlString)
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+            conn.connectTimeout = 15000
+            conn.readTimeout = 30000
             if (conn.responseCode == 200) {
                 val reader = BufferedReader(InputStreamReader(conn.inputStream))
                 reader.readText()
