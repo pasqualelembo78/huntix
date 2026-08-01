@@ -236,7 +236,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         val labels = arrayOf("🌍 3D Meshing", "📐 Rilevamento superfici", "🕊️ Modalità libera")
         val modes = arrayOf(ARGameMode.MESHING, ARGameMode.PLANE, ARGameMode.FREE)
         var picked = gameMode
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("🎮 Modalità di gioco")
             .setMessage("Come vuoi posizionare il gioco nella stanza?")
             .setSingleChoiceItems(labels, modes.indexOf(gameMode).coerceAtLeast(0)) { _, which ->
@@ -248,8 +248,9 @@ abstract class ARGameActivity : AppCompatActivity() {
                 onChosen()
             }
             .setOnCancelListener { onChosen() }
-            .setCanceledOnTouchOutside(false)
-            .show()
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
     }
 
     private fun buildHud() {
