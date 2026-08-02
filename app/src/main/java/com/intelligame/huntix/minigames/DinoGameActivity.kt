@@ -323,6 +323,29 @@ class DinoGameActivity : AppCompatActivity() {
         private val cactusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#00C86A") }
         private val birdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FF8888") }
         private val eyePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+        private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33000000.toInt() }
+        private val grassPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#00CC66"); strokeWidth = 2f }
+        private val mountainPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val dustPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55887766.toInt() }
+        private val dinoPath = Path().apply {
+            moveTo(-0.22f, 0.0f)
+            lineTo(-0.12f, -0.06f)
+            lineTo(0.08f, -0.06f)
+            cubicTo(0.18f, -0.06f, 0.26f, -0.04f, 0.32f, -0.02f)
+            lineTo(0.32f, -0.14f)
+            cubicTo(0.32f, -0.18f, 0.38f, -0.2f, 0.48f, -0.18f)
+            lineTo(0.58f, -0.08f)
+            cubicTo(0.6f, -0.03f, 0.52f, 0.02f, 0.48f, 0.0f)
+            lineTo(0.32f, 0.04f)
+            lineTo(0.28f, 0.08f)
+            lineTo(0.08f, 0.08f)
+            lineTo(-0.08f, 0.04f)
+            lineTo(-0.22f, 0.0f)
+            close()
+        }
+        private val cactusPath = Path()
+        private val birdWingL = Path()
+        private val birdWingR = Path()
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -330,56 +353,88 @@ class DinoGameActivity : AppCompatActivity() {
             val h = height.toFloat()
             val minDim = min(w, h)
             val gridW = minDim
-            val gridH = minDim * 1.778f // ~16:9
+            val gridH = minDim * 1.778f
             val offsetX = (w - gridW) / 2
             val offsetY = (h - gridH) / 2
+            val groundYAbs = offsetY + groundY * gridH
+            val now = System.currentTimeMillis()
 
-            // Background
+            // Background gradient
             if (nightMode) {
                 c.drawColor(Color.parseColor("#050310"))
             } else {
                 c.drawColor(Color.parseColor("#0D0620"))
             }
 
-            // Ground line
-            val groundYAbs = offsetY + groundY * gridH
-            val groundPaint2 = Paint().apply { color = Color.parseColor("#00FF88") }
-            c.drawLine(offsetX, groundYAbs, offsetX + gridW, groundYAbs, groundPaint2)
+            // Mountains
+            mountainPaint.color = if (nightMode) Color.parseColor("#0A0520") else Color.parseColor("#1A1040")
+            val mPath = Path()
+            mPath.moveTo(offsetX, groundYAbs)
+            mPath.lineTo(offsetX + gridW * 0.15f, groundYAbs - gridH * 0.12f)
+            mPath.lineTo(offsetX + gridW * 0.3f, groundYAbs)
+            mPath.lineTo(offsetX + gridW * 0.5f, groundYAbs - gridH * 0.08f)
+            mPath.lineTo(offsetX + gridW * 0.7f, groundYAbs)
+            mPath.lineTo(offsetX + gridW * 0.85f, groundYAbs - gridH * 0.1f)
+            mPath.lineTo(offsetX + gridW, groundYAbs)
+            mPath.close()
+            c.drawPath(mPath, mountainPaint)
 
-            // Draw dino as a proper dinosaur silhouette
+            // Ground grass
+            for (i in 0..30) {
+                val gx = offsetX + i * gridW / 30f
+                val gh = (4f + sin(i * 0.7f + now * 0.002f) * 3f).toFloat()
+                c.drawLine(gx, groundYAbs, gx + 1.5f, groundYAbs - gh, grassPaint)
+            }
+
+            // Dino position
             val dinoAbs = dinoSize * gridW
             val dinoX = offsetX + 0.1f * gridW
             val dinoYAbs = offsetY + dinoY * gridH
-            val bodyW = dinoAbs * 0.9f
-            val bodyH = dinoAbs * 1.0f
-            val bodyX = dinoX
-            val bodyY = dinoYAbs - bodyH / 2
-            c.drawRoundRect(bodyX, bodyY, bodyX + bodyW, bodyY + bodyH, bodyW * 0.25f, bodyH * 0.3f, dinoPaint)
-            // Tail
-            val tailW = bodyW * 0.2f
-            val tailH = bodyH * 1.3f
-            val tailX = bodyX - tailW
-            val tailY = bodyY - tailH * 0.3f
-            c.drawRoundRect(tailX, tailY, tailX + tailW, tailY + tailH, tailW / 2, tailH / 3, dinoPaint)
-            // Neck + head
-            val neckW = bodyW * 0.15f
-            val neckH = bodyH * 0.7f
-            val neckX = bodyX + bodyW * 0.6f
-            c.drawRoundRect(neckX, bodyY, neckX + neckW, bodyY + neckH, neckW / 2, neckW / 2, dinoPaint)
-            val headW = bodyW * 0.4f
-            val headH = bodyH * 0.4f
-            val headX = neckX - headW * 0.1f
-            val headY = bodyY + neckH - headH * 0.3f
-            c.drawRoundRect(headX, headY, headX + headW, headY + headH, headW / 3, headH / 3, dinoPaint)
-            // Eye
-            eyePaint.color = if (nightMode) Color.WHITE else Color.BLACK
-            val eyeR = headW * 0.18f
-            c.drawCircle(headX + headW * 0.7f, headY + headH * 0.35f, eyeR, eyePaint)
-            // Legs
-            val legW = bodyW * 0.18f
-            val legH = bodyH * 0.4f
-            c.drawRoundRect(bodyX + bodyW * 0.12f, bodyY + bodyH, bodyX + bodyW * 0.12f + legW, bodyY + bodyH + legH, legW / 2, legH / 3, dinoPaint)
-            c.drawRoundRect(bodyX + bodyW * 0.55f, bodyY + bodyH, bodyX + bodyW * 0.55f + legW, bodyY + bodyH + legH, legW / 2, legH / 3, dinoPaint)
+            val scaleX = dinoAbs
+            val scaleY = dinoAbs * 1.2f
+            val legPhase = now / 80f
+
+            // Shadow
+            val shadowScale = if (dinoY >= groundY - dinoSize - 0.02f) 1f else 0.5f
+            c.drawOval(RectF(
+                dinoX - dinoAbs * 0.25f * shadowScale, groundYAbs - 1f,
+                dinoX + dinoAbs * 0.25f * shadowScale, groundYAbs + 1f
+            ), shadowPaint)
+
+            // Dino body (path)
+            c.save()
+            c.translate(dinoX, dinoYAbs)
+            c.scale(scaleX, scaleY)
+            c.drawPath(dinoPath, dinoPaint)
+            c.restore()
+
+            // Legs (animated)
+            val legSwing = sin(legPhase) * dinoAbs * 0.15f
+            val legW = dinoAbs * 0.12f
+            val legH = dinoAbs * 0.35f
+            val legColor = Color.parseColor("#00CC66")
+            val legPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = legColor }
+            // Back leg
+            c.drawRoundRect(
+                dinoX + dinoAbs * 0.1f + legSwing, dinoYAbs + dinoAbs * 0.06f,
+                dinoX + dinoAbs * 0.1f + legSwing + legW, dinoYAbs + dinoAbs * 0.06f + legH,
+                legW / 2, legH / 3, legPaint
+            )
+            // Front leg
+            c.drawRoundRect(
+                dinoX + dinoAbs * 0.45f - legSwing, dinoYAbs + dinoAbs * 0.06f,
+                dinoX + dinoAbs * 0.45f - legSwing + legW, dinoYAbs + dinoAbs * 0.06f + legH,
+                legW / 2, legH / 3, legPaint
+            )
+
+            // Dust particles when running on ground
+            if (dinoY >= groundY - dinoSize - 0.02f && gameRunning) {
+                for (i in 0..2) {
+                    val dx = dinoX - dinoAbs * 0.15f - i * dinoAbs * 0.08f
+                    val dy = groundYAbs - 1f - (i * 2f + sin(now * 0.01f + i) * 2f).toFloat()
+                    c.drawCircle(dx, dy, 1.5f + i * 0.5f, dustPaint)
+                }
+            }
 
             // Draw obstacles
             for (obs in obstacles) {
@@ -387,29 +442,45 @@ class DinoGameActivity : AppCompatActivity() {
                 val obsW = obs.w * gridW
                 val obsH = obs.h * gridH
                 val obsY = offsetY + obs.y * gridH
+                val halfH = obsH / 2f
 
                 when (obs.type) {
                     TYPE_CACTUS_SMALL -> {
                         cactusPaint.color = Color.parseColor("#00C86A")
-                        val halfH = obsH / 2
-                        val segW = obsW / 2
-                        c.drawRect(obsX, obsY - halfH, obsX + segW, obsY + halfH, cactusPaint)
-                        c.drawRect(obsX + segW, obsY - halfH * 0.4f, obsX + obsW, obsY + halfH, cactusPaint)
+                        val segW = obsW / 2f
+                        // Left segment
+                        c.drawRoundRect(obsX, obsY - halfH, obsX + segW, obsY + halfH, segW / 2, halfH / 2, cactusPaint)
+                        // Right segment (shorter)
+                        c.drawRoundRect(obsX + segW, obsY - halfH * 0.4f, obsX + obsW, obsY + halfH, segW / 2, halfH / 2, cactusPaint)
+                        // Highlight
+                        cactusPaint.color = Color.parseColor("#33FF88")
+                        c.drawRect(obsX + 2f, obsY - halfH + 2f, obsX + segW - 2f, obsY + halfH - 2f, cactusPaint)
                     }
                     TYPE_CACTUS_LARGE -> {
                         cactusPaint.color = Color.parseColor("#009633")
-                        val halfH = obsH / 2
-                        c.drawRect(obsX, obsY - halfH, obsX + obsW, obsY + halfH, cactusPaint)
-                        c.drawRect(obsX + obsW * 0.7f, obsY - halfH, obsX + obsW * 1.2f, obsY - halfH * 0.3f, cactusPaint)
+                        // Main body
+                        c.drawRoundRect(obsX, obsY - halfH, obsX + obsW, obsY + halfH, obsW / 2, halfH / 2, cactusPaint)
+                        // Arm
+                        c.drawRoundRect(obsX + obsW * 0.7f, obsY - halfH, obsX + obsW * 1.2f, obsY - halfH * 0.3f, obsW / 4, halfH / 3, cactusPaint)
+                        // Highlight
+                        cactusPaint.color = Color.parseColor("#33AA44")
+                        c.drawRect(obsX + 2f, obsY - halfH + 2f, obsX + obsW - 2f, obsY + halfH - 2f, cactusPaint)
                     }
                     TYPE_BIRD -> {
-                        // Bird — two circles + beak
-                        birdPaint.color = Color.parseColor("#FF8888")
                         val bx = obsX + obsW / 2
                         val by = obsY
                         val wingR = obsW / 3
+                        val wingAngle = sin(now * 0.012f) * 0.4f
+                        // Left wing
+                        c.save()
+                        c.rotate((wingAngle * 45f), bx - wingR, by)
                         c.drawCircle(bx - wingR, by, wingR, birdPaint)
+                        c.restore()
+                        // Right wing
+                        c.save()
+                        c.rotate((-wingAngle * 45f), bx + wingR, by)
                         c.drawCircle(bx + wingR, by, wingR, birdPaint)
+                        c.restore()
                         // Eye
                         eyePaint.color = Color.BLACK
                         c.drawCircle(bx - wingR * 0.5f, by - wingR * 0.3f, wingR * 0.2f, eyePaint)
