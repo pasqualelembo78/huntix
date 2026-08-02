@@ -225,16 +225,14 @@ class ARMinesweeperActivity : ARGameActivity() {
     /** Fa esplodere una singola cella-mina in particelle colorate. */
     private fun explodeCell(i: Int) {
         val cell = cells[i] ?: return
-        val node = cell.node
-        val wp = node?.worldPosition
-        if (node != null) removeNode(node)
+        val node = cell.node ?: return
+        val wp = node.worldPosition
+        removeNode(node)
         cell.node = null
         nodeMap.remove(node)
-        if (wp != null) {
-            burst(wp, 0xFFFF5252.toInt(), 14)
-            burst(wp, 0xFFFFB300.toInt(), 7)
-            spatialAudio.oneShot(140f + Random.nextInt(60).toFloat(), 180, decay = true, gain = 0.45f)
-        }
+        burst(wp, 0xFFFF5252.toInt(), 14)
+        burst(wp, 0xFFFFB300.toInt(), 7)
+        spatialAudio.oneShot(140f + Random.nextInt(60).toFloat(), 180, decay = true, gain = 0.45f)
     }
 
     /** Scuote tutte le celle ancora presenti, poi le riporta in posizione. */
