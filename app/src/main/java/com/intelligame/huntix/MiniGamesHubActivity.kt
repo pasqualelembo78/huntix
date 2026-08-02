@@ -1,19 +1,24 @@
 package com.intelligame.huntix
 
+import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.lifecycle.lifecycleScope
 import com.intelligame.huntix.managers.MiniGameManager
 import com.intelligame.huntix.managers.ResearchTaskManager
 import com.intelligame.huntix.minigames.*
 import com.intelligame.huntix.minigames.ar.*
+import kotlinx.coroutines.launch
 
 /**
  * MiniGamesHubActivity — hub centrale dei minigiochi.
@@ -60,6 +65,7 @@ class MiniGamesHubActivity : BaseNavActivity() {
     private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR
     private lateinit var gridBox: GridLayout
     private val filterButtons = mutableListOf<TextView>()
+    private lateinit var roomsBox: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +93,12 @@ class MiniGamesHubActivity : BaseNavActivity() {
         }
         content.addView(filterRow)
 
+        content.addView(UiKit.section(c, "🏠 Stanze gioco"))
+        roomsBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        content.addView(roomsBox)
+        renderRooms()
+        syncRooms()
+
         gridBox = GridLayout(c).apply {
             columnCount = 2
         }
@@ -106,6 +118,118 @@ class MiniGamesHubActivity : BaseNavActivity() {
         1 -> games.filter { it.hasNormal }
         2 -> games.filter { it.hasAr }
         else -> games
+    }
+
+    // ── Stanze gioco (AR) ─────────────────────────────────────────
+
+    /** Ricostruisce la lista delle stanze AR salvate. */
+    private fun renderRooms() {
+        val c = this
+        roomsBox.removeAllViews()
+        val rooms = ArArenaStore.loadRooms(c)
+        if (rooms.isEmpty()) {
+            roomsBox.addView(TextView(c).apply {
+                text = "Nessuna stanza salvata: si creano da sole quando piazzi un gioco AR in un posto nuovo."
+                textSize = 12f
+                setTextColor(Color.parseColor(UiKit.TEXT_DIM))
+                setPadding(UiKit.dp(c, 14), UiKit.dp(c, 10), UiKit.dp(c, 14), UiKit.dp(c, 10))
+                background = GradientDrawableCompat("#20224A")
+            })
+            return
+        }
+        rooms.forEach { room -> roomsBox.addView(roomRow(room)) }
+    }
+
+    private fun roomRow(room: ArRoom): View {
+        val c = this
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(UiKit.dp(c, 12), UiKit.dp(c, 8), UiKit.dp(c, 12), UiKit.dp(c, 8))
+            background = GradientDrawableCompat("#20224A")
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = UiKit.dp(c, 6) }
+        }
+        row.addView(TextView(c).apply {
+            text = "🏠  ${room.name}"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        row.addView(smallAction("✏️") { renameRoom(room) })
+        row.addView(smallAction("🗑️") { deleteRoom(room) })
+        return row
+    }
+
+    private fun smallAction(emoji: String, onClick: () -> Unit): TextView =
+        TextView(this).apply {
+            text = emoji
+            textSize = 18f
+            isClickable = true
+            isFocusable = true
+            setPadding(UiKit.dp(this@MiniGamesHubActivity, 10), UiKit.dp(this@MiniGamesHubActivity, 2), UiKit.dp(this@MiniGamesHubActivity, 8), UiKit.dp(this@MiniGamesHubActivity, 2))
+            setOnClickListener { onClick() }
+        }
+
+    private fun renameRoom(room: ArRoom) {
+        val input = EditText(this).apply {
+            setText(room.name)
+            hint = "Nome stanza"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.parseColor("#888888"))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("✏️ Rinomina stanza")
+            .setView(input)
+            .setPositiveButton("Salva") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty() && newName != room.name) {
+                    val updated = room.copy(name = newName)
+                    ArArenaStore.saveRoom(this, updated, setLast = false)
+                    lifecycleScope.launch { ArArenaStore.pushRoom(updated) }
+                    renderRooms()
+                }
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
+    }
+
+    private fun deleteRoom(room: ArRoom) {
+        AlertDialog.Builder(this)
+            .setTitle("🗑️ Elimina stanza")
+            .setMessage("Eliminare la stanza '${room.name}'? La posizione salvata per i giochi AR andrà persa.")
+            .setPositiveButton("Elimina") { _, _ ->
+                ArArenaStore.deleteRoom(this, room.roomId)
+                lifecycleScope.launch { ArArenaStore.deleteRoomCloud(room.roomId) }
+                renderRooms()
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
+    }
+
+    /** Fondo arrotondato colorato per le righe delle stanze. */
+    private fun GradientDrawableCompat(hex: String): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = UiKit.dp(this@MiniGamesHubActivity, 12).toFloat()
+            setColor(Color.parseColor(hex))
+        }
+
+    /** Unisce in locale le stanze presenti sul cloud (fire-and-forget). */
+    private fun syncRooms() {
+        lifecycleScope.launch {
+            val remote = ArArenaStore.pullRooms()
+            if (remote.isEmpty()) return@launch
+            val localIds = ArArenaStore.loadRooms(this@MiniGamesHubActivity).map { it.roomId }.toSet()
+            val newRooms = remote.filter { it.roomId !in localIds }
+            if (newRooms.isNotEmpty()) {
+                newRooms.forEach { ArArenaStore.saveRoom(this@MiniGamesHubActivity, it, setLast = false) }
+                renderRooms()
+            }
+        }
     }
 
     private fun render() {
