@@ -15,6 +15,7 @@ class AREggShooterActivity : ARGameActivity() {
     private var spawnCb: Runnable? = null
 
     override fun onGameCreate() {
+        usesSurfaceArena = false
         lives = 3; score = 0; timeLeft = 40
         eggsActive.clear()
         statusText.text = "Spara alle uova che salgono! ✨"

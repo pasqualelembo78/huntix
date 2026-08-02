@@ -23,8 +23,11 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import com.google.ar.core.Anchor
 import com.google.ar.core.Config
 import com.intelligame.huntix.AppLog
+import com.intelligame.huntix.BuildConfig
 import com.intelligame.huntix.R
 import com.google.ar.core.Frame
 import com.google.ar.core.Plane
@@ -45,6 +48,7 @@ import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import java.util.Collections
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -96,6 +100,21 @@ abstract class ARGameActivity : AppCompatActivity() {
     private var pendingAction: (() -> Unit)? = null
     private var lastTrackingState: TrackingState? = null
 
+    // ── stanze AR ("trova il piano una volta per tutte") ──────────
+    // Le arene piazzate su una superficie reale vengono salvate per stanza
+    // ([ArArenaStore]: locale + cloud, separate dalle stanze indoor). Alla
+    // riapertura dell'app si prova prima a risolvere la Cloud Anchor della
+    // stanza scelta (stesso punto, senza riscansionare), poi si ripiega sulla
+    // scansione normale; la nuova posizione diventa una stanza nuova.
+    protected var usesSurfaceArena = true
+    private var currentRoomId: String? = null
+    private var forceNewRoom = false
+    private var cloudRestoreAttempted = false
+    private var cloudRestoring = false
+    private var restoredArena: AnchorNode? = null
+    private var resolvingCloudAnchor: Anchor? = null
+    private var hostingCloudAnchor: Anchor? = null
+
     /** Motore audio 3D (sintesi PCM + panning distanza). */
     protected val spatialAudio = SpatialAudio()
     /** Effetti di rottura/particelle animati ogni frame. */
@@ -137,6 +156,12 @@ abstract class ARGameActivity : AppCompatActivity() {
             0xFFFF7AB6.toInt(), 0xFFFFD166.toInt(), 0xFF6AD7FF.toInt(), 0xFFFF6B6B.toInt()
         )
         fun eggColor(type: Int) = EGG_COLORS[type % EGG_COLORS.size]
+
+        /** Durata della Cloud Anchor dell'arena: 30gg in modalità keyless
+         * (OAuth), 1gg con API key (limite ARCore). */
+        private const val ARENA_TTL_DAYS_KEYLESS = 30
+        private const val ARENA_TTL_DAYS_APIKEY = 1
+        private const val CLOUD_RESTORE_TIMEOUT_MS = 10_000L
 
         /** Colori vivaci per coriandoli/fuochi delle celebrazioni. */
         private val CONFETTI_COLORS = intArrayOf(
@@ -189,7 +214,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
             config.focusMode = Config.FocusMode.AUTO
             config.depthMode = Config.DepthMode.AUTOMATIC
-            config.cloudAnchorMode = Config.CloudAnchorMode.DISABLED
+            config.cloudAnchorMode = Config.CloudAnchorMode.ENABLED
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
         }
         sceneView.configureSession { _, config -> configBlock(config) }
@@ -297,8 +322,76 @@ abstract class ARGameActivity : AppCompatActivity() {
      */
     private fun onGameCreateWithMode() {
         loadGameMode()
-        if (showsModeDialog) chooseGameMode { startContent() }
-        else startContent()
+        if (showsModeDialog) chooseGameMode { selectRoomAndStart() }
+        else selectRoomAndStart()
+    }
+
+    /**
+     * Sceglie la stanza in cui giocare (se ce ne sono) e poi avvia il contenuto.
+     * Se non esistono stanze salvate (o il gioco non usa un'arena su superficie)
+     * parte subito: la posizione verrà salvata come stanza al primo piazzamento.
+     */
+    private fun selectRoomAndStart() {
+        if (!usesSurfaceArena) { startContent(); return }
+        syncCloudRooms()
+        val rooms = ArArenaStore.loadRooms(this)
+        if (rooms.isEmpty()) startContent()
+        else showRoomPicker(rooms)
+    }
+
+    /**
+     * Selettore delle stanze AR salvate (la più recente pre-selezionata), con
+     * opzioni per crearne una nuova o eliminarne una.
+     */
+    private fun showRoomPicker(rooms: List<ArRoom>) {
+        if (rooms.isEmpty()) { startContent(); return }
+        val labels = rooms.map { "🏠 ${it.name}" }.toMutableList()
+        val NEW = labels.size
+        labels += "➕ Nuova stanza"
+        val lastId = ArArenaStore.lastRoom(this)
+        var picked = rooms.indexOfFirst { it.roomId == lastId }.coerceAtLeast(0)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("🏠 Dove giochi?")
+            .setMessage("Il gioco apparirà nella posizione salvata per la stanza scelta.")
+            .setSingleChoiceItems(labels.toTypedArray(), picked) { _, which -> picked = which }
+            .setPositiveButton("▶ Gioca") { _, _ ->
+                forceNewRoom = picked == NEW
+                currentRoomId = if (picked == NEW) null else rooms[picked].roomId
+                startContent()
+            }
+            .setNegativeButton("🗑️ Elimina") { _, _ -> showRoomDelete(rooms) }
+            .setOnCancelListener { startContent() }
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+    }
+
+    /** Elimina una stanza (locale + cloud) e riapre il selettore. */
+    private fun showRoomDelete(rooms: List<ArRoom>) {
+        if (rooms.isEmpty()) { startContent(); return }
+        AlertDialog.Builder(this)
+            .setTitle("🗑️ Elimina stanza")
+            .setItems(rooms.map { it.name }.toTypedArray()) { _, which ->
+                val room = rooms[which]
+                if (room.roomId == currentRoomId) currentRoomId = null
+                ArArenaStore.deleteRoom(this, room.roomId)
+                lifecycleScope.launch { ArArenaStore.deleteRoomCloud(room.roomId) }
+                showRoomPicker(ArArenaStore.loadRooms(this))
+            }
+            .setNegativeButton("Annulla") { _, _ -> showRoomPicker(rooms) }
+            .setOnCancelListener { showRoomPicker(rooms) }
+            .show()
+    }
+
+    /** Unisce in locale le stanze presenti sul cloud (fire-and-forget). */
+    private fun syncCloudRooms() {
+        lifecycleScope.launch {
+            val remote = ArArenaStore.pullRooms()
+            if (remote.isEmpty()) return@launch
+            val localIds = ArArenaStore.loadRooms(this@ARGameActivity).map { it.roomId }.toSet()
+            remote.filter { it.roomId !in localIds }
+                .forEach { ArArenaStore.saveRoom(this@ARGameActivity, it, setLast = false) }
+        }
     }
 
     /**
@@ -658,6 +751,40 @@ abstract class ARGameActivity : AppCompatActivity() {
      * tipo Flappy poggiati su un tavolo); ignorata in [ARGameMode.FREE].
      */
     protected fun tryArenaByMode(elevation: Float = 0f): AnchorNode? {
+        // Prima chiamata: prova a recuperare la posizione salvata per la stanza
+        // scelta, così il gioco riappare nello stesso punto senza riscansionare.
+        if (!cloudRestoreAttempted) {
+            cloudRestoreAttempted = true
+            if (gameMode != ARGameMode.FREE && !forceNewRoom && !BuildConfig.ARCORE_API_KEY.isBlank()) {
+                val savedId = savedCloudAnchorId()
+                if (!savedId.isNullOrBlank()) {
+                    cloudRestoring = true
+                    statusText.text = "🔄 Recupero la posizione salvata…"
+                    startCloudRestore(savedId) { restored ->
+                        cloudRestoring = false
+                        if (restored != null) {
+                            restoredArena = restored
+                            statusText.text = "✅ Gioco ritrovato nello stesso punto!"
+                        } else {
+                            // La posizione salvata non è qui: al prossimo
+                            // piazzamento la nuova posizione diventa una stanza
+                            // nuova (quella vecchia resta intatta).
+                            currentRoomId = null
+                            statusText.text = "⚠️ Posizione salvata non trovata: inquadra una superficie (salverò una nuova stanza)."
+                            statusText.setTextColor(Color.parseColor(UiKit.ACCENT))
+                        }
+                    }
+                    return null
+                }
+            }
+        }
+        // Finché il ripristino è in corso non piazziamo niente (il loop di
+        // retry richiama questo metodo finché la risoluzione non finisce).
+        if (cloudRestoring) return null
+        restoredArena?.let { arena ->
+            restoredArena = null
+            return arena
+        }
         val base = when (gameMode) {
             ARGameMode.MESHING -> tryAnchorToMesh()
             ARGameMode.PLANE -> tryAnchorToPlane()
@@ -672,6 +799,104 @@ abstract class ARGameActivity : AppCompatActivity() {
         return createAnchorNode(raisedPose)
     }
 
+    // ── Cloud Anchor: host + resolve ─────────────────────────────
+
+    private val cloudTtlDays
+        get() = if (BuildConfig.ARCORE_API_KEY.isBlank()) ARENA_TTL_DAYS_KEYLESS else ARENA_TTL_DAYS_APIKEY
+
+    /**
+     * Salva la posizione dell'arena sul cloud ARCore (non bloccante): alla
+     * prossima riapertura dell'app il gioco può essere ritrovato nello stesso
+     * punto senza dover scansionare di nuovo. In modalità libera (gioco sospeso
+     * davanti alla camera, non ancorato a una superficie) non viene salvato.
+     */
+    protected fun persistArena(a: AnchorNode) {
+        if (gameMode == ARGameMode.FREE) return
+        if (BuildConfig.ARCORE_API_KEY.isBlank()) return
+        if (hostingCloudAnchor != null) return
+        val session = lastSession ?: return
+        val hosted = runCatching { session.hostCloudAnchorWithTtl(a.anchor, cloudTtlDays) }.getOrElse {
+            AppLog.w("ARGameActivity", "persistArena: hostCloudAnchor failed: ${it.message}")
+            return
+        }
+        hostingCloudAnchor = hosted
+        pollHostCloud()
+    }
+
+    private fun pollHostCloud() {
+        val hosted = hostingCloudAnchor ?: return
+        when (val st = hosted.cloudAnchorState) {
+            Anchor.CloudAnchorState.SUCCESS -> {
+                hostingCloudAnchor = null
+                val cloudId = hosted.cloudAnchorId
+                val existing = currentRoomId?.let { ArArenaStore.loadRoom(this, it) }
+                val room = existing?.copy(cloudAnchorId = cloudId)
+                    ?: ArArenaStore.createRoom(ArArenaStore.nextRoomName(this), cloudId)
+                currentRoomId = room.roomId
+                forceNewRoom = false
+                ArArenaStore.saveRoom(this, room)
+                lifecycleScope.launch { ArArenaStore.pushRoom(room) }
+                AppLog.i("ARGameActivity", "Arena saved in stanza '${room.name}' (cloud ${cloudId.take(8)}…)")
+            }
+            Anchor.CloudAnchorState.NONE -> handler.postDelayed({ pollHostCloud() }, 250)
+            Anchor.CloudAnchorState.ERROR_NOT_AUTHORIZED,
+            Anchor.CloudAnchorState.ERROR_RESOURCE_EXHAUSTED -> {
+                hostingCloudAnchor = null
+                AppLog.w("ARGameActivity", "persistArena: cloud anchor not authorized/resource exhausted")
+            }
+            else -> {
+                hostingCloudAnchor = null
+                AppLog.w("ARGameActivity", "persistArena: host state ${st.name}")
+            }
+        }
+    }
+
+    /** ID della Cloud Anchor da ripristinare: la stanza attiva o, in mancanza, l'ultima usata. */
+    private fun savedCloudAnchorId(): String? {
+        val roomId = currentRoomId ?: ArArenaStore.lastRoom(this) ?: return null
+        return ArArenaStore.loadRoom(this, roomId)?.cloudAnchorId
+    }
+
+    /** Prova a risolvere [anchorId]; [onDone] riceve l'ancora o null (fallito). */
+    private fun startCloudRestore(anchorId: String, onDone: (AnchorNode?) -> Unit) {
+        val session = lastSession ?: sceneView.session
+        if (session == null) { onDone(null); return }
+        val resolved = runCatching { session.resolveCloudAnchor(anchorId) }.getOrElse {
+            AppLog.w("ARGameActivity", "startCloudRestore: resolveCloudAnchor failed: ${it.message}")
+            onDone(null)
+            return
+        }
+        resolvingCloudAnchor = resolved
+        val start = SystemClock.uptimeMillis()
+        fun poll() {
+            val a = resolvingCloudAnchor ?: return
+            when {
+                a.cloudAnchorState == Anchor.CloudAnchorState.SUCCESS -> {
+                    resolvingCloudAnchor = null
+                    val node = anchorNodeForResolved(a)
+                    AppLog.i("ARGameActivity", "Arena position restored from cloud")
+                    onDone(node)
+                }
+                a.cloudAnchorState.name.startsWith("ERROR") ||
+                    SystemClock.uptimeMillis() - start > CLOUD_RESTORE_TIMEOUT_MS -> {
+                    resolvingCloudAnchor = null
+                    AppLog.w("ARGameActivity", "startCloudRestore: ${a.cloudAnchorState.name} → fallback to scan")
+                    onDone(null)
+                }
+                else -> handler.postDelayed({ poll() }, 250)
+            }
+        }
+        poll()
+    }
+
+    /** Avvolge un anchor (risolto) in un [AnchorNode] registrato nella scena. */
+    private fun anchorNodeForResolved(anchor: Anchor): AnchorNode? {
+        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
+        sceneView.addChildNode(an)
+        sharedAnchors.add(an)
+        return an
+    }
+
     /**
      * Piazza l'arena secondo la modalità attiva, ritentando finché non trova una
      * posizione valida (piano/mesh davanti alla camera). Mostra suggerimenti nello
@@ -680,14 +905,17 @@ abstract class ARGameActivity : AppCompatActivity() {
     protected fun placeArena(onReady: (AnchorNode) -> Unit) {
         val a = tryArenaByMode()
         if (a == null) {
-            statusText.text = if (gameMode == ARGameMode.FREE)
-                "⚠️ Inquadra la stanza davanti a te…"
-            else
-                "⚠️ Nessuna superficie rilevata: muovi il telefono e inquadra un tavolo o il pavimento."
+            if (!cloudRestoring) {
+                statusText.text = if (gameMode == ARGameMode.FREE)
+                    "⚠️ Inquadra la stanza davanti a te…"
+                else
+                    "⚠️ Nessuna superficie rilevata: muovi il telefono e inquadra un tavolo o il pavimento."
+            }
             if (running) postDelayed(500) { placeArena(onReady) }
             return
         }
         onReady(a)
+        persistArena(a)
     }
 
     /**

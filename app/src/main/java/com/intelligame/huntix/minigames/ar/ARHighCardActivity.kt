@@ -13,6 +13,7 @@ class ARHighCardActivity : ARGameActivity() {
     private var drawn = false
 
     override fun onGameCreate() {
+        usesSurfaceArena = false
         round = 0; wins = 0; drawn = false
         statusText.text = "Carta Alta AR: tocca per pescare la carta! 🃏"
         startGame()

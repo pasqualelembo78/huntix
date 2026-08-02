@@ -97,6 +97,7 @@ class ARMemoryActivity : ARGameActivity() {
         if (arena != null) {
             scanning = false
             placed = true
+            persistArena(arena)
             statusText.text = "Memory AR: trova le coppie! 🧠"
             AppLog.i("ARMemoryActivity", "Plane found — placing grid")
             placeGrid(arena)

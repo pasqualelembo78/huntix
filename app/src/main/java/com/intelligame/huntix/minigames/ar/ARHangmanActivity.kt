@@ -83,6 +83,7 @@ class ARHangmanActivity : ARGameActivity() {
             return
         }
         arena = a
+        persistArena(a)
 
         gallowsBase = cubeNode(0xFF8D6E63.toInt(), Float3(0.25f, 0.04f, 0.18f)).apply {
             position = Position(0f, 0.03f, -0.3f)

@@ -18,6 +18,7 @@ class ARColorBombActivity : ARGameActivity() {
     private var targetCb: Runnable? = null
 
     override fun onGameCreate() {
+        usesSurfaceArena = false
         lives = 3; score = 0; timeLeft = 30
         eggsActive.clear()
         target = (0..5).random()

@@ -9,6 +9,7 @@ class AREggRadarActivity : ARGameActivity() {
     private var timerCb: Runnable? = null
 
     override fun onGameCreate() {
+        usesSurfaceArena = false
         timeLeft = 45
         statusText.text = "Radar AR: cattura tutte le uova sospese! 🛰️"
         startGame(); startTimer(); whenReady { spawnWave() }

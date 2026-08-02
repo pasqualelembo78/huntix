@@ -87,6 +87,7 @@ class ARFlappyEggActivity : ARGameActivity() {
             return
         }
         arena = a
+        persistArena(a)
         val egg = eggNode(C_EGG, 0.09f)
         egg.position = Position(0f, 0f, 0f)
         a.addChildNode(egg)

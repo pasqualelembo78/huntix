@@ -17,6 +17,7 @@ class ARCatchEggActivity : ARGameActivity() {
     private var spawnCb: Runnable? = null
 
     override fun onGameCreate() {
+        usesSurfaceArena = false
         lives = 3; score = 0; timeLeft = 40; speedMult = 1f
         eggsActive.clear()
         statusText.text = "Tocca le uova fluttuanti nell'aria! 🎯"
