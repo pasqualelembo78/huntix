@@ -199,7 +199,7 @@ class DinoGameActivity : AppCompatActivity() {
             // Cactus
             val type = if (Random.nextFloat() < 0.4f) TYPE_CACTUS_LARGE else TYPE_CACTUS_SMALL
             val w = if (type == TYPE_CACTUS_LARGE) 0.05f else 0.035f
-            val h = groundY - 0.07f
+            val h = 0.12f
             obstacles.add(Obstacle(1f + margin, w, h, type, groundY - h / 2 - 0.01f))
             // Sometimes spawn a second cactus close by
             if (Random.nextFloat() < 0.3f) {
@@ -212,17 +212,17 @@ class DinoGameActivity : AppCompatActivity() {
             if (nextCactusGap > 0) {
                 val type = if (Random.nextFloat() < 0.4f) TYPE_CACTUS_LARGE else TYPE_CACTUS_SMALL
                 val w = if (type == TYPE_CACTUS_LARGE) 0.05f else 0.035f
-                val h = groundY - 0.07f
+                val h = 0.12f
                 obstacles.add(Obstacle(1f + margin + 0.06f, w, h, type, groundY - h / 2 - 0.01f))
             }
         }
     }
 
     private fun checkCollisions() {
-        val dinoLeft = 0.1f
-        val dinoRight = 0.1f + dinoSize
-        val dinoTop = dinoY - dinoSize / 2
-        val dinoBottom = dinoY + dinoSize / 2
+        val dinoLeft = 0.1f - dinoSize * 0.2f
+        val dinoRight = 0.1f + dinoSize * 1.1f
+        val dinoTop = dinoY - dinoSize
+        val dinoBottom = dinoY + dinoSize * 0.7f
 
         for (obs in obstacles) {
             val obsLeft = obs.x
@@ -346,17 +346,40 @@ class DinoGameActivity : AppCompatActivity() {
             val groundPaint2 = Paint().apply { color = Color.parseColor("#00FF88") }
             c.drawLine(offsetX, groundYAbs, offsetX + gridW, groundYAbs, groundPaint2)
 
-            // Draw dino
+            // Draw dino as a proper dinosaur silhouette
+            val dinoAbs = dinoSize * gridW
             val dinoX = offsetX + 0.1f * gridW
-            val dinoCX = dinoX + dinoSize * gridW / 2
-            val dinoCY = offsetY + dinoY * gridH
-            val dinoR = dinoSize * gridW / 2
-            c.drawCircle(dinoCX, dinoCY, dinoR, dinoPaint)
+            val dinoYAbs = offsetY + dinoY * gridH
+            val bodyW = dinoAbs * 0.9f
+            val bodyH = dinoAbs * 1.0f
+            val bodyX = dinoX
+            val bodyY = dinoYAbs - bodyH / 2
+            c.drawRoundRect(bodyX, bodyY, bodyX + bodyW, bodyY + bodyH, bodyW * 0.25f, bodyH * 0.3f, dinoPaint)
+            // Tail
+            val tailW = bodyW * 0.2f
+            val tailH = bodyH * 1.3f
+            val tailX = bodyX - tailW
+            val tailY = bodyY - tailH * 0.3f
+            c.drawRoundRect(tailX, tailY, tailX + tailW, tailY + tailH, tailW / 2, tailH / 3, dinoPaint)
+            // Neck + head
+            val neckW = bodyW * 0.15f
+            val neckH = bodyH * 0.7f
+            val neckX = bodyX + bodyW * 0.6f
+            c.drawRoundRect(neckX, bodyY, neckX + neckW, bodyY + neckH, neckW / 2, neckW / 2, dinoPaint)
+            val headW = bodyW * 0.4f
+            val headH = bodyH * 0.4f
+            val headX = neckX - headW * 0.1f
+            val headY = bodyY + neckH - headH * 0.3f
+            c.drawRoundRect(headX, headY, headX + headW, headY + headH, headW / 3, headH / 3, dinoPaint)
             // Eye
             eyePaint.color = if (nightMode) Color.WHITE else Color.BLACK
-            val eyeOffset = dinoR * 0.3f
-            val eyeR = dinoR * 0.2f
-            c.drawCircle(dinoCX - eyeOffset, dinoCY - eyeOffset, eyeR, eyePaint)
+            val eyeR = headW * 0.18f
+            c.drawCircle(headX + headW * 0.7f, headY + headH * 0.35f, eyeR, eyePaint)
+            // Legs
+            val legW = bodyW * 0.18f
+            val legH = bodyH * 0.4f
+            c.drawRoundRect(bodyX + bodyW * 0.12f, bodyY + bodyH, bodyX + bodyW * 0.12f + legW, bodyY + bodyH + legH, legW / 2, legH / 3, dinoPaint)
+            c.drawRoundRect(bodyX + bodyW * 0.55f, bodyY + bodyH, bodyX + bodyW * 0.55f + legW, bodyY + bodyH + legH, legW / 2, legH / 3, dinoPaint)
 
             // Draw obstacles
             for (obs in obstacles) {
@@ -368,16 +391,16 @@ class DinoGameActivity : AppCompatActivity() {
                 when (obs.type) {
                     TYPE_CACTUS_SMALL -> {
                         cactusPaint.color = Color.parseColor("#00C86A")
-                        // Multi-segment cactus
+                        val halfH = obsH / 2
                         val segW = obsW / 2
-                        c.drawRect(obsX, obsY - obsH, obsX + segW, obsY, cactusPaint)
-                        c.drawRect(obsX + segW, obsY - obsH * 0.7f, obsX + obsW, obsY, cactusPaint)
+                        c.drawRect(obsX, obsY - halfH, obsX + segW, obsY + halfH, cactusPaint)
+                        c.drawRect(obsX + segW, obsY - halfH * 0.4f, obsX + obsW, obsY + halfH, cactusPaint)
                     }
                     TYPE_CACTUS_LARGE -> {
                         cactusPaint.color = Color.parseColor("#009633")
-                        // Large cactus with arm
-                        c.drawRect(obsX, obsY - obsH, obsX + obsW, obsY, cactusPaint)
-                        c.drawRect(obsX + obsW, obsY - obsH * 0.6f, obsX + obsW * 1.3f, obsY - obsH * 0.4f, cactusPaint)
+                        val halfH = obsH / 2
+                        c.drawRect(obsX, obsY - halfH, obsX + obsW, obsY + halfH, cactusPaint)
+                        c.drawRect(obsX + obsW * 0.7f, obsY - halfH, obsX + obsW * 1.2f, obsY - halfH * 0.3f, cactusPaint)
                     }
                     TYPE_BIRD -> {
                         // Bird — two circles + beak
