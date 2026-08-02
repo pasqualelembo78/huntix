@@ -152,7 +152,11 @@ abstract class ARGameActivity : AppCompatActivity() {
         sceneView.configureSession { _, config -> configBlock(config) }
         // Fallback: if session already created by onAttachedToWindow lifecycle auto-detection,
         // configureSession's callback was missed. Apply config immediately.
-        sceneView.session?.configure(configBlock)
+        sceneView.session?.let { session ->
+            val config = session.config
+            configBlock(config)
+            session.configure(config)
+        }
         sceneView.onSessionUpdated = { s, f ->
             lastSession = s
             lastFrame = f
