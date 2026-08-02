@@ -1,12 +1,12 @@
 package com.intelligame.huntix.minigames.ar
 
 import android.view.MotionEvent
-import com.google.arcore.Frame
-import com.google.arcore.Session
+import com.google.ar.core.Frame
+import com.google.ar.core.Session
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.github.sceneview.ar.node.AnchorNode
-import io.github.sceneview.math.Float3
+import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.sentry.Sentry

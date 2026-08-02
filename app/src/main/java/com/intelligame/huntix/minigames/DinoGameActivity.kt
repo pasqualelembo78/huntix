@@ -52,7 +52,7 @@ class DinoGameActivity : AppCompatActivity() {
     private val obstacles = mutableListOf<Obstacle>()
     private var lastSpawn = 0L
     private val spawnIntervalBase = 1500L
-    private var nextCactusGap = 0L
+    private var nextCactusGap = 0f
 
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val groundPaint = Paint().apply { color = Color.parseColor("#0D0620") }
@@ -163,7 +163,7 @@ class DinoGameActivity : AppCompatActivity() {
         }
 
         // Move obstacles
-        val iter = obstacles.iterator()
+        val iter = obstacles.listIterator()
         while (iter.hasNext()) {
             val obs = iter.next()
             val newX = obs.x - gameSpeed * deltaSec * 60f / 100f
