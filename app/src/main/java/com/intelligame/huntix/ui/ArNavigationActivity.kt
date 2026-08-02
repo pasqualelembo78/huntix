@@ -89,7 +89,6 @@ class ArNavigationActivity : AppCompatActivity() {
 
         sceneView = findViewById(R.id.sceneView)
         overlay = findViewById(R.id.arOverlay)
-        sceneView.lifecycle = lifecycle
         val intentEggId = intent.getStringExtra("eggId")
         mgr.huntingEggId = intentEggId ?: mgr.nearestUnfoundEgg()?.id
         buildHud()
@@ -131,6 +130,12 @@ class ArNavigationActivity : AppCompatActivity() {
                     currentEggId = null
                 }
             }
+        }
+
+        // SceneView.onAttachedToWindow() auto-detects the lifecycle. Only set
+        // it manually as a fallback if auto-detection failed.
+        if (sceneView.lifecycle == null) {
+            sceneView.lifecycle = lifecycle
         }
 
         val needsLoc = ContextCompat.checkSelfPermission(

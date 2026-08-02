@@ -86,7 +86,6 @@ class OutdoorArCatchActivity : AppCompatActivity() {
 
         sceneView = findViewById(R.id.sceneView)
         overlay = findViewById(R.id.arOverlay)
-        sceneView.lifecycle = lifecycle
         buildHud()
         configureSession()
 
@@ -110,6 +109,12 @@ class OutdoorArCatchActivity : AppCompatActivity() {
                 updateArrow3D()
                 updateCompassEggs()
             }
+        }
+
+        // SceneView.onAttachedToWindow() auto-detects the lifecycle. Only set
+        // it manually as a fallback if auto-detection failed.
+        if (sceneView.lifecycle == null) {
+            sceneView.lifecycle = lifecycle
         }
 
         val needsLoc = ContextCompat.checkSelfPermission(

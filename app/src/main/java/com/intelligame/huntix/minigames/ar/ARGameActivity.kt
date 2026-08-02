@@ -129,10 +129,15 @@ abstract class ARGameActivity : AppCompatActivity() {
         android.util.Log.d("ARGameActivity", "SceneView found: ${sceneView != null}, SceneView class: ${sceneView?.javaClass?.name}")
         android.util.Log.d("ARGameActivity", "HUD found: ${hud != null}")
         android.util.Log.d("ARGameActivity", "SceneView initialized: ${sceneView != null}")
-        sceneView.lifecycle = lifecycle
-        buildHud()
-        android.util.Log.d("ARGameActivity", "Checking CAMERA permission")
 
+        buildHud()
+
+        // Set callbacks BEFORE triggering the lifecycle. If the lifecycle was
+        // already auto-detected by SceneView.onAttachedToWindow(), the session
+        // may already be created, so configureSession's callback would be missed.
+        // By setting callbacks first, we ensure they are registered before any
+        // session creation happens (whether from onAttachedToWindow or the
+        // manual fallback below).
         sceneView.onSessionCreated = { _ ->
             AppLog.i("ARGameActivity", "ARCore session created")
         }
@@ -171,6 +176,16 @@ abstract class ARGameActivity : AppCompatActivity() {
                 }
             }
             true
+        }
+
+        // SceneView.onAttachedToWindow() auto-detects the lifecycle from the
+        // view hierarchy. Setting it explicitly a second time triggers
+        // ON_DESTROY + ON_CREATE again, which destroys the SceneView engine
+        // and calls arCore.create() twice (duplicate ActivityResultLauncher
+        // registration → IllegalStateException). Only set it manually as a
+        // fallback if onAttachedToWindow didn't auto-detect it.
+        if (sceneView.lifecycle == null) {
+            sceneView.lifecycle = lifecycle
         }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
