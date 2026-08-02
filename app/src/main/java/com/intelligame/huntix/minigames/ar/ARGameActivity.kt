@@ -138,6 +138,18 @@ abstract class ARGameActivity : AppCompatActivity() {
         android.util.Log.d("ARGameActivity", "HUD found: ${hud != null}")
         android.util.Log.d("ARGameActivity", "SceneView initialized: ${sceneView != null}")
 
+        // Luce ambientale per i giochi AR: l'ambiente di default di ARSceneView
+        // non ha IndirectLight, quindi gli oggetti sono illuminati solo dal "sole"
+        // stimato da ARCore (AMBIENT_INTENSITY). Con pixelIntensity bassa (stanza
+        // normale) il sole è troppo debole e le uova risultano nere. La IBL neutra
+        // garantisce luce ambientale uniforme: oggetti sempre visibili e colorati.
+        runCatching {
+            sceneView.environment = sceneView.environmentLoader.createKTX1Environment(
+                iblAssetFile = "environments/neutral/neutral_ibl.ktx",
+                skyboxAssetFile = null
+            )
+        }
+
         buildHud()
 
         // Set callbacks BEFORE triggering the lifecycle. If the lifecycle was
@@ -417,22 +429,16 @@ abstract class ARGameActivity : AppCompatActivity() {
      * reale mentre il giocatore si muove nella stanza.
      */
     protected fun spawnEggAt(pose: Pose, type: Int, radius: Float = 0.07f): AREgg? {
-        val session = lastSession ?: return null
-        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
-            AppLog.e("ARGameActivity", "spawnEggAt: createAnchor failed", it)
-            return null
-        }
-        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
+        val an = spawnAnchorAt(pose) ?: return null
         val mat = sceneView.materialLoader.createColorInstance(color = eggColor(type))
         val node = SphereNode(sceneView.engine, radius, materialInstance = mat).apply {
             position = Position(0f, 0f, 0f)
             scale = Scale(1f, 1.4f, 1f)
         }
         an.addChildNode(node)
-        sceneView.addChildNode(an)
         val egg = AREgg(an, node, type, phase = Math.random().toFloat() * 6.28f)
         eggs[node] = egg
-        AppLog.i("ARGameActivity", "Egg spawned at world pose type=$type, anchor=${anchor.trackingState}")
+        AppLog.i("ARGameActivity", "Egg spawned at world pose type=$type, anchor=${an.anchor.trackingState}")
         onEggSpawned(egg)
         return egg
     }
@@ -463,6 +469,23 @@ abstract class ARGameActivity : AppCompatActivity() {
         egg.alive = false
         eggs.remove(egg.node)
         egg.anchorNode.destroy()
+    }
+
+    /** Registra un egg creato dall'esterno (es. carte ImageNode) per il tap-to-match. */
+    protected fun registerEgg(egg: AREgg) {
+        synchronized(eggs) { eggs[egg.node] = egg }
+    }
+
+    /** Crea un [AnchorNode] da una pose assoluta SENZA registrarlo in sharedAnchors. */
+    protected fun spawnAnchorAt(pose: Pose): AnchorNode? {
+        val session = lastSession ?: return null
+        val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
+            AppLog.e("ARGameActivity", "spawnAnchorAt: createAnchor failed", it)
+            return null
+        }
+        val an = AnchorNode(engine = sceneView.engine, anchor = anchor)
+        sceneView.addChildNode(an)
+        return an
     }
 
     // ── shared-anchor arena (per giochi con campo di gioco unico) ──

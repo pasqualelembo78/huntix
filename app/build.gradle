@@ -123,6 +123,13 @@ compileOptions {
         viewBinding true
         buildConfig true
     }
+
+    lint {
+        // Il controllo lint "vital" sulle build release è costoso (es. lintVitalRelease)
+        // e rallenta ogni assembleRelease/bundleRelease. Lo si esegue solo esplicitamente
+        // con: ./gradlew lint  (consigliato in CI, non in ogni build di rilascio).
+        checkReleaseBuilds = false
+    }
 }
 
 configurations.all {
