@@ -269,9 +269,9 @@ class GamePreviewView(context: Context) : View(context) {
         canvas.drawLine(cx - dp(4f), cy - dp(6f), cx - dp(2f), cy - dp(12f), strokePaint)
         // Cacti
         fillPaint.color = 0xFF00C86A.toInt()
-        canvas.drawRect(RectF(cx - dp(6f), cy + dp(8f), cx - dp(3f), cy + dp(2f)), fillPaint)
-        canvas.drawRect(RectF(cx + dp(8f), cy + dp(8f), cx + dp(11f), cy + dp(4f)), fillPaint)
-        canvas.drawRect(RectF(cx + dp(15f), cy + dp(8f), cx + dp(18f), cy + dp(2f)), fillPaint)
+        canvas.drawRect(cx - dp(6f), cy + dp(8f), cx - dp(3f), cy + dp(2f), fillPaint)
+        canvas.drawRect(cx + dp(8f), cy + dp(8f), cx + dp(11f), cy + dp(4f), fillPaint)
+        canvas.drawRect(cx + dp(15f), cy + dp(8f), cx + dp(18f), cy + dp(2f), fillPaint)
     }
 
     private fun drawMemory(canvas: Canvas, cx: Float, cy: Float) {

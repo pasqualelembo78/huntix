@@ -3,6 +3,8 @@ package com.intelligame.huntix.minigames
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -16,6 +18,7 @@ import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
 import kotlin.math.min
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
