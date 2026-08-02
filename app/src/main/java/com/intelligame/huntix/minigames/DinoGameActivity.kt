@@ -123,7 +123,7 @@ class DinoGameActivity : AppCompatActivity() {
         lastSpeedBump = 0L
         obstacles.clear()
         lastSpawn = 0L
-        nextCactusGap = 0L
+        nextCactusGap = 0f
         gameRunning = true
         nightMode = false
         nightPhase = 0f
