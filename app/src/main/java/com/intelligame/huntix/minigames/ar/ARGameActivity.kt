@@ -102,6 +102,19 @@ abstract class ARGameActivity : AppCompatActivity() {
     private val fx = Collections.synchronizedList(mutableListOf<FxParticle>())
     private var fxLast = 0L
 
+    // ── zoom a due dita (pinch) ─────────────────────────────────
+    // Le ancore AR sono agganciate al mondo reale: per allargare/rimpicciolire
+    // il campo senza perderne l'ancoraggio scaliamo le [AnchorNode] stesse.
+    // PoseNode riscrive la transform a ogni aggiornamento dell'anchor, quindi
+    // la scala va ri-applicata ogni frame (vedi [syncContentScale]).
+    protected var contentScale = 1f
+        private set
+    private var pinchGesture = false
+    private var suppressTap = false
+    private var pinchStartDist = 0f
+    private var pinchStartScale = 1f
+    private var zoomText: TextView? = null
+
     data class FxParticle(
         val node: SphereNode,
         var vel: Float3,
@@ -205,7 +218,11 @@ abstract class ARGameActivity : AppCompatActivity() {
             tickEngine()
         }
         sceneView.onTouchEvent = { event, svHit ->
-            if (event.action == MotionEvent.ACTION_UP) {
+            if (onTouchPinch(event)) {
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    suppressTap = false
+                }
+            } else if (event.actionMasked == MotionEvent.ACTION_UP) {
                 val egg = svHit?.node?.let { eggs[it] }
                 when {
                     egg != null -> onEggTapped(egg)
@@ -356,6 +373,23 @@ abstract class ARGameActivity : AppCompatActivity() {
         }
         wrap.addView(topRow); wrap.addView(statusText)
         hud.addView(wrap)
+
+        zoomText = TextView(c).apply {
+            text = "🔍 100%"
+            textSize = 11f
+            setTextColor(0xCCFFFFFF.toInt())
+            setBackgroundColor(0x660D0620.toInt())
+            setPadding(UiKit.dp(c, 8), UiKit.dp(c, 4), UiKit.dp(c, 8), UiKit.dp(c, 4))
+            visibility = android.view.View.GONE
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.END
+                topMargin = UiKit.dp(c, 52)
+                rightMargin = UiKit.dp(c, 12)
+            }
+        }
+        hud.addView(zoomText)
     }
 
     // ── lifecycle hooks ──────────────────────────────────────────
@@ -919,6 +953,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             }
         }
         spatialAudio.tick(cameraPose)
+        syncContentScale()
     }
 
 
@@ -942,6 +977,76 @@ abstract class ARGameActivity : AppCompatActivity() {
     protected fun removeNode(node: Node) {
         node.parent?.removeChildNode(node)
         node.destroy()
+    }
+
+    // ── pinch-zoom ─────────────────────────────────────────────
+
+    private fun pinchDistance(e: MotionEvent): Float {
+        if (e.pointerCount < 2) return 0f
+        val dx = e.getX(0) - e.getX(1)
+        val dy = e.getY(0) - e.getY(1)
+        return kotlin.math.sqrt(dx * dx + dy * dy)
+    }
+
+    /** Applica la scala corrente a tutte le ancore del gioco (ogni frame). */
+    private fun syncContentScale() {
+        val sc = Scale(contentScale, contentScale, contentScale)
+        sharedAnchors.forEach { it.scale = sc }
+        synchronized(eggs) {
+            eggs.values.forEach { it.anchorNode.scale = sc }
+        }
+    }
+
+    /** Scala tutto il contenuto AR di [scale] (0.4–2.5): grandezza E distanze. */
+    protected fun applyContentScale(scale: Float) {
+        contentScale = scale.coerceIn(0.4f, 2.5f)
+        syncContentScale()
+        zoomText?.let {
+            it.visibility = if (contentScale != 1f) android.view.View.VISIBLE else android.view.View.GONE
+            it.text = "🔍 ${(contentScale * 100).toInt()}%"
+        }
+    }
+
+    /** Riporta lo zoom a 1×. */
+    protected fun resetContentScale() {
+        contentScale = 1f
+        syncContentScale()
+        zoomText?.let {
+            it.visibility = android.view.View.GONE
+            it.text = "🔍 100%"
+        }
+    }
+
+    /** Gestione del tocco a due dita dentro il callback di tocco della scena. */
+    private fun onTouchPinch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount >= 2) {
+                    pinchGesture = true
+                    pinchStartDist = pinchDistance(event)
+                    pinchStartScale = contentScale
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (pinchGesture && event.pointerCount >= 2) {
+                    val d = pinchDistance(event)
+                    if (pinchStartDist > 0f && d > 0f) {
+                        applyContentScale(pinchStartScale * d / pinchStartDist)
+                    }
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (pinchGesture) {
+                    pinchGesture = false
+                    suppressTap = true
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                pinchGesture = false
+                suppressTap = true
+            }
+        }
+        return pinchGesture || suppressTap
     }
 
     // ── input capture (drag / tap full-screen) ─────────────────────
@@ -1100,6 +1205,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         spatialAudio.release()
         sharedAnchors.forEach { it.destroy() }
         sharedAnchors.clear()
+        resetContentScale()
         running = false
         startContent()
     }
