@@ -295,6 +295,11 @@
 
         <!-- Giochi di Numeri / Logica -->
 
+         <activity android:name=".minigames.SnakeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
         <activity android:name=".minigames.MemoryGameActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>

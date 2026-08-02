@@ -57,7 +57,7 @@ class AREggShooterActivity : ARGameActivity() {
             egg.phase += 0.006f
             moveEggLocal(egg, 0f, egg.phase, 0f)
             if (egg.phase > 0.55f) {
-                eggsActive.remove(egg); removeEgg(egg)
+                iter.remove(); removeEgg(egg)
                 lives = (lives - 1).coerceAtLeast(0)
                 updateHud()
                 if (lives <= 0) endGame()
