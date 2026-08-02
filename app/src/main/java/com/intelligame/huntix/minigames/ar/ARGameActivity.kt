@@ -38,8 +38,10 @@ import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.ar.arcore.zDirection
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
+import io.github.sceneview.math.Rotation
 import io.github.sceneview.math.Scale
 import io.github.sceneview.node.CubeNode
+import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import java.util.Collections
@@ -696,6 +698,88 @@ abstract class ARGameActivity : AppCompatActivity() {
             val speed = 0.5f + Math.random().toFloat() * 0.4f
             synchronized(fx) {
                 fx += FxParticle(part, Float3(cos(ang) * speed, up + 0.3f, -sin(ang) * speed), 0.5f, 0.5f)
+            }
+        }
+    }
+
+    // ── rottura uovo → frittata ────────────────────────────────────
+
+    /** Disco piatto colorato (albume della frittata). */
+    private fun frittataDisc(color: Int, radius: Float, height: Float): CylinderNode {
+        val mat = sceneView.materialLoader.createColorInstance(color = color)
+        return CylinderNode(
+            sceneView.engine,
+            radius = radius,
+            height = height,
+            center = Position(0f, 0f, 0f),
+            sideCount = 28,
+            materialInstance = mat
+        )
+    }
+
+    /** Cupola schiacciata (tuorlo / bozzi della frittata). */
+    private fun frittataDome(color: Int, radius: Float): SphereNode {
+        val mat = sceneView.materialLoader.createColorInstance(color = color)
+        return SphereNode(sceneView.engine, radius, materialInstance = mat).apply {
+            scale = Scale(1f, 0.22f, 1f)
+        }
+    }
+
+    /**
+     * Un uovo si rompe e si trasforma in una frittata: spruzzo di tuorlo e
+     * albume (particelle) + un disco piatto con tuorlo a cupola che "piomba"
+     * a terra. [parent]/[local] = dove ancorare la frittata (spazio locale),
+     * [world] = posizione nel mondo per le particelle.
+     */
+    protected fun eggBreak(
+        parent: Node?,
+        local: Position,
+        world: Float3,
+        radius: Float = 0.085f,
+        big: Boolean = false
+    ) {
+        val n = if (big) 14 else 9
+        repeat(n) { it ->
+            val part = eggNode(if (it % 2 == 0) 0xFFFFD700.toInt() else 0xFFFFF3D6.toInt(), UiKit.dp(this, 2).toFloat())
+            part.position = Position(world.x, world.y + 0.03f, world.z)
+            sceneView.addChildNode(part)
+            val ang = it * 0.7f + Math.random().toFloat() * 0.5f
+            val speed = 0.1f + Math.random().toFloat() * (if (big) 0.32f else 0.18f)
+            synchronized(fx) {
+                fx += FxParticle(
+                    part,
+                    Float3(cos(ang) * speed, 0.3f + Math.random().toFloat() * 0.2f, sin(ang) * speed),
+                    0.55f, 0.55f, gravity = 1.8f
+                )
+            }
+        }
+        spatialAudio.oneShot(if (big) 75f else 120f + Math.random().toFloat() * 40f, 220, decay = true, gain = 0.5f)
+
+        val p = parent ?: return
+        val w = radius * (if (big) 1.6f else 1.1f)
+        val white = frittataDisc(0xFFFFF3D6.toInt(), w, 0.02f)
+        val yolk = frittataDome(0xFFFFC93C.toInt(), w * 0.55f)
+        yolk.position = Position(0f, 0.022f, 0f)
+        val bumps = (0..1).map {
+            frittataDome(0xFFFFA726.toInt(), w * 0.13f).apply {
+                val a = Math.random().toFloat() * 6.28f
+                position = Position(cos(a) * w * 0.35f, 0.038f, sin(a) * w * 0.35f)
+            }
+        }
+        val root = Node(sceneView.engine).apply {
+            rotation = Rotation(0f, Math.random().toFloat() * 360f, 0f)
+            addChildNode(white)
+            addChildNode(yolk)
+            bumps.forEach { addChildNode(it) }
+        }
+        p.addChildNode(root)
+        val landY = 0.02f
+        repeat(5) { st ->
+            postDelayed(st * 40L) {
+                if (isDestroyed) return@postDelayed
+                val f = (st + 1) / 5f
+                root.position = Position(local.x, landY + 0.08f * (1f - f), local.z)
+                root.scale = Scale(f, f, f)
             }
         }
     }

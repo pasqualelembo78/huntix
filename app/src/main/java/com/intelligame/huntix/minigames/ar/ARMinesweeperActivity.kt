@@ -4,7 +4,6 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
-import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
@@ -19,8 +18,9 @@ import kotlin.random.Random
  * Tocca per rivelare; le uova colorate indicano le uova adiacenti alla bomba
  * (colori classici). Attiva la bandiera per segnare le mine.
  *
- * Se tocchi una mina: tutte le uovo-mina diventano rosse ed esplodono in una
- * reazione a catena (particelle + suoni), la griglia trema e termina la partita.
+ * Se tocchi una mina: tutte le uovo-mina diventano rosse e si rompono una
+ * dopo l'altra trasformandosi in frittata (reazione a catena), la griglia
+ * trema con una grande frittata al centro e termina la partita.
  */
 class ARMinesweeperActivity : ARGameActivity() {
 
@@ -191,9 +191,9 @@ class ARMinesweeperActivity : ARGameActivity() {
     }
 
     /**
-     * Mina toccata: reazione a catena. La mina colpita esplode per prima, poi
-     * tutte le altre una alla volta (particelle + suoni); gran finale con una
-     * grossa esplosione centrale e scossa della griglia, poi fine partita.
+     * Mina toccata: reazione a catena. La mina colpita si rompe per prima, poi
+     * tutte le altre una alla volta (ognuna diventa una frittata); gran finale
+     * con una grande frittata al centro della griglia e scossa, poi fine partita.
      */
     private fun boom(tapped: Int) {
         exploding = true
@@ -209,10 +209,8 @@ class ARMinesweeperActivity : ARGameActivity() {
         }
         postDelayed(delay) {
             if (!exploding || isDestroyed) return@postDelayed
-            val center = arena?.worldPosition ?: return@postDelayed
-            burst(center, 0xFFFFB300.toInt(), 22)
-            burst(Float3(center.x, center.y + 0.3f, center.z), 0xFFFF5252.toInt(), 16)
-            spatialAudio.oneShot(90f, 420, decay = true, gain = 0.55f)
+            val a = arena ?: return@postDelayed
+            eggBreak(a, Position(0f, 0.03f, 0f), a.worldPosition, 0.09f, big = true)
             shakeGrid()
             postDelayed(520) {
                 if (!exploding || isDestroyed) return@postDelayed
@@ -222,17 +220,16 @@ class ARMinesweeperActivity : ARGameActivity() {
         }
     }
 
-    /** Fa esplodere una singola cella-mina in particelle colorate. */
+    /** Fa rompere una singola cella-mina: sparisce e diventa una frittata. */
     private fun explodeCell(i: Int) {
         val cell = cells[i] ?: return
         val node = cell.node ?: return
+        val local = node.position
         val wp = node.worldPosition
         removeNode(node)
         cell.node = null
         nodeMap.remove(node)
-        burst(wp, 0xFFFF5252.toInt(), 14)
-        burst(wp, 0xFFFFB300.toInt(), 7)
-        spatialAudio.oneShot(140f + Random.nextInt(60).toFloat(), 180, decay = true, gain = 0.45f)
+        eggBreak(node.parent, local, wp)
     }
 
     /** Scuote tutte le celle ancora presenti, poi le riporta in posizione. */
