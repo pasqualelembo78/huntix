@@ -102,12 +102,9 @@ class SnakeActivity : MiniGameBase() {
     private fun step() {
         dirX = nextDirX; dirY = nextDirY
         val head = snake.first()
-        val nx = head.first + dirX
-        val ny = head.second + dirY
-        if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) {
-            endGame()
-            return
-        }
+        // Wrap around the screen instead of ending the game at walls
+        val nx = Math.floorMod(head.first + dirX, COLS)
+        val ny = Math.floorMod(head.second + dirY, ROWS)
         val newHead = nx to ny
         if (newHead in snake) {
             endGame()
@@ -189,8 +186,9 @@ class SnakeActivity : MiniGameBase() {
         private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#00FF88") }
         private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#00C86A") }
         private val gridPaint = Paint().apply { color = Color.parseColor("#1A1030") }
-        private var startX = 0f
+         private var startX = 0f
         private var startY = 0f
+        private var isSwipe = false
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -207,7 +205,7 @@ class SnakeActivity : MiniGameBase() {
             }
             for ((i, p) in snake.withIndex()) {
                 val paint = if (i == 0) headPaint else bodyPaint
-                val inset = cw * 0.08f
+                val inset = cw * 0.22f
                 c.drawRoundRect(
                     android.graphics.RectF(p.first * cw + inset, p.second * ch + inset, (p.first + 1) * cw - inset, (p.second + 1) * ch - inset),
                     cw * 0.25f, ch * 0.25f, paint
@@ -217,17 +215,26 @@ class SnakeActivity : MiniGameBase() {
             c.drawText("🥚", food.first * cw + cw / 2, food.second * ch + ch * 0.85f, fp)
         }
 
-        override fun onTouchEvent(ev: MotionEvent): Boolean {
+         override fun onTouchEvent(ev: MotionEvent): Boolean {
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = ev.x; startY = ev.y
+                    isSwipe = false
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = ev.x - startX
+                    val dy = ev.y - startY
+                    if (!isSwipe && (Math.abs(dx) > 60 || Math.abs(dy) > 60)) {
+                        isSwipe = true
+                    }
                     return true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!gameRunning) return true
                     val dx = ev.x - startX
                     val dy = ev.y - startY
-                    if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return true
+                    if (!isSwipe || Math.abs(dx) < 60 && Math.abs(dy) < 60) return true
                     if (Math.abs(dx) > Math.abs(dy)) {
                         if (dx > 0 && dirX != -1) { nextDirX = 1; nextDirY = 0 }
                         else if (dx < 0 && dirX != 1) { nextDirX = -1; nextDirY = 0 }
