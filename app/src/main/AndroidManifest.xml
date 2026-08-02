@@ -323,6 +323,12 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
+        <!-- Classic Games -->
+        <activity android:name=".minigames.DinoGameActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
         <!-- AR Minigames -->
         <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>

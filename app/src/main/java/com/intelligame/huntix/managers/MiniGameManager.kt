@@ -66,6 +66,7 @@ object MiniGameManager {
     const val GAME_HANGMAN     = "hangman"
     const val GAME_TIC_TAC_TOE = "tic_tac_toe"
     const val GAME_SIMON       = "simon"
+    const val GAME_DINO        = "dino_runner"
 
     // ─── AR-Native exclusive game IDs ────────────────────────────
     const val GAME_AR_SHOOTER   = "ar_egg_shooter"
@@ -79,6 +80,7 @@ object MiniGameManager {
         GAME_CATCH_EGG, GAME_MATCH3,
         GAME_2048, GAME_SNAKE, GAME_MINESWEEPER, GAME_FLAPPY,
         GAME_CONNECT4, GAME_HANGMAN, GAME_TIC_TAC_TOE, GAME_SIMON,
+        GAME_DINO,
         GAME_SLINGSHOT
     )
 

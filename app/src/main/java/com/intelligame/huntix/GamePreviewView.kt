@@ -97,6 +97,7 @@ class GamePreviewView(context: Context) : View(context) {
             MiniGameManager.GAME_HANGMAN -> drawHangman(canvas, cx, cy)
             MiniGameManager.GAME_TIC_TAC_TOE -> drawTris(canvas, cx, cy)
             MiniGameManager.GAME_SIMON -> drawSimon(canvas, cx, cy)
+            MiniGameManager.GAME_DINO -> drawDino(canvas, cx, cy)
             MiniGameManager.GAME_MEMORY -> drawMemory(canvas, cx, cy)
             MiniGameManager.GAME_NUMBER_PICK -> drawNumberPick(canvas, cx, cy)
             MiniGameManager.GAME_HIGH_CARD -> drawHighCard(canvas, cx, cy)
@@ -244,6 +245,33 @@ class GamePreviewView(context: Context) : View(context) {
         canvas.drawCircle(cx - off, cy + off, r, fillPaint)
         fillPaint.color = 0xFFFFCA28.toInt()
         canvas.drawCircle(cx + off, cy + off, r, fillPaint)
+    }
+
+    private fun drawDino(canvas: Canvas, cx: Float, cy: Float) {
+        // Ground line
+        strokePaint.color = GREEN
+        strokePaint.strokeWidth = dp(1.5f)
+        canvas.drawLine(cx - dp(18f), cy + dp(8f), cx + dp(18f), cy + dp(8f), strokePaint)
+        // Dino body
+        fillPaint.color = GREEN
+        canvas.drawRect(RectF(cx - dp(10f), cy - dp(2f), cx - dp(2f), cy + dp(6f), fillPaint))
+        // Dino head
+        canvas.drawCircle(cx - dp(4f), cy - dp(6f), dp(4f), fillPaint)
+        // Eye
+        fillPaint.color = Color.BLACK
+        canvas.drawCircle(cx - dp(5.5f), cy - dp(7f), dp(1f), fillPaint)
+        // Legs
+        strokePaint.color = GREEN
+        canvas.drawLine(cx - dp(9f), cy + dp(4f), cx - dp(9f), cy + dp(10f), strokePaint)
+        canvas.drawLine(cx - dp(5f), cy + dp(4f), cx - dp(5f), cy + dp(10f), strokePaint)
+        // Neck
+        strokePaint.color = GREEN
+        canvas.drawLine(cx - dp(4f), cy - dp(6f), cx - dp(2f), cy - dp(12f), strokePaint)
+        // Cacti
+        fillPaint.color = 0xFF00C86A.toInt()
+        canvas.drawRect(RectF(cx - dp(6f), cy + dp(8f), cx - dp(3f), cy + dp(2f), fillPaint))
+        canvas.drawRect(RectF(cx + dp(8f), cy + dp(8f), cx + dp(11f), cy + dp(4f), fillPaint))
+        canvas.drawRect(RectF(cx + dp(15f), cy + dp(8f), cx + dp(18f), cy + dp(2f), fillPaint))
     }
 
     private fun drawMemory(canvas: Canvas, cx: Float, cy: Float) {
