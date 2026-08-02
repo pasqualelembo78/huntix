@@ -15,11 +15,16 @@ import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
 import java.util.Locale
+import kotlin.math.sin
 
 /**
  * 🙈 AR Impiccato — una forca sospesa nella stanza REALE con un'uovo appeso
  * che precipita ad ogni errore. Le lettere della parola sono uova fluttuanti
  * che diventano dorate quando le indovini. Lettere tramite tastiera in HUD.
+ *
+ * Ad ogni errore: l'uovo cade con animazione (scossa della forca inclusa),
+ * esplosione di particelle e suono d'impatto. Quando l'impiccato è completo
+ * (6 errori) parte un effetto pirotecnico con fuochi d'artificio colorati.
  */
 class ARHangmanActivity : ARGameActivity() {
 
@@ -31,6 +36,11 @@ class ARHangmanActivity : ARGameActivity() {
         )
         private val C_DIM = 0x99FFFFFF.toInt()
         private val C_GOLD = 0xFFFFD700.toInt()
+        private val FIRE_COLORS = intArrayOf(
+            0xFFFFD700.toInt(), 0xFFFF5252.toInt(), 0xFF40C4FF.toInt(),
+            0xFF69F0AE.toInt(), 0xFFFFB300.toInt(), 0xFFE040FB.toInt(),
+            0xFFFFFFFF.toInt()
+        )
     }
 
     init {
@@ -154,7 +164,7 @@ class ARHangmanActivity : ARGameActivity() {
     }
 
     private fun guess(ch: Char) {
-        if (guessed.contains(ch)) return
+        if (gameOver || guessed.contains(ch)) return
         guessed.add(ch)
         if (word.contains(ch)) {
             for (i in word.indices) {
@@ -166,28 +176,120 @@ class ARHangmanActivity : ARGameActivity() {
                     gold.position = Position(egg.position.x, egg.position.y, egg.position.z)
                     parent?.addChildNode(gold)
                     letterEggs[i] = gold
+                    burst(gold.worldPosition, C_GOLD, 6)
                 }
             }
             updateProgress()
             if (word.all { guessed.contains(it) }) {
-                endGame(true)
+                winBurst()
+                postDelayed(600) { endGame(true) }
             }
         } else {
+            if (wrong >= 6) return
             wrong++
             timerText.text = "Errori: $wrong/6"
-            val t = wrong / 6f
-            val color = Color.rgb(255, (255 * (1 - t)).toInt(), (255 * (1 - t)).toInt())
-            gallowsEgg[0]?.let { egg ->
-                val oldParent = egg.parent
-                removeNode(egg)
-                val red = eggNode(color, 0.1f)
-                red.position = Position(0.2f, 0.42f - wrong * 0.02f, -0.3f)
-                oldParent?.addChildNode(red)
-                gallowsEgg[0] = red
+            dropEgg()
+            if (wrong >= 6) postDelayed(420) { endGame(false) }
+        }
+    }
+
+    /** Errore: rimpiazza l'uovo con uno rosso, lo fa precipitare con animazione
+     *  (ease-in + oscillazione), scuote la forca e fa esplodere particelle. */
+    private fun dropEgg() {
+        val old = gallowsEgg[0]
+        val parent = old?.parent
+        if (old != null) removeNode(old)
+        val t = wrong / 6f
+        val color = Color.rgb(255, (255 * (1 - t)).toInt(), (255 * (1 - t)).toInt())
+        val egg = eggNode(color, 0.08f)
+        val startY = 0.42f
+        val targetY = startY - 0.02f - wrong * 0.045f
+        egg.position = Position(0.2f, startY, -0.3f)
+        parent?.addChildNode(egg)
+        gallowsEgg[0] = egg
+        val steps = 8
+        for (s in 1..steps) {
+            postDelayed(s * 30L) {
+                if (gallowsEgg[0] !== egg) return@postDelayed
+                val f = s.toFloat() / steps
+                val eased = f * f
+                egg.position = Position(
+                    0.2f + sin(f * 9f) * 0.02f * (1f - f),
+                    startY + (targetY - startY) * eased,
+                    -0.3f
+                )
             }
-            if (wrong >= 6) {
-                endGame(false)
+        }
+        postDelayed(steps * 30L) {
+            if (gallowsEgg[0] !== egg) return@postDelayed
+            val wp = egg.worldPosition
+            burst(wp, 0xFFFF5252.toInt(), 14)
+            burst(wp, 0xFFFFB300.toInt(), 7)
+            spatialAudio.oneShot(140f, 160, decay = true, gain = 0.5f)
+            spatialAudio.oneShot(90f, 260, decay = true, gain = 0.45f)
+        }
+        shakeGallows()
+    }
+
+    /** Scuote la forca (paletto + braccio) per dare impatto all'errore. */
+    private fun shakeGallows() {
+        val pole = gallowsPole ?: return
+        val arm = gallowsArm
+        val baseX = pole.position.x
+        val armBaseX = arm?.position?.x ?: 0f
+        val steps = 6
+        for (s in 1..steps) {
+            postDelayed(s * 40L) {
+                if (gallowsPole !== pole) return@postDelayed
+                val amp = 0.012f * (1f - s.toFloat() / (steps + 1f))
+                val off = sin(s * 2.6f) * amp
+                pole.position = Position(baseX + off, pole.position.y, pole.position.z)
+                arm?.let { a ->
+                    if (gallowsArm === a) {
+                        a.position = Position(armBaseX + off * 0.6f, a.position.y, a.position.z)
+                    }
+                }
             }
+        }
+        postDelayed(steps * 40L + 20L) {
+            if (gallowsPole === pole) pole.position = Position(baseX, pole.position.y, pole.position.z)
+            arm?.let { a ->
+                if (gallowsArm === a) a.position = Position(armBaseX, a.position.y, a.position.z)
+            }
+        }
+    }
+
+    /** Impiccato completo: fuochi d'artificio colorati attorno all'uovo appeso. */
+    private fun playFireworks() {
+        val base = gallowsEgg[0]?.worldPosition ?: arena?.worldPosition ?: return
+        var delay = 380L
+        repeat(8) { i ->
+            val color = FIRE_COLORS[i % FIRE_COLORS.size]
+            val offset = Float3(
+                (Math.random().toFloat() - 0.5f) * 0.9f,
+                0.2f + Math.random().toFloat() * 0.9f,
+                (Math.random().toFloat() - 0.5f) * 0.6f
+            )
+            val pos = Float3(base.x + offset.x, base.y + offset.y, base.z + offset.z)
+            val d = delay
+            postDelayed(d) {
+                burst(pos, color, 20)
+                burst(pos, Color.WHITE, 6)
+                spatialAudio.oneShot(320f + Math.random().toFloat() * 520f, 200, decay = true, gain = 0.4f)
+            }
+            delay += 300L
+        }
+        postDelayed(delay) { spatialAudio.oneShot(660f, 320, decay = true, gain = 0.35f) }
+    }
+
+    /** Vittoria: scoppio dorato + scintille colorate sulle lettere indovinate. */
+    private fun winBurst() {
+        val base = gallowsEgg[0]?.worldPosition ?: arena?.worldPosition ?: return
+        burst(base, C_GOLD, 16)
+        burst(Float3(base.x, base.y + 0.3f, base.z), 0xFF69F0AE.toInt(), 12)
+        spatialAudio.oneShot(520f, 300, decay = true, gain = 0.4f)
+        postDelayed(300) {
+            burst(Float3(base.x, base.y + 0.5f, base.z), 0xFF40C4FF.toInt(), 12)
         }
     }
 
@@ -207,15 +309,18 @@ class ARHangmanActivity : ARGameActivity() {
         letterGrid?.let { hud.removeView(it) }
         letterGrid = null
         if (!won) {
-            gallowsEgg[0]?.let { removeNode(it) }
-            gallowsEgg[0] = null
+            // L'uovo resta appeso ("impiccato") mentre partono i fuochi d'artificio.
             statusText.text = "La parola era: $word"
             statusText.setTextColor(Color.parseColor("#FF4444"))
+            playFireworks()
+            postDelayed(3200) {
+                if (!gameOver || isDestroyed) return@postDelayed
+                finishGame(8, "AR Impiccato ($word) ($wrong errori)", false, MiniGameManager.GAME_HANGMAN, celebrate = false)
+            }
+        } else {
+            try {
+                finishGame(60, "AR Impiccato vinto! ($wrong errori)", true, MiniGameManager.GAME_HANGMAN, celebrate = false)
+            } catch (e: Exception) { Sentry.captureException(e) }
         }
-        val reward = if (won) 60 else 8
-        val label = if (won) "AR Impiccato vinto!" else "AR Impiccato ($word)"
-        try {
-            finishGame(reward, "$label ($wrong errori)", won, MiniGameManager.GAME_HANGMAN)
-        } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

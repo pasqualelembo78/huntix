@@ -96,9 +96,27 @@ signingConfigs {
 
 buildTypes {
     release {
+        // Produzione: R8 + shrinkResources + regole proguard. È l'APK da
+        // pubblicare: piccolo, ottimizzato, con mapping per Sentry/Crashlytics.
+        // Per buildare velocemente senza R8 NON toccare qui: usa il build
+        // type "staging" qui sotto (minify e shrinkResources dipendono da R8,
+        // quindi escluderlo via -x romperebbe anche lo shrink delle risorse).
         minifyEnabled true
         shrinkResources true
         proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        if (project.hasProperty("keystoreProps")) {
+            signingConfig signingConfigs.release
+        }
+    }
+    // Build veloce per test locali: niente R8/lint/shrink, quindi assembla in
+    // pochi secondi. Firmata con la stessa chiave della release così si installa
+    // sopra la versione pubblicata (play store) senza disinstallare.
+    // Uso: ./gradlew installStaging
+    staging {
+        minifyEnabled false
+        shrinkResources false
+        debuggable true
+        versionNameSuffix "-staging"
         if (project.hasProperty("keystoreProps")) {
             signingConfig signingConfigs.release
         }

@@ -35,6 +35,7 @@ import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.ARSceneView
+import io.github.sceneview.ar.arcore.zDirection
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Scale
@@ -103,7 +104,8 @@ abstract class ARGameActivity : AppCompatActivity() {
         val node: SphereNode,
         var vel: Float3,
         var life: Float,
-        val maxLife: Float
+        val maxLife: Float,
+        var gravity: Float = 3f
     )
 
     data class AREgg(
@@ -120,6 +122,12 @@ abstract class ARGameActivity : AppCompatActivity() {
             0xFFFF7AB6.toInt(), 0xFFFFD166.toInt(), 0xFF6AD7FF.toInt(), 0xFFFF6B6B.toInt()
         )
         fun eggColor(type: Int) = EGG_COLORS[type % EGG_COLORS.size]
+
+        /** Colori vivaci per coriandoli/fuochi delle celebrazioni. */
+        private val CONFETTI_COLORS = intArrayOf(
+            0xFFFFD700.toInt(), 0xFF00E5FF.toInt(), 0xFFFF5252.toInt(), 0xFF69F0AE.toInt(),
+            0xFFFFB300.toInt(), 0xFFE040FB.toInt(), 0xFFFFFFFF.toInt()
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -692,6 +700,115 @@ abstract class ARGameActivity : AppCompatActivity() {
         }
     }
 
+    // ── celebrazioni (vittoria/sconfitta/pari) ─────────────────────
+
+    /** Centro del campo di gioco per gli effetti: arena condivisa se c'è,
+     *  altrimenti un punto davanti alla camera. */
+    protected fun gameCenter(): Float3 {
+        sharedAnchors.lastOrNull()?.let { return it.worldPosition }
+        val cam = cameraPose ?: return Float3(0f, 0.3f, 0f)
+        val f = cam.zDirection
+        return Float3(cam.tx() + f.x * 0.9f, cam.ty() + 0.2f, cam.tz() + f.z * 0.9f)
+    }
+
+    /** Vittoria stile mondiale: coriandoli + fuochi d'artificio + fanfara. */
+    protected fun celebrateWin(center: Float3? = null, accentColors: IntArray = CONFETTI_COLORS) {
+        val c = center ?: gameCenter()
+        confettiRain(c, 40, accentColors)
+        fireworks(c, accentColors, 6, 260L)
+        playVictoryFanfare()
+    }
+
+    /** Sconfitta: trombone "sad" + piccoli scoppi spenti (comico). */
+    protected fun celebrateLose(center: Float3? = null) {
+        val c = center ?: gameCenter()
+        playSadTrombone()
+        postDelayed(160) { burst(Float3(c.x, c.y + 0.1f, c.z), 0xFF9E9E9E.toInt(), 10) }
+        postDelayed(560) { burst(Float3(c.x, c.y + 0.15f, c.z), 0xFF607D8B.toInt(), 8) }
+    }
+
+    /** Pareggio: doppio tono gentile + piccolo scoppio dorato. */
+    protected fun celebrateDraw(center: Float3? = null) {
+        val c = center ?: gameCenter()
+        playDrawTone()
+        postDelayed(240) { burst(c, 0xFFFFD700.toInt(), 8) }
+    }
+
+    /** Pioggia di coriandoli che scende lenta sopra il campo (gravità ridotta). */
+    protected fun confettiRain(center: Float3, count: Int = 36, colors: IntArray = CONFETTI_COLORS) {
+        synchronized(fx) {
+            repeat(count) { k ->
+                val part = eggNode(colors[k % colors.size], UiKit.dp(this, 3).toFloat())
+                part.position = Position(
+                    center.x + (Math.random().toFloat() - 0.5f) * 1.6f,
+                    center.y + 0.9f + Math.random().toFloat() * 1.0f,
+                    center.z + (Math.random().toFloat() - 0.5f) * 1.0f
+                )
+                sceneView.addChildNode(part)
+                fx += FxParticle(
+                    part,
+                    Float3(
+                        (Math.random().toFloat() - 0.5f) * 0.35f,
+                        -0.05f - Math.random().toFloat() * 0.25f,
+                        (Math.random().toFloat() - 0.5f) * 0.35f
+                    ),
+                    1.6f, 1.6f, gravity = 0.4f
+                )
+            }
+        }
+    }
+
+    /** Batterie di fuochi d'artificio colorati sopra il campo. */
+    protected fun fireworks(center: Float3, colors: IntArray, volleys: Int = 6, delay: Long = 300L) {
+        var d = 0L
+        repeat(volleys) { v ->
+            val d0 = d
+            postDelayed(d0) {
+                val pos = Float3(
+                    center.x + (Math.random().toFloat() - 0.5f) * 1.3f,
+                    center.y + 0.7f + Math.random().toFloat() * 1.0f,
+                    center.z + (Math.random().toFloat() - 0.5f) * 0.9f
+                )
+                burst(pos, colors[v % colors.size], 18)
+                burst(pos, 0xFFFFFFFF.toInt(), 6)
+                spatialAudio.oneShot(300f + Math.random().toFloat() * 520f, 200, decay = true, gain = 0.4f)
+            }
+            d += delay
+        }
+    }
+
+    /** Fanfara di vittoria ascendente (stile podio/campionato). */
+    protected fun playVictoryFanfare() {
+        playNotes(listOf(
+            659f to 140L, 784f to 140L, 1047f to 140L, 1319f to 340L,
+            1047f to 170L, 784f to 170L, 1047f to 520L,
+            659f to 140L, 784f to 140L, 1047f to 140L, 1319f to 300L,
+            1568f to 240L, 1319f to 240L, 1047f to 640L
+        ))
+    }
+
+    /** "Trombone triste" discendente (comico, per la sconfitta). */
+    protected fun playSadTrombone() {
+        playNotes(listOf(
+            196f to 320L, 175f to 320L, 155f to 320L, 131f to 640L
+        ))
+    }
+
+    /** Doppio tono gentile per il pareggio. */
+    protected fun playDrawTone() {
+        playNotes(listOf(392f to 240L, 523f to 360L), 60L)
+    }
+
+    /** Suona una sequenza di note (freq, durata) una dopo l'altra. */
+    private fun playNotes(notes: List<Pair<Float, Long>>, startDelay: Long = 0L) {
+        var d = startDelay
+        notes.forEach { (freq, ms) ->
+            val d0 = d
+            postDelayed(d0) { spatialAudio.oneShot(freq, ms.toInt(), decay = true, gain = 0.35f) }
+            d += ms
+        }
+    }
+
     private fun tickEngine() {
         val now = SystemClock.elapsedRealtime()
         val dt = ((now - fxLast) / 1000f).coerceIn(0f, 0.05f)
@@ -710,7 +827,7 @@ abstract class ARGameActivity : AppCompatActivity() {
                         }
                         val pos = p.node.position
                         p.node.position = Position(pos.x + p.vel.x * dt, pos.y + p.vel.y * dt, pos.z + p.vel.z * dt)
-                        p.vel = Float3(p.vel.x, p.vel.y - 3f * dt, p.vel.z)
+                        p.vel = Float3(p.vel.x, p.vel.y - p.gravity * dt, p.vel.z)
                         val s = (p.life / p.maxLife) * 0.6f
                         p.node.scale = Scale(s, s, s)
                     }
@@ -846,9 +963,24 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     // ── end of game ──────────────────────────────────────────────
 
-    protected fun finishGame(reward: Int, label: String, isWin: Boolean, gameId: String) {
+    protected fun finishGame(
+        reward: Int,
+        label: String,
+        isWin: Boolean,
+        gameId: String,
+        celebrate: Boolean = true,
+        isDraw: Boolean = false,
+        accentColors: IntArray? = null
+    ) {
         running = false
         removeInputCapture()
+        if (celebrate) {
+            when {
+                isWin -> celebrateWin(gameCenter(), accentColors ?: CONFETTI_COLORS)
+                isDraw -> celebrateDraw(gameCenter())
+                else -> celebrateLose(gameCenter())
+            }
+        }
         MiniGameManager.consumePlay(this, gameId)
         MiniGameManager.applyReward(
             this,

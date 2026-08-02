@@ -4,17 +4,23 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
+import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlin.random.Random
 
 /**
  * 💣 AR Campo Minato — una griglia 9×9 di uova fluttua nella stanza REALE.
  * Tocca per rivelare; le uova colorate indicano le uova adiacenti alla bomba
  * (colori classici). Attiva la bandiera per segnare le mine.
+ *
+ * Se tocchi una mina: tutte le uovo-mina diventano rosse ed esplodono in una
+ * reazione a catena (particelle + suoni), la griglia trema e termina la partita.
  */
 class ARMinesweeperActivity : ARGameActivity() {
 
@@ -46,6 +52,7 @@ class ARMinesweeperActivity : ARGameActivity() {
     private var flagMode = false
     private var minesPlaced = false
     private var revealedCount = 0
+    private var exploding = false
     private var flagToggle: TextView? = null
 
     init {
@@ -66,6 +73,7 @@ class ARMinesweeperActivity : ARGameActivity() {
         livesText.text = "🥚 Campo Minato"
         timerText.text = "💣 $MINES"
         scoreText.text = "9×9"
+        exploding = false
         startGame()
         whenReady { placeArena { build(it) } }
     }
@@ -115,7 +123,7 @@ class ARMinesweeperActivity : ARGameActivity() {
     }
 
     override fun onNodeTapped(node: Node) {
-        if (gameOver || !running) return
+        if (gameOver || exploding || !running) return
         val idx = nodeMap[node] ?: return
         val cell = cells[idx] ?: return
         if (cell.revealed) return
@@ -131,7 +139,7 @@ class ARMinesweeperActivity : ARGameActivity() {
         }
         if (idx in mines) {
             revealMines()
-            endGame(false)
+            boom(idx)
             return
         }
         reveal(idx)
@@ -182,6 +190,79 @@ class ARMinesweeperActivity : ARGameActivity() {
         }
     }
 
+    /**
+     * Mina toccata: reazione a catena. La mina colpita esplode per prima, poi
+     * tutte le altre una alla volta (particelle + suoni); gran finale con una
+     * grossa esplosione centrale e scossa della griglia, poi fine partita.
+     */
+    private fun boom(tapped: Int) {
+        exploding = true
+        val order = listOf(tapped) + mines.filter { it != tapped }.shuffled()
+        var delay = 0L
+        order.forEach { i ->
+            val d = delay
+            postDelayed(d) {
+                if (!exploding || isDestroyed) return@postDelayed
+                explodeCell(i)
+            }
+            delay += 150L
+        }
+        postDelayed(delay) {
+            if (!exploding || isDestroyed) return@postDelayed
+            val center = arena?.worldPosition ?: return@postDelayed
+            burst(center, 0xFFFFB300.toInt(), 22)
+            burst(Float3(center.x, center.y + 0.3f, center.z), 0xFFFF5252.toInt(), 16)
+            spatialAudio.oneShot(90f, 420, decay = true, gain = 0.55f)
+            shakeGrid()
+            postDelayed(520) {
+                if (!exploding || isDestroyed) return@postDelayed
+                exploding = false
+                endGame(false)
+            }
+        }
+    }
+
+    /** Fa esplodere una singola cella-mina in particelle colorate. */
+    private fun explodeCell(i: Int) {
+        val cell = cells[i] ?: return
+        val node = cell.node
+        val wp = node?.worldPosition
+        if (node != null) removeNode(node)
+        cell.node = null
+        nodeMap.remove(node)
+        if (wp != null) {
+            burst(wp, 0xFFFF5252.toInt(), 14)
+            burst(wp, 0xFFFFB300.toInt(), 7)
+            spatialAudio.oneShot(140f + Random.nextInt(60).toFloat(), 180, decay = true, gain = 0.45f)
+        }
+    }
+
+    /** Scuote tutte le celle ancora presenti, poi le riporta in posizione. */
+    private fun shakeGrid() {
+        val base = HashMap<Int, Position>()
+        cells.forEach { (i, c) -> c.node?.let { base[i] = it.position } }
+        val steps = 6
+        for (s in 1..steps) {
+            postDelayed(s * 45L) {
+                if (!exploding || isDestroyed) return@postDelayed
+                val amp = 0.012f * (1f - s.toFloat() / (steps + 1f))
+                base.forEach { (i, p) ->
+                    cells[i]?.node?.let { n ->
+                        n.position = Position(
+                            p.x + sin(s * 2.6f + i * 1.7f) * amp,
+                            p.y + cos(s * 2.6f + i * 1.7f) * amp * 0.6f,
+                            p.z
+                        )
+                    }
+                }
+            }
+        }
+        postDelayed(steps * 45L + 30L) {
+            if (!exploding || isDestroyed) return@postDelayed
+            base.forEach { (i, p) -> cells[i]?.node?.let { n -> n.position = p } }
+        }
+    }
+
     private fun replaceCellNode(i: Int, color: Int, radius: Float, ry: Float) {
         if (arena == null) return
         val cell = cells[i] ?: return
@@ -205,7 +286,7 @@ class ARMinesweeperActivity : ARGameActivity() {
         val reward = if (won) 120 else 8
         val label = if (won) "AR Campo Minato vinto!" else "Boom! 💥"
         try {
-            finishGame(reward, "$label ($revealedCount/71)", won, MiniGameManager.GAME_MINESWEEPER)
+            finishGame(reward, "$label ($revealedCount/71)", won, MiniGameManager.GAME_MINESWEEPER, celebrate = won)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

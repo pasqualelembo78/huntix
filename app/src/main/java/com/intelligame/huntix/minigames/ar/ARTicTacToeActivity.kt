@@ -31,6 +31,11 @@ class ARTicTacToeActivity : ARGameActivity() {
     private val cells = arrayOfNulls<SphereNode>(9)
     private val nodeMap = HashMap<Node, Int>()
     private val board = IntArray(9)
+    private val LINES = arrayOf(
+        intArrayOf(0, 1, 2), intArrayOf(3, 4, 5), intArrayOf(6, 7, 8),
+        intArrayOf(0, 3, 6), intArrayOf(1, 4, 7), intArrayOf(2, 5, 8),
+        intArrayOf(0, 4, 8), intArrayOf(2, 4, 6)
+    )
     private var gameOver = false
     private var cpuThinking = false
     private var cpuCb: Runnable? = null
@@ -110,16 +115,35 @@ class ARTicTacToeActivity : ARGameActivity() {
     }
 
     private fun winner(): Int {
-        val lines = arrayOf(
-            intArrayOf(0, 1, 2), intArrayOf(3, 4, 5), intArrayOf(6, 7, 8),
-            intArrayOf(0, 3, 6), intArrayOf(1, 4, 7), intArrayOf(2, 5, 8),
-            intArrayOf(0, 4, 8), intArrayOf(2, 4, 6)
-        )
-        for (line in lines) {
+        for (line in LINES) {
             val v = board[line[0]]
             if (v != EMPTY && board[line[1]] == v && board[line[2]] == v) return v
         }
         return EMPTY
+    }
+
+    /** Linea vincente (le 3 uova che hanno chiuso il tris). */
+    private fun winningLine(): IntArray? {
+        for (line in LINES) {
+            val v = board[line[0]]
+            if (v != EMPTY && board[line[1]] == v && board[line[2]] == v) return line
+        }
+        return null
+    }
+
+    /** Le 3 uova della linea vincente saltano su e giù (esultanza da stadio). */
+    private fun pulseWinningLine(line: IntArray) {
+        repeat(4) { p ->
+            postDelayed(p * 260L) {
+                if (!gameOver) return@postDelayed
+                val s = if (p % 2 == 0) 1.5f else 1.15f
+                line.forEach { i ->
+                    cells[i]?.let {
+                        it.scale = io.github.sceneview.math.Scale(s, s * 1.2f, s)
+                    }
+                }
+            }
+        }
     }
 
     private fun findWinningMove(who: Int): Int {
@@ -162,8 +186,15 @@ class ARTicTacToeActivity : ARGameActivity() {
             draw -> "AR Tris pari"
             else -> "AR Tris perso"
         }
+        if (won) {
+            winningLine()?.let { pulseWinningLine(it) }
+        }
         try {
-            finishGame(reward, "$label ($score)", won, MiniGameManager.GAME_TIC_TAC_TOE)
+            finishGame(
+                reward, "$label ($score)", won, MiniGameManager.GAME_TIC_TAC_TOE,
+                isDraw = draw,
+                accentColors = intArrayOf(C_X, 0xFFFFFFFF.toInt(), 0xFFFFD700.toInt())
+            )
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 
