@@ -227,8 +227,24 @@ abstract class ARGameActivity : AppCompatActivity() {
      */
     private fun onGameCreateWithMode() {
         loadGameMode()
-        if (showsModeDialog) chooseGameMode { onGameCreate() }
-        else onGameCreate()
+        if (showsModeDialog) chooseGameMode { startContent() }
+        else startContent()
+    }
+
+    /**
+     * Avvia il contenuto di gioco SOLO quando ARCore ha un frame TRACKING.
+     * Le uova si ancorano allo spazio reale a partire dalla pose della camera,
+     * quindi un avvio anticipato farebbe fallire gli spawn (session null /
+     * not tracking) e brucerebbe secondi di timer prima che compaia qualcosa.
+     * Se il tracking è già attivo parte subito, altrimenti attende il primo
+     * frame TRACKING (stesso meccanismo di [whenReady]).
+     */
+    private fun startContent() {
+        whenReady {
+            runCatching { onGameCreate() }.onFailure { e ->
+                AppLog.e("ARGameActivity", "Error in onGameCreate", e)
+            }
+        }
     }
 
     /** Dialogo di scelta della [ARGameMode], con l'ultima scelta pre-selezionata. */
@@ -308,7 +324,15 @@ abstract class ARGameActivity : AppCompatActivity() {
     /**
      * Crea un'uovo sospeso nell'aria davanti alla camera corrente.
      * [forward] = distanza dalla camera (m, valori positivi = davanti),
-     * [right]/[up] = offset laterale/verticale nel piano della camera (m).
+     * [right]/[up] = offset laterale/verticale (m).
+     *
+     * La posizione NON segue l'asse ottico della camera: [forward]/[right]
+     * sono proiettati sul piano orizzontale e [up] è verticale in mondo. Così
+     * le uova compaiono sempre davanti agli occhi dell'utente alla sua altezza,
+     * anche se al momento dello spawn il telefono è inclinato verso il
+     * pavimento o il soffitto (tipico durante la scansione iniziale del
+     * tracking, quando in precedenza finivano sotto lo schermo e non si
+     * vedevano mai).
      */
     protected fun spawnEgg(
         type: Int, forward: Float, right: Float, up: Float, radius: Float = 0.07f
@@ -329,11 +353,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             return null
         }
         val camPose = frame.camera.displayOrientedPose
-        val offset = Pose(
-            floatArrayOf(right, up, -forward),
-            floatArrayOf(0f, 0f, 0f, 1f)
-        )
-        val pose = camPose.compose(offset)
+        val pose = stabilizedPose(camPose, forward, right, up)
         val anchor = runCatching { session.createAnchor(pose) }.getOrElse {
             AppLog.e("ARGameActivity", "spawnEgg: createAnchor failed", it)
             return null
@@ -453,15 +473,35 @@ abstract class ARGameActivity : AppCompatActivity() {
             return null
         }
         val camPose = frame.camera.displayOrientedPose
-        val offset = Pose(
-            floatArrayOf(right, up, -forward),
-            floatArrayOf(0f, 0f, 0f, 1f)
-        )
-        val an = createAnchorNode(camPose.compose(offset))
+        val pose = stabilizedPose(camPose, forward, right, up)
+        val an = createAnchorNode(pose)
         if (an != null) {
             AppLog.i("ARGameActivity", "Arena anchor spawned, scene nodes=${sceneView.childNodes.size}")
         }
         return an
+    }
+
+    /**
+     * Pose davanti alla camera "stabilizzata": [forward] e [right] sono applicati
+     * sul piano orizzontale (proiezione degli assi della camera) e [up] è la
+     * verticale di mondo. L'orientamento resta quello della camera. Senza questa
+     * proiezione, con il telefono inclinato in giù le uova finivano sotto la
+     * cornice dello schermo e non erano mai visibili.
+     */
+    private fun stabilizedPose(camPose: Pose, forward: Float, right: Float, up: Float): Pose {
+        val fwd = camPose.rotateVector(floatArrayOf(0f, 0f, -1f))
+        val rh = camPose.rotateVector(floatArrayOf(1f, 0f, 0f))
+        var fhX = fwd[0]; var fhZ = fwd[2]
+        val fhLen = kotlin.math.sqrt(fhX * fhX + fhZ * fhZ)
+        if (fhLen < 1e-4f) { fhX = 0f; fhZ = -1f } else { fhX /= fhLen; fhZ /= fhLen }
+        var rhX = rh[0]; var rhZ = rh[2]
+        val rhLen = kotlin.math.sqrt(rhX * rhX + rhZ * rhZ)
+        if (rhLen < 1e-4f) { rhX = 1f; rhZ = 0f } else { rhX /= rhLen; rhZ /= rhLen }
+        val wx = camPose.tx() + right * rhX + forward * fhX
+        val wy = camPose.ty() + up
+        val wz = camPose.tz() + right * rhZ + forward * fhZ
+        return Pose.makeTranslation(wx, wy, wz)
+            .compose(Pose.makeRotation(camPose.qx(), camPose.qy(), camPose.qz(), camPose.qw()))
     }
 
     protected fun eggList(): List<AREgg> = eggs.values.toList()
@@ -781,7 +821,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         sharedAnchors.forEach { it.destroy() }
         sharedAnchors.clear()
         running = false
-        onGameCreate()
+        startContent()
     }
 
     override fun onDestroy() {
