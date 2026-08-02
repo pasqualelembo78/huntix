@@ -76,9 +76,12 @@ class HangmanActivity : MiniGameBase() {
         }
         root.addView(letterGrid!!)
 
-        val wrapper = FrameLayout(ctx)
+        val wrapper = FrameLayout(ctx).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+        }
         wrapper.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         overlayContainer = wrapper
+        UiKit.applyWindowInsets(wrapper)
         setContentView(wrapper)
         buildBoard()
     }

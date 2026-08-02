@@ -21,6 +21,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.ar.core.Config
 import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.R
@@ -124,6 +126,11 @@ abstract class ARGameActivity : AppCompatActivity() {
         android.util.Log.d("ARGameActivity", "onCreate start")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_ar_game)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.arOverlay)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, systemBars.bottom + UiKit.dp(this, 8))
+            insets
+        }
         sceneView = findViewById(R.id.sceneView)
         hud = findViewById(R.id.arOverlay)
         android.util.Log.d("ARGameActivity", "SceneView found: ${sceneView != null}, SceneView class: ${sceneView?.javaClass?.name}")

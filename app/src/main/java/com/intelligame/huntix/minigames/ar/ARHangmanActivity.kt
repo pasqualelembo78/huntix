@@ -74,20 +74,20 @@ class ARHangmanActivity : ARGameActivity() {
         }
         arena = a
 
-        gallowsBase = cubeNode(0xFF8D6E63.toInt(), Float3(0.6f, 0.08f, 0.4f)).apply {
-            position = Position(0f, 0.04f, -0.6f)
+        gallowsBase = cubeNode(0xFF8D6E63.toInt(), Float3(0.25f, 0.04f, 0.18f)).apply {
+            position = Position(0f, 0.03f, -0.3f)
         }
-        gallowsPole = cubeNode(0xFF8D6E63.toInt(), Float3(0.06f, 1.3f, 0.06f)).apply {
-            position = Position(0f, 0.75f, -0.6f)
+        gallowsPole = cubeNode(0xFF8D6E63.toInt(), Float3(0.03f, 0.6f, 0.03f)).apply {
+            position = Position(0f, 0.35f, -0.3f)
         }
-        gallowsArm = cubeNode(0xFF8D6E63.toInt(), Float3(0.55f, 0.07f, 0.07f)).apply {
-            position = Position(0.25f, 1.36f, -0.6f)
+        gallowsArm = cubeNode(0xFF8D6E63.toInt(), Float3(0.22f, 0.03f, 0.03f)).apply {
+            position = Position(0.1f, 0.66f, -0.3f)
         }
-        gallowsRope = cubeNode(0xFFD9C9A3.toInt(), Float3(0.03f, 0.35f, 0.03f)).apply {
-            position = Position(0.42f, 1.15f, -0.6f)
+        gallowsRope = cubeNode(0xFFD9C9A3.toInt(), Float3(0.015f, 0.15f, 0.015f)).apply {
+            position = Position(0.2f, 0.55f, -0.3f)
         }
-        val hanging = eggNode(0xFFFFFFFF.toInt(), 0.1f).apply {
-            position = Position(0.42f, 0.88f, -0.6f)
+        val hanging = eggNode(0xFFFFFFFF.toInt(), 0.04f).apply {
+            position = Position(0.2f, 0.42f, -0.3f)
         }
         gallowsEgg[0] = hanging
         a.addChildNode(gallowsBase!!)
@@ -96,10 +96,10 @@ class ARHangmanActivity : ARGameActivity() {
         a.addChildNode(gallowsRope!!)
         a.addChildNode(hanging)
 
-        val cell = 0.26f
+        val cell = 0.2f
         val startX = -((word.length - 1) / 2f) * cell
         for (i in word.indices) {
-            val egg = eggNode(C_DIM, 0.09f)
+            val egg = eggNode(C_DIM, 0.055f)
             egg.position = Position(startX + i * cell, 0.35f, 0f)
             a.addChildNode(egg)
             letterEggs.add(egg)
@@ -181,7 +181,7 @@ class ARHangmanActivity : ARGameActivity() {
                 val oldParent = egg.parent
                 removeNode(egg)
                 val red = eggNode(color, 0.1f)
-                red.position = Position(0.42f, 0.88f - wrong * 0.015f, -0.6f)
+                red.position = Position(0.2f, 0.42f - wrong * 0.02f, -0.3f)
                 oldParent?.addChildNode(red)
                 gallowsEgg[0] = red
             }

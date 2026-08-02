@@ -6,7 +6,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.*
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.NestedScrollView
 
 /**
@@ -27,15 +30,33 @@ object UiKit {
 
     fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
 
+    fun applyWindowInsets(view: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, systemBars.bottom + dp(v.context, 8))
+            insets
+        }
+    }
+
     fun scroll(c: Context, vararg children: View): NestedScrollView {
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 80))
+            setPadding(dp(c, 14), dp(c, 12), dp(c, 14), dp(c, 16))
         }
         children.forEach { root.addView(it) }
         return NestedScrollView(c).apply {
             setBackgroundColor(Color.parseColor(BG))
             addView(root)
+            ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+                val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                v.setPadding(
+                    v.paddingLeft,
+                    v.paddingTop,
+                    v.paddingRight,
+                    systemBars.bottom + dp(c, 8)
+                )
+                insets
+            }
         }
     }
 
