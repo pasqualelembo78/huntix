@@ -164,11 +164,7 @@ class ARSnakeActivity : ARGameActivity() {
     private fun step() {
         dir = nextDir
         val head = body.last()
-        val nh = (head.first + dir.first) to (head.second + dir.second)
-        if (nh.first < 0 || nh.first >= COLS || nh.second < 0 || nh.second >= ROWS) {
-            endGame()
-            return
-        }
+        val nh = Math.floorMod(head.first + dir.first, COLS) to Math.floorMod(head.second + dir.second, ROWS)
         if (nh in body) { endGame(); return }
 
         body.addLast(nh)
