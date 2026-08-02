@@ -3,13 +3,14 @@ package com.intelligame.huntix.minigames.ar
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.intelligame.huntix.managers.MiniGameManager
+import java.util.Collections
 
 class AREggShooterActivity : ARGameActivity() {
 
     private var lives = 3
     private var score = 0
     private var timeLeft = 40
-    private val eggsActive = mutableListOf<AREgg>()
+    private val eggsActive = Collections.synchronizedList(mutableListOf<AREgg>())
     private var timerCb: Runnable? = null
     private var spawnCb: Runnable? = null
 
@@ -35,7 +36,9 @@ class AREggShooterActivity : ARGameActivity() {
         removeCallback(spawnCb)
         spawnCb = postDelayed((450L..800L).random()) {
             if (!running) return@postDelayed
-            if (eggsActive.count { it.alive } < 7) spawnEggUp()
+            synchronized(eggsActive) {
+                if (eggsActive.count { it.alive } < 7) spawnEggUp()
+            }
             scheduleSpawn()
         }
     }
@@ -45,22 +48,24 @@ class AREggShooterActivity : ARGameActivity() {
         val egg = spawnEgg(type, forward = 1.0f, right = (-0.4f..0.4f).random(), up = -0.45f,
             radius = 0.08f) ?: return
         egg.phase = -0.45f
-        eggsActive.add(egg)
+        synchronized(eggsActive) { eggsActive.add(egg) }
     }
 
     override fun onArFrame(session: Session, frame: Frame) {
         if (!running) return
-        val iter = eggsActive.iterator()
-        while (iter.hasNext()) {
-            val egg = iter.next()
-            if (!egg.alive) { iter.remove(); continue }
-            egg.phase += 0.006f
-            moveEggLocal(egg, 0f, egg.phase, 0f)
-            if (egg.phase > 0.55f) {
-                iter.remove(); removeEgg(egg)
-                lives = (lives - 1).coerceAtLeast(0)
-                updateHud()
-                if (lives <= 0) endGame()
+        synchronized(eggsActive) {
+            val iter = eggsActive.iterator()
+            while (iter.hasNext()) {
+                val egg = iter.next()
+                if (!egg.alive) { iter.remove(); continue }
+                egg.phase += 0.006f
+                moveEggLocal(egg, 0f, egg.phase, 0f)
+                if (egg.phase > 0.55f) {
+                    iter.remove(); removeEgg(egg)
+                    lives = (lives - 1).coerceAtLeast(0)
+                    updateHud()
+                    if (lives <= 0) endGame()
+                }
             }
         }
     }
@@ -68,7 +73,10 @@ class AREggShooterActivity : ARGameActivity() {
     override fun onEggTapped(egg: AREgg) {
         if (!running || !egg.alive) return
         score += if (egg.type == 3) 100 else 10
-        removeEgg(egg); eggsActive.remove(egg); updateHud()
+        synchronized(eggsActive) {
+            removeEgg(egg); eggsActive.remove(egg)
+        }
+        updateHud()
     }
 
     private fun updateHud() {

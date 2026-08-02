@@ -9,6 +9,7 @@ import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
+import java.util.Collections
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -39,7 +40,7 @@ class ARSnakeActivity : ARGameActivity() {
     }
 
     private var arena: AnchorNode? = null
-    private val segments = mutableListOf<SphereNode>()
+    private val segments = Collections.synchronizedList(mutableListOf<SphereNode>())
     private val body = ArrayDeque<Pair<Int, Int>>()
     private var food: SphereNode? = null
     private var foodCell = 0 to 0
@@ -63,8 +64,8 @@ class ARSnakeActivity : ARGameActivity() {
         acc = 0f
         dir = 1 to 0
         nextDir = 1 to 0
-        body.clear()
-        segments.clear()
+        synchronized(body) { body.clear() }
+        synchronized(segments) { segments.clear() }
         lastNow = SystemClock.elapsedRealtime()
         statusText.text = "🔍 Inquadra una superficie piana…"
         statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
@@ -83,14 +84,16 @@ class ARSnakeActivity : ARGameActivity() {
 
         val hx = COLS / 2
         val hy = ROWS / 2
-        body.addLast((hx - 2) to hy)
-        body.addLast((hx - 1) to hy)
-        body.addLast(hx to hy)
+        synchronized(body) {
+            body.addLast((hx - 2) to hy)
+            body.addLast((hx - 1) to hy)
+            body.addLast(hx to hy)
+        }
 
         for (i in 0 until 3) {
             val node = eggNode(bodyColor(i), 0.075f)
             anchor.addChildNode(node)
-            segments.add(node)
+            synchronized(segments) { segments.add(node) }
         }
 
         buildMarkers(anchor)
@@ -99,7 +102,7 @@ class ARSnakeActivity : ARGameActivity() {
     }
 
     private fun bodyColor(index: Int): Int {
-        val n = segments.size.coerceAtLeast(1)
+        val n = synchronized(segments) { segments.size }.coerceAtLeast(1)
         val t = index.toFloat() / n.toFloat()
         return when {
             index == 0 -> C_HEAD
@@ -124,7 +127,7 @@ class ARSnakeActivity : ARGameActivity() {
     }
 
     private fun placeFood(anchor: AnchorNode) {
-        val occupied = body.toSet()
+        val occupied = synchronized(body) { body.toSet() }
         val free = (0 until COLS).flatMap { x -> (0 until ROWS).map { y -> x to y } }
             .filter { it !in occupied }
         if (free.isEmpty()) return
@@ -163,38 +166,43 @@ class ARSnakeActivity : ARGameActivity() {
 
     private fun step() {
         dir = nextDir
-        val head = body.last()
-        val nh = Math.floorMod(head.first + dir.first, COLS) to Math.floorMod(head.second + dir.second, ROWS)
-        if (nh in body) { endGame(); return }
+        synchronized(body) {
+            val head = body.last()
+            val nh = Math.floorMod(head.first + dir.first, COLS) to Math.floorMod(head.second + dir.second, ROWS)
+            if (nh in body) { endGame(); return }
 
-        body.addLast(nh)
-        if (nh == foodCell) {
-            score += 10
-            scoreText.text = "$score pt"
-            timerText.text = "Lunghezza: ${body.size}"
-            tickMs = (tickMs - 4).coerceAtLeast(MIN_TICK)
-            food?.let { arena?.removeChildNode(it); it.destroy() }
-            food = null
-            arena?.let { placeFood(it) }
-        } else {
-            body.removeFirst()
+            body.addLast(nh)
+            if (nh == foodCell) {
+                score += 10
+                scoreText.text = "$score pt"
+                timerText.text = "Lunghezza: ${body.size}"
+                tickMs = (tickMs - 4).coerceAtLeast(MIN_TICK)
+                food?.let { arena?.removeChildNode(it); it.destroy() }
+                food = null
+                arena?.let { placeFood(it) }
+            } else {
+                body.removeFirst()
+            }
         }
 
-        while (segments.size < body.size) {
-            val node = eggNode(bodyColor(segments.size), 0.075f)
+        while (synchronized(segments) { segments.size } < synchronized(body) { body.size }) {
+            val node = eggNode(bodyColor(synchronized(segments) { segments.size }), 0.075f)
             arena?.addChildNode(node)
-            segments.add(node)
+            synchronized(segments) { segments.add(node) }
         }
         layoutBody()
     }
 
     private fun layoutBody() {
         if (arena == null) return
-        for (i in body.indices) {
-            if (i >= segments.size) break
-            val (x, y) = cellPos(body.elementAt(i))
-            val bob = sin(phase + i * 0.6f) * 0.015f
-            segments[i].position = Position(x, 0.075f + bob, -y)
+        val snapshot = synchronized(segments) { segments.toList() }
+        synchronized(body) {
+            for (i in body.indices) {
+                if (i >= snapshot.size) break
+                val (x, y) = cellPos(body.elementAt(i))
+                val bob = sin(phase + i * 0.6f) * 0.015f
+                snapshot[i].position = Position(x, 0.075f + bob, -y)
+            }
         }
     }
 

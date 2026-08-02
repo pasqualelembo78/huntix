@@ -8,6 +8,7 @@ import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
+import java.util.Collections
 import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -41,7 +42,7 @@ class AREggSlingshotActivity : ARGameActivity() {
 
     private var arena: AnchorNode? = null
     private var groundY = 0f
-    private val targets = mutableListOf<Target>()
+    private val targets = Collections.synchronizedList(mutableListOf<Target>())
     private var aimLine = mutableListOf<SphereNode>()
     private var projectile: SphereNode? = null
     private var projVel = Float3(0f, 0f, 0f)
@@ -57,8 +58,10 @@ class AREggSlingshotActivity : ARGameActivity() {
     }
 
     override fun onGameCreate() {
-        targets.forEach { removeNode(it.node) }
-        targets.clear()
+        synchronized(targets) {
+            targets.forEach { removeNode(it.node) }
+            targets.clear()
+        }
         aimLine.forEach { removeNode(it) }
         aimLine.clear()
         projectile?.let { removeNode(it) }
@@ -102,7 +105,7 @@ class AREggSlingshotActivity : ARGameActivity() {
         val a = arena ?: return
         repeat(TARGET_COUNT) {
             val t = spawnTarget(a)
-            targets.add(t)
+            synchronized(targets) { targets.add(t) }
         }
     }
 
@@ -178,15 +181,17 @@ class AREggSlingshotActivity : ARGameActivity() {
                 miss()
                 return
             }
-            for (t in targets) {
-                if (!t.alive) continue
-                val nn = t.node.worldPosition
-                val dx = wp.x - nn.x
-                val dy = wp.y - nn.y
-                val dz = wp.z - nn.z
-                if (sqrt(dx * dx + dy * dy + dz * dz) < 0.22f) {
-                    hit(t)
-                    return
+            synchronized(targets) {
+                for (t in targets) {
+                    if (!t.alive) continue
+                    val nn = t.node.worldPosition
+                    val dx = wp.x - nn.x
+                    val dy = wp.y - nn.y
+                    val dz = wp.z - nn.z
+                    if (sqrt(dx * dx + dy * dy + dz * dz) < 0.22f) {
+                        hit(t)
+                        return
+                    }
                 }
             }
         }
@@ -213,22 +218,24 @@ class AREggSlingshotActivity : ARGameActivity() {
         t.alive = false
         t.node.isVisible = false
         t.loopId = -1
-        val alive = targets.count { it.alive }
+        val alive = synchronized(targets) { targets.count { it.alive } }
         updateHud()
         val a = arena
         if (a != null && alive > 0 && (score / 10) % 2 == 0) {
-            val n = targets[targets.count { !it.alive } % targets.size]
-            if (!n.alive) {
-                n.x = Random.nextFloat() * 1.4f - 0.7f
-                n.y = Random.nextFloat() * 0.7f + 0.25f
-                n.z = 0.6f + Random.nextFloat() * 0.9f
-                if (n.node.parent != null) {
-                    n.node.position = Position(n.x, n.y, n.z)
-                    n.node.isVisible = true
+            synchronized(targets) {
+                val n = targets[targets.count { !it.alive } % targets.size]
+                if (!n.alive) {
+                    n.x = Random.nextFloat() * 1.4f - 0.7f
+                    n.y = Random.nextFloat() * 0.7f + 0.25f
+                    n.z = 0.6f + Random.nextFloat() * 0.9f
+                    if (n.node.parent != null) {
+                        n.node.position = Position(n.x, n.y, n.z)
+                        n.node.isVisible = true
+                    }
+                    n.alive = true
+                    n.loopId = spatialAudio.loopAt(n.node, 320f + Random.nextFloat() * 80f, 0.45f)
+                    targetLoops[n.node.hashCode()] = n.loopId
                 }
-                n.alive = true
-                n.loopId = spatialAudio.loopAt(n.node, 320f + Random.nextFloat() * 80f, 0.45f)
-                targetLoops[n.node.hashCode()] = n.loopId
             }
         }
         if (score / 10 >= WIN_HITS) {
@@ -254,7 +261,8 @@ class AREggSlingshotActivity : ARGameActivity() {
     }
 
     private fun updateHud() {
-        timerText.text = "🥚 Obiettivi: ${(WIN_HITS - targets.count { !it.alive }).coerceAtLeast(0)}/$WIN_HITS"
+        val remaining = synchronized(targets) { targets.count { !it.alive } }
+        timerText.text = "🥚 Obiettivi: ${(WIN_HITS - remaining).coerceAtLeast(0)}/$WIN_HITS"
         scoreText.text = "$score pt"
     }
 
@@ -272,7 +280,7 @@ class AREggSlingshotActivity : ARGameActivity() {
             projectile?.let { removeNode(it) }
             projectile = null
         }
-        targets.forEach { spatialAudio.stopLoop(it.loopId) }
+        synchronized(targets) { targets.forEach { spatialAudio.stopLoop(it.loopId) } }
         targetLoops.clear()
         val reward = if (won) 200 else (score)
         val label = if (won) "AR Slingshot: colpiti $score!" else "AR Slingshot: $score pt"
@@ -283,7 +291,7 @@ class AREggSlingshotActivity : ARGameActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        targets.forEach { spatialAudio.stopLoop(it.loopId) }
+        synchronized(targets) { targets.forEach { spatialAudio.stopLoop(it.loopId) } }
         targetLoops.clear()
     }
 }

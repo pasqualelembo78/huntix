@@ -41,6 +41,7 @@ import io.github.sceneview.math.Scale
 import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
+import java.util.Collections
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -82,7 +83,7 @@ abstract class ARGameActivity : AppCompatActivity() {
     protected lateinit var livesText: TextView
     protected lateinit var timerText: TextView
 
-    private val eggs = LinkedHashMap<Node, AREgg>()
+    private val eggs = Collections.synchronizedMap(LinkedHashMap<Node, AREgg>())
     private var lastSession: Session? = null
     private var lastFrame: Frame? = null
     protected var running = false
@@ -95,7 +96,7 @@ abstract class ARGameActivity : AppCompatActivity() {
     /** Motore audio 3D (sintesi PCM + panning distanza). */
     protected val spatialAudio = SpatialAudio()
     /** Effetti di rottura/particelle animati ogni frame. */
-    private val fx = mutableListOf<FxParticle>()
+    private val fx = Collections.synchronizedList(mutableListOf<FxParticle>())
     private var fxLast = 0L
 
     data class FxParticle(
@@ -115,8 +116,8 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     companion object {
         private val EGG_COLORS = intArrayOf(
-            0xFFF4C2.toInt(), 0xA78BFA.toInt(), 0x00FF88.toInt(),
-            0xFF7AB6.toInt(), 0xFFD166.toInt(), 0x6AD7FF.toInt(), 0xFF6B6B.toInt()
+            0xFFFFF4C2.toInt(), 0xFFA78BFA.toInt(), 0xFF00FF88.toInt(),
+            0xFFFF7AB6.toInt(), 0xFFFFD166.toInt(), 0xFF6AD7FF.toInt(), 0xFFFF6B6B.toInt()
         )
         fun eggColor(type: Int) = EGG_COLORS[type % EGG_COLORS.size]
     }
@@ -534,7 +535,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             .compose(Pose.makeRotation(camPose.qx(), camPose.qy(), camPose.qz(), camPose.qw()))
     }
 
-    protected fun eggList(): List<AREgg> = eggs.values.toList()
+    protected fun eggList(): List<AREgg> = synchronized(eggs) { eggs.values.toList() }
     protected fun aliveCount() = eggs.size
     protected fun isTracking() = trackingReady
 
@@ -662,7 +663,9 @@ abstract class ARGameActivity : AppCompatActivity() {
             val ang = (it * (2.0 * Math.PI / count) + Math.random() * 0.5).toFloat()
             val up = (Math.random() * 0.6).toFloat()
             val speed = 0.5f + Math.random().toFloat() * 0.4f
-            fx += FxParticle(part, Float3(cos(ang) * speed, up + 0.3f, -sin(ang) * speed), 0.5f, 0.5f)
+            synchronized(fx) {
+                fx += FxParticle(part, Float3(cos(ang) * speed, up + 0.3f, -sin(ang) * speed), 0.5f, 0.5f)
+            }
         }
     }
 
@@ -670,21 +673,25 @@ abstract class ARGameActivity : AppCompatActivity() {
         val now = SystemClock.elapsedRealtime()
         val dt = ((now - fxLast) / 1000f).coerceIn(0f, 0.05f)
         fxLast = now
-        if (dt > 0f && fx.isNotEmpty()) {
-            val iter = fx.iterator()
-            while (iter.hasNext()) {
-                val p = iter.next()
-                p.life -= dt
-                if (p.life <= 0f) {
-                    iter.remove()
-                    removeNode(p.node)
-                    continue
+        if (dt > 0f) {
+            synchronized(fx) {
+                if (fx.isNotEmpty()) {
+                    val iter = fx.iterator()
+                    while (iter.hasNext()) {
+                        val p = iter.next()
+                        p.life -= dt
+                        if (p.life <= 0f) {
+                            iter.remove()
+                            removeNode(p.node)
+                            continue
+                        }
+                        val pos = p.node.position
+                        p.node.position = Position(pos.x + p.vel.x * dt, pos.y + p.vel.y * dt, pos.z + p.vel.z * dt)
+                        p.vel = Float3(p.vel.x, p.vel.y - 3f * dt, p.vel.z)
+                        val s = (p.life / p.maxLife) * 0.6f
+                        p.node.scale = Scale(s, s, s)
+                    }
                 }
-                val pos = p.node.position
-                p.node.position = Position(pos.x + p.vel.x * dt, pos.y + p.vel.y * dt, pos.z + p.vel.z * dt)
-                p.vel = Float3(p.vel.x, p.vel.y - 3f * dt, p.vel.z)
-                val s = (p.life / p.maxLife) * 0.6f
-                p.node.scale = Scale(s, s, s)
             }
         }
         spatialAudio.tick(cameraPose)
@@ -843,10 +850,14 @@ abstract class ARGameActivity : AppCompatActivity() {
         removeInputCapture()
         pendingAction = null
         handler.removeCallbacks(retryPending)
-        eggs.values.forEach { it.anchorNode.destroy() }
-        eggs.clear()
-        fx.forEach { removeNode(it.node) }
-        fx.clear()
+        synchronized(eggs) {
+            eggs.values.forEach { it.anchorNode.destroy() }
+            eggs.clear()
+        }
+        synchronized(fx) {
+            fx.forEach { removeNode(it.node) }
+            fx.clear()
+        }
         spatialAudio.release()
         sharedAnchors.forEach { it.destroy() }
         sharedAnchors.clear()
@@ -866,13 +877,17 @@ abstract class ARGameActivity : AppCompatActivity() {
         // (dentro AnchorNode.destroy) può essere il trigger del crash nativo su
         // back. Rimuoviamo solo i nodi dalla scena e lasciamo l'engine destroy
         // liberare le entità Filament.
-        eggs.values.forEach { egg ->
-            runCatching { egg.anchorNode.parent?.removeChildNode(egg.anchorNode) }
+        synchronized(eggs) {
+            eggs.values.forEach { egg ->
+                runCatching { egg.anchorNode.parent?.removeChildNode(egg.anchorNode) }
+            }
+            eggs.clear()
         }
-        eggs.clear()
         AppLog.i("ARGameActivity", "eggs cleaned")
-        fx.forEach { runCatching { removeNode(it.node) } }
-        fx.clear()
+        synchronized(fx) {
+            fx.forEach { runCatching { removeNode(it.node) } }
+            fx.clear()
+        }
         AppLog.i("ARGameActivity", "fx cleaned")
         runCatching { spatialAudio.release() }
         AppLog.i("ARGameActivity", "spatialAudio released")

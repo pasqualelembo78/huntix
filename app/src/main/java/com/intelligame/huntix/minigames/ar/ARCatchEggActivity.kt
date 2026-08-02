@@ -3,6 +3,7 @@ package com.intelligame.huntix.minigames.ar
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.intelligame.huntix.managers.MiniGameManager
+import java.util.Collections
 import kotlin.math.sin
 
 class ARCatchEggActivity : ARGameActivity() {
@@ -11,7 +12,7 @@ class ARCatchEggActivity : ARGameActivity() {
     private var score = 0
     private var timeLeft = 40
     private var speedMult = 1f
-    private val eggsActive = mutableListOf<AREgg>()
+    private val eggsActive = Collections.synchronizedList(mutableListOf<AREgg>())
     private var timerCb: Runnable? = null
     private var spawnCb: Runnable? = null
 
@@ -43,7 +44,9 @@ class ARCatchEggActivity : ARGameActivity() {
         removeCallback(spawnCb)
         spawnCb = postDelayed((500L..900L).random()) {
             if (!running) return@postDelayed
-            if (eggsActive.count { it.alive } < 8) spawnEgg()
+            synchronized(eggsActive) {
+                if (eggsActive.count { it.alive } < 8) spawnEgg()
+            }
             scheduleSpawn()
         }
     }
@@ -60,19 +63,21 @@ class ARCatchEggActivity : ARGameActivity() {
         val up = (-0.25f..0.30f).random()
         val egg = spawnEgg(type, forward, right, up, radius = 0.08f) ?: return
         egg.phase = (forward * 6.28f)
-        eggsActive.add(egg)
+        synchronized(eggsActive) { eggsActive.add(egg) }
     }
 
     override fun onArFrame(session: Session, frame: Frame) {
         if (!running) return
-        val iter = eggsActive.iterator()
-        while (iter.hasNext()) {
-            val egg = iter.next()
-            if (!egg.alive) { iter.remove(); continue }
-            egg.phase += 0.03f * speedMult
-            val y = sin(egg.phase.toDouble()).toFloat() * 0.12f
-            val x = sin(egg.phase.toDouble() * 0.5f).toFloat() * 0.1f
-            moveEggLocal(egg, x, y, 0f)
+        synchronized(eggsActive) {
+            val iter = eggsActive.iterator()
+            while (iter.hasNext()) {
+                val egg = iter.next()
+                if (!egg.alive) { iter.remove(); continue }
+                egg.phase += 0.03f * speedMult
+                val y = sin(egg.phase.toDouble()).toFloat() * 0.12f
+                val x = sin(egg.phase.toDouble() * 0.5f).toFloat() * 0.1f
+                moveEggLocal(egg, x, y, 0f)
+            }
         }
     }
 

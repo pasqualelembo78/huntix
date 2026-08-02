@@ -9,6 +9,7 @@ import io.github.sceneview.math.Position
 import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.SphereNode
 import io.sentry.Sentry
+import java.util.Collections
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -47,7 +48,7 @@ class ARFlappyEggActivity : ARGameActivity() {
 
     private var arena: AnchorNode? = null
     private var eggNode: SphereNode? = null
-    private val pipes = mutableListOf<PipePair>()
+    private val pipes = Collections.synchronizedList(mutableListOf<PipePair>())
     private var y = 0f
     private var vy = 0f
     private var score = 0
@@ -57,8 +58,10 @@ class ARFlappyEggActivity : ARGameActivity() {
     private var gameOver = false
 
     override fun onGameCreate() {
-        pipes.forEach { removeNode(it.top); removeNode(it.topCap); removeNode(it.bottom); removeNode(it.bottomCap) }
-        pipes.clear()
+        synchronized(pipes) {
+            pipes.forEach { removeNode(it.top); removeNode(it.topCap); removeNode(it.bottom); removeNode(it.bottomCap) }
+            pipes.clear()
+        }
         y = 0f
         vy = 0f
         score = 0
@@ -119,28 +122,30 @@ class ARFlappyEggActivity : ARGameActivity() {
             spawnPipe()
         }
 
-        val iter = pipes.iterator()
-        while (iter.hasNext()) {
-            val p = iter.next()
-            p.z -= PIPE_SPEED * dt
-            p.top.position = Position(0f, p.top.position.y, p.z)
-            p.topCap.position = Position(0f, p.topCap.position.y, p.z)
-            p.bottom.position = Position(0f, p.bottom.position.y, p.z)
-            p.bottomCap.position = Position(0f, p.bottomCap.position.y, p.z)
-            if (!p.scored && p.z <= 0f) {
-                p.scored = true
-                score++
-                scoreText.text = "$score pt"
-            }
-            if (p.z < -1.1f) {
-                iter.remove()
-                removeNode(p.top); removeNode(p.topCap); removeNode(p.bottom); removeNode(p.bottomCap)
-                continue
-            }
-            if (abs(p.z) < 0.24f) {
-                if (y > p.gapY + 0.30f || y < p.gapY - 0.30f) {
-                    endGame()
-                    return
+        synchronized(pipes) {
+            val iter = pipes.iterator()
+            while (iter.hasNext()) {
+                val p = iter.next()
+                p.z -= PIPE_SPEED * dt
+                p.top.position = Position(0f, p.top.position.y, p.z)
+                p.topCap.position = Position(0f, p.topCap.position.y, p.z)
+                p.bottom.position = Position(0f, p.bottom.position.y, p.z)
+                p.bottomCap.position = Position(0f, p.bottomCap.position.y, p.z)
+                if (!p.scored && p.z <= 0f) {
+                    p.scored = true
+                    score++
+                    scoreText.text = "$score pt"
+                }
+                if (p.z < -1.1f) {
+                    iter.remove()
+                    removeNode(p.top); removeNode(p.topCap); removeNode(p.bottom); removeNode(p.bottomCap)
+                    continue
+                }
+                if (abs(p.z) < 0.24f) {
+                    if (y > p.gapY + 0.30f || y < p.gapY - 0.30f) {
+                        endGame()
+                        return
+                    }
                 }
             }
         }
@@ -172,7 +177,7 @@ class ARFlappyEggActivity : ARGameActivity() {
         a.addChildNode(bottomCap)
 
         val pair = PipePair(top, topCap, bottom, bottomCap, gapY, z)
-        pipes.add(pair)
+        synchronized(pipes) { pipes.add(pair) }
     }
 
     private fun endGame() {

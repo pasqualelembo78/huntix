@@ -3,6 +3,7 @@ package com.intelligame.huntix.minigames.ar
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.intelligame.huntix.managers.MiniGameManager
+import java.util.Collections
 
 class ARColorBombActivity : ARGameActivity() {
 
@@ -11,7 +12,7 @@ class ARColorBombActivity : ARGameActivity() {
     private var score = 0
     private var timeLeft = 30
     private var target = 0
-    private val eggsActive = mutableListOf<AREgg>()
+    private val eggsActive = Collections.synchronizedList(mutableListOf<AREgg>())
     private var timerCb: Runnable? = null
     private var spawnCb: Runnable? = null
     private var targetCb: Runnable? = null
@@ -49,11 +50,13 @@ class ARColorBombActivity : ARGameActivity() {
         removeCallback(spawnCb)
         spawnCb = postDelayed((500L..900L).random()) {
             if (!running) return@postDelayed
-            if (eggsActive.count { it.alive } < 7) {
-                val type = (0..5).random()
-                val egg = spawnEgg(type, (0.6f..1.2f).random(),
-                    (-0.45f..0.45f).random(), (-0.25f..0.30f).random(), radius = 0.08f)
-                egg?.let { eggsActive.add(it) }
+            synchronized(eggsActive) {
+                if (eggsActive.count { it.alive } < 7) {
+                    val type = (0..5).random()
+                    val egg = spawnEgg(type, (0.6f..1.2f).random(),
+                        (-0.45f..0.45f).random(), (-0.25f..0.30f).random(), radius = 0.08f)
+                    egg?.let { eggsActive.add(it) }
+                }
             }
             scheduleSpawn()
         }
@@ -61,18 +64,22 @@ class ARColorBombActivity : ARGameActivity() {
 
     override fun onArFrame(session: Session, frame: Frame) {
         if (!running) return
-        for (egg in eggsActive) {
-            if (!egg.alive) continue
-            egg.phase += 0.02f
-            moveEggLocal(egg, sin(egg.phase.toDouble()).toFloat() * 0.12f,
-                cos(egg.phase.toDouble()).toFloat() * 0.1f, 0f)
+        synchronized(eggsActive) {
+            for (egg in eggsActive) {
+                if (!egg.alive) continue
+                egg.phase += 0.02f
+                moveEggLocal(egg, sin(egg.phase.toDouble()).toFloat() * 0.12f,
+                    cos(egg.phase.toDouble()).toFloat() * 0.1f, 0f)
+            }
         }
     }
 
     override fun onEggTapped(egg: AREgg) {
         if (!running || !egg.alive) return
-        if (egg.type == target) { score += 25; removeEgg(egg); eggsActive.remove(egg) }
-        else { lives = (lives - 1).coerceAtLeast(0); removeEgg(egg); eggsActive.remove(egg) }
+        synchronized(eggsActive) {
+            if (egg.type == target) { score += 25; removeEgg(egg); eggsActive.remove(egg) }
+            else { lives = (lives - 1).coerceAtLeast(0); removeEgg(egg); eggsActive.remove(egg) }
+        }
         updateHud()
         if (lives <= 0) endGame()
     }

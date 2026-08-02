@@ -10,6 +10,7 @@ import dev.romainguy.kotlin.math.Float3
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.Node
 import io.sentry.Sentry
+import java.util.Collections
 import kotlin.random.Random
 
 /**
@@ -35,7 +36,7 @@ class ARDinoActivity : ARGameActivity() {
     private var arena: AnchorNode? = null
     private var dinoBody: Node? = null
     private var dinoHead: Node? = null
-    private val obstacles = mutableListOf<Obstacle>()
+    private val obstacles = Collections.synchronizedList(mutableListOf<Obstacle>())
 
     private var dinoY = GROUND_Y
     private val dinoHeight = 0.12f
@@ -69,7 +70,7 @@ class ARDinoActivity : ARGameActivity() {
         dinoY = GROUND_Y + dinoHeight / 2
         dinoVel = 0f
         isJumping = false
-        obstacles.clear()
+        synchronized(obstacles) { obstacles.clear() }
         lastFrameTime = System.currentTimeMillis()
         lastScoreTime = System.currentTimeMillis()
 
@@ -120,7 +121,7 @@ class ARDinoActivity : ARGameActivity() {
                 position = Position(0f, GROUND_Y + h / 2, OBSTACLE_SPAWN_Z)
             }
             anchor.addChildNode(node)
-            obstacles.add(Obstacle(node, OBSTACLE_SPAWN_Z, w, h, 0))
+            synchronized(obstacles) { obstacles.add(Obstacle(node, OBSTACLE_SPAWN_Z, w, h, 0)) }
         } else {
             // Flying bird
             val w = 0.06f
@@ -129,7 +130,7 @@ class ARDinoActivity : ARGameActivity() {
                 position = Position(0f, GROUND_Y + 0.15f, OBSTACLE_SPAWN_Z)
             }
             anchor.addChildNode(node)
-            obstacles.add(Obstacle(node, OBSTACLE_SPAWN_Z, w, h, 1))
+            synchronized(obstacles) { obstacles.add(Obstacle(node, OBSTACLE_SPAWN_Z, w, h, 1)) }
         }
     }
 
@@ -155,14 +156,33 @@ class ARDinoActivity : ARGameActivity() {
         }
 
         // Move obstacles toward dinosaur
-        val iter = obstacles.iterator()
-        while (iter.hasNext()) {
-            val obs = iter.next()
-            obs.z -= gameSpeed * 0.015f * factor
-            obs.node.position = Position(0f, obs.node.position.y, obs.z)
-            if (obs.z < -0.1f) {
-                iter.remove()
-                removeNode(obs.node)
+        synchronized(obstacles) {
+            val iter = obstacles.iterator()
+            while (iter.hasNext()) {
+                val obs = iter.next()
+                obs.z -= gameSpeed * 0.015f * factor
+                obs.node.position = Position(0f, obs.node.position.y, obs.z)
+                if (obs.z < -0.1f) {
+                    iter.remove()
+                    removeNode(obs.node)
+                }
+            }
+
+            // Collision check
+            val dinoZFront = DINO_Z - 0.1f
+            val dinoZBack = DINO_Z + 0.1f
+            for (obs in obstacles) {
+                if (obs.z > dinoZFront && obs.z < dinoZBack) {
+                    val dinoTop = dinoY - dinoHeight / 2
+                    val dinoBottom = dinoY + dinoHeight / 2
+                    val obsTop = GROUND_Y + obs.height / 2 - obs.height
+                    val obsBottom = GROUND_Y + obs.height / 2
+
+                    if (obsTop < dinoBottom && obsBottom > dinoTop) {
+                        endGame()
+                        return
+                    }
+                }
             }
         }
 
@@ -178,23 +198,6 @@ class ARDinoActivity : ARGameActivity() {
             val headY = dinoY + dinoHeight * 0.2f
             dinoBody?.position = Position(0f, dinoY, DINO_Z)
             dinoHead?.position = Position(dinoHeight * 0.6f, headY, DINO_Z)
-        }
-
-        // Collision check
-        val dinoZFront = DINO_Z - 0.1f
-        val dinoZBack = DINO_Z + 0.1f
-        for (obs in obstacles) {
-            if (obs.z > dinoZFront && obs.z < dinoZBack) {
-                val dinoTop = dinoY - dinoHeight / 2
-                val dinoBottom = dinoY + dinoHeight / 2
-                val obsTop = GROUND_Y + obs.height / 2 - obs.height
-                val obsBottom = GROUND_Y + obs.height / 2
-
-                if (obsTop < dinoBottom && obsBottom > dinoTop) {
-                    endGame()
-                    return
-                }
-            }
         }
     }
 

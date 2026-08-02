@@ -295,6 +295,11 @@
 
         <!-- Giochi di Numeri / Logica -->
 
+         <activity android:name=".minigames.HangmanActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
          <activity android:name=".minigames.SnakeActivity"
             android:exported="false"
             android:screenOrientation="portrait"
@@ -328,6 +333,31 @@
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
+
+        <activity android:name=".minigames.Game2048Activity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.MinesweeperActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.FlappyEggActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+
+        <activity android:name=".minigames.ConnectFourActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.TicTacToeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.SimonActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
 
         <!-- AR Minigames -->
         <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
