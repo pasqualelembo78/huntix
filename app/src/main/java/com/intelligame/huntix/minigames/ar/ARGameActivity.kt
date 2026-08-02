@@ -141,7 +141,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         sceneView.onSessionCreated = { _ ->
             AppLog.i("ARGameActivity", "ARCore session created")
         }
-        sceneView.configureSession { _, config ->
+        val configBlock: (Config) -> Unit = { config ->
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
             config.focusMode = Config.FocusMode.AUTO
@@ -149,6 +149,10 @@ abstract class ARGameActivity : AppCompatActivity() {
             config.cloudAnchorMode = Config.CloudAnchorMode.DISABLED
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
         }
+        sceneView.configureSession { _, config -> configBlock(config) }
+        // Fallback: if session already created by onAttachedToWindow lifecycle auto-detection,
+        // configureSession's callback was missed. Apply config immediately.
+        sceneView.session?.configure(configBlock)
         sceneView.onSessionUpdated = { s, f ->
             lastSession = s
             lastFrame = f

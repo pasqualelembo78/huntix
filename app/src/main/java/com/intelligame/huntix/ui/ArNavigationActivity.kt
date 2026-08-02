@@ -186,13 +186,17 @@ class ArNavigationActivity : AppCompatActivity() {
     }
 
     private fun configureSession() {
-        sceneView.configureSession { session, config ->
+        val configBlock: (Config) -> Unit = { config ->
             config.planeFindingMode = Config.PlaneFindingMode.DISABLED
             config.lightEstimationMode = Config.LightEstimationMode.AMBIENT_INTENSITY
             config.focusMode = Config.FocusMode.AUTO
             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
             geoMgr.configureSession(session, config)
         }
+        sceneView.configureSession { session, config -> configBlock(config) }
+        // Fallback: if session already created by onAttachedToWindow lifecycle auto-detection,
+        // configureSession's callback was missed. Apply config immediately.
+        sceneView.session?.configure(configBlock)
     }
 
     private fun onTrackingReady() {
