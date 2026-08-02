@@ -50,7 +50,7 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_HANGMAN, "Impiccato", "🙈", HangmanActivity::class.java, ARHangmanActivity::class.java),
         GameEntry(MiniGameManager.GAME_TIC_TAC_TOE, "Tris", "⭕", TicTacToeActivity::class.java, ARTicTacToeActivity::class.java),
         GameEntry(MiniGameManager.GAME_SIMON, "Simon", "🎨", SimonActivity::class.java, ARSimonActivity::class.java),
-        GameEntry(MiniGameManager.GAME_DINO, "Dino Runner", "🦖", DinoGameActivity::class.java, null),
+        GameEntry(MiniGameManager.GAME_DINO, "Dino Runner", "🦖", DinoGameActivity::class.java, ARDinoActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_SHOOTER, "Egg Shooter", "🔫", null, AREggShooterActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_BOMB, "Color Bomb", "💣", null, ARColorBombActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "Egg Radar", "📡", null, AREggRadarActivity::class.java),
