@@ -81,6 +81,8 @@ object MiniGameManager {
     const val GAME_BRISCOLA    = "briscola"
     const val GAME_SCOPA       = "scopa"
     const val GAME_SOLITAIRE   = "solitaire"
+    const val GAME_PONG        = "pong"
+    const val GAME_MOTO_X3M    = "moto_x3m"
 
     val ALL_GAME_IDS = listOf(
         GAME_MEMORY,
@@ -95,7 +97,8 @@ object MiniGameManager {
         GAME_FLOOD,
         GAME_ASTEROIDS,
         GAME_FROGGER,
-        GAME_BRISCOLA, GAME_SCOPA, GAME_SOLITAIRE
+        GAME_BRISCOLA, GAME_SCOPA, GAME_SOLITAIRE,
+        GAME_PONG, GAME_MOTO_X3M
     )
 
     val AR_NATIVE_GAME_IDS = listOf(

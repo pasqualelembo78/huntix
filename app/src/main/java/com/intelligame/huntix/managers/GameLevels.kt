@@ -50,6 +50,8 @@ object GameLevels {
     const val GAME_BRISCOLA    = "briscola"
     const val GAME_SCOPA       = "scopa"
     const val GAME_SOLITAIRE   = "solitaire"
+    const val GAME_PONG        = "pong"
+    const val GAME_MOTO_X3M    = "moto_x3m"
 
     // ─── Definizioni per gioco ──────────────────────────────────
     // SCORE: target = base + (level-1)*step (score = punti della partita)
@@ -81,6 +83,8 @@ object GameLevels {
         Def(GAME_BRISCOLA,   "vittorie",  Mode.WIN),
         Def(GAME_SCOPA,      "vittorie",  Mode.WIN),
         Def(GAME_SOLITAIRE,  "vittorie",  Mode.WIN),
+        Def(GAME_PONG,       "punti",     Mode.SCORE, base = 100, step = 100),
+        Def(GAME_MOTO_X3M,   "punti",     Mode.SCORE, base = 100, step = 100),
     )
     /** Config per gioco; se assente usa una config di default ragionevole. */
     fun def(gameId: String): Def =

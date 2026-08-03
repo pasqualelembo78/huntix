@@ -124,7 +124,7 @@ abstract class CardGameBase : AppCompatActivity() {
     protected fun startGame() {
         score = 0
         lives = 3
-        currentLevel = MiniGameManager.getLevel(this, MiniGameManager.getGameId(config))
+        currentLevel = MiniGameManager.getLevel(this, config.toGameId())
         gameRunning = true
         scoreText.text = "Punti: 0"
         livesText.text = "❤️".repeat(lives)
@@ -179,7 +179,7 @@ abstract class CardGameBase : AppCompatActivity() {
         val xp = if (won) (score * 0.1f * config.rewardMultiplier).toInt().coerceAtLeast(8) else kotlin.math.max(score / 8, 3)
         val result = try {
             MiniGameManager.completePlay(
-                this, MiniGameManager.getGameId(config), score,
+                this, config.toGameId(), score,
                 mvc = mvc, xp = xp,
                 label = "${config.title}: ${if (won) "vittoria!" else "sconfitta"}",
                 isWin = won,
