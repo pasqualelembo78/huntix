@@ -365,6 +365,18 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
+        <activity android:name=".minigames.FloodActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.FroggerActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.AsteroidsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
         <!-- AR Minigames -->
         <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>

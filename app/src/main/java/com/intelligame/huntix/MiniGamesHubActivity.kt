@@ -44,6 +44,7 @@ class MiniGamesHubActivity : BaseNavActivity() {
     private val games = listOf(
         GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, null),
         GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, ARMemoryActivity::class.java),
+        GameEntry(MiniGameManager.GAME_FROGGER, "Frogger", "🐸", FroggerActivity::class.java, null),
         GameEntry(MiniGameManager.GAME_NUMBER_PICK, "Scegli il Numero", "🔢", NumberPickActivity::class.java, ARNumberPickActivity::class.java),
         GameEntry(MiniGameManager.GAME_HIGH_CARD, "Carta Alta", "🃏", HighCardActivity::class.java, ARHighCardActivity::class.java),
         GameEntry(MiniGameManager.GAME_CATCH_EGG, "Prendi l'Uovo", "🥚", CatchEggActivity::class.java, ARCatchEggActivity::class.java),
@@ -61,7 +62,9 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_AR_BOMB, "Color Bomb", "💣", null, ARColorBombActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "Egg Radar", "📡", null, AREggRadarActivity::class.java),
         GameEntry(MiniGameManager.GAME_SLINGSHOT, "Egg Slingshot", "🎯", null, AREggSlingshotActivity::class.java),
-        GameEntry(MiniGameManager.GAME_TETRIS, "Tetris", "🧱", TetrisActivity::class.java, null)
+        GameEntry(MiniGameManager.GAME_TETRIS, "Tetris", "🧱", TetrisActivity::class.java, null),
+        GameEntry(MiniGameManager.GAME_FLOOD, "Flood", "🌊", FloodActivity::class.java, null),
+        GameEntry(MiniGameManager.GAME_ASTEROIDS, "Asteroids", "🚀", AsteroidsActivity::class.java, null)
     )
 
     private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR

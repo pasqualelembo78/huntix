@@ -216,12 +216,13 @@ download_repo() {
         log_error "Impossibile scaricare il repo"
         return 1
     }
-    echo "$dest"
+    DOWNLOADED_DIR="$dest"
 }
 
 analyze_repo() {
     local dest="$1"
     local key="$2"
+    IFS='|' read -r url lang lic type desc <<< "${REPOS[$key]}"
 
     log_step "2. Analisi"
 
@@ -441,7 +442,7 @@ class ${name^}Activity : MiniGameBase() {
 KOTLIN_EOF
 
     log_ok "Template generato: $template_file"
-    echo "$template_file"
+    GENERATED_TEMPLATE="$template_file"
 }
 
 register_game() {
@@ -452,44 +453,19 @@ register_game() {
 
     log_step "4. Registrazione nel progetto"
 
-    # Aggiungi GAME_ID a MiniGameManager
-    local mg_file="$PROJECT_DIR/app/src/main/java/com/intelligame/huntix/managers/MiniGameManager.kt"
-    if ! grep -q "GAME_${game_id_upper}" "$mg_file" 2>/dev/null; then
-        log_info "Aggiungono GAME_${game_id_upper} a MiniGameManager..."
-        sed -i "/GAME_SCOPA/a\\    const val GAME_${game_id_upper} = \"${game_id}\"" "$mg_file"
-        # Aggiungi a ALL_GAME_IDS
-        sed -i "/GAME_SCOPA/a\\        GAME_${game_id_upper}," "$mg_file"
-        log_ok "GAME_${game_id_upper} aggiunto a MiniGameManager"
-    else
-        log_warn "GAME_${game_id_upper} già presente in MiniGameManager"
-    fi
-
-    # Aggiungi a GameLevels
-    local gl_file="$PROJECT_DIR/app/src/main/java/com/intelligame/huntix/managers/GameLevels.kt"
-    if ! grep -q "GAME_${game_id_upper}" "$gl_file" 2>/dev/null; then
-        log_info "Aggiungono livello a GameLevels..."
-        sed -i "/GAME_SCOPA/i\\        Def(GAME_${game_id_upper}, \"punti\", Mode.SCORE, base = 100, step = 100)," "$gl_file"
-        log_ok "Livello aggiunto a GameLevels"
-    else
-        log_warn "GAME_${game_id_upper} già presente in GameLevels"
-    fi
-
-    # Aggiungi a MiniGamesHubActivity
-    local hub_file="$PROJECT_DIR/app/src/main/java/com/intelligame/huntix/MiniGamesHubActivity.kt"
-    if ! grep -q "GAME_${game_id_upper}" "$hub_file" 2>/dev/null; then
-        log_info "Aggiungono entry a MiniGamesHubActivity..."
-        # Trova l'ultima GameEntry e aggiungi dopo
-        sed -i "/GAME_SCOPA.*Scopa.*GameCategory.PUZZLE)/a\\        GameEntry(MiniGameManager.GAME_${game_id_upper}, \"${name^}\", \"🎮\", ${name^}Activity::class.java, null, GameCategory.PUZZLE)," "$hub_file"
-        log_ok "Entry aggiunta a MiniGamesHubActivity"
-    else
-        log_warn "GAME_${game_id_upper} già presente in MiniGamesHubActivity"
-    fi
+    python3 "$SCRIPT_DIR/register_game.py" \
+        --project "$PROJECT_DIR" \
+        --template "$TEMPLATES_DIR/${name^}Activity.kt" \
+        --id "$game_id" \
+        --label "${name^}" \
+        --emoji "🎮" \
+        && log_ok "Registrazione completata per ${name^}" \
+        || log_error "Registrazione fallita"
 
     # Copia il template come Activity reale
-    local template_file="$TEMPLATES_DIR/${name^}Activity.kt"
     local dest_file="$PROJECT_DIR/app/src/main/java/com/intelligame/huntix/minigames/${name^}Activity.kt"
-    if [ -f "$template_file" ]; then
-        cp "$template_file" "$dest_file"
+    if [ -f "$GENERATED_TEMPLATE" ]; then
+        cp "$GENERATED_TEMPLATE" "$dest_file"
         log_ok "Activity copiata in: $dest_file"
     fi
 }
@@ -535,9 +511,11 @@ fi
 log_ok "Trovato: $MATCH"
 
 # Esegui i passi
-DEST=$(download_repo "$MATCH") || exit 1
+download_repo "$MATCH" || exit 1
+DEST="$DOWNLOADED_DIR"
 analyze_repo "$DEST" "$MATCH"
-TEMPLATE=$(generate_template "$DEST" "$MATCH")
+generate_template "$DEST" "$MATCH"
+TEMPLATE="$GENERATED_TEMPLATE"
 register_game "$MATCH"
 verify_build
 

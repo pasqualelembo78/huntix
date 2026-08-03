@@ -74,6 +74,9 @@ object MiniGameManager {
     const val GAME_AR_RADAR     = "ar_egg_radar"
     const val GAME_SLINGSHOT    = "ar_slingshot"
     const val GAME_TETRIS      = "tetris"
+    const val GAME_FLOOD       = "flood"
+    const val GAME_ASTEROIDS      = "asteroids"
+    const val GAME_FROGGER      = "frogger"
 
     val ALL_GAME_IDS = listOf(
         GAME_MEMORY,
@@ -83,7 +86,10 @@ object MiniGameManager {
         GAME_CONNECT4, GAME_HANGMAN, GAME_TIC_TAC_TOE, GAME_SIMON,
         GAME_DINO,
         GAME_SLINGSHOT,
-        GAME_TETRIS
+        GAME_TETRIS,
+        GAME_FLOOD,
+        GAME_ASTEROIDS,
+        GAME_FROGGER
     )
 
     val AR_NATIVE_GAME_IDS = listOf(
