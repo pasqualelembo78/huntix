@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 fetch_open_source_games.py — Scarica e analizza repository di giochi
-open-source da GitHub per adattarli alla architettura Huntix.
+open-source da GitHub per adattarli all'architettura di Huntix.
 
 Uso:
-    python3 fetch_open_source_games.py                    # Scarica i repo di default
+    python3 fetch_open_source_games.py                    # Scarica i repo predefiniti
     python3 fetch_open_source_games.py --all              # Scarica tutti i repo
     python3 fetch_open_source_games.py --repo <url>       # Scarica un repo specifico
     python3 fetch_open_source_games.py --analyze <path>   # Analizza un repo scaricato
