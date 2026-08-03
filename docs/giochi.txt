@@ -5,31 +5,30 @@
 ================================================================
  PARTE 1 — GIOCHI CLASSICI (modo normale, 2D)
 ================================================================
-1   | 2048              | Normale   | Game2048Activity.kt        | ✅ completo | griglia 4x4, fusione swipe, +MVC/Xp
+1   | 2048 Uova        | Normale   | Game2048Activity.kt        | ✅ completo | uova a griglia con tier di colore, swipe per fondere, obiettivo 2048
 2   | Snake             | Normale   | SnakeActivity.kt           | ✅ completo | serpente su griglia, cibo, crescita
 3   | Campo Minato       | Normale   | MinesweeperActivity.kt     | ✅ completo | 9x9, 10 mine, bandiera, flood reveal
 4   | Flappy Egg         | Normale   | FlappyEggActivity.kt       | ✅ completo | gravity/tap, tubi, collisioni
-5   | Forza 4           | Normale   | ConnectFourActivity.kt     | ✅ completo | 7x6, 2P vs CPU, heuristica vinci/blocca
+5   | Forza 4           | Normale   | ConnectFourActivity.kt     | ✅ completo | 7x6, 2P vs CPU, heuristica vinci/blocca, overlay picker fixato
 6   | Impiccato         | Normale   | HangmanActivity.kt         | ✅ completo | parole IT, 7 stadi, tastiera A-Z
-7   | Tris              | Normale   | TicTacToeActivity.kt       | ✅ completo | 3x3, vs CPU, heuristica perfetta
+7   | Tris              | Normale   | TicTacToeActivity.kt       | ✅ completo | 3x3, vs CPU, replay bug fixato
 8   | Simon             | Normale   | SimonActivity.kt           | ✅ completo | sequenza colori, input utente
+9   | Breakout Eggs     | Normale   | PongActivity.kt            | ✅ completo | brick-breaker 2D: rompi il muro di uova, barra + palla
 
 ================================================================
  PARTE 2 — GIOCHI CLASSICI IN REALTÀ APPROFONDATA (ARCore 3D)
 ================================================================
-9   | AR 2048            | AR        | AR2048Activity.kt          | ✅ completo | uova fuse in arena 3D, colore+dimensione= valore, suono alla fusione
+9   | Breakout Eggs AR  | AR        | AR2048Activity.kt          | ✅ completo | uova fuse in arena 3D, colore+dimensione=tier, suono alla fusione
 10  | AR Snake           | AR        | ARSnakeActivity.kt         | ✅ completo | serpente di uova luminose nella stanza, caccia uova dorate
 11  | AR Campo Minato    | AR        | ARMinesweeperActivity.kt   | ✅ completo | 9x9 di uova in AR, colori classici, modalità bandiera HUD
 12  | AR Flappy Egg      | AR        | ARFlappyEggActivity.kt     | ✅ completo | uovo tra tubi 3D che avanzano nella stanza
 13  | AR Forza 4        | AR        | ARConnectFourActivity.kt   | ✅ completo | 7 colonne di uova in aria, caduta gravità
 14  | AR Impiccato      | AR        | ARHangmanActivity.kt       | ✅ completo | forca 3D con uovo che cade, lettere-uova
 15  | AR Tris           | AR        | ARTicTacToeActivity.kt     | ✅ completo | 3x3 di uova in aria (verde=TU, viola=CPU)
-16  | AR Simon          | AR        | ARSimonActivity.kt         | ✅ completo | 4 uova colorate sospese che lampeggiano
+16  | AR Simon          | AR        | ARSimonActivity.kt        | ✅ completo | 4 uova colorate sospese che lampeggiano
 17  | AR Memory         | AR        | ARMemoryActivity.kt        | ✅ esistente (legacy) |
-18  | AR Scegli Numero  | AR        | ARNumberPickActivity.kt    | ✅ esistente (legacy) |
-19  | AR Carta Alta     | AR        | ARHighCardActivity.kt      | ✅ esistente (legacy) |
-20  | AR Prendi Uovo    | AR        | ARCatchEggActivity.kt      | ✅ esistente (legacy) |
-21  | AR Match 3        | AR        | ARMatch3Activity.kt        | ✅ esistente (legacy) |
+18  | AR Prendi Uovo    | AR        | ARCatchEggActivity.kt      | ✅ esistente (legacy) |
+19  | AR Match 3        | AR        | ARMatch3Activity.kt        | ✅ esistente (legacy) |
 
 ================================================================
  PARTE 3 — GIOCHI EXCLUSIVI AR (non hanno versione normale)
@@ -38,6 +37,16 @@
 23  | AR Color Bomb     | AR-only   | ARColorBombActivity.kt     | ✅ esistente (legacy) |
 24  | AR Egg Radar      | AR-only   | AREggRadarActivity.kt      | ✅ esistente (legacy) |
 25  | AR Egg Slingshot  | AR-only   | AREggSlingshotActivity.kt  | ✅ NUOVO (showcase) | catapulta su piano reale, traiettoria balistica, audio 3D, esplosioni, haptic
+26  | Breakout Eggs   | Normale   | PongActivity.kt            | ✅ completo | brick-breaker 2D: rompi il muro di uova con palettiera e palla
+27  | AR Breakout     | AR        | ARPongActivity.kt          | ✅ completo | brick-breaker AR: muro di uova 3D su superficie reale, paddle trascinabile
+28  | Moto X3M        | Normale   | MotoX3MActivity.kt       | ✅ NUOVO | corsa moto laterale, salta ostacoli e raccogli uova, difficoltà crescente
+29  | Solitaire       | Normale   | minigames/card/SolitaireActivity.kt | ✅ NUOVO | Klondike solitaire con carte da gioco, 4 fondali A→K, trascina carte
+30  | Briscola        | Normale   | minigames/card/BriscolaActivity.kt  | ✅ NUOVO | Briscola italiana 2P vs CPU, scegli seme briscola, 6 mani
+31  | Scopa           | Normale   | minigames/card/ScopaActivity.kt     | ✅ NUOVO | Scopa italiana 2P vs CPU, cattura sommando 15, 3 mani
+
+32  | Egg Event System   | Engine    | EggEventEngine.kt          | ✅ completo | eventi casuali modulari (Esplosione, Magia, Ricompensa, Sberla, Rara, Portale, Musica,
+   |                        |           |                            |             | Scioglimento, Congelamento, Cambio scena, Reazione a catena, Combo, Nucleo gioco)
+   |                        |           |                            |             | con disclosure probabilità e scaling per livello
 
 ================================================================
  PARTE 4 — GIOCHI DI BATTAGLIA (sempre disponibili, nessun limite)
@@ -59,7 +68,7 @@
 ================================================================
  REGISTRI — dove vivono
 ================================================================
-- Elenco giochi + toggle Normale/AR + griglia con mini-preview → MiniGamesHubActivity.kt
+- Elenco giochi + tab per tipologia (Memoria, Puzzle, Arcade, Solo AR) → MiniGamesHubActivity.kt
 - Mini preview Canvas → GamePreviewView.kt (icona per ogni gameId)
 - Base AR → ARGameActivity.kt (+ SpatialAudio.kt)
 - Limiti di gioco/giorno → MiniGameManager.kt (MAX_PLAYS_MAP, GAME_*_id)

@@ -1,0 +1,172 @@
+{
+  "name": "WordSearchPuzzleView",
+  "url": "https://github.com/akherbouch/WordSearchPuzzleView.git",
+  "language": "Kotlin",
+  "license": "Apache-2.0",
+  "type": "customview",
+  "description": "Word Search puzzle view personalizzabile",
+  "files": [
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/WordSearchView.java",
+      "lines": 297
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/drawables/Line.java",
+      "lines": 162
+    },
+    {
+      "path": "app/src/main/java/com/akherbouch/puzzleviews/MainActivity.kt",
+      "lines": 51
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/utils/CommonUtil.kt",
+      "lines": 46
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/utils/DrawUtil.kt",
+      "lines": 46
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/utils/BitmapUtil.kt",
+      "lines": 45
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/drawables/Letter.kt",
+      "lines": 44
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/drawables/Grid.kt",
+      "lines": 33
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/drawables/Drawable.kt",
+      "lines": 29
+    },
+    {
+      "path": "wsv/src/androidTest/java/com/akherbouch/wsv/ExampleInstrumentedTest.java",
+      "lines": 26
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/drawables/Background.kt",
+      "lines": 25
+    },
+    {
+      "path": "app/src/androidTest/java/com/akherbouch/puzzleviews/ExampleInstrumentedTest.kt",
+      "lines": 24
+    },
+    {
+      "path": "app/src/test/java/com/akherbouch/puzzleviews/ExampleUnitTest.kt",
+      "lines": 17
+    },
+    {
+      "path": "wsv/src/test/java/com/akherbouch/wsv/ExampleUnitTest.java",
+      "lines": 17
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/WordSearchPuzzle.kt",
+      "lines": 16
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/utils/Calculator.kt",
+      "lines": 15
+    },
+    {
+      "path": "wsv/src/main/java/com/akherbouch/wsv/utils/ExceptionUtil.kt",
+      "lines": 9
+    },
+    {
+      "path": "app/src/main/java/com/akherbouch/puzzleviews/Text.java",
+      "lines": 9
+    }
+  ],
+  "game_logic_files": [
+    {
+      "file": "akherbouch/wsv/WordSearchPuzzle.kt",
+      "matches": [
+        "move",
+        "puzzle",
+        "word",
+        "letter",
+        "column"
+      ],
+      "lines": 16
+    },
+    {
+      "file": "wsv/drawables/Grid.kt",
+      "matches": [
+        "draw",
+        "Canvas",
+        "grid"
+      ],
+      "lines": 33
+    },
+    {
+      "file": "wsv/drawables/Letter.kt",
+      "matches": [
+        "draw",
+        "Canvas",
+        "letter"
+      ],
+      "lines": 44
+    },
+    {
+      "file": "wsv/drawables/Drawable.kt",
+      "matches": [
+        "draw",
+        "Canvas",
+        "grid",
+        "letter"
+      ],
+      "lines": 29
+    },
+    {
+      "file": "akherbouch/puzzleviews/MainActivity.kt",
+      "matches": [
+        "puzzle",
+        "word",
+        "letter",
+        "column"
+      ],
+      "lines": 51
+    },
+    {
+      "file": "akherbouch/wsv/WordSearchView.java",
+      "matches": [
+        "game",
+        "draw",
+        "onTouch",
+        "level",
+        "pause",
+        "resume",
+        "SurfaceView",
+        "Canvas",
+        "move",
+        "puzzle",
+        "grid",
+        "word",
+        "letter",
+        "push",
+        "column"
+      ],
+      "lines": 297
+    },
+    {
+      "file": "wsv/drawables/Line.java",
+      "matches": [
+        "draw",
+        "Canvas",
+        "word",
+        "column"
+      ],
+      "lines": 162
+    }
+  ],
+  "total_lines": 911,
+  "adaptability": "high",
+  "adaptation_notes": [
+    "Usa View custom \u2014 pattern compatibile con Huntix"
+  ],
+  "total_files": 18,
+  "kotlin_files": 13,
+  "java_files": 5
+}

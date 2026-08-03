@@ -60,7 +60,8 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_AR_SHOOTER, "Egg Shooter", "🔫", null, AREggShooterActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_BOMB, "Color Bomb", "💣", null, ARColorBombActivity::class.java),
         GameEntry(MiniGameManager.GAME_AR_RADAR, "Egg Radar", "📡", null, AREggRadarActivity::class.java),
-        GameEntry(MiniGameManager.GAME_SLINGSHOT, "Egg Slingshot", "🎯", null, AREggSlingshotActivity::class.java)
+        GameEntry(MiniGameManager.GAME_SLINGSHOT, "Egg Slingshot", "🎯", null, AREggSlingshotActivity::class.java),
+        GameEntry(MiniGameManager.GAME_TETRIS, "Tetris", "🧱", TetrisActivity::class.java, null)
     )
 
     private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR

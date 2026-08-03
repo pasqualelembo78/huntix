@@ -2,6 +2,7 @@ package com.intelligame.huntix.minigames.ar
 
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
+import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import java.util.Collections
 
@@ -16,12 +17,16 @@ class AREggShooterActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         usesSurfaceArena = false
+        val diff = MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_SHOOTER)
         lives = 3; score = 0
-        timeLeft = (40 - (10 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_SHOOTER)).toInt()).coerceAtLeast(20)
+        timeLeft = (40 - (10 * diff).toInt()).coerceAtLeast(20)
         eggsActive.clear()
-        statusText.text = "Spara alle uova che salgono! ✨"
+        statusText.text = "🎯  Spara alle uova dorate che salgono! ⚪=10pt  🟡=100pt  ⚫=perdi vita"
+        statusText.setTextColor(android.graphics.Color.parseColor(UiKit.ACCENT))
+        livesText.text = "❤️".repeat(lives)
+        timerText.text = "⏱ ${timeLeft}s"
+        scoreText.text = "0 pt"
         updateLevelHud(MiniGameManager.GAME_AR_SHOOTER)
-        updateHud()
         startGame(); startTimer(); scheduleSpawn()
     }
 
@@ -30,24 +35,35 @@ class AREggShooterActivity : ARGameActivity() {
         timerCb = postDelayed(1000) {
             if (!running) return@postDelayed
             timeLeft--
-            timerText.text = "⏱ ${timeLeft}s"
+            val elapsed = 40 - timeLeft
+            timerText.text = "⏱ ${timeLeft}s  🔥 ${String.format("%.1f", 1f + elapsed * 0.03f)}x"
             if (timeLeft <= 0) endGame() else startTimer()
         }
     }
 
     private fun scheduleSpawn() {
         removeCallback(spawnCb)
-        spawnCb = postDelayed((450L..800L).random()) {
+        val elapsed = 40 - timeLeft
+        val interval = (Math.max(200L, 450L - elapsed * 10L)..Math.max(150L, 800L - elapsed * 15L)).random()
+        spawnCb = postDelayed(interval) {
             if (!running) return@postDelayed
             synchronized(eggsActive) {
-                if (eggsActive.count { it.alive } < 7) spawnEggUp()
+                val maxEggs = (7 + (elapsed / 5)).coerceAtMost(12)
+                if (eggsActive.count { it.alive } < maxEggs) spawnEggUp()
             }
             scheduleSpawn()
         }
     }
 
     private fun spawnEggUp() {
-        val type = if (Math.random() < 0.2) 3 else 0
+        val elapsed = 40 - timeLeft
+        val bombChance = (elapsed * 0.006f).coerceIn(0f, 0.25f)
+        val rnd = Math.random()
+        val type = when {
+            rnd < 0.12 -> 3      // 🟡 Rara — 100pt
+            rnd < 0.12 + bombChance -> 6      // ⚫ Bomba — perde vita
+            else -> 0            // ⚪ Normale — 10pt
+        }
         val egg = spawnEgg(type, forward = 1.0f, right = (-0.4f..0.4f).random(), up = -0.45f,
             radius = 0.08f) ?: return
         egg.phase = -0.45f
@@ -89,8 +105,15 @@ class AREggShooterActivity : ARGameActivity() {
     }
 
     private fun endGame() {
-        stopGame(); removeCallback(timerCb); removeCallback(spawnCb)
-        finishGame((score * 0.7).toInt().coerceAtMost(400),
-            "AR Egg Shooter ($score pt)", score > 50, MiniGameManager.GAME_AR_SHOOTER, score = score)
+        stopGame()
+        removeCallback(timerCb); removeCallback(spawnCb)
+        val reward = (score * 0.7).toInt().coerceAtLeast(10).coerceAtMost(400)
+        finishGame(
+            reward = reward,
+            label = "AR Egg Shooter ($score pt)",
+            isWin = score > 50,
+            gameId = MiniGameManager.GAME_AR_SHOOTER,
+            score = score
+        )
     }
 }

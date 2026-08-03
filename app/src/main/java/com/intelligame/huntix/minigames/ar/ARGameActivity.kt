@@ -419,22 +419,28 @@ abstract class ARGameActivity : AppCompatActivity() {
         }
     }
 
-    /** Dialogo di scelta della [ARGameMode], con l'ultima scelta pre-selezionata. */
+    /**
+     * Dialogo di scelta della [ARGameMode]: ogni opzione è un bottone toccabile
+     * che avvia subito il gioco con la modalità scelta (che viene ricordata).
+     * Se si chiude senza toccare nulla si parte comunque con l'ultima scelta salvata.
+     */
     protected fun chooseGameMode(onChosen: () -> Unit) {
-        val labels = arrayOf("🌍 3D Meshing", "📐 Rilevamento superfici", "🕊️ Modalità libera")
+        val options = arrayOf(
+            "🌍 Su pareti, pavimento e soffitto",
+            "📐 Su superfici piatte",
+            "🕊️ Libero nell'aria"
+        )
         val modes = arrayOf(ARGameMode.MESHING, ARGameMode.PLANE, ARGameMode.FREE)
-        var picked = gameMode
         val dialog = AlertDialog.Builder(this)
-            .setTitle("🎮 Modalità di gioco")
-            .setMessage("Come vuoi posizionare il gioco nella stanza?")
-            .setSingleChoiceItems(labels, modes.indexOf(gameMode).coerceAtLeast(0)) { _, which ->
-                picked = modes[which]
-            }
-            .setPositiveButton("▶ Inizia") { _, _ ->
-                gameMode = picked
+            .setTitle("🎮 Dove posiziono il gioco?")
+            .setMessage("Tocca l'opzione che preferisci e si parte subito. " +
+                "La scelta viene ricordata per le prossime partite.")
+            .setItems(options) { _, which ->
+                gameMode = modes[which]
                 persistGameMode()
                 onChosen()
             }
+            .setNegativeButton("↩ Riprendi com'era") { _, _ -> onChosen() }
             .setOnCancelListener { onChosen() }
             .create()
         dialog.setCanceledOnTouchOutside(false)

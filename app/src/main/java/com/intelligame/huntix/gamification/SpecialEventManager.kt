@@ -8,10 +8,11 @@ import java.util.Calendar
  *
  * Eventi attuali:
  *  - ElfHunt (Caccia dell'Elfo): 1-25 Dicembre
- *  - Tombolata: 27-31 Dicembre (placeholder per futuro)
  *
  * Pattern: object singleton, nessun SharedPreferences,
  * solo calcolo basato su Calendar.
+ *
+ * === v9: Rimossa Tombolata di Capodanno (attività d'azzardo) ===
  */
 object SpecialEventManager {
 
@@ -37,23 +38,10 @@ object SpecialEventManager {
             override val endDay = 25
             override val colorHex = "#C62828"
         }
-
-        data object Tombolata : SpecialEvent() {
-            override val id = "tombolata"
-            override val title = "Tombolata di Capodanno"
-            override val description = "Celebrare il nuovo anno con premi speciali!"
-            override val emoji = "\uD83C\uDF86"
-            override val startMonth = Calendar.DECEMBER
-            override val startDay = 27
-            override val endMonth = Calendar.DECEMBER
-            override val endDay = 31
-            override val colorHex = "#FF6F00"
-        }
     }
 
     private val allEvents: List<SpecialEvent> = listOf(
-        SpecialEvent.ElfHunt,
-        SpecialEvent.Tombolata
+        SpecialEvent.ElfHunt
     )
 
     fun getActiveSpecialEvent(): SpecialEvent? {

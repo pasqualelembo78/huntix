@@ -1,0 +1,14 @@
+{
+  "name": "tetris",
+  "url": "https://github.com/SpiritualForest/AndroidTetris.git",
+  "language": "",
+  "license": "",
+  "type": "",
+  "description": "Tetris Android con engine decoupled",
+  "kotlin_files": 0,
+  "java_files": 0,
+  "total_lines": 0,
+  "uses_compose": true,
+  "patterns": "",
+  "adaptability": "high"
+}

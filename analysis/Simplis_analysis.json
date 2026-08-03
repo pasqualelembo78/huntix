@@ -1,0 +1,247 @@
+{
+  "name": "Simplis",
+  "url": "https://github.com/gabrielrovesti/Simplis.git",
+  "language": "Kotlin",
+  "license": "MIT",
+  "type": "compose",
+  "description": "Tetris moderno con Jetpack Compose e Canvas",
+  "files": [
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/GameScreen.kt",
+      "lines": 431
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/GameEngine.kt",
+      "lines": 257
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/TitleScreen.kt",
+      "lines": 162
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/GameViewModel.kt",
+      "lines": 115
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/Board.kt",
+      "lines": 92
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/TetrominoType.kt",
+      "lines": 86
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/Tetromino.kt",
+      "lines": 85
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/GameState.kt",
+      "lines": 84
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/SplashScreen.kt",
+      "lines": 73
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/theme/Theme.kt",
+      "lines": 58
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/MainActivity.kt",
+      "lines": 47
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/theme/Type.kt",
+      "lines": 34
+    },
+    {
+      "path": "app/src/androidTest/java/com/example/simplis/ExampleInstrumentedTest.kt",
+      "lines": 24
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/game/Constants.kt",
+      "lines": 23
+    },
+    {
+      "path": "app/src/test/java/com/example/simplis/ExampleUnitTest.kt",
+      "lines": 17
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/theme/Color.kt",
+      "lines": 11
+    },
+    {
+      "path": "app/src/main/java/com/example/simplis/ui/ScreenState.kt",
+      "lines": 10
+    }
+  ],
+  "game_logic_files": [
+    {
+      "file": "simplis/ui/TitleScreen.kt",
+      "matches": [
+        "draw",
+        "onClick",
+        "Canvas",
+        "tetris",
+        "tetromino",
+        "piece",
+        "move",
+        "letter",
+        "box",
+        "space",
+        "drop",
+        "column"
+      ],
+      "lines": 162
+    },
+    {
+      "file": "simplis/ui/SplashScreen.kt",
+      "matches": [
+        "draw",
+        "letter",
+        "box",
+        "space",
+        "column"
+      ],
+      "lines": 73
+    },
+    {
+      "file": "simplis/ui/GameScreen.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "score",
+        "level",
+        "gameOver",
+        "pause",
+        "resume",
+        "Canvas",
+        "tetromino",
+        "piece",
+        "board",
+        "move",
+        "letter",
+        "box",
+        "ghost",
+        "space",
+        "drop",
+        "column"
+      ],
+      "lines": 431
+    },
+    {
+      "file": "simplis/game/Constants.kt",
+      "matches": [
+        "game",
+        "level",
+        "tetris",
+        "board",
+        "drop",
+        "column"
+      ],
+      "lines": 23
+    },
+    {
+      "file": "simplis/game/GameState.kt",
+      "matches": [
+        "game",
+        "draw",
+        "render",
+        "score",
+        "level",
+        "gameOver",
+        "pause",
+        "gameState",
+        "tetromino",
+        "piece",
+        "board",
+        "move",
+        "grid",
+        "ghost",
+        "drop"
+      ],
+      "lines": 84
+    },
+    {
+      "file": "simplis/game/TetrominoType.kt",
+      "matches": [
+        "game",
+        "tetris",
+        "tetromino",
+        "piece"
+      ],
+      "lines": 86
+    },
+    {
+      "file": "simplis/game/GameViewModel.kt",
+      "matches": [
+        "game",
+        "game loop",
+        "gameOver",
+        "startGame",
+        "pause",
+        "gameState",
+        "gameLoop",
+        "tick",
+        "piece",
+        "move",
+        "drop"
+      ],
+      "lines": 115
+    },
+    {
+      "file": "simplis/game/Tetromino.kt",
+      "matches": [
+        "game",
+        "tetromino",
+        "piece",
+        "board",
+        "move",
+        "column"
+      ],
+      "lines": 85
+    },
+    {
+      "file": "simplis/game/GameEngine.kt",
+      "matches": [
+        "game",
+        "update",
+        "score",
+        "level",
+        "gameOver",
+        "reset",
+        "pause",
+        "gameState",
+        "tick",
+        "tetris",
+        "tetromino",
+        "piece",
+        "board",
+        "move",
+        "swap",
+        "drop"
+      ],
+      "lines": 257
+    },
+    {
+      "file": "simplis/game/Board.kt",
+      "matches": [
+        "game",
+        "tetromino",
+        "piece",
+        "board",
+        "grid"
+      ],
+      "lines": 92
+    }
+  ],
+  "total_lines": 1609,
+  "adaptability": "high",
+  "adaptation_notes": [
+    "Usa View custom \u2014 pattern compatibile con Huntix"
+  ],
+  "total_files": 17,
+  "kotlin_files": 17,
+  "java_files": 0
+}

@@ -1,0 +1,108 @@
+package com.intelligame.huntix.minigames
+
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.os.Bundle
+import android.view.MotionEvent
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
+import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.managers.MiniGameManager
+import io.sentry.Sentry
+
+/**
+ * 🎮 ConnectFour — adattato da open-source.
+ *
+ * Originale: Mini-giochi Kotlin Multiplatform (include Connect Four)
+ * Licenza: MIT
+ * Fonte: https://github.com/avan1235/mini-games.git
+ *
+ * Adattamento: logica di gioco preservata,
+ * rendering convertito al pattern Canvas di Huntix.
+ */
+class ConnectFourActivity : MiniGameBase() {
+
+    // ── Costanti del gioco ──────────────────────────────────
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var gameRunning = false
+    private var score = 0
+
+    // ── Stato del gioco ─────────────────────────────────────
+
+    // TODO: Aggiungere le variabili di stato del gioco originale
+
+    override fun onGameCreate() {
+        // TODO: Inizializzare il gioco
+        // Esempio:
+        // val ctx = this
+        // val root = LinearLayout(ctx).apply {
+        //     orientation = LinearLayout.VERTICAL
+        //     setBackgroundColor(Color.parseColor(UiKit.BG))
+        //     setPadding(UiKit.dp(ctx, 14), UiKit.dp(ctx, 12), UiKit.dp(ctx, 14), UiKit.dp(ctx, 12))
+        // }
+        // root.addView(UiKit.title(ctx, "ConnectFour", "🎮"))
+        // ...
+        // setContentView(root)
+        // startGame()
+    }
+
+    // ── Game Loop ────────────────────────────────────────────
+
+    private fun startGame() {
+        // TODO: Reset dello stato del gioco
+        score = 0
+        gameRunning = true
+        // TODO: Avviare il game loop
+        // handler.postDelayed(gameLoop, tickMs)
+    }
+
+    private val gameLoop = object : Runnable {
+        override fun run() {
+            if (!gameRunning) return
+            // TODO: Aggiornare la logica di gioco
+            // TODO: Disegnare il frame
+            // handler.postDelayed(this, tickMs)
+        }
+    }
+
+    // ── Rendering ────────────────────────────────────────────
+
+    // TODO: Implementare onDraw() con il rendering Canvas
+    // Seguire il pattern di SnakeActivity.kt o CardGameBase.kt
+
+    // ── Input ────────────────────────────────────────────────
+
+    // TODO: Implementare onTouchEvent() per il controllo del gioco
+
+    // ── Fine gioco ───────────────────────────────────────────
+
+    private fun endGame(won: Boolean) {
+        if (!gameRunning) return
+        gameRunning = false
+        handler.removeCallbacksAndMessages(null)
+
+        val mvc = if (won) (score * 0.2f).toInt().coerceAtLeast(10) else kotlin.math.max(score / 5, 3)
+        val xp = if (won) (score * 0.1f).toInt().coerceAtLeast(5) else kotlin.math.max(score / 8, 2)
+
+        try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_CONNECTFOUR, score,
+                mvc = mvc, xp = xp,
+                label = "ConnectFour: ${if (won) "vittoria!" else "sconfitta"}",
+                isWin = won
+            )
+        } catch (e: Exception) { Sentry.captureException(e) }
+
+        // TODO: Mostrare overlay di fine gioco
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        gameRunning = false
+        handler.removeCallbacksAndMessages(null)
+    }
+}

@@ -6,7 +6,7 @@
 #  2) Se firebase CLI è installato, esegue il deploy.
 #  3) Altrimenti stampa le istruzioni per il deploy manuale dalla console.
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # firebase-tools richiede Node >= 18: se c'è nvm, attiva una versione adeguata.
 if ! command -v firebase >/dev/null 2>&1; then
@@ -17,7 +17,7 @@ if ! command -v firebase >/dev/null 2>&1; then
   fi
 fi
 
-# Estrae la sezione Firestore dal documento master (firebase_security_rules.txt),
+# Estrae la sezione Firestore dal documento master (firebase/firebase_security_rules.txt),
 # partendo da `rules_version` e fermandosi alla chiusura di `service cloud.firestore`
 # (conteggio bilanciato delle parentesi: il doc contiene anche le moderation rules RTDB).
 awk '
@@ -28,12 +28,12 @@ awk '
     closes += gsub(/\}/, "}")
     if (opens > 0 && opens == closes) exit
   }
-' firebase_security_rules.txt > firestore.rules
-if [ ! -s firestore.rules ]; then
-  echo "ERRORE: sezione Firestore non trovata in firebase_security_rules.txt" >&2
+' firebase/firebase_security_rules.txt > firebase/firestore.rules
+if [ ! -s firebase/firestore.rules ]; then
+  echo "ERRORE: sezione Firestore non trovata in firebase/firebase_security_rules.txt" >&2
   exit 1
 fi
-echo ">> Regole estratte in firestore.rules ($(wc -l < firestore.rules) righe)"
+echo ">> Regole estratte in firebase/firestore.rules ($(wc -l < firebase/firestore.rules) righe)"
 
 if ! command -v firebase >/dev/null 2>&1; then
   echo ""
@@ -47,7 +47,7 @@ if ! command -v firebase >/dev/null 2>&1; then
   echo ""
   echo "  B) Deploy manuale dalla console:"
   echo "     1) Vai su https://console.firebase.google.com/project/easter-egg-hunt-ar/firestore/rules"
-  echo "     2) Incolla il contenuto di firestore.rules (o della sezione FIRESTORE di firebase_security_rules.txt)"
+  echo "     2) Incolla il contenuto di firebase/firestore.rules (o della sezione FIRESTORE di firebase/firebase_security_rules.txt)"
   echo "     3) Pubblica"
   exit 1
 fi
@@ -57,10 +57,10 @@ firebase deploy --only firestore:rules
 
 # ═══════════════════════════════════════════════════════════════
 #  REGOLE REALTIME DATABASE (indoor_rooms, outdoor_rooms, chat…)
-#  Fonte: rtdb.rules (stato di produzione — allineato al live).
+#  Fonte: firebase/rtdb.rules (stato di produzione — allineato al live).
 # ═══════════════════════════════════════════════════════════════
-if [ ! -f rtdb.rules ]; then
-  echo "⚠️  rtdb.rules non trovato — salto il deploy RTDB." >&2
+if [ ! -f firebase/rtdb.rules ]; then
+  echo "⚠️  firebase/rtdb.rules non trovato — salto il deploy RTDB." >&2
   exit 0
 fi
 
@@ -93,10 +93,10 @@ if [ -z "$RTDB_TOKEN" ]; then
 fi
 
 RTDB_URL="https://easter-egg-hunt-ar-default-rtdb.europe-west1.firebasedatabase.app"
-echo ">> Deploy regole Realtime Database (rtdb.rules)..."
+echo ">> Deploy regole Realtime Database (firebase/rtdb.rules)..."
 HTTP=$(curl -s -o /tmp/rtdb_rules_deploy_resp.json -w "%{http_code}" -X PUT \
   -H "Authorization: Bearer $RTDB_TOKEN" \
   -H "Content-Type: application/json" \
-  --data-binary @rtdb.rules "$RTDB_URL/.settings/rules.json")
+  --data-binary @firebase/rtdb.rules "$RTDB_URL/.settings/rules.json")
 echo "   HTTP $HTTP — $(cat /tmp/rtdb_rules_deploy_resp.json)"
 if [ "$HTTP" != "200" ]; then exit 1; fi

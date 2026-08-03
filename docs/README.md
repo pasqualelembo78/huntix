@@ -48,7 +48,6 @@ e crescendo il proprio team di creature.
 - **Android Studio** Hedgehog o più recente
 - **JDK 17** (incluso con Android Studio)
 - **Dispositivo fisico** con GPS attivo
-- **Google Maps API key** (configurato in `mapbox.txt`)
 
 ### Come aprire il progetto
 1. Apri Android Studio
@@ -77,23 +76,29 @@ huntix/
 │   │   ├── res/               — layout, drawable, stringhe
 │   │   └── AndroidManifest.xml
 │   └── build.gradle
-├── backend/                    — Firebase Cloud Functions
-└── mapbox.txt                  — roadmap e stato del progetto
+├── backend/                    — backend Python (AI, chat, auth)
+├── functions/                  — Firebase Cloud Functions
+├── scripts/                    — script utili (deploy regole, ricorrenze)
+├── docs/                       — documentazione (README, CREDITS, ricorrenze)
+└── firebase/                   — regole di sicurezza (Firestore + RTDB)
 ```
 
 ---
 
-## 📋 Documentazione aggiuntiva
+## 📋 Documentazione
 
 | File | Contenuto |
 |---|---|
-| `HUNTIX.md` | Panoramica completa del progetto |
-| `DEBUG_OUTDOOR_ISSUE.md` | Analisi tecnica bug map e fix applicati |
-| `ANALISI_OutdoorWorldActivity.kt` | Analisi approfondita del file principale |
-| `CHANGELOG_v5.md` / `CHANGELOG_v6.md` | Registro versioni |
-| `mapbox.txt` | Roadmap sviluppo e stato delle feature |
-| `FIREBASE_SCHEMA.md` | Schema dati Firestore |
-| `SPECIAL_EVENTS_PLAN.md` | Piano eventi live e stagionali |
+| `docs/README.md` | Questo file |
+| `docs/CREDITS.md` | Crediti e paternità |
+| `docs/ricorrenze.md` | Attività manuali + backup + esecutore `scripts/ricorrenze.sh` |
+| `docs/FIREBASE_SCHEMA.md` | Schema dati Firestore |
+| `docs/giochi.txt` | Mappa dei sistemi di gioco |
+| `docs/brookhaven.txt` / `docs/narrazione.txt` | Design mondo 3D e RealLife |
+| `firebase/firebase_security_rules.txt` | Regole Firestore + Realtime DB (sorgente) |
+| `firebase/firestore.rules` / `firebase/rtdb.rules` | Regole deployate |
+| `scripts/deploy_rules.sh` | Deploy regole Firestore + RTDB |
+| `scripts/ricorrenze.sh` | Verifica backup + login + deploy + (opzionale) build APK |
 
 ---
 

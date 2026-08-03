@@ -67,6 +67,10 @@ class ConnectFourActivity : MiniGameBase() {
             gravity = android.view.Gravity.CENTER
             setPadding(UiKit.dp(ctx, 30), UiKit.dp(ctx, 40), UiKit.dp(ctx, 30), UiKit.dp(ctx, 40))
         }
+        val pickerFrame = FrameLayout(ctx).apply {
+            setBackgroundColor(Color.parseColor("#CC0D0620"))
+            isClickable = true; isFocusable = true
+        }
         picker.addView(TextView(ctx).apply {
             text = "🎮"; textSize = 48f; gravity = android.view.Gravity.CENTER
         })
@@ -76,21 +80,15 @@ class ConnectFourActivity : MiniGameBase() {
         })
         picker.addView(UiKit.button(ctx, "👥  Due Giocatori", UiKit.PURPLE) {
             cpuMode = false
-            picker.removeAllViews()
-            wrapper.removeView(picker)
+            wrapper.removeView(pickerFrame)
             startGame()
         })
         picker.addView(UiKit.button(ctx, "🤖  Contro CPU", UiKit.ACCENT) {
             cpuMode = true
-            picker.removeAllViews()
-            wrapper.removeView(picker)
+            wrapper.removeView(pickerFrame)
             startGame()
         })
         picker.addView(UiKit.button(ctx, "⬅  Indietro", UiKit.TEXT_DIM) { finish() })
-        val pickerFrame = FrameLayout(ctx).apply {
-            setBackgroundColor(Color.parseColor("#CC0D0620"))
-            isClickable = true; isFocusable = true
-        }
         pickerFrame.addView(picker)
         wrapper.addView(pickerFrame)
     }
@@ -126,7 +124,7 @@ class ConnectFourActivity : MiniGameBase() {
                 } else {
                     currentPlayer = if (currentPlayer == 1) 2 else 1
                     updateStatus()
-                    if (cpuMode && currentPlayer == 2) {
+                    if (cpuMode && currentPlayer == 2 && !gameOver) {
                         handler.postDelayed({ cpuMove() }, 500)
                     }
                 }

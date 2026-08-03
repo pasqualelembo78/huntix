@@ -1,0 +1,1200 @@
+{
+  "name": "ConnectFour",
+  "url": "https://github.com/avan1235/mini-games.git",
+  "language": "Kotlin",
+  "license": "MIT",
+  "type": "multiplatform",
+  "description": "Mini-giochi Kotlin Multiplatform (include Connect Four)",
+  "files": [
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Swipeable.kt",
+      "lines": 879
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/set/SetCard.kt",
+      "lines": 292
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/service/GameService.kt",
+      "lines": 259
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/SnakeGameModel.kt",
+      "lines": 245
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/BirdGameModel.kt",
+      "lines": 239
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/ScrollScreen.kt",
+      "lines": 232
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Chat.kt",
+      "lines": 209
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/LogInComponent.kt",
+      "lines": 187
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/Bird.kt",
+      "lines": 166
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/SetGameModel.kt",
+      "lines": 165
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/screen/LogInScreen.kt",
+      "lines": 162
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponent.kt",
+      "lines": 148
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Notifications.kt",
+      "lines": 144
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/RegisterComponent.kt",
+      "lines": 135
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/screen/GameScreen.kt",
+      "lines": 133
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/UserDataRow.kt",
+      "lines": 132
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/Candy.kt",
+      "lines": 121
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/GameClient.kt",
+      "lines": 116
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/GameModel.kt",
+      "lines": 116
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/GameComponent.kt",
+      "lines": 112
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/screen/RegisterScreen.kt",
+      "lines": 107
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/Spike.kt",
+      "lines": 106
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/AbstractComponent.kt",
+      "lines": 105
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/routes/GameRoutes.kt",
+      "lines": 100
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/RecompositionHighlighter.kt",
+      "lines": 99
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/snake/Snake.kt",
+      "lines": 98
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Typography.kt",
+      "lines": 94
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormField.kt",
+      "lines": 91
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/BirdGamePlay.kt",
+      "lines": 88
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/service/UserService.kt",
+      "lines": 87
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/snake/SnakeBackground.kt",
+      "lines": 87
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/set/SetBoard.kt",
+      "lines": 80
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/RestApiClient.kt",
+      "lines": 80
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/CollectionUtil.kt",
+      "lines": 80
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenu.kt",
+      "lines": 78
+    },
+    {
+      "path": "build-src/src/main/kotlin/Dependencies.kt",
+      "lines": 77
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Loading.kt",
+      "lines": 69
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/snake/SnakeGamePlay.kt",
+      "lines": 69
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/ChatComponent.kt",
+      "lines": 69
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/snake/SnakePointItem.kt",
+      "lines": 68
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/MiniGamesApp.kt",
+      "lines": 65
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Button.kt",
+      "lines": 65
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/GameMessageModel.kt",
+      "lines": 63
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/util/DecomposeUtil.kt",
+      "lines": 60
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/util/RoutesUtil.kt",
+      "lines": 59
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/util/ColorUtil.kt",
+      "lines": 59
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/screen/LoadingScreen.kt",
+      "lines": 57
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/WebsocketApiClient.kt",
+      "lines": 57
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/AppConfiguration.kt",
+      "lines": 56
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/routes/UserRoutes.kt",
+      "lines": 56
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/GameTopBar.kt",
+      "lines": 52
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/BirdTheme.kt",
+      "lines": 52
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/SnakeComponent.kt",
+      "lines": 49
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/main.desktop.kt",
+      "lines": 47
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Players.kt",
+      "lines": 47
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/SetComponent.kt",
+      "lines": 47
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/VectorUtil.kt",
+      "lines": 46
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/Server.kt",
+      "lines": 43
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/db/DbSettings.kt",
+      "lines": 43
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Theme.kt",
+      "lines": 43
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/Icon.kt",
+      "lines": 41
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/TimeUtil.kt",
+      "lines": 40
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/BirdComponent.kt",
+      "lines": 39
+    },
+    {
+      "path": "build-src/src/main/kotlin/BuildSrcPlugin.kt",
+      "lines": 39
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/main.android.kt",
+      "lines": 38
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/set/SetGamePlay.kt",
+      "lines": 37
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/NotificationsComponent.kt",
+      "lines": 33
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/routes/WebRoutes.kt",
+      "lines": 32
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/CountingComponent.kt",
+      "lines": 32
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/ResUtil.kt",
+      "lines": 32
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/db/model/User.kt",
+      "lines": 31
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/db/model/BaseUUID.kt",
+      "lines": 31
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/UserClient.kt",
+      "lines": 30
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/StateKeeperUtils.kt",
+      "lines": 30
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/service/EmailService.kt",
+      "lines": 29
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/server/Jwt.kt",
+      "lines": 28
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/bird/Positioned.kt",
+      "lines": 28
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenuParts.kt",
+      "lines": 27
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenuParts.kt",
+      "lines": 27
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenuParts.kt",
+      "lines": 27
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenuParts.kt",
+      "lines": 27
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/TypeUtil.kt",
+      "lines": 26
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/UserModel.kt",
+      "lines": 26
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/util/SwingUtil.kt",
+      "lines": 25
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/main.web.kt",
+      "lines": 22
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/SizedCanvas.kt",
+      "lines": 20
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/DropdownMenuInternal.kt",
+      "lines": 19
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/api/GameApi.kt",
+      "lines": 19
+    },
+    {
+      "path": "android-app/src/androidMain/kotlin/ml/dev/kotlin/minigames/activity/MainActivity.kt",
+      "lines": 18
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/ProportionKeeper.kt",
+      "lines": 18
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponentContext.kt",
+      "lines": 18
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/util/EnvUtil.kt",
+      "lines": 16
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Fonts.kt",
+      "lines": 15
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Fonts.kt",
+      "lines": 15
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Fonts.kt",
+      "lines": 15
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/UserErrorMessage.kt",
+      "lines": 14
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/util/StateUtil.kt",
+      "lines": 12
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/MessageModel.kt",
+      "lines": 12
+    },
+    {
+      "path": "build-src/src/main/kotlin/Constants.kt",
+      "lines": 12
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Shape.kt",
+      "lines": 11
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Fonts.kt",
+      "lines": 11
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponentContext.kt",
+      "lines": 10
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponentContext.kt",
+      "lines": 9
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponentContext.kt",
+      "lines": 9
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/ViewModelSettings.kt",
+      "lines": 9
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/ViewModelSettings.kt",
+      "lines": 9
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/main.ios.kt",
+      "lines": 9
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/component/MiniGamesAppComponentContext.kt",
+      "lines": 9
+    },
+    {
+      "path": "server/src/jvmMain/kotlin/ml/dev/kotlin/minigames/util/AnyUtil.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/WebsocketApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/ViewModelSettings.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/rest/RestApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/WebsocketApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/rest/RestApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/WebsocketApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/rest/RestApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/WebsocketApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/ViewModelSettings.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/rest/RestApiConfig.kt",
+      "lines": 8
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/util/SerializationUtil.kt",
+      "lines": 7
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/WebsocketApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/RestJsonApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/WebsocketApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/RestJsonApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/WebsocketApiConfig.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/viewmodel/ViewModelSettings.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/rest/RestApiConfig.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/WebsocketApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/RestJsonApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/websocket/client/WebsocketApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/rest/client/RestJsonApiClient.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/model/JwtModel.kt",
+      "lines": 6
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/api/UserApi.kt",
+      "lines": 6
+    },
+    {
+      "path": "desktop-app/src/jvmMain/kotlin/ml/dev/kotlin/minigames/app/MainApp.kt",
+      "lines": 5
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/util/ComposeUtil.kt",
+      "lines": 5
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/theme/Fonts.kt",
+      "lines": 5
+    },
+    {
+      "path": "web-app/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/app/MainApp.kt",
+      "lines": 5
+    },
+    {
+      "path": "shared-client/src/wasmJsMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormFieldParts.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared-client/src/jvmMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormFieldParts.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared-client/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormFieldInternal.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared-client/src/androidMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormFieldParts.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared-client/src/iosMain/kotlin/ml/dev/kotlin/minigames/shared/ui/component/FormFieldParts.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/api/UtilApi.kt",
+      "lines": 3
+    },
+    {
+      "path": "shared/src/commonMain/kotlin/ml/dev/kotlin/minigames/shared/api/Api.kt",
+      "lines": 3
+    }
+  ],
+  "game_logic_files": [
+    {
+      "file": "server/routes/GameRoutes.kt",
+      "matches": [
+        "game",
+        "update",
+        "Handler",
+        "gameState",
+        "snake",
+        "move",
+        "connect"
+      ],
+      "lines": 100
+    },
+    {
+      "file": "minigames/db/DbSettings.kt",
+      "matches": [
+        "game",
+        "level",
+        "connect"
+      ],
+      "lines": 43
+    },
+    {
+      "file": "minigames/service/GameService.kt",
+      "matches": [
+        "game",
+        "update",
+        "reset",
+        "gameState",
+        "move",
+        "connect"
+      ],
+      "lines": 259
+    },
+    {
+      "file": "minigames/service/UserService.kt",
+      "matches": [
+        "game",
+        "match",
+        "match",
+        "word"
+      ],
+      "lines": 87
+    },
+    {
+      "file": "minigames/shared/main.web.kt",
+      "matches": [
+        "game",
+        "resume",
+        "Canvas"
+      ],
+      "lines": 22
+    },
+    {
+      "file": "ui/component/DropdownMenuParts.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "drop",
+        "column"
+      ],
+      "lines": 27
+    },
+    {
+      "file": "ui/component/DropdownMenuParts.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "drop",
+        "column"
+      ],
+      "lines": 27
+    },
+    {
+      "file": "ui/component/GameTopBar.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "space",
+        "column"
+      ],
+      "lines": 52
+    },
+    {
+      "file": "ui/component/Chat.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "board",
+        "box",
+        "column"
+      ],
+      "lines": 209
+    },
+    {
+      "file": "ui/component/Icon.kt",
+      "matches": [
+        "game",
+        "draw",
+        "box"
+      ],
+      "lines": 41
+    },
+    {
+      "file": "ui/component/Notifications.kt",
+      "matches": [
+        "game",
+        "draw",
+        "direction",
+        "move",
+        "card",
+        "box",
+        "column"
+      ],
+      "lines": 144
+    },
+    {
+      "file": "ui/component/Loading.kt",
+      "matches": [
+        "game",
+        "draw",
+        "dot",
+        "space"
+      ],
+      "lines": 69
+    },
+    {
+      "file": "ui/component/DropdownMenuInternal.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "drop",
+        "column"
+      ],
+      "lines": 19
+    },
+    {
+      "file": "ui/component/Swipeable.kt",
+      "matches": [
+        "game",
+        "update",
+        "direction",
+        "move",
+        "match",
+        "match",
+        "connect"
+      ],
+      "lines": 879
+    },
+    {
+      "file": "ui/component/SizedCanvas.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "onDraw"
+      ],
+      "lines": 20
+    },
+    {
+      "file": "ui/component/Players.kt",
+      "matches": [
+        "game",
+        "card",
+        "column"
+      ],
+      "lines": 47
+    },
+    {
+      "file": "ui/component/DropdownMenu.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "box",
+        "drop"
+      ],
+      "lines": 78
+    },
+    {
+      "file": "ui/component/FormField.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "board",
+        "direction",
+        "move",
+        "match",
+        "match",
+        "word"
+      ],
+      "lines": 91
+    },
+    {
+      "file": "ui/component/Button.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "box"
+      ],
+      "lines": 65
+    },
+    {
+      "file": "ui/component/RecompositionHighlighter.kt",
+      "matches": [
+        "game",
+        "draw",
+        "reset",
+        "onDraw"
+      ],
+      "lines": 99
+    },
+    {
+      "file": "ui/component/ScrollScreen.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "Handler",
+        "box",
+        "space",
+        "column"
+      ],
+      "lines": 232
+    },
+    {
+      "file": "ui/component/UserDataRow.kt",
+      "matches": [
+        "game",
+        "draw",
+        "reset",
+        "direction",
+        "move",
+        "card",
+        "box"
+      ],
+      "lines": 132
+    },
+    {
+      "file": "component/snake/Snake.kt",
+      "matches": [
+        "game",
+        "draw",
+        "snake",
+        "box",
+        "space"
+      ],
+      "lines": 98
+    },
+    {
+      "file": "component/snake/SnakeGamePlay.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "snake",
+        "direction",
+        "box"
+      ],
+      "lines": 69
+    },
+    {
+      "file": "component/snake/SnakeBackground.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "snake",
+        "move",
+        "box"
+      ],
+      "lines": 87
+    },
+    {
+      "file": "component/snake/SnakePointItem.kt",
+      "matches": [
+        "game",
+        "snake",
+        "box"
+      ],
+      "lines": 68
+    },
+    {
+      "file": "component/bird/Spike.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "move",
+        "box"
+      ],
+      "lines": 106
+    },
+    {
+      "file": "component/bird/BirdGamePlay.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "direction",
+        "box",
+        "column"
+      ],
+      "lines": 88
+    },
+    {
+      "file": "component/bird/Bird.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "direction",
+        "move",
+        "box",
+        "space"
+      ],
+      "lines": 166
+    },
+    {
+      "file": "component/bird/Candy.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "move",
+        "box"
+      ],
+      "lines": 121
+    },
+    {
+      "file": "component/set/SetBoard.kt",
+      "matches": [
+        "game",
+        "board",
+        "ball",
+        "card",
+        "box",
+        "column"
+      ],
+      "lines": 80
+    },
+    {
+      "file": "component/set/SetGamePlay.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "board",
+        "column"
+      ],
+      "lines": 37
+    },
+    {
+      "file": "component/set/SetCard.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "Canvas",
+        "move",
+        "card",
+        "box",
+        "space",
+        "column"
+      ],
+      "lines": 292
+    },
+    {
+      "file": "ui/screen/RegisterScreen.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "word",
+        "box",
+        "space",
+        "column"
+      ],
+      "lines": 107
+    },
+    {
+      "file": "ui/screen/LoadingScreen.kt",
+      "matches": [
+        "game",
+        "box",
+        "dot",
+        "space",
+        "column"
+      ],
+      "lines": 57
+    },
+    {
+      "file": "ui/screen/LogInScreen.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "reset",
+        "word",
+        "box",
+        "space",
+        "drop",
+        "column"
+      ],
+      "lines": 162
+    },
+    {
+      "file": "ui/screen/GameScreen.kt",
+      "matches": [
+        "game",
+        "update",
+        "Handler",
+        "gameState",
+        "board",
+        "card",
+        "box",
+        "connect"
+      ],
+      "lines": 133
+    },
+    {
+      "file": "websocket/client/GameClient.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState"
+      ],
+      "lines": 116
+    },
+    {
+      "file": "shared/component/SnakeComponent.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "snake",
+        "direction"
+      ],
+      "lines": 49
+    },
+    {
+      "file": "shared/component/SetComponent.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "card"
+      ],
+      "lines": 47
+    },
+    {
+      "file": "shared/component/GameComponent.kt",
+      "matches": [
+        "game",
+        "card",
+        "connect"
+      ],
+      "lines": 112
+    },
+    {
+      "file": "shared/component/MiniGamesAppComponent.kt",
+      "matches": [
+        "game",
+        "snake",
+        "word",
+        "push"
+      ],
+      "lines": 148
+    },
+    {
+      "file": "shared/component/LogInComponent.kt",
+      "matches": [
+        "game",
+        "word",
+        "connect"
+      ],
+      "lines": 187
+    },
+    {
+      "file": "shared/component/NotificationsComponent.kt",
+      "matches": [
+        "game",
+        "update",
+        "move"
+      ],
+      "lines": 33
+    },
+    {
+      "file": "shared/component/BirdComponent.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState"
+      ],
+      "lines": 39
+    },
+    {
+      "file": "shared/component/RegisterComponent.kt",
+      "matches": [
+        "game",
+        "match",
+        "match",
+        "word",
+        "connect"
+      ],
+      "lines": 135
+    },
+    {
+      "file": "shared/viewmodel/UserErrorMessage.kt",
+      "matches": [
+        "game",
+        "word",
+        "connect"
+      ],
+      "lines": 14
+    },
+    {
+      "file": "ui/component/DropdownMenuParts.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "drop",
+        "column"
+      ],
+      "lines": 27
+    },
+    {
+      "file": "ui/component/DropdownMenuParts.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "drop",
+        "column"
+      ],
+      "lines": 27
+    },
+    {
+      "file": "shared/util/CollectionUtil.kt",
+      "matches": [
+        "game",
+        "move",
+        "block"
+      ],
+      "lines": 80
+    },
+    {
+      "file": "shared/model/GameMessageModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "card"
+      ],
+      "lines": 63
+    },
+    {
+      "file": "shared/model/SnakeGameModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "snake",
+        "direction",
+        "move",
+        "block",
+        "drop"
+      ],
+      "lines": 245
+    },
+    {
+      "file": "shared/model/SetGameModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "card",
+        "drop"
+      ],
+      "lines": 165
+    },
+    {
+      "file": "shared/model/BirdGameModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "direction",
+        "move",
+        "drop"
+      ],
+      "lines": 239
+    },
+    {
+      "file": "shared/model/GameModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "gameState",
+        "move",
+        "card"
+      ],
+      "lines": 116
+    }
+  ],
+  "total_lines": 8290,
+  "adaptability": "high",
+  "adaptation_notes": [
+    "Usa Canvas Android \u2014 adattabile a MiniGameBase",
+    "Usa Jetpack Compose \u2014 richiede conversione a Canvas",
+    "Usa View custom \u2014 pattern compatibile con Huntix"
+  ],
+  "total_files": 144,
+  "kotlin_files": 144,
+  "java_files": 0
+}

@@ -1,0 +1,473 @@
+{
+  "name": "AndroidTetris",
+  "url": "https://github.com/SpiritualForest/AndroidTetris.git",
+  "language": "Kotlin",
+  "license": "MIT",
+  "type": "canvas",
+  "description": "Tetris Android con engine decoupled",
+  "files": [
+    {
+      "path": "app/src/main/java/com/androidtetris/game/Game.kt",
+      "lines": 424
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/activity/tetris/GridCanvas.kt",
+      "lines": 332
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/screens/tetris/TetrisScreenViewModel.kt",
+      "lines": 293
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/screens/tetris/TetrisScreen.kt",
+      "lines": 236
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/screens/home/HomeScreen.kt",
+      "lines": 164
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/UpcomingTetrominoesBox.kt",
+      "lines": 137
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/game/Grid.kt",
+      "lines": 137
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/settings/SettingsHandler.kt",
+      "lines": 136
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/game/Tetromino.kt",
+      "lines": 129
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/TetrisGrid.kt",
+      "lines": 127
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/activity/tetris/CircleButton.kt",
+      "lines": 110
+    },
+    {
+      "path": "app/src/test/java/com/androidtetris/TetrominoUnitTest.kt",
+      "lines": 107
+    },
+    {
+      "path": "app/src/test/java/com/androidtetris/GameSimulationTest.kt",
+      "lines": 94
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/GameActionButton.kt",
+      "lines": 90
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/DropdownMenuSurface.kt",
+      "lines": 86
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/TetrominoShapeConverter.kt",
+      "lines": 79
+    },
+    {
+      "path": "app/src/test/java/com/androidtetris/GridUnitTest.kt",
+      "lines": 79
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/theme/Theme.kt",
+      "lines": 70
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/game/API.kt",
+      "lines": 62
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/MainActivity.kt",
+      "lines": 55
+    },
+    {
+      "path": "app/src/test/java/com/androidtetris/EventDispatcherUnitTest.kt",
+      "lines": 47
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/theme/TetrisThemeColors.kt",
+      "lines": 37
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/theme/Type.kt",
+      "lines": 34
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/TetrisDropdownMenuItem.kt",
+      "lines": 33
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/game/EventDispatcher.kt",
+      "lines": 31
+    },
+    {
+      "path": "app/src/androidTest/java/com/androidtetris/ExampleInstrumentedTest.kt",
+      "lines": 24
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/game/event/Event.kt",
+      "lines": 21
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/components/TetrisText.kt",
+      "lines": 20
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/screens/home/HomeScreenViewModel.kt",
+      "lines": 18
+    },
+    {
+      "path": "app/src/main/java/com/androidtetris/ui/theme/Color.kt",
+      "lines": 11
+    }
+  ],
+  "game_logic_files": [
+    {
+      "file": "com/androidtetris/TetrominoShapeConverter.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "tetris",
+        "tetromino",
+        "move"
+      ],
+      "lines": 79
+    },
+    {
+      "file": "screens/tetris/TetrisScreen.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onClick",
+        "score",
+        "level",
+        "startGame",
+        "pause",
+        "Handler",
+        "gameState",
+        "gameRunning",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move",
+        "grid",
+        "box",
+        "ghost",
+        "space",
+        "column"
+      ],
+      "lines": 236
+    },
+    {
+      "file": "screens/tetris/TetrisScreenViewModel.kt",
+      "matches": [
+        "game",
+        "collision",
+        "score",
+        "level",
+        "startGame",
+        "pause",
+        "Handler",
+        "gameState",
+        "gameRunning",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move",
+        "grid",
+        "ghost",
+        "drop"
+      ],
+      "lines": 293
+    },
+    {
+      "file": "screens/home/HomeScreen.kt",
+      "matches": [
+        "game",
+        "onClick",
+        "level",
+        "Handler",
+        "tetris",
+        "grid",
+        "box",
+        "drop",
+        "column"
+      ],
+      "lines": 164
+    },
+    {
+      "file": "screens/home/HomeScreenViewModel.kt",
+      "matches": [
+        "game",
+        "level",
+        "tetris",
+        "grid",
+        "drop"
+      ],
+      "lines": 18
+    },
+    {
+      "file": "ui/components/UpcomingTetrominoesBox.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "tetris",
+        "tetromino",
+        "box",
+        "column"
+      ],
+      "lines": 137
+    },
+    {
+      "file": "ui/components/GameActionButton.kt",
+      "matches": [
+        "game",
+        "draw",
+        "tetris",
+        "move",
+        "box"
+      ],
+      "lines": 90
+    },
+    {
+      "file": "ui/components/TetrisDropdownMenuItem.kt",
+      "matches": [
+        "draw",
+        "onClick",
+        "tetris",
+        "drop"
+      ],
+      "lines": 33
+    },
+    {
+      "file": "ui/components/DropdownMenuSurface.kt",
+      "matches": [
+        "draw",
+        "tetris",
+        "drop",
+        "column"
+      ],
+      "lines": 86
+    },
+    {
+      "file": "ui/components/TetrisGrid.kt",
+      "matches": [
+        "game",
+        "draw",
+        "pause",
+        "Canvas",
+        "gameState",
+        "tetris",
+        "tetromino",
+        "grid",
+        "ghost"
+      ],
+      "lines": 127
+    },
+    {
+      "file": "androidtetris/settings/SettingsHandler.kt",
+      "matches": [
+        "game",
+        "score",
+        "level",
+        "Handler",
+        "tetris",
+        "tetromino",
+        "piece",
+        "ball",
+        "grid",
+        "ghost",
+        "drop"
+      ],
+      "lines": 136
+    },
+    {
+      "file": "activity/tetris/CircleButton.kt",
+      "matches": [
+        "game",
+        "draw",
+        "onTouch",
+        "Canvas",
+        "onDraw",
+        "Handler",
+        "postDelayed",
+        "tetris",
+        "move"
+      ],
+      "lines": 110
+    },
+    {
+      "file": "activity/tetris/GridCanvas.kt",
+      "matches": [
+        "game",
+        "update",
+        "draw",
+        "collision",
+        "pause",
+        "Canvas",
+        "onDraw",
+        "Handler",
+        "postDelayed",
+        "tetris",
+        "tetromino",
+        "piece",
+        "move",
+        "grid",
+        "ghost",
+        "space",
+        "drop"
+      ],
+      "lines": 332
+    },
+    {
+      "file": "androidtetris/game/API.kt",
+      "matches": [
+        "game",
+        "level",
+        "startGame",
+        "pause",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move"
+      ],
+      "lines": 62
+    },
+    {
+      "file": "androidtetris/game/Grid.kt",
+      "matches": [
+        "game",
+        "collision",
+        "tetris",
+        "tetromino",
+        "move",
+        "block",
+        "grid",
+        "push"
+      ],
+      "lines": 137
+    },
+    {
+      "file": "androidtetris/game/Game.kt",
+      "matches": [
+        "game",
+        "update",
+        "draw",
+        "render",
+        "collision",
+        "level",
+        "startGame",
+        "reset",
+        "pause",
+        "gameRunning",
+        "tick",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move",
+        "block",
+        "grid",
+        "push",
+        "drop"
+      ],
+      "lines": 424
+    },
+    {
+      "file": "androidtetris/game/EventDispatcher.kt",
+      "matches": [
+        "game",
+        "tetris",
+        "move"
+      ],
+      "lines": 31
+    },
+    {
+      "file": "androidtetris/game/Tetromino.kt",
+      "matches": [
+        "game",
+        "draw",
+        "tetris",
+        "tetromino",
+        "grid"
+      ],
+      "lines": 129
+    },
+    {
+      "file": "game/event/Event.kt",
+      "matches": [
+        "game",
+        "collision",
+        "pause",
+        "tetris",
+        "tetromino",
+        "direction",
+        "grid"
+      ],
+      "lines": 21
+    },
+    {
+      "file": "com/androidtetris/TetrominoUnitTest.kt",
+      "matches": [
+        "game",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move"
+      ],
+      "lines": 107
+    },
+    {
+      "file": "com/androidtetris/GridUnitTest.kt",
+      "matches": [
+        "game",
+        "collision",
+        "tetris",
+        "tetromino",
+        "move",
+        "grid",
+        "push"
+      ],
+      "lines": 79
+    },
+    {
+      "file": "com/androidtetris/GameSimulationTest.kt",
+      "matches": [
+        "game",
+        "tetris",
+        "tetromino",
+        "direction",
+        "move",
+        "grid",
+        "drop"
+      ],
+      "lines": 94
+    },
+    {
+      "file": "com/androidtetris/EventDispatcherUnitTest.kt",
+      "matches": [
+        "game",
+        "tetris",
+        "tetromino",
+        "move"
+      ],
+      "lines": 47
+    }
+  ],
+  "total_lines": 3223,
+  "adaptability": "high",
+  "adaptation_notes": [
+    "Usa Canvas Android \u2014 adattabile a MiniGameBase",
+    "Usa View custom \u2014 pattern compatibile con Huntix"
+  ],
+  "total_files": 30,
+  "kotlin_files": 30,
+  "java_files": 0
+}

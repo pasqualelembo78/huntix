@@ -1,0 +1,271 @@
+{
+  "name": "SlidingPuzzle",
+  "url": "https://github.com/zmuzik/sliding-puzzle.git",
+  "language": "Kotlin",
+  "license": "Apache-2.0",
+  "type": "customview",
+  "description": "Sliding puzzle 15 pezzi",
+  "files": [
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/PuzzleBoardView.kt",
+      "lines": 417
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/HomeFragment.kt",
+      "lines": 301
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/GameFragment.kt",
+      "lines": 200
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/BasePicturesView.kt",
+      "lines": 120
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/repo/Repo.kt",
+      "lines": 78
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/TileView.kt",
+      "lines": 69
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/ShakeDetector.kt",
+      "lines": 66
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/HomeScreenViewModel.kt",
+      "lines": 60
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/Utils.kt",
+      "lines": 57
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/Prefs.kt",
+      "lines": 57
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/MainActivity.kt",
+      "lines": 55
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/repo/flickr/Dtos.kt",
+      "lines": 55
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/GameState.kt",
+      "lines": 39
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/SingleLiveEvent.kt",
+      "lines": 39
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/Extensions.kt",
+      "lines": 38
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/AppModule.kt",
+      "lines": 37
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/Conf.kt",
+      "lines": 33
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/App.kt",
+      "lines": 31
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/BaseFragment.kt",
+      "lines": 28
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/repo/flickr/FlickrApi.kt",
+      "lines": 28
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/GameScreenViewModel.kt",
+      "lines": 26
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/CameraPicturesView.kt",
+      "lines": 23
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/repo/model/Picture.kt",
+      "lines": 20
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/TransitionEndListener.kt",
+      "lines": 16
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/Auxiliary.kt",
+      "lines": 15
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/Keys.kt",
+      "lines": 15
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/FlickrPicturesView.kt",
+      "lines": 13
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/AppPicturesView.kt",
+      "lines": 13
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/common/AnimationEndListener.kt",
+      "lines": 13
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/home/HomeScreen.kt",
+      "lines": 11
+    },
+    {
+      "path": "app/src/main/java/zmuzik/slidingpuzzle2/screens/game/GameScreen.kt",
+      "lines": 7
+    }
+  ],
+  "game_logic_files": [
+    {
+      "file": "zmuzik/slidingpuzzle2/Conf.kt",
+      "matches": [
+        "game",
+        "puzzle",
+        "grid"
+      ],
+      "lines": 33
+    },
+    {
+      "file": "screens/game/PuzzleBoardView.kt",
+      "matches": [
+        "game",
+        "onTouch",
+        "gameState",
+        "board",
+        "move",
+        "puzzle",
+        "grid",
+        "column"
+      ],
+      "lines": 417
+    },
+    {
+      "file": "screens/game/GameState.kt",
+      "matches": [
+        "game",
+        "gameState",
+        "board",
+        "puzzle"
+      ],
+      "lines": 39
+    },
+    {
+      "file": "screens/game/GameFragment.kt",
+      "matches": [
+        "game",
+        "draw",
+        "pause",
+        "resume",
+        "postDelayed",
+        "gameState",
+        "board",
+        "move",
+        "puzzle",
+        "grid"
+      ],
+      "lines": 200
+    },
+    {
+      "file": "screens/game/GameScreenViewModel.kt",
+      "matches": [
+        "game",
+        "gameState",
+        "board",
+        "puzzle"
+      ],
+      "lines": 26
+    },
+    {
+      "file": "screens/game/TileView.kt",
+      "matches": [
+        "game",
+        "draw",
+        "Canvas",
+        "onDraw",
+        "puzzle"
+      ],
+      "lines": 69
+    },
+    {
+      "file": "screens/home/HomeScreenViewModel.kt",
+      "matches": [
+        "game",
+        "update",
+        "puzzle",
+        "grid"
+      ],
+      "lines": 60
+    },
+    {
+      "file": "screens/home/HomeFragment.kt",
+      "matches": [
+        "game",
+        "update",
+        "draw",
+        "onClick",
+        "resume",
+        "move",
+        "puzzle",
+        "grid"
+      ],
+      "lines": 301
+    },
+    {
+      "file": "screens/home/CameraPicturesView.kt",
+      "matches": [
+        "onClick",
+        "move",
+        "puzzle",
+        "grid"
+      ],
+      "lines": 23
+    },
+    {
+      "file": "screens/home/BasePicturesView.kt",
+      "matches": [
+        "game",
+        "update",
+        "draw",
+        "onClick",
+        "move",
+        "puzzle",
+        "grid",
+        "column"
+      ],
+      "lines": 120
+    },
+    {
+      "file": "slidingpuzzle2/common/TransitionEndListener.kt",
+      "matches": [
+        "pause",
+        "resume",
+        "puzzle"
+      ],
+      "lines": 16
+    }
+  ],
+  "total_lines": 1980,
+  "adaptability": "high",
+  "adaptation_notes": [
+    "Usa View custom \u2014 pattern compatibile con Huntix"
+  ],
+  "total_files": 31,
+  "kotlin_files": 31,
+  "java_files": 0
+}

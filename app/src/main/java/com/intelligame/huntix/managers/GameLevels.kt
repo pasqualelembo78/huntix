@@ -64,7 +64,8 @@ object GameLevels {
         Def(GAME_AR_SHOOTER,  "punti",     Mode.SCORE, base = 60,   step = 40),
         Def(GAME_AR_BOMB,     "punti",     Mode.SCORE, base = 60,   step = 40),
         Def(GAME_AR_RADAR,    "catture",   Mode.WIN),
-        Def(GAME_SLINGSHOT,   "colpi",     Mode.WIN)
+        Def(GAME_SLINGSHOT,   "colpi",     Mode.WIN),
+        Def(GAME_TETRIS,     "punti",     Mode.SCORE, base = 100, step = 100)
     )
 
     /** Config per gioco; se assente usa una config di default ragionevole. */

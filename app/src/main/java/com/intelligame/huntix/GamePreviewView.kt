@@ -99,10 +99,13 @@ class GamePreviewView(context: Context) : View(context) {
             MiniGameManager.GAME_SIMON -> drawSimon(canvas, cx, cy)
             MiniGameManager.GAME_DINO -> drawDino(canvas, cx, cy)
             MiniGameManager.GAME_MEMORY -> drawMemory(canvas, cx, cy)
-            MiniGameManager.GAME_NUMBER_PICK -> drawNumberPick(canvas, cx, cy)
-            MiniGameManager.GAME_HIGH_CARD -> drawHighCard(canvas, cx, cy)
             MiniGameManager.GAME_CATCH_EGG -> drawCatchEgg(canvas, cx, cy)
             MiniGameManager.GAME_MATCH3 -> drawMatch3(canvas, cx, cy)
+            MiniGameManager.GAME_PONG -> drawPong(canvas, cx, cy)
+            MiniGameManager.GAME_MOTO_X3M -> drawMotoX3M(canvas, cx, cy)
+            MiniGameManager.GAME_SOLITAIRE -> drawSolitaire(canvas, cx, cy)
+            MiniGameManager.GAME_BRISCOLA -> drawBriscola(canvas, cx, cy)
+            MiniGameManager.GAME_SCOPA -> drawScopa(canvas, cx, cy)
             MiniGameManager.GAME_AR_SHOOTER -> drawShooter(canvas, cx, cy)
             MiniGameManager.GAME_AR_BOMB -> drawBomb(canvas, cx, cy)
             MiniGameManager.GAME_AR_RADAR -> drawRadar(canvas, cx, cy)
@@ -285,28 +288,6 @@ class GamePreviewView(context: Context) : View(context) {
         }
     }
 
-    private fun drawNumberPick(canvas: Canvas, cx: Float, cy: Float) {
-        textPaint.color = GOLD
-        textPaint.textSize = dp(30f)
-        canvas.drawText("?", cx, cy + dp(11f), textPaint)
-    }
-
-    private fun drawHighCard(canvas: Canvas, cx: Float, cy: Float) {
-        fillPaint.color = Color.WHITE
-        canvas.drawRoundRect(RectF(cx - dp(11f), cy - dp(15f), cx + dp(11f), cy + dp(15f)), dp(2f), dp(2f), fillPaint)
-        fillPaint.color = 0xFFE95D5D.toInt()
-        val path = Path()
-        path.moveTo(cx, cy - dp(6f))
-        path.lineTo(cx + dp(5f), cy)
-        path.lineTo(cx, cy + dp(6f))
-        path.lineTo(cx - dp(5f), cy)
-        path.close()
-        canvas.drawPath(path, fillPaint)
-        textPaint.color = 0xFFE95D5D.toInt()
-        textPaint.textSize = dp(8f)
-        canvas.drawText("A", cx + dp(2f), cy + dp(2.5f), textPaint)
-    }
-
     private fun drawCatchEgg(canvas: Canvas, cx: Float, cy: Float) {
         egg(canvas, cx, cy - dp(2f), dp(7f), Color.WHITE)
         strokePaint.color = Color.parseColor("#A78BFA")
@@ -323,6 +304,114 @@ class GamePreviewView(context: Context) : View(context) {
         canvas.drawCircle(cx, cy, r, fillPaint)
         fillPaint.color = Color.parseColor("#42A5F5")
         canvas.drawCircle(cx + dp(9f), cy - dp(9f), r, fillPaint)
+    }
+
+    private fun drawPong(canvas: Canvas, cx: Float, cy: Float) {
+        strokePaint.color = ACCENT
+        strokePaint.strokeWidth = dp(2f)
+        canvas.drawLine(cx - dp(16f), cy - dp(2f), cx + dp(16f), cy - dp(2f), strokePaint)
+
+        fillPaint.color = GREEN
+        val paddleW = dp(14f)
+        val paddleH = dp(4f)
+        canvas.drawRoundRect(
+            RectF(cx - paddleW / 2f, cy + dp(12f), cx + paddleW / 2f, cy + dp(12f) + paddleH),
+            dp(2f), dp(2f), fillPaint
+        )
+
+        fillPaint.color = Color.WHITE
+        canvas.drawCircle(cx, cy - dp(12f), dp(3f), fillPaint)
+    }
+
+    private fun drawMotoX3M(canvas: Canvas, cx: Float, cy: Float) {
+        // Ground line
+        strokePaint.color = GREEN
+        strokePaint.strokeWidth = dp(2f)
+        canvas.drawLine(cx - dp(18f), cy + dp(10f), cx + dp(18f), cy + dp(10f), strokePaint)
+
+        // Motorcycle body
+        fillPaint.color = Color.parseColor("#FF6B35")
+        canvas.drawRoundRect(RectF(cx - dp(12f), cy - dp(8f), cx + dp(12f), cy + dp(2f)), dp(4f), dp(4f), fillPaint)
+        // Wheels
+        fillPaint.color = Color.BLACK
+        canvas.drawCircle(cx - dp(8f), cy + dp(4f), dp(5f), fillPaint)
+        canvas.drawCircle(cx + dp(8f), cy + dp(4f), dp(5f), fillPaint)
+        // Helmet
+        fillPaint.color = Color.parseColor("#4FC3F7")
+        canvas.drawCircle(cx, cy - dp(10f), dp(4f), fillPaint)
+
+        // Obstacle rocks
+        fillPaint.color = Color.parseColor("#8D6E63")
+        canvas.drawRoundRect(RectF(cx - dp(5f), cy + dp(6f), cx + dp(5f), cy + dp(12f)), dp(2f), dp(2f), fillPaint)
+    }
+
+    private fun drawSolitaire(canvas: Canvas, cx: Float, cy: Float) {
+        val s = dp(10f)
+        val cardW = dp(8f)
+        val cardH = dp(12f)
+        // Draw a few cards stacked
+        for (i in 0 until 4) {
+            fillPaint.color = Color.WHITE
+            canvas.drawRoundRect(RectF(cx - s + i * dp(2f), cy - cardH + i * dp(1.5f), cx - s + i * dp(2f) + cardW, cy + i * dp(1.5f)), dp(1f), dp(1f), fillPaint)
+            strokePaint.color = Color.parseColor("#CCCCCC")
+            strokePaint.strokeWidth = dp(0.5f)
+            canvas.drawRoundRect(RectF(cx - s + i * dp(2f), cy - cardH + i * dp(1.5f), cx - s + i * dp(2f) + cardW, cy + i * dp(1.5f)), dp(1f), dp(1f), strokePaint)
+        }
+        // Ace of hearts on top
+        fillPaint.color = Color.parseColor("#FF4444")
+        textPaint.textSize = dp(8f)
+        textPaint.textAlign = Paint.Align.CENTER
+        canvas.drawText("A", cx - s + dp(4f), cy - cardH + dp(9f), textPaint)
+        textPaint.color = Color.parseColor("#FF4444")
+        canvas.drawText("♥", cx - s + dp(4f), cy + dp(2f), textPaint)
+    }
+
+    private fun drawBriscola(canvas: Canvas, cx: Float, cy: Float) {
+        // Draw 3 cards in a fan
+        val s = dp(10f)
+        val cardW = dp(8f)
+        val cardH = dp(12f)
+        for (i in 0 until 3) {
+            val angle = (i - 1) * dp(3f)
+            val x = cx + angle
+            fillPaint.color = Color.WHITE
+            canvas.drawRoundRect(RectF(x - cardW / 2f, cy - cardH, x + cardW / 2f, cy), dp(1f), dp(1f), fillPaint)
+            strokePaint.color = Color.parseColor("#CCCCCC")
+            strokePaint.strokeWidth = dp(0.5f)
+            canvas.drawRoundRect(RectF(x - cardW / 2f, cy - cardH, x + cardW / 2f, cy), dp(1f), dp(1f), strokePaint)
+        }
+        textPaint.textSize = dp(8f)
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.color = Color.parseColor("#FF4444")
+        canvas.drawText("♥", cx, cy - dp(2f), textPaint)
+    }
+
+    private fun drawScopa(canvas: Canvas, cx: Float, cy: Float) {
+        // Draw table cards + hand card
+        val s = dp(10f)
+        val cardW = dp(8f)
+        val cardH = dp(12f)
+        // Table cards
+        for (i in 0 until 3) {
+            fillPaint.color = Color.parseColor("#FFF8E1")
+            canvas.drawRoundRect(RectF(cx - s + i * dp(10f), cy - cardH, cx - s + i * dp(10f) + cardW, cy), dp(1f), dp(1f), fillPaint)
+            strokePaint.color = Color.parseColor("#CCCCCC")
+            strokePaint.strokeWidth = dp(0.5f)
+            canvas.drawRoundRect(RectF(cx - s + i * dp(10f), cy - cardH, cx - s + i * dp(10f) + cardW, cy), dp(1f), dp(1f), strokePaint)
+        }
+        // Hand card (selected)
+        fillPaint.color = Color.WHITE
+        canvas.drawRoundRect(RectF(cx - s + dp(10f), cy + dp(4f), cx - s + dp(10f) + cardW, cy + dp(4f) + cardH), dp(1f), dp(1f), fillPaint)
+        strokePaint.color = Color.parseColor("#A78BFA")
+        strokePaint.strokeWidth = dp(1f)
+        canvas.drawRoundRect(RectF(cx - s + dp(10f), cy + dp(4f), cx - s + dp(10f) + cardW, cy + dp(4f) + cardH), dp(1f), dp(1f), strokePaint)
+        // 7 of coins (settebello)
+        textPaint.textSize = dp(7f)
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.color = Color.parseColor("#FFC53D")
+        canvas.drawText("7", cx - s + dp(14f), cy + dp(10f), textPaint)
+        textPaint.color = Color.parseColor("#FFD54F")
+        canvas.drawText("♦", cx - s + dp(14f), cy + dp(18f), textPaint)
     }
 
     private fun drawSwords(canvas: Canvas, cx: Float, cy: Float) {

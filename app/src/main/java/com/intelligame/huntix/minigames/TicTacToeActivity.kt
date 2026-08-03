@@ -103,6 +103,7 @@ class TicTacToeActivity : MiniGameBase() {
     private fun onPlayerTap(i: Int) {
         if (gameOver || board[i] != EMPTY) return
         place(i, PLAYER)
+        if (gameOver) return
         statusText?.text = "CPU sta pensando..."
         for (b in buttons) b?.isEnabled = false
         handler.postDelayed({ cpuTurn() }, 450)

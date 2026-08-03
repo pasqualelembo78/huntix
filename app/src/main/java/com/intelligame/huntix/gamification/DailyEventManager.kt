@@ -20,7 +20,7 @@ import java.util.Calendar
  * - 5 minutes before event start (reminder)
  * - Event start time (go!)
  *
- * Priority: monthly events (ElfHunt, Tombolata) override daily events.
+ * Priority: monthly events (ElfHunt) override daily events.
  * Daily events only show when no monthly event is active.
  */
 object DailyEventManager {

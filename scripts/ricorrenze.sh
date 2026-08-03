@@ -8,7 +8,7 @@
 #    ./ricorrenze.sh --apk    # come sopra + rebuild APK debug
 # ═══════════════════════════════════════════════════════════════
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 NEED_APK=0
 for a in "$@"; do
@@ -67,7 +67,7 @@ fi
 # ── 3) DEPLOY REGOLE (Firestore + Realtime Database) ───────────
 echo ""
 echo "3) DEPLOY REGOLE (Firestore + RTDB)"
-./deploy_rules.sh || { echo "   ERRORE nel deploy regole."; exit 1; }
+./scripts/deploy_rules.sh || { echo "   ERRORE nel deploy regole."; exit 1; }
 
 # ── 4) (OPZIONALE) REBUILD APK ─────────────────────────────────
 if [ "$NEED_APK" = "1" ]; then

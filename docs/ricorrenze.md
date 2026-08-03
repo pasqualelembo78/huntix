@@ -1,10 +1,10 @@
 # 🔁 RICORRENZE — Huntix
 
-Cosa va fatto **a mano** e cosa **si risolve da solo** (`./ricorrenze.sh`).
+Cosa va fatto **a mano** e cosa **si risolve da solo** (`./scripts/ricorrenze.sh`).
 
 ```
-./ricorrenze.sh          # backup + login + deploy regole (ogni volta che serve)
-./ricorrenze.sh --apk    # idem + ricompila l'APK debug
+./scripts/ricorrenze.sh          # backup + login + deploy regole (ogni volta che serve)
+./scripts/ricorrenze.sh --apk    # idem + ricompila l'APK debug
 ```
 
 ---
@@ -15,13 +15,13 @@ Cosa va fatto **a mano** e cosa **si risolve da solo** (`./ricorrenze.sh`).
 |---|---|---|
 | Verifica file di backup | ogni esecuzione | ti dice se manca qualcosa |
 | Login Firebase CLI | ogni esecuzione | se scaduto, stampa le istruzioni e si ferma |
-| Deploy regole Firestore | ogni esecuzione | da `firebase_security_rules.txt` → `firestore.rules` |
-| Deploy regole Realtime DB | ogni esecuzione | da `rtdb.rules` (indoor/outdoor/chat) |
+| Deploy regole Firestore | ogni esecuzione | da `firebase/firebase_security_rules.txt` → `firebase/firestore.rules` |
+| Deploy regole Realtime DB | ogni esecuzione | da `firebase/rtdb.rules` (indoor/outdoor/chat) |
 | Rebuild APK debug | con `--apk` | dopo modifiche al codice |
 
-> **Le regole**: il file `firebase_security_rules.txt` è la sorgente per Firestore.
-> Per RTDB la sorgente è `rtdb.rules` (stato di produzione). Se modifichi le regole,
-> aggiorna quei file e poi lancia `./ricorrenze.sh`.
+> **Le regole**: il file `firebase/firebase_security_rules.txt` è la sorgente per Firestore.
+> Per RTDB la sorgente è `firebase/rtdb.rules` (stato di produzione). Se modifichi le regole,
+> aggiorna quei file e poi lancia `./scripts/ricorrenze.sh`.
 
 ---
 

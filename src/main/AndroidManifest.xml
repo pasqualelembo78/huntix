@@ -47,8 +47,6 @@
         <activity android:name=".ar.ARTicTacToeActivity" />
         <activity android:name=".ar.ARSimonActivity" />
         <activity android:name=".ar.ARMemoryActivity" />
-        <activity android:name=".ar.ARNumberPickActivity" />
-        <activity android:name=".ar.ARHighCardActivity" />
         <activity android:name=".ar.ARCatchEggActivity" />
         <activity android:name=".ar.ARMatch3Activity" />
 

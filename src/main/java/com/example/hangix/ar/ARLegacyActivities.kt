@@ -12,21 +12,6 @@ class ARMemoryActivity : ARGameActivity() {
     override fun onGameOver(score: Int) {}
 }
 
-// Scegli Numero AR
-class ARNumberPickActivity : ARGameActivity() {
-    override fun setupGame() {}
-    override fun handleFrame(frame: Frame) {}
-    override fun onGameOver(score: Int) {}
-}
-
-// Carta Alta AR
-class ARHighCardActivity : ARGameActivity() {
-    private val gameManager = com.example.huntix.ar.base.ARGameActivity
-    override fun setupGame() {}
-    override fun handleFrame(frame: Frame) {}
-    override fun onGameOver(score: Int) {}
-}
-
 // Prendi Uovo AR
 class ARCatchEggActivity : ARGameActivity() {
     override fun setupGame() {}

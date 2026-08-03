@@ -14,22 +14,44 @@ import android.widget.TextView
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
+import kotlin.math.log2
 import kotlin.random.Random
 
 /**
- * 🧩 2048 — unisci le tessere uguali scorrendo, fino a 2048.
- * Classico puzzle (meccanica pubblica, ispirato a 2048 MIT, riscritto nativo).
+ * 🧩 2048 Uova — unisci le uova dello stesso livello scorrendo!
+ *
+ * Il classico 2048 con unova. Ogni uovo ha una "giara" (tier):
+ * bianca → verde → blu → viola → oro → arcobaleno.
+ * Scorri in una direzione per far scivolare tutte le uova:
+ * due uova dello stesso livello si fondono in una più potente!
+ *
+ * Controlla:
+ * - Scorri ← → ↑ ↓ per muovere tutte le uova nella direzione
+ * - Uova + Uova = Uova superiore (2+2=4, 4+4=8, ...)
+ * - Arriva all'Uovo Arcobaleno (2048) per vincere!
  */
 class Game2048Activity : MiniGameBase() {
 
     private val handler = Handler(Looper.getMainLooper())
-    private var board = IntArray(16)
+    private val board = IntArray(16)
     private var score = 0
     private var gameRunning = false
     private var reached2048 = false
     private var scoreText: TextView? = null
     private var boardView: BoardView? = null
     private var overlayContainer: FrameLayout? = null
+
+    companion object {
+        private val TIER_COLORS = listOf(
+            0xFFEAD7A1.toInt(), 0xFFE4B978.toInt(), 0xFFE88E5A.toInt(),
+            0xFFF2B179.toInt(), 0xFFF59563.toInt(), 0xFFCE5FA8.toInt(),
+            0xFF8E7CE8.toInt(), 0xFF5F9EE9.toInt(), 0xFF57D6D9.toInt(),
+            0xFF66E07A.toInt(), 0xFFE6C84D.toInt(), 0xFFFFD700.toInt()
+        )
+        private val TIER_EMOJIS = listOf(
+            "🥚", "🥚", "🥚", "🥚", "🥚", "🥚", "🥚", "🥚", "🥚", "🥚", "✨", "🌈"
+        )
+    }
 
     override fun onGameCreate() {
         val ctx = this
@@ -38,9 +60,9 @@ class Game2048Activity : MiniGameBase() {
             setBackgroundColor(Color.parseColor(UiKit.BG))
             setPadding(UiKit.dp(ctx, 14), UiKit.dp(ctx, 12), UiKit.dp(ctx, 14), UiKit.dp(ctx, 12))
         }
-        root.addView(UiKit.title(ctx, "2048", "🧩"))
+        root.addView(UiKit.title(ctx, "2048 Uova", "🧩"))
         root.addView(TextView(ctx).apply {
-            text = "Scorri per unire le tessere. Arriva a 2048!"
+            text = "⇦⇨⇩⇧ Scorri per fondere le uova dello stesso livello!\n2+2=4, 4+4=8, ... fino all'Uovo Arcobaleno 🈯"
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
@@ -56,7 +78,7 @@ class Game2048Activity : MiniGameBase() {
         }
         header.addView(scoreText!!)
         header.addView(TextView(ctx).apply {
-            text = "🎯 2048"; textSize = 18f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "🌈 2048"; textSize = 18f; setTextColor(Color.parseColor(UiKit.ACCENT))
         })
         root.addView(header)
 
@@ -71,7 +93,7 @@ class Game2048Activity : MiniGameBase() {
     }
 
     private fun startGame() {
-        board = IntArray(16)
+        board.fill(0)
         score = 0
         reached2048 = false
         gameRunning = true
@@ -84,8 +106,7 @@ class Game2048Activity : MiniGameBase() {
     private fun addRandomTile() {
         val empty = board.indices.filter { board[it] == 0 }
         if (empty.isEmpty()) return
-        val idx = empty[Random.nextInt(empty.size)]
-        board[idx] = if (Random.nextFloat() < 0.9f) 2 else 4
+        board[empty[Random.nextInt(empty.size)]] = if (Random.nextFloat() < 0.9f) 2 else 4
     }
 
     /** Unisce una riga verso sinistra. Ritorna la nuova riga e i punti guadagnati. */
@@ -110,12 +131,11 @@ class Game2048Activity : MiniGameBase() {
         val before = board.copyOf()
         for (r in 0 until 4) {
             for (c in 0 until 4) {
-                val i = r * 4 + c
                 val line = when (direction) {
-                    0 -> intArrayOf(board[r * 4 + 0], board[r * 4 + 1], board[r * 4 + 2], board[r * 4 + 3])       // left
-                    1 -> intArrayOf(board[r * 4 + 3], board[r * 4 + 2], board[r * 4 + 1], board[r * 4 + 0])       // right
-                    2 -> intArrayOf(board[0 * 4 + c], board[1 * 4 + c], board[2 * 4 + c], board[3 * 4 + c])       // up
-                    else -> intArrayOf(board[3 * 4 + c], board[2 * 4 + c], board[1 * 4 + c], board[0 * 4 + c])    // down
+                    0 -> intArrayOf(board[r * 4 + 0], board[r * 4 + 1], board[r * 4 + 2], board[r * 4 + 3])
+                    1 -> intArrayOf(board[r * 4 + 3], board[r * 4 + 2], board[r * 4 + 1], board[r * 4 + 0])
+                    2 -> intArrayOf(board[0 * 4 + c], board[1 * 4 + c], board[2 * 4 + c], board[3 * 4 + c])
+                    else -> intArrayOf(board[3 * 4 + c], board[2 * 4 + c], board[1 * 4 + c], board[0 * 4 + c])
                 }
                 val (merged, pts) = mergeLeft(line)
                 when (direction) {
@@ -151,14 +171,15 @@ class Game2048Activity : MiniGameBase() {
         if (!gameRunning) return
         gameRunning = false
         val won = reached2048
-        val mvc = (score / 2).coerceAtLeast(10).coerceAtMost(500)
-        val xp = (score / 4).coerceAtLeast(3).coerceAtMost(150)
+        val maxEgg = board.maxOrNull() ?: 2
+        val mvc = if (won) 80 else (maxEgg / 2).coerceAtLeast(10).coerceAtMost(200)
+        val xp = if (won) 30 else (maxEgg / 4).coerceAtLeast(3).coerceAtMost(80)
         val result = try {
             MiniGameManager.completePlay(
                 this, MiniGameManager.GAME_2048, score,
                 mvc = mvc, xp = xp,
-                giftEggRarityId = if (won) "common" else null,
-                label = if (won) "2048: hai raggiunto 2048!" else "2048: $score punti",
+                giftEggRarityId = if (won) "uncommon" else null,
+                label = if (won) "2048 Uova: Uovo Arcobaleno!" else "2048 Uova: max $maxEgg",
                 isWin = won
             )
         } catch (e: Exception) { Sentry.captureException(e); null }
@@ -176,14 +197,16 @@ class Game2048Activity : MiniGameBase() {
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         endLayout.addView(TextView(ctx).apply {
-            text = if (won) "🏆" else "🎮"; textSize = 48f; gravity = android.view.Gravity.CENTER
+            text = if (won) "🌈" else "🥚"; textSize = 48f; gravity = android.view.Gravity.CENTER
         })
         endLayout.addView(TextView(ctx).apply {
-            text = if (won) "Hai raggiunto 2048!" else "Nessuna mossa disponibile"; textSize = 22f; setTextColor(Color.WHITE)
+            text = if (won) "Hai creato l'Uovo Arcobaleno!" else "Nessuna mossa disponibile"
+            textSize = 22f; setTextColor(Color.WHITE)
             gravity = android.view.Gravity.CENTER; setPadding(0, UiKit.dp(ctx, 10), 0, UiKit.dp(ctx, 6))
         })
         endLayout.addView(TextView(ctx).apply {
-            text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
+            text = "Punteggio: $score  •  Max: $maxEgg"; textSize = 18f
+            setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
         result?.let { endLayout.addView(levelResultView(it)) }
@@ -208,17 +231,13 @@ class Game2048Activity : MiniGameBase() {
 
     inner class BoardView(context: android.content.Context) : View(context) {
 
-        private val colors = mapOf(
-            0 to "#CDC1B4", 2 to "#EEE4DA", 4 to "#EDE0C8", 8 to "#F2B179", 16 to "#F59563",
-            32 to "#F67C5F", 64 to "#F65E3B", 128 to "#EDCF72", 256 to "#EDCC61", 512 to "#EDC850",
-            1024 to "#EDC53F", 2048 to "#EDC22E"
-        )
-
         private val textDark = Color.parseColor("#776E65")
         private val textLight = Color.WHITE
 
         private var startX = 0f
         private var startY = 0f
+
+        private fun valueToTier(v: Int): Int = if (v <= 2) 0 else log2(v.toFloat()).toInt() - 1
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -227,22 +246,55 @@ class Game2048Activity : MiniGameBase() {
             val gap = w * 0.02f
             val size = (w - gap * 5) / 4
             val cell = RectF()
-            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+
+            val cellBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#1A1030") }
+            val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2A2C55") }
+
             for (r in 0 until 4) for (col in 0 until 4) {
-                val v = board[r * 4 + col]
                 val left = gap + col * (size + gap)
                 val top = gap + r * (size + gap)
                 cell.set(left, top, left + size, top + size)
-                c.drawRoundRect(cell, size * 0.08f, size * 0.08f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor(colors[v] ?: "#EDC22E")
-                })
-                if (v != 0) {
-                    textPaint.textSize = if (v < 100) size * 0.42f else if (v < 1000) size * 0.34f else size * 0.28f
-                    textPaint.color = if (v <= 4) textDark else textLight
-                    textPaint.typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
-                    val baseline = top + (size - textPaint.textSize) / 2 - textPaint.ascent() / 2
-                    c.drawText(v.toString(), left + size / 2, baseline, textPaint)
+                c.drawRoundRect(cell, size * 0.04f, size * 0.04f, cellBg)
+            }
+
+            for (r in 0 until 4) for (col in 0 until 4) {
+                val v = board[r * 4 + col]
+                if (v == 0) continue
+                val left = gap + col * (size + gap)
+                val top = gap + r * (size + gap)
+                val cx = left + size / 2f
+                val cy = top + size / 2f
+                val tier = valueToTier(v)
+                val color = if (tier < TIER_COLORS.size) TIER_COLORS[tier] else TIER_COLORS.last()
+                val emoji = if (tier < TIER_EMOJIS.size) TIER_EMOJIS[tier] else TIER_EMOJIS.last()
+
+                val eggRadius = size * 0.25f + tier * size * 0.015f
+                val eggPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color }
+                val rf = RectF(cx - eggRadius, cy - eggRadius * 1.2f, cx + eggRadius, cy + eggRadius * 1.2f)
+                c.drawOval(rf, eggPaint)
+
+                val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = Color.argb(100, Color.red(color), Color.green(color), Color.blue(color))
                 }
+                c.drawOval(
+                    RectF(cx - eggRadius - 2f, cy - eggRadius * 1.2f - 2f, cx + eggRadius + 2f, cy + eggRadius * 1.2f + 2f),
+                    glowPaint
+                )
+
+                val label = if (tier >= 8) emoji else ""
+                val valueText = v.toString()
+                val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    textAlign = Paint.Align.CENTER
+                    typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
+                    this.color = if (tier <= 1) textDark else textLight
+                    textSize = size * 0.22f
+                }
+                val baseline = cy + (size - textPaint.textSize) / 2f - textPaint.ascent() / 2f
+                if (label.isNotEmpty()) {
+                    textPaint.textSize = size * 0.20f
+                    c.drawText(label, cx, cy - eggRadius - 4f, textPaint)
+                }
+                c.drawText(valueText, cx, baseline + size * 0.15f, textPaint)
             }
         }
 

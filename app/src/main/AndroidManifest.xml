@@ -309,15 +309,6 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
-        <activity android:name=".minigames.NumberPickActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
-
-        <!-- Giochi di Carte -->
-        <activity android:name=".minigames.HighCardActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
-
         <!-- Giochi di Abilità -->
         <activity android:name=".minigames.CatchEggActivity"
             android:exported="false"
@@ -359,12 +350,25 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
+        <activity android:name=".minigames.PongActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
+        <activity android:name=".minigames.ar.ARPongActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
+        <activity android:name=".minigames.MotoX3MActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
+
         <!-- AR Minigames -->
         <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARMatch3Activity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
-        <activity android:name=".minigames.ar.ARHighCardActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
-        <activity android:name=".minigames.ar.ARNumberPickActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <!-- AR Native exclusive games -->
         <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
@@ -450,17 +454,17 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <activity android:name=".ui.TombolataActivity"
+        <activity android:name=".minigames.card.BriscolaActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <activity android:name=".ui.TombolaRapidaActivity"
+        <activity android:name=".minigames.card.SolitaireActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <activity android:name=".ui.BriscolaActivity"
+        <activity android:name=".minigames.card.ScopaActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>

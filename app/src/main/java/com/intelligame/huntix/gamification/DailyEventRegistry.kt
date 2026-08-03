@@ -1,7 +1,6 @@
 package com.intelligame.huntix.gamification
 
-import com.intelligame.huntix.ui.BriscolaActivity
-import com.intelligame.huntix.ui.TombolaRapidaActivity
+import com.intelligame.huntix.minigames.card.BriscolaActivity
 import java.util.Calendar
 
 /**
@@ -15,19 +14,12 @@ import java.util.Calendar
  * - Determine what event is happening today
  * - Schedule notifications
  * - Decide whether to show the daily event or a monthly event
+ *
+ * === v9: Rimossa Tombola Rapida (attività d'azzardo) ===
  */
 object DailyEventRegistry {
 
     private val events: List<DailyEvent> = listOf(
-        DailyEvent(
-            id = "tombola_rapida",
-            title = "Tombola Rapida",
-            description = "Cartella 3x3, numeri 1-30. Estrai e vinci!",
-            emoji = "\uD83C\uDFB2",
-            colorHex = "#FF6F00",
-            dayOfWeek = Calendar.MONDAY,
-            activityClass = TombolaRapidaActivity::class.java
-        ),
         DailyEvent(
             id = "briscola",
             title = "Briscola al Buio",
