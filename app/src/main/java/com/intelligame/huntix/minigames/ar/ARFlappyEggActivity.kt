@@ -74,6 +74,7 @@ class ARFlappyEggActivity : ARGameActivity() {
         livesText.text = "🥚 Flappy Egg"
         timerText.text = ""
         scoreText.text = "0 pt"
+        updateLevelHud(MiniGameManager.GAME_FLAPPY)
         startGame()
         whenReady { build() }
     }
@@ -118,11 +119,12 @@ class ARFlappyEggActivity : ARGameActivity() {
         eggNode?.position = Position(0f, y, 0f)
 
         spawnAcc += dt * 1000f
-        if (spawnAcc >= SPAWN_INTERVAL) {
+        if (spawnAcc >= spawnInterval()) {
             spawnAcc = 0f
             spawnPipe()
         }
 
+        val gapTolerance = 0.30f - 0.10f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_FLAPPY)
         synchronized(pipes) {
             val iter = pipes.iterator()
             while (iter.hasNext()) {
@@ -143,7 +145,7 @@ class ARFlappyEggActivity : ARGameActivity() {
                     continue
                 }
                 if (abs(p.z) < 0.24f) {
-                    if (y > p.gapY + 0.30f || y < p.gapY - 0.30f) {
+                    if (y > p.gapY + gapTolerance || y < p.gapY - gapTolerance) {
                         endGame()
                         return
                     }
@@ -181,13 +183,16 @@ class ARFlappyEggActivity : ARGameActivity() {
         synchronized(pipes) { pipes.add(pair) }
     }
 
+    private fun spawnInterval(): Float =
+        SPAWN_INTERVAL - 400f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_FLAPPY)
+
     private fun endGame() {
         if (gameOver) return
         gameOver = true
         stopGame()
         val reward = (score * 2).coerceAtLeast(5).coerceAtMost(350)
         try {
-            finishGame(reward, "AR Flappy ($score pt)", score >= 10, MiniGameManager.GAME_FLAPPY)
+            finishGame(reward, "AR Flappy ($score pt)", score >= 10, MiniGameManager.GAME_FLAPPY, score = score)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

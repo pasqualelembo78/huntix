@@ -15,6 +15,10 @@ class ARMatch3Activity : ARGameActivity() {
     private var lock = false
     private var round = 0
 
+    /** Secondi a disposizione: meno a livelli alti. */
+    private val timeLimit: Int
+        get() = (60 - 15 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_MATCH3)).toInt().coerceAtLeast(30)
+
     init {
         // Posizionamento dell'arena (piano/mesh/libero): mostra il dialogo di scelta.
         showsModeDialog = true
@@ -24,6 +28,7 @@ class ARMatch3Activity : ARGameActivity() {
         score = 0; selected = -1; lock = false; round = 0
         nodes.forEach { it?.let { e -> removeEgg(e) } }
         statusText.text = "🔍 Inquadra una superficie piana…"
+        updateLevelHud(MiniGameManager.GAME_MATCH3)
         startGame(); startTimer()
         whenReady { placeArena { build(it) } }
     }
@@ -47,8 +52,8 @@ class ARMatch3Activity : ARGameActivity() {
         timerCb = postDelayed(1000) {
             if (!running) return@postDelayed
             round++
-            timerText.text = "⏱ ${60 - round}s"
-            if (round >= 60) endGame() else startTimer()
+            timerText.text = "⏱ ${timeLimit - round}s"
+            if (round >= timeLimit) endGame() else startTimer()
         }
     }
 
@@ -129,12 +134,12 @@ class ARMatch3Activity : ARGameActivity() {
     private fun updateHud() {
         livesText.text = "💎 $score"
         scoreText.text = ""
-        if (timerText.text.isEmpty()) timerText.text = "⏱ 60s"
+        if (timerText.text.isEmpty()) timerText.text = "⏱ ${timeLimit}s"
     }
 
     private fun endGame() {
         stopGame(); removeCallback(timerCb)
         finishGame((score * 0.6).toInt().coerceAtMost(400),
-            "AR Match 3 ($score pt)", score > 80, MiniGameManager.GAME_MATCH3)
+            "AR Match 3 ($score pt)", score > 80, MiniGameManager.GAME_MATCH3, score = score)
     }
 }

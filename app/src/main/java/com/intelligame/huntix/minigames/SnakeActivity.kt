@@ -22,9 +22,12 @@ import kotlin.random.Random
 class SnakeActivity : MiniGameBase() {
 
     private val handler = Handler(Looper.getMainLooper())
-    private val TICK_MS = 120L
     private val COLS = 22
     private val ROWS = 26
+
+    /** Velocità del serpente: più alto il livello, più veloce il tick. */
+    private val tickMs: Long
+        get() = 120L - (40f * levelDifficulty(MiniGameManager.GAME_SNAKE)).toLong()
 
     private val snake = ArrayDeque<Pair<Int, Int>>()
     private var food = 5 to 5
@@ -43,7 +46,7 @@ class SnakeActivity : MiniGameBase() {
             if (!gameRunning) return
             step()
             gameView?.invalidate()
-            handler.postDelayed(this, TICK_MS)
+            handler.postDelayed(this, tickMs)
         }
     }
 
@@ -60,6 +63,7 @@ class SnakeActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_SNAKE))
         scoreText = TextView(ctx).apply {
             text = "Punti: 0"; textSize = 18f; setTextColor(Color.WHITE)
             setPadding(0, 0, 0, UiKit.dp(ctx, 8))
@@ -88,7 +92,7 @@ class SnakeActivity : MiniGameBase() {
         placeFood()
         gameView?.invalidate()
         handler.removeCallbacksAndMessages(null)
-        handler.postDelayed(gameLoop, TICK_MS)
+        handler.postDelayed(gameLoop, tickMs)
     }
 
     private fun placeFood() {
@@ -126,18 +130,14 @@ class SnakeActivity : MiniGameBase() {
         handler.removeCallbacksAndMessages(null)
         val mvc = (score / 2).coerceAtLeast(8)
         val xp = (score / 4).coerceAtLeast(2)
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_SNAKE)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = "Snake: $score punti",
-                    isWin = score >= 30
-                ),
-                MiniGameManager.GAME_SNAKE
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_SNAKE, score,
+                mvc = mvc, xp = xp,
+                label = "Snake: $score punti",
+                isWin = score >= 30
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -162,8 +162,9 @@ class SnakeActivity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

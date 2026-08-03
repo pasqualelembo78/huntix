@@ -83,6 +83,7 @@ class ARMemoryActivity : ARGameActivity() {
         scanHintShown = false
         scanStart = SystemClock.elapsedRealtime()
         statusText.text = "🔍 Scansiona l'ambiente: punta la fotocamera su una superficie piana…"
+        updateLevelHud(MiniGameManager.GAME_MEMORY)
         updateHud()
         startGame()
     }
@@ -219,6 +220,6 @@ class ARMemoryActivity : ARGameActivity() {
     private fun endGame() {
         stopGame()
         finishGame(pairsFound * 90, "AR Memory ($pairsFound/${N / 2})", pairsFound == N / 2,
-            MiniGameManager.GAME_MEMORY)
+            MiniGameManager.GAME_MEMORY, score = pairsFound)
     }
 }

@@ -1,0 +1,139 @@
+{
+  "rules": {
+    // ── STANZE OUTDOOR MULTIPLAYER ──────────────────────────────
+    "outdoor_rooms": {
+      "$roomCode": {
+        ".read":  "auth != null",
+        // Solo l'host può creare la stanza
+        ".write": "auth != null && (!data.exists() || data.child('hostId').val() == auth.uid || newData.child('hostId').val() == auth.uid)",
+        
+        "outdoor_eggs": {
+          "$eggId": {
+            // Chiunque nella stanza può catturare (segnare come preso)
+            ".write": "auth != null"
+          }
+        },
+        "scores": {
+          "$playerId": {
+            // Solo il proprio punteggio
+            ".write": "auth != null && auth.uid == $playerId"
+          }
+        },
+        "players": {
+          "$playerId": {
+            // Solo il proprio profilo nella stanza
+            ".write": "auth != null && auth.uid == $playerId",
+            // Validazione: nome non vuoto, online è boolean
+            ".validate": "newData.hasChildren(['playerName', 'online'])"
+          }
+        },
+        // Imposta TTL: le stanze scadono dopo 24 ore
+        ".validate": "newData.hasChildren(['hostName', 'roomName', 'createdAt'])"
+      }
+    },
+    
+    // ── STANZE INDOOR MULTIPLAYER ───────────────────────────────
+    "indoor_rooms": {
+      "$roomCode": {
+        ".read":  "auth != null",
+        // Solo l'host può creare; tutti i giocatori possono aggiornare
+        ".write": "auth != null",
+        
+        "scores": {
+          "$playerId": {
+            ".write": "auth != null && auth.uid == $playerId",
+            // Anti-cheat: punteggio massimo ragionevole
+            ".validate": "newData.child('eggsFound').val() <= 50 && newData.child('totalMs').val() >= 0"
+          }
+        },
+        "players": {
+          "$playerId": {
+            ".write": "auth != null && auth.uid == $playerId"
+          }
+        },
+        "chat": {
+          "$messageId": {
+            // Solo messaggi dal proprio uid
+            ".write": "auth != null && newData.child('senderId').val() == auth.uid",
+            ".validate": "newData.hasChildren(['senderId', 'senderName', 'text', 'ts']) && newData.child('text').val().length <= 500"
+          }
+        },
+        // Setup della partita — solo l'host (meta/hostUid scritto dall'app in joinRoom)
+        "setup": {
+          ".write": "auth != null && data.parent().child('meta').child('hostUid').val() == auth.uid",
+          "eggs": {
+            "$eggIdx": {
+              // Il flag "found" può essere segnato da qualunque giocatore
+              "found": {
+                ".write": "auth != null"
+              }
+            }
+          }
+        },
+        // Chi ha trovato un uovo — solo il proprio record
+        "found": {
+          "$playerUid": {
+            ".write": "auth != null && auth.uid == $playerUid"
+          }
+        },
+        // Risultati di fine partita — solo il proprio record
+        "results": {
+          "$playerUid": {
+            ".write": "auth != null && auth.uid == $playerUid"
+          }
+        },
+        "turnIndex": {
+          ".write": "auth != null"
+        },
+        "finished": {
+          ".write": "auth != null"
+        },
+        "game": {
+          // Game state — tutti i giocatori in partita
+          ".write": "auth != null"
+        },
+        "meta": {
+          // Solo l'host scrive/aggiorna i propri metadati
+          ".write": "auth != null && (!data.exists() || data.child('hostUid').val() == auth.uid)"
+        }
+      }
+    },
+    
+    // ── CHAT GLOBALE ───────────────────────────────────────────
+    "chat_global": {
+      "$messageId": {
+        ".read":  "auth != null",
+        ".write": "auth != null && newData.child('uid').val() == auth.uid",
+        // Limita lunghezza messaggi
+        ".validate": "newData.hasChildren(['uid', 'name', 'text', 'ts']) && newData.child('text').val().length <= 500"
+      }
+    },
+    
+    // ── CHAT PRIVATA (tra amici) ───────────────────────────────
+    "chat_private": {
+      "$chatId": {
+        // $chatId è la combinazione ordinata dei due uid
+        ".read":  "auth != null && $chatId.contains(auth.uid)",
+        "$messageId": {
+          ".write": "auth != null && $chatId.contains(auth.uid) && newData.child('uid').val() == auth.uid",
+          ".validate": "newData.hasChildren(['uid', 'name', 'text', 'ts']) && newData.child('text').val().length <= 500"
+        }
+      }
+    },
+    
+    // ── GAME PROGRESS SYNC (v7.2.1) ──────────────────────────
+    // Ogni utente può leggere/scrivere solo il proprio progresso
+    "game_progress": {
+      "$uid": {
+        ".read":  "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    
+    // ── BLOCCA TUTTO IL RESTO ──────────────────────────────────
+    "$other": {
+      ".read":  false,
+      ".write": false
+    }
+  }
+}

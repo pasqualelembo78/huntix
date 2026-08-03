@@ -26,7 +26,6 @@ class ARMinesweeperActivity : ARGameActivity() {
 
     companion object {
         private const val GRID = 9
-        private const val MINES = 10
         private const val CELL = 0.20f
         private val C_EMPTY = 0xFF8E7CE8.toInt()
         private val C_FLAG = 0xFFFFD700.toInt()
@@ -37,6 +36,10 @@ class ARMinesweeperActivity : ARGameActivity() {
             0xFF303F9F.toInt(), 0xFF8D6E63.toInt(), 0xFF00BCD4.toInt(), 0xFF212121.toInt()
         )
     }
+
+    /** Più mine a livelli alti: da 10 fino a 14. */
+    private val MINES: Int
+        get() = 10 + (4 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_MINESWEEPER)).toInt()
 
     private class Cell(
         var node: SphereNode? = null,
@@ -74,6 +77,7 @@ class ARMinesweeperActivity : ARGameActivity() {
         timerText.text = "💣 $MINES"
         scoreText.text = "9×9"
         exploding = false
+        updateLevelHud(MiniGameManager.GAME_MINESWEEPER)
         startGame()
         whenReady { placeArena { build(it) } }
     }
@@ -281,7 +285,8 @@ class ARMinesweeperActivity : ARGameActivity() {
         val reward = if (won) 120 else 8
         val label = if (won) "AR Campo Minato vinto!" else "Boom! 💥"
         try {
-            finishGame(reward, "$label ($revealedCount/71)", won, MiniGameManager.GAME_MINESWEEPER, celebrate = won)
+            finishGame(reward, "$label ($revealedCount/71)", won, MiniGameManager.GAME_MINESWEEPER,
+                celebrate = won, score = if (won) 1 else 0)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

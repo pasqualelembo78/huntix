@@ -13,6 +13,7 @@ import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import com.intelligame.huntix.managers.MiniGameManager
 import com.intelligame.huntix.managers.ResearchTaskManager
@@ -126,6 +127,21 @@ class MiniGamesHubActivity : BaseNavActivity() {
     private fun renderRooms() {
         val c = this
         roomsBox.removeAllViews()
+        roomsBox.addView(TextView(c).apply {
+            text = "➕  Nuova stanza"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor(UiKit.GREEN))
+            setPadding(UiKit.dp(c, 12), UiKit.dp(c, 9), UiKit.dp(c, 12), UiKit.dp(c, 9))
+            background = GradientDrawableCompat("#1A2F1F")
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = UiKit.dp(c, 6) }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { requestNewRoom() }
+        })
         val rooms = ArArenaStore.loadRooms(c)
         if (rooms.isEmpty()) {
             roomsBox.addView(TextView(c).apply {
@@ -138,6 +154,16 @@ class MiniGamesHubActivity : BaseNavActivity() {
             return
         }
         rooms.forEach { room -> roomsBox.addView(roomRow(room)) }
+    }
+
+    /**
+     * Predispone la creazione di una nuova stanza: il prossimo gioco AR
+     * ancorato che viene aperto salta il selettore e salva la posizione come
+     * nuova stanza.
+     */
+    private fun requestNewRoom() {
+        ArArenaStore.setPendingNewRoom(this)
+        Toast.makeText(this, "✅ Apri un gioco AR ancorato: la posizione sarà salvata come nuova stanza.", Toast.LENGTH_LONG).show()
     }
 
     private fun roomRow(room: ArRoom): View {
@@ -286,7 +312,7 @@ class MiniGamesHubActivity : BaseNavActivity() {
         })
 
         nameRow.addView(TextView(c).apply {
-            text = "∞"
+            text = "⭐ ${MiniGameManager.getTotalStars(c, g.id)}  •  Lv ${MiniGameManager.getLevel(c, g.id)}"
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor(UiKit.GREEN))
@@ -299,6 +325,7 @@ class MiniGamesHubActivity : BaseNavActivity() {
         }
         if (g.hasNormal) chips.addView(chip(c, "📱 Normale"))
         if (g.hasAr) chips.addView(chip(c, "🔮 AR"))
+        chips.addView(chip(c, "🎯 ${MiniGameManager.getLevelTarget(c, g.id)}"))
         card.addView(chips)
 
         return card

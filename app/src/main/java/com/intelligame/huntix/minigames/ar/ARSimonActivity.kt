@@ -52,6 +52,7 @@ class ARSimonActivity : ARGameActivity() {
         livesText.text = "🥚 Uova luminose"
         timerText.text = ""
         scoreText.text = "Punti: 0"
+        updateLevelHud(MiniGameManager.GAME_SIMON)
         handler.removeCallbacksAndMessages(null)
         startGame()
         whenReady { placeArena { build(it) } }
@@ -80,6 +81,7 @@ class ARSimonActivity : ARGameActivity() {
         playing = true
         statusText.text = "Memorizza…"
         val seq = sequence.toList()
+        val delay = (620 - 170 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_SIMON)).toLong().coerceAtLeast(300)
         var i = 0
         val runnable = object : Runnable {
             override fun run() {
@@ -92,7 +94,7 @@ class ARSimonActivity : ARGameActivity() {
                 }
                 pulse(seq[i])
                 i++
-                handler.postDelayed(this, 620)
+                handler.postDelayed(this, delay)
             }
         }
         handler.postDelayed(runnable, 500)
@@ -122,7 +124,8 @@ class ARSimonActivity : ARGameActivity() {
         handler.removeCallbacksAndMessages(null)
         val reward = (score / 2).coerceAtLeast(8).coerceAtMost(300)
         try {
-            finishGame(reward, "AR Simon ($score pt)", score >= 40, MiniGameManager.GAME_SIMON)
+            finishGame(reward, "AR Simon ($score pt)", score >= 40, MiniGameManager.GAME_SIMON,
+                score = score)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 

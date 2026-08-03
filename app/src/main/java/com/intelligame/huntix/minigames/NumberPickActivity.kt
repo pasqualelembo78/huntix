@@ -38,6 +38,7 @@ class NumberPickActivity : MiniGameBase() {
         isRevealed = false
         numberButtons.clear()
         gameArea.removeAllViews()
+        gameArea.addView(levelBanner(MiniGameManager.GAME_NUMBER_PICK))
 
         val remainText = TextView(c).apply {
             text = "Partite: illimitate"
@@ -116,8 +117,6 @@ class NumberPickActivity : MiniGameBase() {
         isRevealed = true
         totalPlays++
 
-        MiniGameManager.consumePlay(this, MiniGameManager.GAME_NUMBER_PICK)
-
         for (btn in numberButtons) {
             btn.isClickable = false
             btn.isFocusable = false
@@ -133,6 +132,7 @@ class NumberPickActivity : MiniGameBase() {
             }
         }
 
+        var lr: MiniGameManager.LevelResult? = null
         if (picked == secretNumber) {
             wins++
             pickedView.background = GradientDrawable().apply {
@@ -145,9 +145,11 @@ class NumberPickActivity : MiniGameBase() {
             }
             statusText.text = "HAI INDOVINATO! +150 MVC +50 XP"
             statusText.setTextColor(Color.parseColor(UiKit.GREEN))
-            MiniGameManager.applyReward(c, MiniGameManager.GameReward(
-                mvcCoins = 150, xpPoints = 50, label = "Numero indovinato!", isWin = true
-            ), MiniGameManager.GAME_NUMBER_PICK)
+            lr = MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_NUMBER_PICK,
+                score = 1, mvc = 150, xp = 50,
+                label = "Numero indovinato!", isWin = true
+            )
         } else {
             pickedView.background = GradientDrawable().apply {
                 cornerRadius = UiKit.dp(c, 10).toFloat()
@@ -159,9 +161,11 @@ class NumberPickActivity : MiniGameBase() {
             }
             statusText.text = "Il numero era $secretNumber. +20 MVC consolation"
             statusText.setTextColor(Color.parseColor("#FF5555"))
-            MiniGameManager.applyReward(c, MiniGameManager.GameReward(
-                mvcCoins = 20, label = "Consolation", isWin = false
-            ), MiniGameManager.GAME_NUMBER_PICK)
+            lr = MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_NUMBER_PICK,
+                score = 0, mvc = 20,
+                label = "Consolation", isWin = false
+            )
         }
 
         scoreText.text = "Vittorie: $wins / $totalPlays"
@@ -169,6 +173,7 @@ class NumberPickActivity : MiniGameBase() {
         gameArea.addView(statusText)
         gameArea.removeView(gameArea.getChildAt(gameArea.childCount - 1))
 
+        lr?.let { gameArea.addView(levelResultView(it)) }
         gameArea.addView(UiKit.button(c, "Gioca Ancora", UiKit.ACCENT) {
             showStartScreen()
         })

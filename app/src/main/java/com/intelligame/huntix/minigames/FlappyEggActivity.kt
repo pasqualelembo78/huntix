@@ -25,9 +25,12 @@ class FlappyEggActivity : MiniGameBase() {
     private val GRAVITY = 0.0018f
     private val FLAP = -0.055f
     private val PIPE_W = 0.12f
-    private val GAP_H = 0.28f
-    private val PIPE_SPEED = 0.008f
-    private val SPAWN_INTERVAL = 1500L
+
+    /** Difficoltà variabile: gap più stretto e tubi più veloci ai livelli alti. */
+    private val diff: Float get() = levelDifficulty(MiniGameManager.GAME_FLAPPY)
+    private val GAP_H: Float get() = 0.30f - 0.08f * diff
+    private val PIPE_SPEED: Float get() = 0.008f + 0.006f * diff
+    private val SPAWN_INTERVAL: Long get() = 1500L - (400L * diff).toLong()
 
     data class Pipe(var x: Float, val gapY: Float)
 
@@ -63,6 +66,7 @@ class FlappyEggActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_FLAPPY))
         scoreText = TextView(ctx).apply {
             text = "Punti: 0"; textSize = 18f; setTextColor(Color.WHITE)
             setPadding(0, 0, 0, UiKit.dp(ctx, 8))
@@ -140,18 +144,14 @@ class FlappyEggActivity : MiniGameBase() {
         handler.removeCallbacksAndMessages(null)
         val mvc = (score / 2).coerceAtLeast(5)
         val xp = (score / 5).coerceAtLeast(2)
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_FLAPPY)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = "Flappy Egg: $score punti",
-                    isWin = score >= 30
-                ),
-                MiniGameManager.GAME_FLAPPY
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_FLAPPY, score,
+                mvc = mvc, xp = xp,
+                label = "Flappy Egg: $score punti",
+                isWin = score >= 30
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -176,8 +176,9 @@ class FlappyEggActivity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

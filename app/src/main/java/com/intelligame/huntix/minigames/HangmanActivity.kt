@@ -53,6 +53,7 @@ class HangmanActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_HANGMAN))
         hangmanText = TextView(ctx).apply {
             text = HANGMAN[0]; textSize = 40f
             setPadding(0, 0, 0, UiKit.dp(ctx, 6))
@@ -87,7 +88,10 @@ class HangmanActivity : MiniGameBase() {
     }
 
     private fun buildBoard() {
-        word = WORDS[Random.nextInt(WORDS.size)]
+        // Parole più lunghe a livelli alti: difficoltà crescente.
+        val minLen = 4 + (3 * levelDifficulty(MiniGameManager.GAME_HANGMAN)).toInt()
+        val pool = WORDS.filter { it.length >= minLen }
+        word = (if (pool.isEmpty()) WORDS else pool)[Random.nextInt((if (pool.isEmpty()) WORDS else pool).size)]
         guessed.clear()
         wrong = 0
         gameRunning = true
@@ -163,19 +167,16 @@ class HangmanActivity : MiniGameBase() {
         if (!gameRunning) gameRunning = false
         val mvc = if (won) 40 else 10
         val xp = if (won) 12 else 3
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_HANGMAN)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    giftEggRarityId = if (won) "common" else null,
-                    label = if (won) "Impiccato: indovinato \"$word\"!" else "Impiccato: era \"$word\"",
-                    isWin = won
-                ),
-                MiniGameManager.GAME_HANGMAN
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_HANGMAN,
+                score = if (won) 1 else 0,
+                mvc = mvc, xp = xp,
+                giftEggRarityId = if (won) "common" else null,
+                label = if (won) "Impiccato: indovinato \"$word\"!" else "Impiccato: era \"$word\"",
+                isWin = won
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -200,8 +201,9 @@ class HangmanActivity : MiniGameBase() {
             text = "Parola: ${word.uppercase()}"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

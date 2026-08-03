@@ -33,6 +33,10 @@ class SimonActivity : MiniGameBase() {
     private val buttons = arrayOfNulls<Button>(4)
     private var overlayContainer: FrameLayout? = null
 
+    /** Ritmo della sequenza: più alto il livello, più veloce il flash. */
+    private val flashDelay: Long
+        get() = 600L - (250f * levelDifficulty(MiniGameManager.GAME_SIMON)).toLong()
+
     override fun onGameCreate() {
         val ctx = this
         val root = LinearLayout(ctx).apply {
@@ -46,6 +50,7 @@ class SimonActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_SIMON))
 
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -141,7 +146,7 @@ class SimonActivity : MiniGameBase() {
                 }
                 flash(seq[i])
                 i++
-                handler.postDelayed(this, 600)
+                handler.postDelayed(this, flashDelay)
             }
         }
         handler.postDelayed(runnable, 500)
@@ -169,18 +174,17 @@ class SimonActivity : MiniGameBase() {
         handler.removeCallbacksAndMessages(null)
         val mvc = (score / 2).coerceAtLeast(8)
         val xp = (score / 4).coerceAtLeast(2)
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_SIMON)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = "Simon: $score punti",
-                    isWin = score >= 40
-                ),
-                MiniGameManager.GAME_SIMON
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_SIMON, score,
+                mvc = mvc, xp = xp,
+                label = "Simon: $score punti",
+                isWin = score >= 40
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            null
+        }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -205,8 +209,10 @@ class SimonActivity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"
+            textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

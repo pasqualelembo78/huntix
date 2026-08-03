@@ -10,17 +10,25 @@ class AREggRadarActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         usesSurfaceArena = false
-        timeLeft = 45
+        val diff = MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_RADAR)
+        timeLeft = (45 - (15 * diff).toInt()).coerceAtLeast(20)
         statusText.text = "Radar AR: cattura tutte le uova sospese! 🛰️"
+        updateLevelHud(MiniGameManager.GAME_AR_RADAR)
         startGame(); startTimer(); whenReady { spawnWave() }
     }
 
     private fun spawnWave() {
-        val positions = listOf(
+        val extra = (3 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_RADAR)).toInt()
+        val positions = mutableListOf(
             Triple(0.8f, -0.4f, 0.2f), Triple(1.1f, 0.35f, -0.1f),
             Triple(0.9f, 0.0f, 0.35f), Triple(1.3f, -0.3f, -0.25f),
             Triple(1.0f, 0.45f, 0.15f)
         )
+        repeat(extra) { i ->
+            positions.add(Triple(0.7f + Math.random().toFloat() * 0.6f,
+                -0.4f + Math.random().toFloat() * 0.8f,
+                -0.3f + Math.random().toFloat() * 0.6f))
+        }
         positions.forEachIndexed { i, (f, r, u) ->
             spawnEgg(i % 5, f, r, u, radius = 0.09f)
         }
@@ -59,6 +67,6 @@ class AREggRadarActivity : ARGameActivity() {
         val found = total - aliveCount()
         val reward = found * 60
         finishGame(reward, "AR Egg Radar ($found/$total)", found == total,
-            MiniGameManager.GAME_AR_RADAR)
+            MiniGameManager.GAME_AR_RADAR, score = found)
     }
 }

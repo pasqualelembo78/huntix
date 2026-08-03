@@ -64,6 +64,7 @@ class ARConnectFourActivity : ARGameActivity() {
         livesText.text = "🥚 Tu = rosso"
         timerText.text = "🤖 CPU = giallo"
         scoreText.text = "0-0"
+        updateLevelHud(MiniGameManager.GAME_CONNECT4)
         startGame()
         whenReady { placeArena { build(it) } }
     }
@@ -149,7 +150,13 @@ class ARConnectFourActivity : ARGameActivity() {
             if (hasSpace(c) && winsWith(c, PLAYER)) return c
         }
         val candidates = (0 until COLS).filter { hasSpace(it) }
-        return if (candidates.isEmpty()) -1 else candidates[Random.nextInt(candidates.size)]
+        if (candidates.isEmpty()) return -1
+        val smart = 0.5f + 0.5f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_CONNECT4)
+        if (Random.nextFloat() < smart) {
+            val center = candidates.sortedBy { kotlin.math.abs(it - (COLS - 1) / 2f) }
+            return center.first()
+        }
+        return candidates[Random.nextInt(candidates.size)]
     }
 
     private fun hasSpace(col: Int): Boolean {
@@ -189,7 +196,8 @@ class ARConnectFourActivity : ARGameActivity() {
         val reward = when { won -> 60; draw -> 25; else -> 12 }
         val label = when { won -> "AR Forza 4 vinto!"; draw -> "AR Forza 4 pari"; else -> "AR Forza 4 perso" }
         try {
-            finishGame(reward, "$label ($playerDiscs-$cpuDiscs)", won, MiniGameManager.GAME_CONNECT4)
+            finishGame(reward, "$label ($playerDiscs-$cpuDiscs)", won, MiniGameManager.GAME_CONNECT4,
+                isDraw = draw, score = if (won) 1 else 0)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 

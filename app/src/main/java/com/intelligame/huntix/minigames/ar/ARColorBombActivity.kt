@@ -19,10 +19,12 @@ class ARColorBombActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         usesSurfaceArena = false
-        lives = 3; score = 0; timeLeft = 30
+        lives = 3; score = 0
+        timeLeft = (30 - (8 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_BOMB)).toInt()).coerceAtLeast(15)
         eggsActive.clear()
         target = (0..5).random()
         statusText.text = "Esplodi le uova del colore bersaglio! 💥"
+        updateLevelHud(MiniGameManager.GAME_AR_BOMB)
         updateHud()
         startGame(); startTimer(); scheduleSpawn(); scheduleTarget()
     }
@@ -96,7 +98,7 @@ class ARColorBombActivity : ARGameActivity() {
         stopGame()
         removeCallback(timerCb); removeCallback(spawnCb); removeCallback(targetCb)
         finishGame((score * 0.8).toInt().coerceAtMost(350),
-            "AR Color Bomb ($score pt)", score > 60, MiniGameManager.GAME_AR_BOMB)
+            "AR Color Bomb ($score pt)", score > 60, MiniGameManager.GAME_AR_BOMB, score = score)
     }
 
     private fun cos(v: Double) = kotlin.math.cos(v).toFloat()

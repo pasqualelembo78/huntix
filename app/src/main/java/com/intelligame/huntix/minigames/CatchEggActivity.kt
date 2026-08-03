@@ -77,6 +77,7 @@ class CatchEggActivity : MiniGameBase() {
         }
 
         root.addView(UiKit.title(ctx, "Prendi l'Uovo", "\uD83E\uDD5A"))
+        root.addView(levelBanner(MiniGameManager.GAME_CATCH_EGG))
 
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -111,13 +112,14 @@ class CatchEggActivity : MiniGameBase() {
         basketX = 0.5f
         score = 0
         lives = 3
-        timeLeft = 45
+        val diff = levelDifficulty(MiniGameManager.GAME_CATCH_EGG)
+        timeLeft = 45 - (12 * diff).toInt()
         elapsed = 0
         gameRunning = true
-        spawnInterval = 1000L
+        spawnInterval = (1000L - (300L * diff).toLong()).coerceAtLeast(400L)
         nextSpawn = System.currentTimeMillis() + 500
         scoreText?.text = "Punti: 0"
-        timeText?.text = "Tempo: 45s"
+        timeText?.text = "Tempo: ${timeLeft}s"
         updateLivesUI()
         gameView?.invalidate()
         handler.postDelayed(timerRunnable, 1000)
@@ -186,19 +188,13 @@ class CatchEggActivity : MiniGameBase() {
         val xp = (score / 5).coerceAtLeast(2)
         val isWin = score > 40
         val label = if (isWin) "CatchEgg: $score punti!" else "CatchEgg: $score punti"
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_CATCH_EGG)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc,
-                    xpPoints = xp,
-                    label = label,
-                    isWin = isWin
-                ),
-                MiniGameManager.GAME_CATCH_EGG
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_CATCH_EGG, score,
+                mvc = mvc, xp = xp,
+                label = label, isWin = isWin
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -223,8 +219,9 @@ class CatchEggActivity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  \u2022  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  \u2022  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "\uD83D\uDD04  Gioca Ancora", UiKit.ACCENT) {

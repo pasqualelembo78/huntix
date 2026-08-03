@@ -45,6 +45,7 @@ class TicTacToeActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_TIC_TAC_TOE))
         statusText = TextView(ctx).apply {
             text = "Tocca una casella"; textSize = 16f; setTextColor(Color.WHITE)
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
@@ -156,7 +157,8 @@ class TicTacToeActivity : MiniGameBase() {
         val empty = board.indices.filter { board[it] == EMPTY }
         if (board[4] == EMPTY) return 4
         val corners = intArrayOf(0, 2, 6, 8).filter { board[it] == EMPTY }
-        if (corners.isNotEmpty() && Random.nextFloat() < 0.7) return corners[Random.nextInt(corners.size)]
+        val cornerChance = 0.7f + 0.3f * levelDifficulty(MiniGameManager.GAME_TIC_TAC_TOE)
+        if (corners.isNotEmpty() && Random.nextFloat() < cornerChance) return corners[Random.nextInt(corners.size)]
         return empty[Random.nextInt(empty.size)]
     }
 
@@ -184,22 +186,19 @@ class TicTacToeActivity : MiniGameBase() {
             CPU -> 1
             else -> 4
         }
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_TIC_TAC_TOE)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = when (result) {
-                        PLAYER -> "Tris: hai vinto!"
-                        CPU -> "Tris: vince la CPU"
-                        else -> "Tris: pareggio"
-                    },
-                    isWin = won
-                ),
-                MiniGameManager.GAME_TIC_TAC_TOE
+        val lr = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_TIC_TAC_TOE,
+                score = if (won) 1 else 0,
+                mvc = mvc, xp = xp,
+                label = when (result) {
+                    PLAYER -> "Tris: hai vinto!"
+                    CPU -> "Tris: vince la CPU"
+                    else -> "Tris: pareggio"
+                },
+                isWin = won
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -226,8 +225,9 @@ class TicTacToeActivity : MiniGameBase() {
             textSize = 22f; setTextColor(Color.WHITE)
             gravity = android.view.Gravity.CENTER; setPadding(0, UiKit.dp(ctx, 10), 0, UiKit.dp(ctx, 6))
         })
+        lr?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${lr?.mvc ?: mvc} MVC  •  +${lr?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

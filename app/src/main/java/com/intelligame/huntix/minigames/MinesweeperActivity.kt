@@ -22,7 +22,10 @@ class MinesweeperActivity : MiniGameBase() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val SIZE = 9
-    private val MINES = 10
+
+    /** Più mine a livelli alti: da 10 fino a 14. */
+    private val MINES: Int
+        get() = 10 + (4 * levelDifficulty(MiniGameManager.GAME_MINESWEEPER)).toInt()
     private val CELLS = SIZE * SIZE
 
     private val mines = BooleanArray(CELLS)
@@ -61,6 +64,7 @@ class MinesweeperActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_MINESWEEPER))
 
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -249,19 +253,16 @@ class MinesweeperActivity : MiniGameBase() {
         handler.removeCallbacksAndMessages(null)
         val mvc = if (won) 60 else 10
         val xp = if (won) 20 else 3
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_MINESWEEPER)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    giftEggRarityId = if (won) "common" else null,
-                    label = if (won) "Campo Minato: vittoria!" else "Campo Minato: boom!",
-                    isWin = won
-                ),
-                MiniGameManager.GAME_MINESWEEPER
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_MINESWEEPER,
+                score = if (won) 1 else 0,
+                mvc = mvc, xp = xp,
+                giftEggRarityId = if (won) "common" else null,
+                label = if (won) "Campo Minato: vittoria!" else "Campo Minato: boom!",
+                isWin = won
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -286,8 +287,9 @@ class MinesweeperActivity : MiniGameBase() {
             text = "Tempo: ${seconds}s"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

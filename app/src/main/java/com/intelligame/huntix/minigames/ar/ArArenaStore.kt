@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.intelligame.huntix.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -32,6 +33,7 @@ data class ArRoom(
 object ArArenaStore {
     private const val PREFS = "ar_arena_rooms"
     private const val KEY_LAST_ROOM = "last_room"
+    private const val KEY_PENDING_NEW_ROOM = "pending_new_room"
     private const val KEY_ID_PREFIX = "room_"
     private const val KEY_NAME_PREFIX = "name_"
     private const val KEY_CREATED_PREFIX = "created_"
@@ -43,6 +45,23 @@ object ArArenaStore {
 
     private fun prefs(c: Context): SharedPreferences =
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /**
+     * Flag "nuova stanza in arrivo": messo dalla hub, viene consumato dal
+     * prossimo gioco AR ancorato che parte, che salta il selettore delle
+     * stanze e crea una stanza nuova al primo piazzamento.
+     */
+    fun setPendingNewRoom(c: Context) {
+        prefs(c).edit().putBoolean(KEY_PENDING_NEW_ROOM, true).apply()
+    }
+
+    /** Legge e azzera il flag; true se una nuova stanza era richiesta. */
+    fun consumePendingNewRoom(c: Context): Boolean {
+        val p = prefs(c)
+        val pending = p.getBoolean(KEY_PENDING_NEW_ROOM, false)
+        if (pending) p.edit().remove(KEY_PENDING_NEW_ROOM).apply()
+        return pending
+    }
 
     private fun idKey(roomId: String) = KEY_ID_PREFIX + roomId
     private fun nameKey(roomId: String) = KEY_NAME_PREFIX + roomId
@@ -83,6 +102,7 @@ object ArArenaStore {
             .putLong(createdKey(room.roomId), room.createdAt)
         if (setLast) ed.putString(KEY_LAST_ROOM, room.roomId)
         ed.apply()
+        AppLog.i("ArArenaStore", "saveRoom '${room.name}' (id=${room.roomId.take(8)}…, cloud=${room.cloudAnchorId.take(8)}…) locale=${loadRooms(c).size} stanze")
     }
 
     fun deleteRoom(c: Context, roomId: String) {
@@ -116,8 +136,11 @@ object ArArenaStore {
     /** Carica le stanze salvate sul cloud per l'utente corrente. */
     suspend fun pullRooms(): List<ArRoom> = withContext(Dispatchers.IO) {
         val uid = currentUid()
-        if (uid.isBlank()) return@withContext emptyList()
-        runCatching {
+        if (uid.isBlank()) {
+            AppLog.w("ArArenaStore", "pullRooms: nessun utente autenticato → skip")
+            return@withContext emptyList()
+        }
+        val result = runCatching {
             FirebaseFirestore.getInstance().collection(COLLECTION)
                 .whereEqualTo("ownerId", uid)
                 .get().await()
@@ -133,14 +156,28 @@ object ArArenaStore {
                         createdAt = (d["createdAt"] as? Number)?.toLong() ?: 0L
                     )
                 }
-        }.getOrDefault(emptyList())
+        }
+        val rooms = result.getOrDefault(emptyList())
+        if (result.isFailure) {
+            AppLog.w("ArArenaStore", "pullRooms: FALLITA → ${result.exceptionOrNull()?.message}")
+        } else {
+            AppLog.i("ArArenaStore", "pullRooms: ${rooms.size} stanze dal cloud")
+        }
+        rooms
     }
 
-    /** Salva (o aggiorna) una stanza sul cloud per l'utente corrente. */
-    suspend fun pushRoom(room: ArRoom) = withContext(Dispatchers.IO) {
+    /**
+     * Salva (o aggiorna) una stanza sul cloud per l'utente corrente.
+     * Ritorna true se Firestore ha confermato, false se non riuscito (o non
+     * autenticato) — così i chiamanti possono loggare l'esito.
+     */
+    suspend fun pushRoom(room: ArRoom): Boolean = withContext(Dispatchers.IO) {
         val uid = currentUid()
-        if (uid.isBlank()) return@withContext
-        runCatching {
+        if (uid.isBlank()) {
+            AppLog.w("ArArenaStore", "pushRoom '${room.name}': nessun utente autenticato → skip")
+            return@withContext false
+        }
+        val result = runCatching {
             FirebaseFirestore.getInstance().collection(COLLECTION)
                 .document(cloudDocId(uid, room.roomId))
                 .set(
@@ -154,15 +191,25 @@ object ArArenaStore {
                     SetOptions.merge()
                 ).await()
         }
+        if (result.isFailure) {
+            AppLog.w("ArArenaStore", "pushRoom '${room.name}': FALLITA → ${result.exceptionOrNull()?.message}")
+            false
+        } else {
+            AppLog.i("ArArenaStore", "pushRoom '${room.name}': OK")
+            true
+        }
     }
 
     /** Elimina una stanza dal cloud per l'utente corrente. */
     suspend fun deleteRoomCloud(roomId: String) = withContext(Dispatchers.IO) {
         val uid = currentUid()
         if (uid.isBlank()) return@withContext
-        runCatching {
+        val result = runCatching {
             FirebaseFirestore.getInstance().collection(COLLECTION)
                 .document(cloudDocId(uid, roomId)).delete().await()
+        }
+        if (result.isFailure) {
+            AppLog.w("ArArenaStore", "deleteRoomCloud(${roomId.take(8)}…): FALLITA → ${result.exceptionOrNull()?.message}")
         }
     }
 }

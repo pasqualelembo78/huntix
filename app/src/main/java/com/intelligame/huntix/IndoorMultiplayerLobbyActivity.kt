@@ -121,6 +121,9 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
             roomCode = code; isHost = asHost
             prefs.edit().putString("room_code", roomCode).apply()
             codeView.text = "Stanza: $roomCode"
+            if (asHost) {
+                roomsRef.child(roomCode).child("meta").child("hostUid").setValue(playerUid)
+            }
             roomsRef.child(roomCode).child("players").child(playerUid).setValue(me)
                 .addOnSuccessListener { attachPlayersListener(roomCode) }
                 .addOnFailureListener { e ->

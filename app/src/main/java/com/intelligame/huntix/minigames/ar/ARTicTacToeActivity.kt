@@ -55,6 +55,7 @@ class ARTicTacToeActivity : ARGameActivity() {
         livesText.text = "🥚 Tu = verde"
         timerText.text = "🤖 CPU = viola"
         scoreText.text = "Tris"
+        updateLevelHud(MiniGameManager.GAME_TIC_TAC_TOE)
         handler.removeCallbacksAndMessages(null)
         startGame()
         whenReady { placeArena { build(it) } }
@@ -165,7 +166,8 @@ class ARTicTacToeActivity : ARGameActivity() {
         val empty = board.indices.filter { board[it] == EMPTY }
         if (board[4] == EMPTY) return 4
         val corners = intArrayOf(0, 2, 6, 8).filter { board[it] == EMPTY }
-        if (corners.isNotEmpty() && Random.nextFloat() < 0.7) return corners[Random.nextInt(corners.size)]
+        val cornerChance = 0.7f + 0.3f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_TIC_TAC_TOE)
+        if (corners.isNotEmpty() && Random.nextFloat() < cornerChance) return corners[Random.nextInt(corners.size)]
         return if (empty.isEmpty()) -1 else empty[Random.nextInt(empty.size)]
     }
 
@@ -193,7 +195,8 @@ class ARTicTacToeActivity : ARGameActivity() {
             finishGame(
                 reward, "$label ($score)", won, MiniGameManager.GAME_TIC_TAC_TOE,
                 isDraw = draw,
-                accentColors = intArrayOf(C_X, 0xFFFFFFFF.toInt(), 0xFFFFD700.toInt())
+                accentColors = intArrayOf(C_X, 0xFFFFFFFF.toInt(), 0xFFFFD700.toInt()),
+                score = if (won) 1 else 0
             )
         } catch (e: Exception) { Sentry.captureException(e) }
     }

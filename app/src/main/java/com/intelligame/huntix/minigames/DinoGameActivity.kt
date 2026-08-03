@@ -29,7 +29,7 @@ import kotlin.random.Random
  *
  * Pixel-perfect: 16:9 logical grid (GROUND_Y a 72% dall'alto) con parallax background.
  */
-class DinoGameActivity : AppCompatActivity() {
+class DinoGameActivity : MiniGameBase() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val tickMs = 16L
@@ -81,9 +81,7 @@ class DinoGameActivity : AppCompatActivity() {
         private const val TYPE_BIRD = 2
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
+    override fun onGameCreate() {
         val ctx = this
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -96,6 +94,7 @@ class DinoGameActivity : AppCompatActivity() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_DINO))
         scoreText = TextView(ctx).apply {
             text = "Punti: 0"; textSize = 18f; setTextColor(Color.WHITE)
             setPadding(0, 0, 0, UiKit.dp(ctx, 8))
@@ -122,7 +121,7 @@ class DinoGameActivity : AppCompatActivity() {
         dinoY = groundY - dinoSize / 2 - 0.02f
         dinoVel = 0f
         score = 0
-        gameSpeed = 2.5f
+        gameSpeed = 2.5f + 2.5f * levelDifficulty(MiniGameManager.GAME_DINO)
         lastSpeedBump = 0L
         obstacles.clear()
         lastSpawn = 0L
@@ -261,18 +260,14 @@ class DinoGameActivity : AppCompatActivity() {
 
         val mvc = (score / 10).coerceAtLeast(8)
         val xp = (score / 20).coerceAtLeast(2)
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_DINO)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = "Dino: $score pt",
-                    isWin = score >= 200
-                ),
-                MiniGameManager.GAME_DINO
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_DINO, score,
+                mvc = mvc, xp = xp,
+                label = "Dino: $score pt",
+                isWin = score >= 200
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -302,8 +297,9 @@ class DinoGameActivity : AppCompatActivity() {
             setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Riprova", UiKit.ACCENT) {

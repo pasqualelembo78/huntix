@@ -64,6 +64,7 @@ class AR2048Activity : ARGameActivity() {
         livesText.text = "🥚 Uova 2048"
         timerText.text = "Max: 2"
         scoreText.text = "Punti: 0"
+        updateLevelHud(MiniGameManager.GAME_2048)
         startGame()
         whenReady { placeArena { build(it) } }
     }
@@ -206,7 +207,8 @@ class AR2048Activity : ARGameActivity() {
                 reward,
                 if (reached2048) "AR 2048: uovo d'oro!" else "AR 2048 ($score pt)",
                 reached2048,
-                MiniGameManager.GAME_2048
+                MiniGameManager.GAME_2048,
+                score = score
             )
         } catch (e: Exception) { Sentry.captureException(e) }
     }

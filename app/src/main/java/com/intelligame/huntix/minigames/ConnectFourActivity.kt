@@ -47,6 +47,7 @@ class ConnectFourActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_CONNECT4))
         statusText = TextView(ctx).apply {
             text = "Scegli la modalità"; textSize = 16f; setTextColor(Color.WHITE)
             setPadding(0, 0, 0, UiKit.dp(ctx, 8))
@@ -149,7 +150,8 @@ class ConnectFourActivity : MiniGameBase() {
         if (blocking != -1) return blocking
         val valid = (0 until COLS).filter { board[it] == 0 }
         val preferCenter = valid.filter { it in 2..4 }
-        val pool = if (preferCenter.isNotEmpty() && Random.nextFloat() < 0.6) preferCenter else valid
+        val smart = 0.6f + 0.35f * levelDifficulty(MiniGameManager.GAME_CONNECT4)
+        val pool = if (preferCenter.isNotEmpty() && Random.nextFloat() < smart) preferCenter else valid
         return pool[Random.nextInt(pool.size)]
     }
 
@@ -197,22 +199,19 @@ class ConnectFourActivity : MiniGameBase() {
         val won = winner != 0
         val mvc = if (won) 50 else 15
         val xp = if (won) 16 else 4
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_CONNECT4)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    label = when (winner) {
-                        1 -> "Forza 4: vince il Rosso!"
-                        2 -> "Forza 4: vince il Blu!"
-                        else -> "Forza 4: pareggio"
-                    },
-                    isWin = won
-                ),
-                MiniGameManager.GAME_CONNECT4
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_CONNECT4,
+                score = if (won) 1 else 0,
+                mvc = mvc, xp = xp,
+                label = when (winner) {
+                    1 -> "Forza 4: vince il Rosso!"
+                    2 -> "Forza 4: vince il Blu!"
+                    else -> "Forza 4: pareggio"
+                },
+                isWin = won
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -239,8 +238,9 @@ class ConnectFourActivity : MiniGameBase() {
             textSize = 22f; setTextColor(Color.WHITE)
             gravity = android.view.Gravity.CENTER; setPadding(0, UiKit.dp(ctx, 10), 0, UiKit.dp(ctx, 6))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

@@ -15,6 +15,7 @@ class ARNumberPickActivity : ARGameActivity() {
         android.util.Log.d("ARNumberPickActivity", "onGameCreate called")
         lives = 3; score = 0; round = 0
         statusText.text = "Number Pick AR: scegli l'uovo giusto! 🔢"
+        updateLevelHud(MiniGameManager.GAME_NUMBER_PICK)
         startGame()
         whenReady { 
             android.util.Log.d("ARNumberPickActivity", "Tracking ready, starting rounds")
@@ -59,6 +60,6 @@ class ARNumberPickActivity : ARGameActivity() {
     private fun endGame() {
         stopGame()
         finishGame((score * 0.7).toInt().coerceAtMost(300),
-            "AR Number Pick ($score pt)", score > 60, MiniGameManager.GAME_NUMBER_PICK)
+            "AR Number Pick ($score pt)", score > 60, MiniGameManager.GAME_NUMBER_PICK, score = score)
     }
 }

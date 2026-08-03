@@ -16,6 +16,7 @@ class ARHighCardActivity : ARGameActivity() {
         usesSurfaceArena = false
         round = 0; wins = 0; drawn = false
         statusText.text = "Carta Alta AR: tocca per pescare la carta! 🃏"
+        updateLevelHud(MiniGameManager.GAME_HIGH_CARD)
         startGame()
         whenReady {
             playerNode = spawnEgg(0, 0.9f, -0.28f, 0f, radius = 0.1f)
@@ -62,6 +63,6 @@ class ARHighCardActivity : ARGameActivity() {
 
     private fun endGame() {
         stopGame()
-        finishGame(wins * 80, "AR High Card ($wins/5)", wins >= 3, MiniGameManager.GAME_HIGH_CARD)
+        finishGame(wins * 80, "AR High Card ($wins/5)", wins >= 3, MiniGameManager.GAME_HIGH_CARD, score = wins)
     }
 }

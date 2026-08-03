@@ -18,9 +18,11 @@ class ARCatchEggActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         usesSurfaceArena = false
-        lives = 3; score = 0; timeLeft = 40; speedMult = 1f
+        val diff = MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_CATCH_EGG)
+        lives = 3; score = 0; timeLeft = (40 - (10 * diff).toInt()).coerceAtLeast(20); speedMult = 1f
         eggsActive.clear()
         statusText.text = "Tocca le uova fluttuanti nell'aria! 🎯"
+        updateLevelHud(MiniGameManager.GAME_CATCH_EGG)
         updateHud()
         startGame()
         startTimer()
@@ -104,6 +106,6 @@ class ARCatchEggActivity : ARGameActivity() {
         stopGame()
         removeCallback(timerCb); removeCallback(spawnCb)
         val reward = (score * 0.6).toInt().coerceAtMost(350)
-        finishGame(reward, "AR Catch Egg ($score pt)", score > 40, MiniGameManager.GAME_CATCH_EGG)
+        finishGame(reward, "AR Catch Egg ($score pt)", score > 40, MiniGameManager.GAME_CATCH_EGG, score = score)
     }
 }

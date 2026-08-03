@@ -52,6 +52,7 @@ class MemoryGameActivity : MiniGameBase() {
         cards.clear()
         cardViews.clear()
         gameArea.removeAllViews()
+        gameArea.addView(levelBanner(MiniGameManager.GAME_MEMORY))
 
         val remainText = TextView(c).apply {
             text = "Partite: illimitate"
@@ -206,16 +207,18 @@ class MemoryGameActivity : MiniGameBase() {
             moves < 20 -> 80 to "Bene! <$moves mosse"
             else -> 40 to "$moves mosse - ci riprovi?"
         }
-        MiniGameManager.consumePlay(c, MiniGameManager.GAME_MEMORY)
         wins++
-        MiniGameManager.applyReward(c, MiniGameManager.GameReward(
-            mvcCoins = mvc, label = label, isWin = true
-        ), MiniGameManager.GAME_MEMORY)
+        val lr = MiniGameManager.completePlay(
+            c, MiniGameManager.GAME_MEMORY,
+            score = 1,
+            mvc = mvc, label = label, isWin = true
+        )
 
         statusText.text = "$label\n+$mvc MVC"
         statusText.setTextColor(Color.parseColor(UiKit.GREEN))
         movesText.text = "Mosse: $moves | Coppie trovate: $matchedPairs"
 
+        gameArea.addView(levelResultView(lr))
         gameArea.addView(UiKit.button(c, "Gioca Ancora", UiKit.ACCENT) {
             showStartScreen()
         })

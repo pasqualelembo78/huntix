@@ -95,6 +95,150 @@ object MiniGameManager {
     private fun totalGamesKey(day: String)             = "total_games_$day"
     private fun bonusClaimedKey(day: String, nth: Int) = "daily_bonus_claimed_${day}_$nth"
 
+    // ─── Livelli (per-game) ──────────────────────────────────────
+    private fun levelKey(gameId: String)        = "level_$gameId"
+    private fun starsKey(gameId: String, lvl: Int) = "stars_${gameId}_$lvl"
+    private fun bestKey(gameId: String)         = "best_$gameId"
+
+    /** Livello corrente del gioco (1..GameLevels.MAX_LEVELS). */
+    fun getLevel(ctx: Context, gameId: String): Int {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(levelKey(gameId), 1).coerceIn(1, GameLevels.MAX_LEVELS)
+    }
+
+    /** Obiettivo (target) del livello corrente del gioco. */
+    fun getLevelTarget(ctx: Context, gameId: String): Int =
+        GameLevels.target(gameId, getLevel(ctx, gameId))
+
+    /** Obiettivo di un livello specifico. */
+    fun getLevelTarget(ctx: Context, gameId: String, level: Int): Int =
+        GameLevels.target(gameId, level)
+
+    /** Difficoltà 0..1 del livello corrente del gioco. */
+    fun levelDifficulty(ctx: Context, gameId: String): Float =
+        GameLevels.difficulty(gameId, getLevel(ctx, gameId))
+
+    /** Miglior punteggio mai raggiunto nel gioco. */
+    fun getBestScore(ctx: Context, gameId: String): Int {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(bestKey(gameId), 0)
+    }
+
+    /** Stelle migliori (0..3) ottenute su un livello. */
+    fun getStars(ctx: Context, gameId: String, level: Int): Int {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getInt(starsKey(gameId, level), 0).coerceIn(0, 3)
+    }
+
+    /** Totale stelle accumulate nel gioco. */
+    fun getTotalStars(ctx: Context, gameId: String): Int {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        var sum = 0
+        for (lvl in 1..GameLevels.MAX_LEVELS) sum += prefs.getInt(starsKey(gameId, lvl), 0)
+        return sum.coerceAtMost(GameLevels.MAX_LEVELS * 3)
+    }
+
+    /** Totale stelle accumulate su tutti i giochi. */
+    fun getTotalStarsAll(ctx: Context): Int {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        var sum = 0
+        for (g in ALL_GAME_IDS) {
+            for (lvl in 1..GameLevels.MAX_LEVELS) sum += prefs.getInt(starsKey(g, lvl), 0)
+        }
+        return sum
+    }
+
+    /** Rappresentazione testuale delle stelle, es. "⭐⭐☆". */
+    fun starsText(stars: Int): String = buildString {
+        repeat(stars.coerceIn(0, 3)) { append("⭐") }
+        repeat((3 - stars.coerceIn(0, 3))) { append("☆") }
+    }
+
+    /**
+     * Esito di una partita conclusa, in ottica livelli.
+     * @property level livello giocato
+     * @property target obiettivo da raggiungere per superare il livello
+     * @property score punteggio della partita
+     * @property stars stelle guadagnate in questa partita
+     * @property cleared true se il livello è stato superato
+     * @property levelUp true se è stato sbloccato il livello successivo
+     * @property mvc MVC effettivi assegnati (con moltiplicatore di livello)
+     * @property xp XP effettivi assegnati (con moltiplicatore di livello)
+     * @property gems gemme bonus assegnate (level-up)
+     */
+    data class LevelResult(
+        val gameId: String,
+        val level: Int,
+        val target: Int,
+        val score: Int,
+        val stars: Int,
+        val cleared: Boolean,
+        val levelUp: Boolean,
+        val mvc: Int,
+        val xp: Int,
+        val gems: Int
+    )
+
+    /**
+     * Chiusura di una partita con gestione livelli:
+     *  - conta la giocata ([consumePlay]);
+     *  - aggiorna livello, stelle e record personale;
+     *  - applica i premi base scalati col livello (+ bonus level-up);
+     *
+     * Ritorna l'esito completo ([LevelResult]) da mostrare nell'overlay.
+     */
+    fun completePlay(
+        ctx: Context,
+        gameId: String,
+        score: Int,
+        mvc: Int = 0,
+        xp: Int = 0,
+        label: String = "",
+        isWin: Boolean = false,
+        giftEggRarityId: String? = null
+    ): LevelResult {
+        consumePlay(ctx, gameId)
+
+        val level  = getLevel(ctx, gameId)
+        val target = getLevelTarget(ctx, gameId)
+        val cleared = score >= target && target > 0
+        val stars  = GameLevels.stars(score, target)
+
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (score > prefs.getInt(bestKey(gameId), 0)) {
+            prefs.edit().putInt(bestKey(gameId), score).apply()
+        }
+        if (stars > getStars(ctx, gameId, level)) {
+            prefs.edit().putInt(starsKey(gameId, level), stars).apply()
+        }
+        var levelUp = false
+        if (cleared && level < GameLevels.MAX_LEVELS) {
+            prefs.edit().putInt(levelKey(gameId), level + 1).apply()
+            levelUp = true
+        }
+
+        // Premi scalati col livello + bonus per il level-up.
+        val mul      = 1f + 0.15f * (level - 1)
+        val finalMvc = (mvc * mul).toInt() + if (levelUp) 100 * level else 0
+        val finalXp  = (xp * mul).toInt()  + if (levelUp) 50 * level else 0
+        val finalGems = if (levelUp) 1 else 0
+
+        applyReward(
+            ctx,
+            GameReward(
+                mvcCoins        = finalMvc,
+                xpPoints        = finalXp,
+                gems            = finalGems,
+                giftEggRarityId = giftEggRarityId,
+                label           = label,
+                isWin           = isWin
+            ),
+            gameId
+        )
+
+        return LevelResult(gameId, level, target, score, stars, cleared, levelUp, finalMvc, finalXp, finalGems)
+    }
+
     // ─── Enum-based API ─────────────────────────────────────────
 
     fun recordPlay(ctx: Context, gameId: MiniGameId) {

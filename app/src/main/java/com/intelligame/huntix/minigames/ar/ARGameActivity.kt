@@ -47,6 +47,7 @@ import io.github.sceneview.node.CubeNode
 import io.github.sceneview.node.CylinderNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
+import io.sentry.Sentry
 import java.util.Collections
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -89,6 +90,7 @@ abstract class ARGameActivity : AppCompatActivity() {
     protected lateinit var scoreText: TextView
     protected lateinit var livesText: TextView
     protected lateinit var timerText: TextView
+    protected lateinit var levelText: TextView
 
     private val eggs = Collections.synchronizedMap(LinkedHashMap<Node, AREgg>())
     private var lastSession: Session? = null
@@ -334,6 +336,13 @@ abstract class ARGameActivity : AppCompatActivity() {
     private fun selectRoomAndStart() {
         if (!usesSurfaceArena) { startContent(); return }
         syncCloudRooms()
+        if (ArArenaStore.consumePendingNewRoom(this)) {
+            forceNewRoom = true
+            currentRoomId = null
+            AppLog.i("ARGameActivity", "selectRoomAndStart: nuova stanza richiesta dalla hub → salto il selettore")
+            startContent()
+            return
+        }
         val rooms = ArArenaStore.loadRooms(this)
         if (rooms.isEmpty()) startContent()
         else showRoomPicker(rooms)
@@ -451,6 +460,12 @@ abstract class ARGameActivity : AppCompatActivity() {
             text = ""; textSize = 15f; setTextColor(Color.parseColor(UiKit.GREEN)); gravity = Gravity.END
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
+        levelText = TextView(c).apply {
+            text = ""; textSize = 12f
+            setTextColor(Color.parseColor(UiKit.ACCENT))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, UiKit.dp(c, 2))
+        }
         topRow.addView(livesText); topRow.addView(timerText); topRow.addView(scoreText)
 
         statusText = TextView(c).apply {
@@ -464,7 +479,7 @@ abstract class ARGameActivity : AppCompatActivity() {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
         }
-        wrap.addView(topRow); wrap.addView(statusText)
+        wrap.addView(topRow); wrap.addView(levelText); wrap.addView(statusText)
         hud.addView(wrap)
 
         zoomText = TextView(c).apply {
@@ -755,16 +770,18 @@ abstract class ARGameActivity : AppCompatActivity() {
         // scelta, così il gioco riappare nello stesso punto senza riscansionare.
         if (!cloudRestoreAttempted) {
             cloudRestoreAttempted = true
-            if (gameMode != ARGameMode.FREE && !forceNewRoom && !BuildConfig.ARCORE_API_KEY.isBlank()) {
+            if (gameMode != ARGameMode.FREE && !forceNewRoom) {
                 val savedId = savedCloudAnchorId()
                 if (!savedId.isNullOrBlank()) {
                     cloudRestoring = true
                     statusText.text = "🔄 Recupero la posizione salvata…"
+                    AppLog.i("ARGameActivity", "tryArenaByMode: restore cloud anchor ${savedId.take(8)}…")
                     startCloudRestore(savedId) { restored ->
                         cloudRestoring = false
                         if (restored != null) {
                             restoredArena = restored
                             statusText.text = "✅ Gioco ritrovato nello stesso punto!"
+                            AppLog.i("ARGameActivity", "tryArenaByMode: restore OK")
                         } else {
                             // La posizione salvata non è qui: al prossimo
                             // piazzamento la nuova posizione diventa una stanza
@@ -772,6 +789,7 @@ abstract class ARGameActivity : AppCompatActivity() {
                             currentRoomId = null
                             statusText.text = "⚠️ Posizione salvata non trovata: inquadra una superficie (salverò una nuova stanza)."
                             statusText.setTextColor(Color.parseColor(UiKit.ACCENT))
+                            AppLog.w("ARGameActivity", "tryArenaByMode: restore failed → nuova stanza al prossimo piazzamento")
                         }
                     }
                     return null
@@ -809,12 +827,26 @@ abstract class ARGameActivity : AppCompatActivity() {
      * prossima riapertura dell'app il gioco può essere ritrovato nello stesso
      * punto senza dover scansionare di nuovo. In modalità libera (gioco sospeso
      * davanti alla camera, non ancorato a una superficie) non viene salvato.
+     *
+     * Funziona sia con API key sia in modalità keyless (OAuth): se la key è
+     * assente ARCore usa l'OAuth client ID (package + SHA-1) e la Cloud Anchor
+     * resta valida [ARENA_TTL_DAYS_KEYLESS] giorni.
      */
     protected fun persistArena(a: AnchorNode) {
-        if (gameMode == ARGameMode.FREE) return
-        if (BuildConfig.ARCORE_API_KEY.isBlank()) return
-        if (hostingCloudAnchor != null) return
-        val session = lastSession ?: return
+        if (gameMode == ARGameMode.FREE) {
+            AppLog.i("ARGameActivity", "persistArena: skip (FREE mode)")
+            return
+        }
+        if (hostingCloudAnchor != null) {
+            AppLog.i("ARGameActivity", "persistArena: host already in progress")
+            return
+        }
+        val session = lastSession ?: run {
+            AppLog.w("ARGameActivity", "persistArena: no session, cannot host")
+            return
+        }
+        val mode = if (BuildConfig.ARCORE_API_KEY.isBlank()) "keyless(OAuth)" else "api-key"
+        AppLog.i("ARGameActivity", "persistArena: hosting arena (${mode}, ttl=${cloudTtlDays}d, room=${currentRoomId ?: "new"})")
         val hosted = runCatching { session.hostCloudAnchorWithTtl(a.anchor, cloudTtlDays) }.getOrElse {
             AppLog.w("ARGameActivity", "persistArena: hostCloudAnchor failed: ${it.message}")
             return
@@ -835,20 +867,45 @@ abstract class ARGameActivity : AppCompatActivity() {
                 currentRoomId = room.roomId
                 forceNewRoom = false
                 ArArenaStore.saveRoom(this, room)
-                lifecycleScope.launch { ArArenaStore.pushRoom(room) }
-                AppLog.i("ARGameActivity", "Arena saved in stanza '${room.name}' (cloud ${cloudId.take(8)}…)")
+                AppLog.i("ARGameActivity", "pollHostCloud: SUCCESS → stanza '${room.name}' salvata in locale (cloud ${cloudId.take(8)}…)")
+                lifecycleScope.launch {
+                    val pushed = ArArenaStore.pushRoom(room)
+                    AppLog.i("ARGameActivity", "pollHostCloud: pushRoom → ${if (pushed) "OK (Firestore)" else "NON riuscito (silenzioso)"}")
+                }
             }
             Anchor.CloudAnchorState.NONE -> handler.postDelayed({ pollHostCloud() }, 250)
             Anchor.CloudAnchorState.ERROR_NOT_AUTHORIZED,
             Anchor.CloudAnchorState.ERROR_RESOURCE_EXHAUSTED -> {
                 hostingCloudAnchor = null
-                AppLog.w("ARGameActivity", "persistArena: cloud anchor not authorized/resource exhausted")
+                AppLog.w("ARGameActivity", "persistArena: cloud anchor not authorized/resource exhausted (${st.name})")
             }
             else -> {
                 hostingCloudAnchor = null
                 AppLog.w("ARGameActivity", "persistArena: host state ${st.name}")
             }
         }
+    }
+
+    /**
+     * Ultimo tentativo di salvataggio all'uscita: se l'hosting della Cloud
+     * Anchor ha già raggiunto [Anchor.CloudAnchorState.SUCCESS] ma il poll
+     * asincrono è stato interrotto (es. back rapido), salva comunque la stanza.
+     */
+    private fun flushPendingRoomSave() {
+        val hosted = hostingCloudAnchor ?: return
+        hostingCloudAnchor = null
+        if (hosted.cloudAnchorState != Anchor.CloudAnchorState.SUCCESS) {
+            AppLog.w("ARGameActivity", "flushPendingRoomSave: hosting non completato (${hosted.cloudAnchorState.name})")
+            return
+        }
+        val cloudId = hosted.cloudAnchorId
+        val existing = currentRoomId?.let { ArArenaStore.loadRoom(this, it) }
+        val room = existing?.copy(cloudAnchorId = cloudId)
+            ?: ArArenaStore.createRoom(ArArenaStore.nextRoomName(this), cloudId)
+        currentRoomId = room.roomId
+        ArArenaStore.saveRoom(this, room)
+        AppLog.i("ARGameActivity", "flushPendingRoomSave: stanza '${room.name}' salvata all'uscita (cloud ${cloudId.take(8)}…)")
+        lifecycleScope.launch { ArArenaStore.pushRoom(room) }
     }
 
     /** ID della Cloud Anchor da ripristinare: la stanza attiva o, in mancanza, l'ultima usata. */
@@ -1380,6 +1437,13 @@ abstract class ARGameActivity : AppCompatActivity() {
 
     // ── end of game ──────────────────────────────────────────────
 
+    /** Aggiorna l'indicatore di livello/HUD con livello corrente e obiettivo. */
+    protected fun updateLevelHud(gameId: String) {
+        if (::levelText.isInitialized) {
+            levelText.text = "⭐ Lv ${MiniGameManager.getLevel(this, gameId)}  •  🎯 ${MiniGameManager.getLevelTarget(this, gameId)}  •  ${MiniGameManager.getTotalStars(this, gameId)} stelle"
+        }
+    }
+
     protected fun finishGame(
         reward: Int,
         label: String,
@@ -1387,7 +1451,9 @@ abstract class ARGameActivity : AppCompatActivity() {
         gameId: String,
         celebrate: Boolean = true,
         isDraw: Boolean = false,
-        accentColors: IntArray? = null
+        accentColors: IntArray? = null,
+        score: Int = reward,
+        giftEggRarityId: String? = null
     ) {
         running = false
         removeInputCapture()
@@ -1398,13 +1464,19 @@ abstract class ARGameActivity : AppCompatActivity() {
                 else -> celebrateLose(gameCenter())
             }
         }
-        MiniGameManager.consumePlay(this, gameId)
-        MiniGameManager.applyReward(
-            this,
-            MiniGameManager.GameReward(mvcCoins = reward, label = label, isWin = isWin),
-            gameId
-        )
-        statusText.text = "🎮 Fine! +$reward MVC"
+        val result = try {
+            MiniGameManager.completePlay(
+                this, gameId, score,
+                mvc = reward,
+                xp = (reward / 4).coerceAtLeast(1),
+                label = label, isWin = isWin, giftEggRarityId = giftEggRarityId
+            )
+        } catch (e: Exception) {
+            Sentry.captureException(e)
+            null
+        }
+        updateLevelHud(gameId)
+        statusText.text = "🎮 Fine! +${result?.mvc ?: reward} MVC"
         statusText.setTextColor(Color.parseColor(UiKit.GREEN))
         val again = UiKit.button(this, "🔄 Gioca Ancora", UiKit.ACCENT) { restart() }
         val lp = FrameLayout.LayoutParams(
@@ -1467,6 +1539,10 @@ abstract class ARGameActivity : AppCompatActivity() {
         sharedAnchors.forEach { runCatching { it.parent?.removeChildNode(it) } }
         sharedAnchors.clear()
         AppLog.i("ARGameActivity", "shared anchors cleaned")
+        // Se l'hosting della Cloud Anchor era ancora in corso, prova un ultimo
+        // check sincrono PRIMA di chiudere la sessione: se nel frattempo è
+        // arrivato a SUCCESS, salva la stanza (esci subito = niente perdita).
+        flushPendingRoomSave()
         // FIX crash nativo su back: la libreria chiude la sessione ARCore su un
         // thread background (destroyArCore -> session.close()) IN CONCORRENZA con
         // il destroy dell'engine Filament/EGL sul main thread -> SIGSEGV.

@@ -44,6 +44,7 @@ class Game2048Activity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
+        root.addView(levelBanner(MiniGameManager.GAME_2048))
 
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -152,19 +153,15 @@ class Game2048Activity : MiniGameBase() {
         val won = reached2048
         val mvc = (score / 2).coerceAtLeast(10).coerceAtMost(500)
         val xp = (score / 4).coerceAtLeast(3).coerceAtMost(150)
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_2048)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc, xpPoints = xp,
-                    giftEggRarityId = if (won) "common" else null,
-                    label = if (won) "2048: hai raggiunto 2048!" else "2048: $score punti",
-                    isWin = won
-                ),
-                MiniGameManager.GAME_2048
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_2048, score,
+                mvc = mvc, xp = xp,
+                giftEggRarityId = if (won) "common" else null,
+                label = if (won) "2048: hai raggiunto 2048!" else "2048: $score punti",
+                isWin = won
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -189,8 +186,9 @@ class Game2048Activity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = android.view.Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "🔄  Gioca Ancora", UiKit.ACCENT) {

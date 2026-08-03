@@ -60,7 +60,8 @@ class ARSnakeActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         score = 0
-        tickMs = TICK_START
+        val diff = MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_SNAKE)
+        tickMs = (TICK_START - 100 * diff).toLong().coerceAtLeast(MIN_TICK)
         acc = 0f
         dir = 1 to 0
         nextDir = 1 to 0
@@ -72,6 +73,7 @@ class ARSnakeActivity : ARGameActivity() {
         livesText.text = "🥚 Caccia alle Uova"
         timerText.text = "Lunghezza: 3"
         scoreText.text = "0 pt"
+        updateLevelHud(MiniGameManager.GAME_SNAKE)
         buildSwipeLayer()
         startGame()
         whenReady { placeArena { buildArena(it) } }
@@ -233,7 +235,8 @@ class ARSnakeActivity : ARGameActivity() {
         stopGame()
         val reward = (score * 0.7).toInt().coerceAtLeast(10).coerceAtMost(400)
         try {
-            finishGame(reward, "AR Snake ($score pt)", score >= 60, MiniGameManager.GAME_SNAKE)
+            finishGame(reward, "AR Snake ($score pt)", score >= 60, MiniGameManager.GAME_SNAKE,
+                score = score)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 }

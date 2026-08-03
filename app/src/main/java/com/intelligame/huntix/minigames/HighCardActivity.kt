@@ -43,6 +43,7 @@ class HighCardActivity : MiniGameBase() {
         val c = this
         isBusy = false
         gameArea.removeAllViews()
+        gameArea.addView(levelBanner(MiniGameManager.GAME_HIGH_CARD))
 
         val remainText = TextView(c).apply {
             text = "Partite: illimitate"
@@ -104,21 +105,25 @@ class HighCardActivity : MiniGameBase() {
 
         handler.postDelayed({
             updateCardFace(dealerCard, dealerVal, true)
-            MiniGameManager.consumePlay(c, MiniGameManager.GAME_HIGH_CARD)
 
+            var lr: MiniGameManager.LevelResult? = null
             if (playerVal > dealerVal) {
                 wins++
                 val mvc = playerVal * 15
-                MiniGameManager.applyReward(c, MiniGameManager.GameReward(
-                    mvcCoins = mvc, label = "Carta Alta vinta!", isWin = true
-                ), MiniGameManager.GAME_HIGH_CARD)
-                statusText.text = "HAI VINTO! +$mvc MVC"
+                lr = MiniGameManager.completePlay(
+                    c, MiniGameManager.GAME_HIGH_CARD,
+                    score = 1, mvc = mvc,
+                    label = "Carta Alta vinta!", isWin = true
+                )
+                statusText.text = "HAI VINTO! +${lr.mvc} MVC"
                 statusText.setTextColor(Color.parseColor(UiKit.GREEN))
             } else if (playerVal < dealerVal) {
                 losses++
-                MiniGameManager.applyReward(c, MiniGameManager.GameReward(
-                    mvcCoins = 0, label = "Carta Alta persa", isWin = false
-                ), MiniGameManager.GAME_HIGH_CARD)
+                lr = MiniGameManager.completePlay(
+                    c, MiniGameManager.GAME_HIGH_CARD,
+                    score = 0,
+                    label = "Carta Alta persa", isWin = false
+                )
                 statusText.text = "Hai perso..."
                 statusText.setTextColor(Color.parseColor("#FF5555"))
             } else {
@@ -129,6 +134,7 @@ class HighCardActivity : MiniGameBase() {
 
             scoreText.text = "Vittorie: $wins  |  Sconfitte: $losses  |  Pareggi: $ties"
 
+            lr?.let { gameArea.addView(levelResultView(it)) }
             actionButton = UiKit.button(c, "Nuova Partita", UiKit.ACCENT) {
                 showStartScreen()
             }

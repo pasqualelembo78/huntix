@@ -66,7 +66,7 @@ class ARDinoActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         score = 0
-        gameSpeed = SPEED_START
+        gameSpeed = SPEED_START + 0.8f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_DINO)
         dinoY = GROUND_Y + dinoHeight / 2
         dinoVel = 0f
         isJumping = false
@@ -79,6 +79,7 @@ class ARDinoActivity : ARGameActivity() {
         livesText.text = "🦖 Dino Runner AR"
         timerText.text = "Distanza: 0m"
         scoreText.text = "0 pt"
+        updateLevelHud(MiniGameManager.GAME_DINO)
         startGame()
         placeArena { anchor -> buildArena(anchor) }
     }
@@ -219,7 +220,8 @@ class ARDinoActivity : ARGameActivity() {
         removeCallback(spawnCb)
         val reward = (score / 5).coerceAtLeast(10).coerceAtMost(400)
         try {
-            finishGame(reward, "AR Dino ($score pt)", score >= 200, MiniGameManager.GAME_DINO)
+            finishGame(reward, "AR Dino ($score pt)", score >= 200, MiniGameManager.GAME_DINO,
+                score = score)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 

@@ -62,7 +62,10 @@ class ARHangmanActivity : ARGameActivity() {
     private var letterGrid: LinearLayout? = null
 
     override fun onGameCreate() {
-        word = WORDS.random().uppercase(Locale.ITALIAN)
+        updateLevelHud(MiniGameManager.GAME_HANGMAN)
+        val minLen = 5 + (3 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_HANGMAN)).toInt()
+        val pool = WORDS.filter { it.length >= minLen }
+        word = (if (pool.isEmpty()) WORDS else pool).random().uppercase(Locale.ITALIAN)
         guessed.clear()
         wrong = 0
         gameOver = false
@@ -316,11 +319,11 @@ class ARHangmanActivity : ARGameActivity() {
             playFireworks()
             postDelayed(3200) {
                 if (!gameOver || isDestroyed) return@postDelayed
-                finishGame(8, "AR Impiccato ($word) ($wrong errori)", false, MiniGameManager.GAME_HANGMAN, celebrate = false)
+                finishGame(8, "AR Impiccato ($word) ($wrong errori)", false, MiniGameManager.GAME_HANGMAN, celebrate = false, score = 0)
             }
         } else {
             try {
-                finishGame(60, "AR Impiccato vinto! ($wrong errori)", true, MiniGameManager.GAME_HANGMAN, celebrate = false)
+                finishGame(60, "AR Impiccato vinto! ($wrong errori)", true, MiniGameManager.GAME_HANGMAN, celebrate = false, score = 1)
             } catch (e: Exception) { Sentry.captureException(e) }
         }
     }

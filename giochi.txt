@@ -64,4 +64,18 @@
 - Base AR → ARGameActivity.kt (+ SpatialAudio.kt)
 - Limiti di gioco/giorno → MiniGameManager.kt (MAX_PLAYS_MAP, GAME_*_id)
 - Activity registrate → AndroidManifest.xml (sezione "AR Minigames")
-- Ricompensi/MVC → MiniGameManager.applyReward (consumo giocata dentro l'activity)
+- Ricompensi/MVC → MiniGameManager.completePlay (consumo giocata + premi dentro l'activity)
+
+================================================================
+ SISTEMA LIVELLI PROGRESSIVI (per singolo gioco, stile Candy Crush)
+================================================================
+- Ogni minigioco (classico + AR) ha 10 livelli (GameLevels.MAX_LEVELS), salvati in SharedPreferences.
+- Config in GameLevels.kt: Def(gameId, unità, mode, base, step). Mode.SCORE → target = base + (level-1)*step;
+  Mode.WIN → target = 1 (si supera vincendo: score=1 vittoria / 0 sconfitta).
+- Stelle: 3 = target raggiunto, 2 = ≥75%, 1 = ≥50%; salvate per (gameId, level).
+- Superare il livello sblocca il successivo; la difficoltà cresce (difficulty 0..1): meno tempo/velocità più alte,
+  CPU più brava, più mine/bersagli, parole più lunghe ecc.
+- Premi scalati: mul = 1 + 0.15*(level-1); al level-up bonus +100*level MVC, +50*level XP, +1 gemma.
+- Flusso unico: MiniGameManager.completePlay(ctx, gameId, score, mvc, xp, label, isWin, giftEggRarityId)
+  → LevelResult(gameId, level, target, score, stars, cleared, levelUp, mvc, xp, gems).
+- Hub: card mostrano "⭐ totali • Lv N" + chip "🎯 target"; overlay di fine partita con levelResultView.

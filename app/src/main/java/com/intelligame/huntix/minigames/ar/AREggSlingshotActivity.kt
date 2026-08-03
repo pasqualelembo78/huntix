@@ -27,7 +27,6 @@ class AREggSlingshotActivity : ARGameActivity() {
     companion object {
         private const val GRAVITY = 9.8f
         private const val TARGET_COUNT = 7
-        private const val WIN_HITS = 12
         private val C_GROUND = 0xFF3A3250.toInt()
         private val C_TARGET = 0xFFFFD700.toInt()
         private val C_AIM = 0xFF6AD7FF.toInt()
@@ -35,6 +34,10 @@ class AREggSlingshotActivity : ARGameActivity() {
         private val C_GLOW = 0x66FFD166.toInt()
         private val ANGLE_RANGE = 12
     }
+
+    /** Bersagli da colpire per vincere: di più a livelli alti. */
+    private val WIN_HITS: Int
+        get() = 12 + (6 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_CATCH_EGG)).toInt()
 
     init {
         showsModeDialog = true
@@ -77,6 +80,7 @@ class AREggSlingshotActivity : ARGameActivity() {
         livesText.text = ""
         timerText.text = "🥚 Obiettivi: 0/$WIN_HITS"
         scoreText.text = "0 pt"
+        updateLevelHud(MiniGameManager.GAME_CATCH_EGG)
         startGame()
         whenReady { placeArena { arenaPlaced(it) } }
     }
@@ -285,7 +289,8 @@ class AREggSlingshotActivity : ARGameActivity() {
         val reward = if (won) 200 else (score)
         val label = if (won) "AR Slingshot: colpiti $score!" else "AR Slingshot: $score pt"
         try {
-            finishGame(reward.coerceAtLeast(10).coerceAtMost(500), label, won, MiniGameManager.GAME_CATCH_EGG)
+            finishGame(reward.coerceAtLeast(10).coerceAtMost(500), label, won, MiniGameManager.GAME_CATCH_EGG,
+                score = if (won) 1 else 0)
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 

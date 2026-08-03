@@ -64,6 +64,7 @@ class Match3Activity : MiniGameBase() {
         }
 
         root.addView(UiKit.title(ctx, "Match 3", "\uD83D\uDC8E"))
+        root.addView(levelBanner(MiniGameManager.GAME_MATCH3))
 
         val header = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -93,7 +94,7 @@ class Match3Activity : MiniGameBase() {
     private fun startGame() {
         score = 0
         combo = 1
-        timeLeft = 60
+        timeLeft = 60 - (15 * levelDifficulty(MiniGameManager.GAME_MATCH3)).toInt()
         gameRunning = true
         busy = false
         scoreText?.text = "Punti: 0"
@@ -208,19 +209,13 @@ class Match3Activity : MiniGameBase() {
         val xp = (score / 10).coerceAtLeast(2)
         val isWin = score > 50
         val label = if (isWin) "Match3: $score punti!" else "Match3: $score punti"
-        try {
-            MiniGameManager.consumePlay(this, MiniGameManager.GAME_MATCH3)
-            MiniGameManager.applyReward(
-                this,
-                MiniGameManager.GameReward(
-                    mvcCoins = mvc,
-                    xpPoints = xp,
-                    label = label,
-                    isWin = isWin
-                ),
-                MiniGameManager.GAME_MATCH3
+        val result = try {
+            MiniGameManager.completePlay(
+                this, MiniGameManager.GAME_MATCH3, score,
+                mvc = mvc, xp = xp,
+                label = label, isWin = isWin
             )
-        } catch (e: Exception) { Sentry.captureException(e) }
+        } catch (e: Exception) { Sentry.captureException(e); null }
 
         val ctx = this
         val overlay = FrameLayout(ctx).apply {
@@ -245,8 +240,9 @@ class Match3Activity : MiniGameBase() {
             text = "Punteggio: $score"; textSize = 18f; setTextColor(Color.parseColor(UiKit.GREEN))
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 8))
         })
+        result?.let { endLayout.addView(levelResultView(it)) }
         endLayout.addView(TextView(ctx).apply {
-            text = "+$mvc MVC  •  +$xp XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "+${result?.mvc ?: mvc} MVC  •  +${result?.xp ?: xp} XP"; textSize = 14f; setTextColor(Color.parseColor(UiKit.ACCENT))
             gravity = Gravity.CENTER; setPadding(0, 0, 0, UiKit.dp(ctx, 16))
         })
         endLayout.addView(UiKit.button(ctx, "\uD83D\uDD04  Gioca Ancora", UiKit.ACCENT) {

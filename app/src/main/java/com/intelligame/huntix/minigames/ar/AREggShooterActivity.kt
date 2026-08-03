@@ -16,9 +16,11 @@ class AREggShooterActivity : ARGameActivity() {
 
     override fun onGameCreate() {
         usesSurfaceArena = false
-        lives = 3; score = 0; timeLeft = 40
+        lives = 3; score = 0
+        timeLeft = (40 - (10 * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_AR_SHOOTER)).toInt()).coerceAtLeast(20)
         eggsActive.clear()
         statusText.text = "Spara alle uova che salgono! ✨"
+        updateLevelHud(MiniGameManager.GAME_AR_SHOOTER)
         updateHud()
         startGame(); startTimer(); scheduleSpawn()
     }
@@ -89,6 +91,6 @@ class AREggShooterActivity : ARGameActivity() {
     private fun endGame() {
         stopGame(); removeCallback(timerCb); removeCallback(spawnCb)
         finishGame((score * 0.7).toInt().coerceAtMost(400),
-            "AR Egg Shooter ($score pt)", score > 50, MiniGameManager.GAME_AR_SHOOTER)
+            "AR Egg Shooter ($score pt)", score > 50, MiniGameManager.GAME_AR_SHOOTER, score = score)
     }
 }
