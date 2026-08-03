@@ -102,7 +102,7 @@ class ARNumberPickActivity : ARGameActivity() {
         }
     }
 
-    private fun burstEgg(node: SphereNode) {
+    private fun burstEgg(node: Node) {
         val an = node.parent
         val local = node.position
         val world = node.worldPosition
@@ -111,7 +111,7 @@ class ARNumberPickActivity : ARGameActivity() {
         node.destroy()
     }
 
-    private fun recolor(node: SphereNode, color: Int) {
+    private fun recolor(node: Node, color: Int) {
         val an = node.parent ?: return
         val i = nodeMap[node] ?: return
         val pos = node.position

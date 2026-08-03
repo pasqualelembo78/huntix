@@ -98,7 +98,7 @@ class ARHighCardActivity : ARGameActivity() {
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 
-    private fun recolor(node: SphereNode, color: Int, index: Int) {
+    private fun recolor(node: Node, color: Int, index: Int) {
         val an = node.parent ?: return
         val pos = node.position
         nodeMap.remove(node)

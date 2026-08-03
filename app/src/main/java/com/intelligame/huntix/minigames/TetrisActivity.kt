@@ -123,7 +123,7 @@ class TetrisActivity : MiniGameBase() {
             MiniGameManager.completePlay(
                 this, MiniGameManager.GAME_TETRIS, score,
                 mvc = mvc, xp = xp,
-                label = "Tetris: ${if (won) \"vittoria!\" else \"sconfitta\"}",
+                label = if (won) "Tetris: vittoria!" else "Tetris: sconfitta",
                 isWin = won
             )
         } catch (e: Exception) { Sentry.captureException(e) }

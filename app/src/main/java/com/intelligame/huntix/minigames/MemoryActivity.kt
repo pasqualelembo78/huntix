@@ -123,7 +123,7 @@ class MemoryActivity : MiniGameBase() {
             MiniGameManager.completePlay(
                 this, MiniGameManager.GAME_MEMORY, score,
                 mvc = mvc, xp = xp,
-                label = "Memory: ${if (won) \"vittoria!\" else \"sconfitta\"}",
+                label = if (won) "Memory: vittoria!" else "Memory: sconfitta",
                 isWin = won
             )
         } catch (e: Exception) { Sentry.captureException(e) }

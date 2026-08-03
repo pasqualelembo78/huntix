@@ -2,7 +2,6 @@ package com.intelligame.huntix.minigames
 
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -30,7 +29,7 @@ class HighCardActivity : MiniGameBase() {
     private var playerCardText: TextView? = null
     private var cpuCardText: TextView? = null
     private var scoreText: TextView? = null
-    private var drawButton: Button? = null
+    private var drawButton: LinearLayout? = null
     private var overlayContainer: FrameLayout? = null
 
     override fun onGameCreate() {

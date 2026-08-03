@@ -123,7 +123,7 @@ class PacmanActivity : MiniGameBase() {
             MiniGameManager.completePlay(
                 this, MiniGameManager.GAME_PACMAN, score,
                 mvc = mvc, xp = xp,
-                label = "Pacman: ${if (won) \"vittoria!\" else \"sconfitta\"}",
+                label = if (won) "Pacman: vittoria!" else "Pacman: sconfitta",
                 isWin = won
             )
         } catch (e: Exception) { Sentry.captureException(e) }
