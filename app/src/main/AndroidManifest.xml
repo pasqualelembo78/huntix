@@ -377,6 +377,14 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
+        <activity android:name=".minigames.NumberPickActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.HighCardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
         <!-- AR Minigames -->
         <activity android:name=".minigames.ar.ARCatchEggActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARMemoryActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
@@ -385,7 +393,9 @@
         <activity android:name=".minigames.ar.AREggShooterActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARColorBombActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.AREggRadarActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
-        <activity android:name=".minigames.ar.ARSnakeActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARSnakeActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARNumberPickActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARHighCardActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARSimonActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARDinoActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARTicTacToeActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>

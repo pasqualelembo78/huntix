@@ -113,7 +113,7 @@ class FroggerActivity : MiniGameBase() {
         for (i in 0 until 4) {
             var ix = 0f
             for (j in 0 until 3) {
-                logs.add(MovingRect(ix, iy, toLeft, w * 3 / 12, unit * 2 / 3))
+                logs.add(MovingRect(ix, iy, toLeft, w * 3 / 12f, unit * 2 / 3))
                 ix += w / 3f
             }
             iy += unit

@@ -42,9 +42,14 @@ object GameLevels {
     const val GAME_AR_BOMB     = "ar_color_bomb"
     const val GAME_AR_RADAR    = "ar_egg_radar"
     const val GAME_SLINGSHOT   = "ar_slingshot"
+    const val GAME_TETRIS      = "tetris"
+    const val GAME_PACMAN      = "pacman"
     const val GAME_FLOOD       = "flood"
     const val GAME_ASTEROIDS      = "asteroids"
     const val GAME_FROGGER      = "frogger"
+    const val GAME_BRISCOLA    = "briscola"
+    const val GAME_SCOPA       = "scopa"
+    const val GAME_SOLITAIRE   = "solitaire"
 
     // ─── Definizioni per gioco ──────────────────────────────────
     // SCORE: target = base + (level-1)*step (score = punti della partita)
@@ -69,9 +74,13 @@ object GameLevels {
         Def(GAME_AR_RADAR,    "catture",   Mode.WIN),
         Def(GAME_SLINGSHOT,   "colpi",     Mode.WIN),
         Def(GAME_TETRIS,     "punti",     Mode.SCORE, base = 100, step = 100),
+        Def(GAME_PACMAN,     "punti",     Mode.SCORE, base = 100, step = 100),
         Def(GAME_FLOOD,      "mosse",     Mode.SCORE, base = 25,   step = 25),
         Def(GAME_ASTEROIDS,      "punti",     Mode.SCORE, base = 100, step = 100),
         Def(GAME_FROGGER,      "punti",     Mode.SCORE, base = 100, step = 100),
+        Def(GAME_BRISCOLA,   "vittorie",  Mode.WIN),
+        Def(GAME_SCOPA,      "vittorie",  Mode.WIN),
+        Def(GAME_SOLITAIRE,  "vittorie",  Mode.WIN),
     )
     /** Config per gioco; se assente usa una config di default ragionevole. */
     fun def(gameId: String): Def =

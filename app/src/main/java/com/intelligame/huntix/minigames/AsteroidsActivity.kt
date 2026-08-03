@@ -125,7 +125,7 @@ class AsteroidsActivity : MiniGameBase() {
                 x = Random.nextFloat() * v.width
                 y = Random.nextFloat() * v.height
             } while (sqrt((x - px) * (x - px) + (y - py) * (y - py)) < safe)
-            asteroids.add(Asteroid(x, y, Asteroid.Type.LARGE, v.width.toFloat(), v.height.toFloat()))
+            asteroids.add(Asteroid(x, y, AsteroidType.LARGE, v.width.toFloat(), v.height.toFloat()))
         }
     }
 
@@ -226,13 +226,13 @@ class AsteroidsActivity : MiniGameBase() {
         }
     }
 
-    private fun splitAsteroid(index: Int, type: Asteroid.Type) {
+    private fun splitAsteroid(index: Int, type: AsteroidType) {
         val a = asteroids[index]
         asteroids.removeAt(index)
         when (type) {
-            Asteroid.Type.LARGE -> for (n in 0 until 2) asteroids.add(Asteroid(a.x, a.y, Asteroid.Type.MEDIUM, a.w, a.h))
-            Asteroid.Type.MEDIUM -> for (n in 0 until 2) asteroids.add(Asteroid(a.x, a.y, Asteroid.Type.SMALL, a.w, a.h))
-            Asteroid.Type.SMALL -> {}
+            AsteroidType.LARGE -> for (n in 0 until 2) asteroids.add(Asteroid(a.x, a.y, AsteroidType.MEDIUM, a.w, a.h))
+            AsteroidType.MEDIUM -> for (n in 0 until 2) asteroids.add(Asteroid(a.x, a.y, AsteroidType.SMALL, a.w, a.h))
+            AsteroidType.SMALL -> {}
         }
     }
 
@@ -354,10 +354,10 @@ class AsteroidsActivity : MiniGameBase() {
             val ny = py + sin(pRadians) * r
             val bx = px + cos(pRadians + Math.PI.toFloat()) * 5f
             val by = py + sin(pRadians + Math.PI.toFloat()) * 5f
-            val lx = px + cos(pRadians - 4f * Math.PI / 5f) * r
-            val ly = py + sin(pRadians - 4f * Math.PI / 5f) * r
-            val rx = px + cos(pRadians + 4f * Math.PI / 5f) * r
-            val ry = py + sin(pRadians + 4f * Math.PI / 5f) * r
+            val lx = px + cos(pRadians - 4f * Math.PI.toFloat() / 5f) * r
+            val ly = py + sin(pRadians - 4f * Math.PI.toFloat() / 5f) * r
+            val rx = px + cos(pRadians + 4f * Math.PI.toFloat() / 5f) * r
+            val ry = py + sin(pRadians + 4f * Math.PI.toFloat() / 5f) * r
             val ship = android.graphics.Path()
             ship.moveTo(nx, ny); ship.lineTo(lx, ly); ship.lineTo(bx, by); ship.lineTo(rx, ry)
             ship.close()
@@ -375,7 +375,7 @@ class AsteroidsActivity : MiniGameBase() {
         override fun onTouchEvent(ev: MotionEvent): Boolean {
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    touchId = ev.pointerId
+                    touchId = ev.getPointerId(0)
                     touchMode = when {
                         ev.x < width / 3f -> 1
                         ev.x > width * 2f / 3f -> 2
@@ -388,7 +388,7 @@ class AsteroidsActivity : MiniGameBase() {
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (ev.pointerId == touchId) {
+                    if (ev.getPointerId(0) == touchId) {
                         val mode = when {
                             ev.x < width / 3f -> 1
                             ev.x > width * 2f / 3f -> 2
@@ -436,15 +436,15 @@ class AsteroidsActivity : MiniGameBase() {
             x < -10f || x > w + 10f || y < -10f || y > h + 10f
     }
 
+    private enum class AsteroidType { SMALL, MEDIUM, LARGE }
+
     private inner class Asteroid(
         var x: Float,
         var y: Float,
-        val type: Type,
+        val type: AsteroidType,
         val w: Float,
         val h: Float
     ) {
-        enum class Type { SMALL, MEDIUM, LARGE }
-
         val radius: Float
         val score: Int
         private val dx: Float
@@ -457,21 +457,21 @@ class AsteroidsActivity : MiniGameBase() {
         init {
             val r = Random(System.currentTimeMillis() + x.toInt() + y.toInt())
             when (type) {
-                Type.SMALL -> {
+                AsteroidType.SMALL -> {
                     radius = 12f
                     score = 100
                     val sp = r.nextFloat() * 30f + 70f
                     dx = cos(r.nextFloat() * 2f * Math.PI.toFloat()) * sp
                     dy = sin(r.nextFloat() * 2f * Math.PI.toFloat()) * sp
                 }
-                Type.MEDIUM -> {
+                AsteroidType.MEDIUM -> {
                     radius = 20f
                     score = 50
                     val sp = r.nextFloat() * 10f + 50f
                     dx = cos(r.nextFloat() * 2f * Math.PI.toFloat()) * sp
                     dy = sin(r.nextFloat() * 2f * Math.PI.toFloat()) * sp
                 }
-                Type.LARGE -> {
+                AsteroidType.LARGE -> {
                     radius = 40f
                     score = 20
                     val sp = r.nextFloat() * 10f + 20f
@@ -482,9 +482,9 @@ class AsteroidsActivity : MiniGameBase() {
             rotationSpeed = r.nextFloat() * 2f - 1f
             radians = r.nextFloat() * 2f * Math.PI.toFloat()
             val numPoints = when (type) {
-                Type.SMALL -> 8
-                Type.MEDIUM -> 10
-                Type.LARGE -> 12
+                AsteroidType.SMALL -> 8
+                AsteroidType.MEDIUM -> 10
+                AsteroidType.LARGE -> 12
             }
             shapeX = FloatArray(numPoints)
             shapeY = FloatArray(numPoints)

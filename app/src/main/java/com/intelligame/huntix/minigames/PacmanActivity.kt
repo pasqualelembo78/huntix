@@ -31,6 +31,9 @@ class PacmanActivity : MiniGameBase() {
     private val handler = Handler(Looper.getMainLooper())
     private var gameRunning = false
     private var score = 0
+    private var scoreText: TextView? = null
+    private var gameView: GameView? = null
+    private var overlayContainer: FrameLayout? = null
 
     // ── Stato del gioco ──────────────────────────────────────────
     // TODO: Aggiungere le variabili di stato dal codice originale
