@@ -30,6 +30,7 @@ class WeatherParticleOverlay(context: Context) : View(context) {
     fun setWeatherType(type: WeatherType) {
         weatherType = type
         particles.clear()
+        if (width == 0 || height == 0) return
         when (type) {
             WeatherType.RAIN -> {
                 for (i in 0 until maxParticles) {

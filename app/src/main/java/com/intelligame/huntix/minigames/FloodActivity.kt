@@ -3,6 +3,7 @@ package com.intelligame.huntix.minigames
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -10,6 +11,8 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
@@ -54,6 +57,11 @@ class FloodActivity : MiniGameBase() {
             setBackgroundColor(Color.parseColor(UiKit.BG))
             setPadding(UiKit.dp(ctx, 14), UiKit.dp(ctx, 12), UiKit.dp(ctx, 14), UiKit.dp(ctx, 12))
         }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(v.paddingLeft, v.paddingTop, v.paddingRight, systemBars.bottom + UiKit.dp(ctx, 14))
+            insets
+        }
         root.addView(UiKit.title(ctx, "Flood", "🌊"))
         root.addView(TextView(ctx).apply {
             text = "Tocca i colori per inondare la griglia. Un solo colore vince!"
@@ -94,14 +102,21 @@ class FloodActivity : MiniGameBase() {
         for (i in 0 until NUM_COLORS) {
             val idx = i
             val btn = View(ctx).apply {
-                setBackgroundColor(palette[idx])
-                layoutParams = LinearLayout.LayoutParams(0, UiKit.dp(ctx, 44), 1f)
+                isClickable = true
+                isFocusable = true
+                val bg = GradientDrawable().apply {
+                    setColor(palette[idx])
+                    setStroke(UiKit.dp(ctx, 2), Color.WHITE)
+                    cornerRadius = 0f
+                }
+                background = bg
+                layoutParams = LinearLayout.LayoutParams(0, UiKit.dp(ctx, 52), 1f)
                 setOnClickListener {
                     if (gameRunning && idx != lastColor) doColor(idx)
                 }
             }
-            val margin = LinearLayout.LayoutParams(0, UiKit.dp(ctx, 44), 1f)
-            margin.setMargins(UiKit.dp(ctx, 2), 0, UiKit.dp(ctx, 2), 0)
+            val margin = LinearLayout.LayoutParams(0, UiKit.dp(ctx, 52), 1f)
+            margin.setMargins(UiKit.dp(ctx, 3), 0, UiKit.dp(ctx, 3), 0)
             btn.layoutParams = margin
             bar.addView(btn)
         }

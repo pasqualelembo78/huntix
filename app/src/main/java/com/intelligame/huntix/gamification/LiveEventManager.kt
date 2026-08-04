@@ -132,6 +132,8 @@ object LiveEventManager {
 
     fun recordParticipation(eventId: String, uid: String) {
         if (uid.isEmpty() || eventId.isEmpty()) return
+        val user = FirebaseAuth.getInstance().currentUser ?: return
+        if (user.uid != uid) return
         FirebaseFirestore.getInstance()
             .collection("live_events").document(eventId)
             .collection("participants").document(uid)

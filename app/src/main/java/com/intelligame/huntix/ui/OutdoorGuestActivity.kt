@@ -16,7 +16,9 @@ class OutdoorGuestActivity : BaseNavActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        mgr.start(this)
+        if (!mgr.isActive()) {
+            mgr.start(this)
+        }
 
         val content = UiKit.scroll(
             this,

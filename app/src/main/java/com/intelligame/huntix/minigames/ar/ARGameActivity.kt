@@ -1458,7 +1458,7 @@ abstract class ARGameActivity : AppCompatActivity() {
         celebrate: Boolean = true,
         isDraw: Boolean = false,
         accentColors: IntArray? = null,
-        score: Int = reward,
+        score: Int = 0,
         giftEggRarityId: String? = null
     ) {
         running = false

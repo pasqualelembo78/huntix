@@ -127,7 +127,7 @@ class NumberPickActivity : MiniGameBase() {
     }
 
     private fun endGame(won: Boolean) {
-        if (gameOver && !won) gameOver = true
+        gameOver = true
         val base = if (won) 60 else 15
         val mvc = base + attemptsLeft.coerceAtLeast(0) * 10
         val xp = (mvc / 4).coerceAtLeast(2)

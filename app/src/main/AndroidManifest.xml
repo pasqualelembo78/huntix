@@ -265,6 +265,7 @@
         <activity android:name=".ui.RealLifeActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityDebugLogActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.CitySearchActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityMapActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.BuildingInteriorActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.POIWebViewActivity" android:screenOrientation="portrait" android:exported="false"/>
@@ -318,6 +319,11 @@
         <activity android:name=".minigames.Match3Activity"
             android:exported="false"
             android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.TetrisActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <!-- Classic Games -->
         <activity android:name=".minigames.DinoGameActivity"
@@ -377,6 +383,10 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
+        <activity android:name=".minigames.SudokuActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
         <activity android:name=".minigames.NumberPickActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>
@@ -405,6 +415,11 @@
         <activity android:name=".minigames.ar.ARMinesweeperActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARHangmanActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.AREggSlingshotActivity" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARTetrisActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARFloodActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARFroggerActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARAsteroidsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
+        <activity android:name=".minigames.ar.ARSudokuActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
 
             <activity android:name=".TutorialActivity"
             android:theme="@style/Theme.ARProto.Fullscreen"

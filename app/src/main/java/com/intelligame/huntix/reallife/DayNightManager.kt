@@ -26,8 +26,8 @@ class DayNightManager {
     /** Avanza il tempo in base al dt reale */
     fun advance(dt: Float) {
         accumDt += dt
-        hour += speed * dt
-        if (hour >= 24f) hour -= 24f
+        hour = (hour + speed * dt) % 24f
+        if (hour < 0f) hour += 24f
     }
 
     /** Imposta un'ora specifica (per debug o sync) */

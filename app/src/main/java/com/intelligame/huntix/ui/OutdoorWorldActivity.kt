@@ -512,9 +512,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
             refreshUi()
         }
 
-        // AR toggle: switch to AR camera view
+        // AR toggle: switch to AR camera view (PRIMARY mode)
         btnArToggle.setOnClickListener {
-            startActivity(Intent(this, OutdoorArCatchActivity::class.java))
+            startActivity(Intent(this, ArNavigationActivity::class.java))
         }
 
         // Phase 1: Central catch button
@@ -571,7 +571,6 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         // Mode-specific UI adjustments
         if (currentMode == MODE_REALLIFE) {
-            // Reallife: hide egg/gym hunt UI, show building-focused UI
             findViewById<View>(R.id.badgeEggs)?.visibility = View.GONE
             findViewById<View>(R.id.badgeGyms)?.visibility = View.GONE
             findViewById<View>(R.id.btnCatch)?.visibility = View.GONE
@@ -591,6 +590,10 @@ class OutdoorWorldActivity : BaseNavActivity() {
             }
         } else {
             findViewById<View>(R.id.btnReportPosition)?.visibility = View.GONE
+            // AR is the primary mode - make the AR button prominent
+            btnArToggle.visibility = View.VISIBLE
+            btnArToggle.text = "📷 AR"
+            btnArToggle.setBackgroundResource(R.drawable.btn_accent)
         }
 
         // Phase 3: compass sensor

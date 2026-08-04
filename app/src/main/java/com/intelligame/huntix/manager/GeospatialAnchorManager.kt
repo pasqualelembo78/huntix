@@ -66,7 +66,9 @@ class GeospatialAnchorManager {
                 state = GeoState.UNAVAILABLE
             }
         } catch (e: Exception) {
-            state = GeoState.ERROR
+            if (state == GeoState.ERROR) {
+                state = GeoState.UNAVAILABLE
+            }
             Log.w(TAG, "Earth state error: ${e.message}")
         }
     }
@@ -120,6 +122,9 @@ class GeospatialAnchorManager {
      * Registra un nodo associato a un egg ID per gestione lifecycle.
      */
     fun trackNode(eggId: String, node: Node) {
+        anchorNodes[eggId]?.let { existing ->
+            try { existing.destroy() } catch (_: Exception) {}
+        }
         anchorNodes[eggId] = node
     }
 

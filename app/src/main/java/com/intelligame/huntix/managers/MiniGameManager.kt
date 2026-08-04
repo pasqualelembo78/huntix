@@ -35,7 +35,27 @@ object MiniGameManager {
         NUMBER_PICK("number_pick"),
         HIGH_CARD("high_card"),
         CATCH_EGG("catch_egg"),
-        MATCH3("match3")
+        MATCH3("match3"),
+        GAME_2048("2048"),
+        GAME_SNAKE("snake"),
+        GAME_MINESWEEPER("minesweeper"),
+        GAME_FLAPPY("flappy_egg"),
+        GAME_CONNECT4("connect4"),
+        GAME_HANGMAN("hangman"),
+        GAME_TIC_TAC_TOE("tic_tac_toe"),
+        GAME_SIMON("simon"),
+        GAME_DINO("dino_runner"),
+        GAME_TETRIS("tetris"),
+        GAME_PACMAN("pacman"),
+        GAME_FLOOD("flood"),
+        GAME_ASTEROIDS("asteroids"),
+        GAME_FROGGER("frogger"),
+        GAME_BRISCOLA("briscola"),
+        GAME_SCOPA("scopa"),
+        GAME_SOLITAIRE("solitaire"),
+        GAME_PONG("pong"),
+        GAME_MOTO_X3M("moto_x3m"),
+        GAME_SUDOKU("sudoku")
     }
 
     // ─── Reward types ────────────────────────────────────────────
@@ -83,6 +103,7 @@ object MiniGameManager {
     const val GAME_SOLITAIRE   = "solitaire"
     const val GAME_PONG        = "pong"
     const val GAME_MOTO_X3M    = "moto_x3m"
+    const val GAME_SUDOKU      = "sudoku"
 
     val ALL_GAME_IDS = listOf(
         GAME_MEMORY,
@@ -98,7 +119,8 @@ object MiniGameManager {
         GAME_ASTEROIDS,
         GAME_FROGGER,
         GAME_BRISCOLA, GAME_SCOPA, GAME_SOLITAIRE,
-        GAME_PONG, GAME_MOTO_X3M
+        GAME_PONG, GAME_MOTO_X3M,
+        GAME_SUDOKU
     )
 
     val AR_NATIVE_GAME_IDS = listOf(

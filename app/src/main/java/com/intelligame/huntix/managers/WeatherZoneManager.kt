@@ -6,7 +6,6 @@ import com.intelligame.huntix.*
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.net.URL
-import java.util.Calendar
 
 object WeatherZoneManager {
     private const val PREFS = "weather_zone_prefs_v1"
@@ -19,7 +18,8 @@ object WeatherZoneManager {
         private set
 
     fun refreshAsync(ctx: Context, lat: Double, lng: Double, onDone: (() -> Unit)? = null) {
-        CoroutineScope(Dispatchers.IO).launch {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope.launch {
             try {
                 val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 val lastFetch = prefs.getLong("last_fetch", 0L)
@@ -34,10 +34,6 @@ object WeatherZoneManager {
                     return@launch
                 }
 
-                val cal = Calendar.getInstance()
-                val hour = cal.get(Calendar.HOUR_OF_DAY)
-                val isNight = hour < 6 || hour >= 21
-
                 if (OWM_API_KEY.isBlank()) {
                     withContext(Dispatchers.Main) { onDone?.invoke() }
                     return@launch
@@ -46,7 +42,7 @@ object WeatherZoneManager {
                 val url = "https://api.openweathermap.org/data/2.5/weather?lat=$lat&lon=$lng&appid=$OWM_API_KEY"
                 val json = JSONObject(URL(url).readText())
                 val weatherCode = json.getJSONArray("weather").getJSONObject(0).getInt("id")
-                val weather = WeatherType.fromOwmCode(weatherCode, isNight)
+                val weather = WeatherType.fromOwmCode(weatherCode, false)
                 val zone = detectZone(lat, lng, json)
 
                 currentWeather = weather

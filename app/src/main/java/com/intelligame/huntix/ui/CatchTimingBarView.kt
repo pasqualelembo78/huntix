@@ -133,6 +133,8 @@ class CatchTimingBarView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         animator?.cancel()
+        animator = null
+        listener = null
         super.onDetachedFromWindow()
     }
 }

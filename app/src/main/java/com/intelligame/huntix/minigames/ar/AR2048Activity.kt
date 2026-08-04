@@ -80,7 +80,7 @@ class AR2048Activity : ARGameActivity() {
             a.addChildNode(e)
             emptyCells[i] = e
         }
-        board[Random.nextInt(16)] = if (Random.nextFloat() < 0.9f) 2 else 4
+        addRandomTile()
         addRandomTile()
         renderTiles()
         android.util.Log.d("AR2048Activity", "Setup complete, installing input capture")

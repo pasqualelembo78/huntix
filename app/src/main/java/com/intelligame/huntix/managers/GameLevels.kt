@@ -52,6 +52,7 @@ object GameLevels {
     const val GAME_SOLITAIRE   = "solitaire"
     const val GAME_PONG        = "pong"
     const val GAME_MOTO_X3M    = "moto_x3m"
+    const val GAME_SUDOKU      = "sudoku"
 
     // ─── Definizioni per gioco ──────────────────────────────────
     // SCORE: target = base + (level-1)*step (score = punti della partita)
@@ -85,6 +86,7 @@ object GameLevels {
         Def(GAME_SOLITAIRE,  "vittorie",  Mode.WIN),
         Def(GAME_PONG,       "punti",     Mode.SCORE, base = 100, step = 100),
         Def(GAME_MOTO_X3M,   "punti",     Mode.SCORE, base = 100, step = 100),
+        Def(GAME_SUDOKU,     "vittorie",  Mode.WIN),
     )
     /** Config per gioco; se assente usa una config di default ragionevole. */
     fun def(gameId: String): Def =

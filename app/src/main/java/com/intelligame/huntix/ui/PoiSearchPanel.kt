@@ -52,7 +52,8 @@ class PoiSearchPanel @JvmOverloads constructor(
     private val cities = mutableListOf<PoiSearchManager.City>()
     private var loadedPois: List<PoiSearchManager.SearchResult> = emptyList()
     private var loadingPois = false
-    private var generation = 0
+    private val searchExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var lastQueryGen = 0
 
     private val handler: Handler? = try {
         Handler(Looper.getMainLooper())
@@ -170,8 +171,8 @@ class PoiSearchPanel @JvmOverloads constructor(
     private var ignoreCityChange = false
 
     private fun onRegionSelected(region: PoiSearchManager.Region?) {
-        generation++
-        val currentGen = generation
+        lastQueryGen++
+        val currentGen = lastQueryGen
         loadedPois = emptyList()
         loadingPois = false
         cities.clear()
@@ -193,7 +194,7 @@ class PoiSearchPanel @JvmOverloads constructor(
         }
         showMessage("Caricamento città di ${region.name}...")
         mgr.getCitiesForRegion(region.slug, context) { list ->
-            if (currentGen != generation) return@getCitiesForRegion
+            if (currentGen != lastQueryGen) return@getCitiesForRegion
             cities.clear()
             cities.add(PoiSearchManager.City("🏙️ Tutte le città", ""))
             cities.addAll(list)
@@ -218,8 +219,8 @@ class PoiSearchPanel @JvmOverloads constructor(
             showMessage("Scegli prima una regione.")
             return
         }
-        generation++
-        val currentGen = generation
+        lastQueryGen++
+        val currentGen = lastQueryGen
         loadedPois = emptyList()
         loadingPois = true
 
@@ -228,7 +229,7 @@ class PoiSearchPanel @JvmOverloads constructor(
         showMessage("Caricamento POI...")
 
         mgr.loadPois(region.slug, citySlug, context) { pois ->
-            if (currentGen != generation) return@loadPois
+            if (currentGen != lastQueryGen) return@loadPois
             loadingPois = false
             loadedPois = pois
             if (loadedPois.isEmpty()) {
@@ -250,15 +251,15 @@ class PoiSearchPanel @JvmOverloads constructor(
             showMessage("Caricamento POI in corso...")
             return
         }
-        val currentGen = generation
+        val currentGen = ++lastQueryGen
         val pois = loadedPois
-        Thread {
+        searchExecutor.submit {
             val results = mgr.filterPois(q, pois)
             handler?.post {
-                if (currentGen != generation) return@post
+                if (currentGen != lastQueryGen) return@post
                 renderResults(results, q)
             }
-        }.start()
+        }
     }
 
     private fun renderResults(results: List<PoiSearchManager.SearchResult>, query: String) {
@@ -302,13 +303,17 @@ class PoiSearchPanel @JvmOverloads constructor(
         }
     }
 
+    private var messageView: TextView? = null
+
     private fun showMessage(text: String) {
-        resultsBox.removeAllViews()
-        resultsBox.addView(TextView(context).apply {
+        messageView?.let { resultsBox.removeView(it) }
+        val tv = TextView(context).apply {
             this.text = text
             textSize = 12f
             setTextColor(Color.parseColor("#88FFFFFF"))
             setPadding(dp(8), dp(8), dp(8), dp(8))
-        })
+        }
+        resultsBox.addView(tv)
+        messageView = tv
     }
 }

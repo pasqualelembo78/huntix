@@ -1,5 +1,6 @@
 package com.intelligame.huntix.gamification
 
+import com.intelligame.huntix.minigames.MemoryCardActivity
 import com.intelligame.huntix.minigames.card.BriscolaActivity
 import java.util.Calendar
 
@@ -39,7 +40,7 @@ object DailyEventRegistry {
             emoji = "\uD83E\uDDE0",
             colorHex = "#9C27B0",
             dayOfWeek = Calendar.WEDNESDAY,
-            activityClass = MemoryActivity::class.java
+            activityClass = MemoryCardActivity::class.java
         ),
         */
     )

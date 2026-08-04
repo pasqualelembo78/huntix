@@ -113,10 +113,9 @@ class HighCardActivity : MiniGameBase() {
     }
 
     private fun renderCard(text: TextView?, card: Card, who: String) {
-        text?.text = "${card.displayName}  ${card.rank.label}"
+        text?.text = "$who\n${card.displayName} ${card.rank.label}"
         text?.setTextColor(card.suit.color)
         text?.textSize = 24f
-        text?.text = "$who\n${card.displayName}"
     }
 
     private fun drawRound() {

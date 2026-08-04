@@ -226,8 +226,10 @@ dependencies {
 }
 
 sentry {
+    // L'upload delle mappature ProGuard a Sentry avviene di default a fine build.
+    // Per build locali più veloci disattivarlo con: ./gradlew ... -PsentryUpload=false
     includeProguardMapping = true
-    autoUploadProguardMapping = true
+    autoUploadProguardMapping = project.findProperty('sentryUpload') != 'false'
     includeNativeSources = false
     org = "pasquale-lembo"
     projectName = "android"

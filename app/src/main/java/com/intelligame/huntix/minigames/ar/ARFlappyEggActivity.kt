@@ -88,7 +88,7 @@ class ARFlappyEggActivity : ARGameActivity() {
             return
         }
         arena = a
-        persistArena(a)
+        // Non chiamare persistArena: l'arena è temporanea per il gioco flappy
         val egg = eggNode(C_EGG, 0.09f)
         egg.position = Position(0f, 0f, 0f)
         a.addChildNode(egg)
@@ -112,7 +112,7 @@ class ARFlappyEggActivity : ARGameActivity() {
         vy -= GRAVITY * dt
         y += vy * dt
         y = y.coerceIn(BOTTOM + 0.1f, TOP - 0.1f)
-        if (eggNode == null || y <= BOTTOM + 0.11f || y >= TOP - 0.11f) {
+        if (y <= BOTTOM + 0.11f || y >= TOP - 0.11f) {
             endGame()
             return
         }
@@ -124,7 +124,7 @@ class ARFlappyEggActivity : ARGameActivity() {
             spawnPipe()
         }
 
-        val gapTolerance = 0.30f - 0.10f * MiniGameManager.levelDifficulty(this, MiniGameManager.GAME_FLAPPY)
+        val gapTolerance = GAP_H / 2f
         synchronized(pipes) {
             val iter = pipes.iterator()
             while (iter.hasNext()) {

@@ -60,6 +60,7 @@ class ARMatch3Activity : ARGameActivity() {
     override fun onEggTapped(egg: AREgg) {
         if (!running || lock || !egg.alive) return
         val i = egg.phase.toInt()
+        if (i !in 0 until N || nodes[i] == null) return
         if (selected == -1) { select(i); return }
         if (selected == i) { deselect(); return }
         val a = selected

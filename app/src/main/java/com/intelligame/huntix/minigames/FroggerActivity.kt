@@ -95,8 +95,14 @@ class FroggerActivity : MiniGameBase() {
 
     private fun startGame() {
         val v = gameView ?: return
-        val w = v.width.coerceAtLeast(1)
-        val h = v.height.coerceAtLeast(1)
+        v.post {
+            val w = v.width.coerceAtLeast(1)
+            val h = v.height.coerceAtLeast(1)
+            startGameWithSize(w, h)
+        }
+    }
+
+    private fun startGameWithSize(w: Int, h: Int) {
         unit = h / 12f
         endY = unit
         logRows = unit * 5

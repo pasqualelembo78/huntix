@@ -76,7 +76,7 @@ class ARNumberPickActivity : ARGameActivity() {
                 try {
                     finishGame(
                         50, "AR Numero indovinato ($secret)!", true,
-                        MiniGameManager.GAME_NUMBER_PICK,
+                        MiniGameManager.GAME_NUMBER_PICK, score = 50,
                         accentColors = intArrayOf(C_WIN, 0xFFFFFFFF.toInt(), 0xFFFFD700.toInt())
                     )
                 } catch (e: Exception) { Sentry.captureException(e) }

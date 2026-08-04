@@ -1,14 +1,18 @@
 package com.intelligame.huntix.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -21,6 +25,7 @@ import com.google.ar.core.Session
 import com.google.ar.core.TrackingState
 import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.WeatherType
 import com.intelligame.huntix.WorldEgg
 import com.intelligame.huntix.manager.BuildingObstacleManager
 import com.intelligame.huntix.manager.GeospatialAnchorManager
@@ -32,6 +37,7 @@ import io.github.sceneview.math.Scale
 import io.github.sceneview.ar.node.AnchorNode
 import io.github.sceneview.node.Node
 import io.github.sceneview.node.SphereNode
+import kotlin.math.abs
 
 class ArNavigationActivity : AppCompatActivity() {
 
@@ -71,6 +77,9 @@ class ArNavigationActivity : AppCompatActivity() {
         }
     }
 
+    private var lastProximityVib = 0L
+    private var lastCatchFlash = 0L
+
     private val requestLoc = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { res ->
@@ -82,7 +91,11 @@ class ArNavigationActivity : AppCompatActivity() {
     }
     private val requestCam = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { }
+    ) { res ->
+        if (res[Manifest.permission.CAMERA] != true) {
+            Toast.makeText(this, "Permesso camera necessario per la modalità AR", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -344,14 +357,21 @@ class ArNavigationActivity : AppCompatActivity() {
             eggAnchorNode?.let { it.parent?.removeChildNode(it) }
             eggAnchorNode = null
             currentEggId = null
+            if (System.currentTimeMillis() - lastProximityVib > 3000) {
+                vibrate(50)
+                lastProximityVib = System.currentTimeMillis()
+            }
         } else {
             targetText.text = "${egg.rarity.displayName}: ${dist.toInt()} m"
             hintText.text = if (geoMgr.isTracking()) "VPS attivo — segui la freccia" else "Segui la freccia gialla"
             compassArrow.visibility = View.VISIBLE
             if (dist <= REVEAL_RADIUS_M) {
                 if (geoMgr.isTracking()) {
-                    // geospatial anchor handles rendering
                 } else updateCompassEgg(egg)
+                if (dist <= 15f && System.currentTimeMillis() - lastProximityVib > 2000) {
+                    vibrate(30)
+                    lastProximityVib = System.currentTimeMillis()
+                }
             } else {
                 eggNode?.let { it.parent?.removeChildNode(it) }
                 eggNode = null
@@ -361,6 +381,26 @@ class ArNavigationActivity : AppCompatActivity() {
             }
         }
         catchBtn.visibility = if (dist <= mgr.getCatchRadiusM(egg)) View.VISIBLE else View.GONE
+        if (catchBtn.visibility == View.VISIBLE && dist <= mgr.getCatchRadiusM(egg)) {
+            val pulse = (Math.sin(System.currentTimeMillis() / 300.0) * 0.3f + 0.7f).toFloat()
+            catchBtn.alpha = pulse
+        } else {
+            catchBtn.alpha = 1f
+        }
+    }
+
+    private fun vibrate(durationMs: Long) {
+        try {
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            vibrator?.let { v ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    v.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    v.vibrate(durationMs)
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun onCatch() {
@@ -373,8 +413,9 @@ class ArNavigationActivity : AppCompatActivity() {
             override fun onCatchReady(foodBonus: Float, xpMultiplier: Float) {
                 val effectiveBonus = if (foodBonus > 0f) foodBonus else 1f
                 val res = mgr.tryCatch(this@ArNavigationActivity, egg.id, effectiveBonus)
-                Toast.makeText(this@ArNavigationActivity, res.message, Toast.LENGTH_LONG).show()
                 if (res.success) {
+                    vibrate(100)
+                    flashScreen()
                     geoMgr.removeAnchor(egg.id)
                     eggNode?.let { it.parent?.removeChildNode(it) }
                     eggNode = null
@@ -383,9 +424,30 @@ class ArNavigationActivity : AppCompatActivity() {
                     currentEggId = null
                     updateHud()
                     EggOpeningAnimationActivity.start(this@ArNavigationActivity, res.egg!!.rarity, res.egg.name, res.egg.rarity.xpReward)
+                } else {
+                    Toast.makeText(this@ArNavigationActivity, res.message, Toast.LENGTH_LONG).show()
                 }
             }
         })
+    }
+
+    private fun flashScreen() {
+        val now = System.currentTimeMillis()
+        if (now - lastCatchFlash < 500) return
+        lastCatchFlash = now
+        val flash = View(this).apply {
+            setBackgroundColor(Color.argb(180, 255, 255, 200))
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+        overlay.addView(flash)
+        flash.animate()
+            .alpha(0f)
+            .setDuration(300)
+            .withEndAction { overlay.removeView(flash) }
+            .start()
     }
 
     private fun buildHud() {
@@ -415,6 +477,7 @@ class ArNavigationActivity : AppCompatActivity() {
             text = "Cattura"
             setBackgroundColor(0xFF2E7D32.toInt())
             setTextColor(Color.WHITE)
+            textSize = 18f
             setOnClickListener { onCatch() }
         }
         mapBtn = Button(this).apply {

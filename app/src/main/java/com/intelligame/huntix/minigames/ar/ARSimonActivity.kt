@@ -104,7 +104,7 @@ class ARSimonActivity : ARGameActivity() {
         if (playing || gameOver || !running) return
         val idx = nodeMap[node] ?: return
         pulse(idx)
-        if (idx == sequence[inputIndex]) {
+        if (idx == sequence.getOrNull(inputIndex)) {
             inputIndex++
             if (inputIndex == sequence.size) {
                 score += 10

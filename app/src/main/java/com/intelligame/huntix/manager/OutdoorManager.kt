@@ -35,6 +35,8 @@ import kotlinx.coroutines.withContext
 
 class OutdoorManager private constructor() : SensorEventListener {
 
+    private val lock = Any()
+
     // Declare online POI manager
     private var onlinePoiManager: OnlinePoiManager? = null
 
@@ -89,8 +91,10 @@ class OutdoorManager private constructor() : SensorEventListener {
     }
 
     private var locationManager: LocationManager? = null
-    var currentLocation: Location? = null
-        private set
+    private var _currentLocation: Location? = null
+    var currentLocation: Location?
+        get() = synchronized(lock) { _currentLocation }
+        set(v) = synchronized(lock) { _currentLocation = v }
     private val eggs = mutableListOf<WorldEgg>()
     private val pois = mutableListOf<Poi>()
     private var listening = false
@@ -274,6 +278,8 @@ class OutdoorManager private constructor() : SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    fun isActive(): Boolean = activeClients > 0 || listening || sensorsRegistered
 
     fun stop() {
         activeClients = (activeClients - 1).coerceAtLeast(0)
@@ -586,15 +592,13 @@ class OutdoorManager private constructor() : SensorEventListener {
         }
         val loc = currentLocation ?: return "Posizione sconosciuta"
         val nearestEgg = targetEgg()
-        val nearestBuildingPoi = pois
-            .filter { (it.type == "building" && it.buildingType.isNotEmpty()) || (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null) }
-            .minByOrNull { distanceMeters(it) }
-        val targetEntry = when {
+        val nearestBuildingPoi = getPoisReallife().minByOrNull { distanceMeters(it) }
+        val targetEntry: Pair<Any, Float> = when {
             nearestEgg == null && nearestBuildingPoi == null -> return "Nessuna uova o edifici nelle vicinanze"
-            nearestEgg == null -> Pair(nearestBuildingPoi as Any, distanceMeters(nearestBuildingPoi))
-            nearestBuildingPoi == null -> Pair(nearestEgg as Any, distanceMeters(nearestEgg))
-            distanceMeters(nearestEgg) < distanceMeters(nearestBuildingPoi) -> Pair(nearestEgg as Any, distanceMeters(nearestEgg))
-            else -> Pair(nearestBuildingPoi as Any, distanceMeters(nearestBuildingPoi))
+            nearestEgg == null -> Pair(nearestBuildingPoi!!, distanceMeters(nearestBuildingPoi))
+            nearestBuildingPoi == null -> Pair(nearestEgg, distanceMeters(nearestEgg))
+            distanceMeters(nearestEgg) < distanceMeters(nearestBuildingPoi) -> Pair(nearestEgg, distanceMeters(nearestEgg))
+            else -> Pair(nearestBuildingPoi, distanceMeters(nearestBuildingPoi))
         }
         val target = targetEntry.first
         val targetDist = targetEntry.second
@@ -635,10 +639,19 @@ class OutdoorManager private constructor() : SensorEventListener {
         isSimulating = false
     }
 
-    fun getEggs(): List<WorldEgg> = eggs.toList()
-    fun getPois(): List<Poi> = pois
-        .filter { if (isReallifeMode) (it.type == "building" && it.buildingType.isNotEmpty()) || (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null) else it.type != "building" || it.buildingType.isEmpty() }
-        .toList()
+    fun getEggs(): List<WorldEgg> = synchronized(lock) { eggs.toList() }
+    fun getPois(): List<Poi> = synchronized(lock) { pois.toList() }
+
+    fun getPoisReallife(): List<Poi> = synchronized(lock) {
+        pois.filter {
+            (it.type == "building" && it.buildingType.isNotEmpty()) ||
+            (it.buildingType.isNotEmpty() && BuildingDefs.resolveBuildingType(it.buildingType, it.type) != null)
+        }.toList()
+    }
+
+    fun getPoisOutdoor(): List<Poi> = synchronized(lock) {
+        pois.filter { it.type != "building" || it.buildingType.isEmpty() }.toList()
+    }
 
     fun nearestUnfoundEgg(): WorldEgg? =
         eggs.filter { !it.found }.minByOrNull { distanceMeters(it) }
@@ -651,7 +664,7 @@ class OutdoorManager private constructor() : SensorEventListener {
     fun getEgg(id: String): WorldEgg? = eggs.firstOrNull { it.id == id }
 
     fun tryCatch(ctx: Context, eggId: String, foodBonus: Float = 1f): CatchResult {
-        val egg = eggs.firstOrNull { it.id == eggId }
+        val egg = synchronized(lock) { eggs.firstOrNull { it.id == eggId } }
             ?: return CatchResult(false, "Uovo non trovato")
         if (egg.found) return CatchResult(false, "Gia' catturato")
         val d = distanceMeters(egg)
@@ -659,9 +672,11 @@ class OutdoorManager private constructor() : SensorEventListener {
         if (d > radius) {
             return CatchResult(false, "Avvicinati: mancano ${d.toInt()} m (raggio: ${radius.toInt()} m)")
         }
-        val idx = eggs.indexOf(egg)
         val caught = egg.copy(found = true)
-        eggs[idx] = caught
+        synchronized(lock) {
+            val idx = eggs.indexOf(egg)
+            if (idx >= 0) eggs[idx] = caught
+        }
         val added = EggInventoryManager.addEgg(ctx, EggInventoryItem.fromWorldEgg(caught))
         PlayerProfileManager.recordEggCatch(caught.rarity) { }
         PlayerProfileManager.markHasPlayedOutdoor()
@@ -673,7 +688,6 @@ class OutdoorManager private constructor() : SensorEventListener {
             EggRarity.LEGENDARY -> 250.0
         }
         com.intelligame.huntix.managers.SavedManager.addMvc(ctx, mvcReward)
-        // Track research tasks
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_3")
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_20")
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "earn_500_mvc", mvcReward.toInt())

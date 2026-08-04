@@ -91,7 +91,8 @@ class HangmanActivity : MiniGameBase() {
         // Parole più lunghe a livelli alti: difficoltà crescente.
         val minLen = 4 + (3 * levelDifficulty(MiniGameManager.GAME_HANGMAN)).toInt()
         val pool = WORDS.filter { it.length >= minLen }
-        word = (if (pool.isEmpty()) WORDS else pool)[Random.nextInt((if (pool.isEmpty()) WORDS else pool).size)]
+        val source = if (pool.isEmpty()) WORDS else pool
+        word = source[Random.nextInt(source.size)]
         guessed.clear()
         wrong = 0
         gameRunning = true
@@ -137,7 +138,7 @@ class HangmanActivity : MiniGameBase() {
         } ?: return
         val letterBtn = letterBtns[ch - 'a']
         letterBtn.isEnabled = false
-        if (ch in word) {
+        if (ch.uppercaseChar() in word) {
             letterBtn.setTextColor(Color.parseColor(UiKit.GREEN))
             updateWordDisplay()
             if (word.all { it in guessed }) {

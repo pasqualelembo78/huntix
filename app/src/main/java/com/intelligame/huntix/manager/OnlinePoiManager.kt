@@ -119,7 +119,12 @@ class OnlinePoiManager {
             val pois = fetchCityPois(regionSlug, nearestCity.slug, lat, lng, maxPois)
             if (pois.isEmpty()) {
                 AppLog.d("OnlinePoi", "City POIs empty, fallback to region: $regionSlug")
-                fetchRegionPois(regionSlug, lat, lng, maxPois)
+                val regionPois = fetchRegionPois(regionSlug, lat, lng, maxPois)
+                if (regionPois.isNotEmpty()) {
+                    Result.success(regionPois)
+                } else {
+                    Result.success(pois)
+                }
             } else pois
             AppLog.d("OnlinePoi", "Got ${pois.size} POIs")
 

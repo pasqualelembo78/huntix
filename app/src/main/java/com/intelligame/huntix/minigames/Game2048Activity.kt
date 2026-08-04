@@ -40,6 +40,8 @@ class Game2048Activity : MiniGameBase() {
     private var scoreText: TextView? = null
     private var boardView: BoardView? = null
     private var overlayContainer: FrameLayout? = null
+    private var flashCells = mutableSetOf<Pair<Int, Int>>()
+    private var flashAlpha = 0f
 
     companion object {
         private val TIER_COLORS = listOf(
@@ -147,13 +149,14 @@ class Game2048Activity : MiniGameBase() {
                 score += pts
             }
         }
-        if (!board.contentEquals(before)) {
-            addRandomTile()
-            scoreText?.text = "Punti: $score"
-            if (board.any { it >= 2048 }) reached2048 = true
-            if (!hasMoves()) endGame()
-            return true
-        }
+if (!board.contentEquals(before)) {
+             addRandomTile()
+             scoreText?.text = "Punti: $score"
+             flashAlpha = 0.3f
+             if (board.any { it >= 2048 }) reached2048 = true
+             if (!hasMoves()) endGame()
+             return true
+         }
         return false
     }
 
@@ -294,11 +297,21 @@ class Game2048Activity : MiniGameBase() {
                     textPaint.textSize = size * 0.20f
                     c.drawText(label, cx, cy - eggRadius - 4f, textPaint)
                 }
-                c.drawText(valueText, cx, baseline + size * 0.15f, textPaint)
-            }
-        }
+c.drawText(valueText, cx, baseline + size * 0.15f, textPaint)
+             }
+         }
+         if (flashAlpha > 0f) {
+             val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                 color = Color.WHITE
+                 alpha = (flashAlpha * 80f).toInt()
+             }
+             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), flashPaint)
+             flashAlpha *= 0.9f
+             if (flashAlpha < 0.01f) flashAlpha = 0f
+         }
+     }
 
-        override fun onTouchEvent(ev: MotionEvent): Boolean {
+     override fun onTouchEvent(ev: MotionEvent): Boolean {
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = ev.x; startY = ev.y

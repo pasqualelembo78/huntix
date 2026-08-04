@@ -11,6 +11,8 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
@@ -48,6 +50,7 @@ class AsteroidsActivity : MiniGameBase() {
     private var turningRight = false
     private var accelerating = false
     private var fireCooldown = 0
+    private var invuln = 0f
 
     private val bullets = mutableListOf<Bullet>()
     private val asteroids = mutableListOf<Asteroid>()
@@ -70,7 +73,7 @@ class AsteroidsActivity : MiniGameBase() {
         }
         root.addView(UiKit.title(ctx, "Asteroids", "🚀"))
         root.addView(TextView(ctx).apply {
-            text = "Tieni premuto a sx/dx per ruotare, su per accellerare, tappa per sparare."
+            text = "Ruota: sx/dx • Sposta: centro • Spara: tappa o 2º dito"
             textSize = 12f
             setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
@@ -89,6 +92,16 @@ class AsteroidsActivity : MiniGameBase() {
 
         val wrapper = FrameLayout(ctx)
         wrapper.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(
+                v.paddingLeft,
+                v.paddingTop,
+                v.paddingRight,
+                systemBars.bottom + UiKit.dp(ctx, 12)
+            )
+            insets
+        }
         overlayContainer = wrapper
         setContentView(wrapper)
         startGame()
@@ -133,14 +146,14 @@ class AsteroidsActivity : MiniGameBase() {
         val v = gameView ?: return
 
         // Rotazione
-        val rot = 3f * dt
+        val rot = 4.2f * dt
         if (turningLeft) pRadians += rot
         if (turningRight) pRadians -= rot
 
         // Accelerazione
-        val acc = 200f * dt
-        val maxSpeed = 300f
-        val dec = 10f
+        val acc = 300f * dt
+        val maxSpeed = 330f
+        val dec = 150f
         if (accelerating) {
             pdx += cos(pRadians) * acc
             pdy += sin(pRadians) * acc
@@ -158,10 +171,15 @@ class AsteroidsActivity : MiniGameBase() {
         py += pdy * dt
         px = wrapX(px, v.width)
         py = wrapY(py, v.height)
+        invuln = (invuln - dt).coerceAtLeast(0f)
 
         // Proiettili
         fireCooldown--
         if (fireCooldown < 0) fireCooldown = 0
+        if (gameView?.isAutofiring() == true) {
+            fireCooldown = 0
+            shoot()
+        }
         for (i in bullets.indices.reversed()) {
             bullets[i].update(dt, v.width.toFloat(), v.height.toFloat())
             if (bullets[i].outOfBounds(v.width, v.height)) bullets.removeAt(i)
@@ -192,7 +210,7 @@ class AsteroidsActivity : MiniGameBase() {
         if (!gameRunning) return
         if (fireCooldown > 0) return
         bullets.add(Bullet(px, py, pRadians))
-        fireCooldown = 12
+        fireCooldown = 8
     }
 
     private fun checkCollisions(w: Int, h: Int) {
@@ -218,7 +236,7 @@ class AsteroidsActivity : MiniGameBase() {
         for (j in asteroids.indices.reversed()) {
             val a = asteroids[j]
             val dist = sqrt((a.x - px) * (a.x - px) + (a.y - py) * (a.y - py))
-            if (dist < a.radius + 10f) {
+            if (invuln <= 0f && dist < a.radius + 8f) {
                 asteroids.removeAt(j)
                 playerHit()
                 break
@@ -238,6 +256,7 @@ class AsteroidsActivity : MiniGameBase() {
 
     private fun playerHit() {
         lives--
+        invuln = 1.5f
         if (lives <= 0) {
             endGame()
         } else {
@@ -322,8 +341,32 @@ class AsteroidsActivity : MiniGameBase() {
         }
         private val bulletPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#00FF88") }
 
-        private var touchId = -1
-        private var touchMode = 0 // 0=nessuno, 1=ruota sx, 2=ruota dx, 3=su+spara
+        private var steerId = -1
+        private var fireId = -1
+        private var touchMode = 0 // 0=nessuno, 1=ruota sx, 2=ruota dx, 3=sposta+spara
+
+        private fun pointerIndexOf(ev: MotionEvent, id: Int): Int {
+            for (i in 0 until ev.pointerCount) if (ev.getPointerId(i) == id) return i
+            return -1
+        }
+
+        private fun applySteer(ev: MotionEvent, idx: Int) {
+            touchMode = when {
+                ev.getX(idx) < width / 3f -> 1
+                ev.getX(idx) > width * 2f / 3f -> 2
+                else -> 3
+            }
+            turningLeft = touchMode == 1
+            turningRight = touchMode == 2
+            accelerating = touchMode == 3
+        }
+
+        private fun stopSteer() {
+            turningLeft = false; turningRight = false; accelerating = false
+            touchMode = 0
+        }
+
+        fun isAutofiring(): Boolean = fireId != -1 || touchMode == 3
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -348,20 +391,22 @@ class AsteroidsActivity : MiniGameBase() {
                 c.drawPath(path, astPaint)
             }
 
-            // Navicella (triangolo)
-            val r = 8f
-            val nx = px + cos(pRadians) * r
-            val ny = py + sin(pRadians) * r
-            val bx = px + cos(pRadians + Math.PI.toFloat()) * 5f
-            val by = py + sin(pRadians + Math.PI.toFloat()) * 5f
-            val lx = px + cos(pRadians - 4f * Math.PI.toFloat() / 5f) * r
-            val ly = py + sin(pRadians - 4f * Math.PI.toFloat() / 5f) * r
-            val rx = px + cos(pRadians + 4f * Math.PI.toFloat() / 5f) * r
-            val ry = py + sin(pRadians + 4f * Math.PI.toFloat() / 5f) * r
-            val ship = android.graphics.Path()
-            ship.moveTo(nx, ny); ship.lineTo(lx, ly); ship.lineTo(bx, by); ship.lineTo(rx, ry)
-            ship.close()
-            c.drawPath(ship, shipPaint)
+            // Navicella (triangolo) — lampeggia durante l'invulnerabilità
+            if (invuln <= 0f || (invuln * 10f).toInt() % 2 == 0) {
+                val r = 8f
+                val nx = px + cos(pRadians) * r
+                val ny = py + sin(pRadians) * r
+                val bx = px + cos(pRadians + Math.PI.toFloat()) * 5f
+                val by = py + sin(pRadians + Math.PI.toFloat()) * 5f
+                val lx = px + cos(pRadians - 4f * Math.PI.toFloat() / 5f) * r
+                val ly = py + sin(pRadians - 4f * Math.PI.toFloat() / 5f) * r
+                val rx = px + cos(pRadians + 4f * Math.PI.toFloat() / 5f) * r
+                val ry = py + sin(pRadians + 4f * Math.PI.toFloat() / 5f) * r
+                val ship = android.graphics.Path()
+                ship.moveTo(nx, ny); ship.lineTo(lx, ly); ship.lineTo(bx, by); ship.lineTo(rx, ry)
+                ship.close()
+                c.drawPath(ship, shipPaint)
+            }
 
             // Fiamma
             if (accelerating) {
@@ -373,45 +418,44 @@ class AsteroidsActivity : MiniGameBase() {
         }
 
         override fun onTouchEvent(ev: MotionEvent): Boolean {
-            when (ev.action) {
+            when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    touchId = ev.getPointerId(0)
-                    touchMode = when {
-                        ev.x < width / 3f -> 1
-                        ev.x > width * 2f / 3f -> 2
-                        else -> 3
-                    }
-                    turningLeft = touchMode == 1
-                    turningRight = touchMode == 2
-                    accelerating = touchMode == 3
+                    steerId = ev.getPointerId(0)
+                    applySteer(ev, 0)
                     if (touchMode == 3) shoot()
                     return true
                 }
-                MotionEvent.ACTION_MOVE -> {
-                    if (ev.getPointerId(0) == touchId) {
-                        val mode = when {
-                            ev.x < width / 3f -> 1
-                            ev.x > width * 2f / 3f -> 2
-                            else -> 3
-                        }
-                        if (mode != touchMode) {
-                            touchMode = mode
-                            turningLeft = mode == 1
-                            turningRight = mode == 2
-                            accelerating = mode == 3
-                            if (mode == 3) shoot()
-                        }
-                        if (touchMode == 3) {
-                            // autofire mentre si tiene premuto il centro
-                            fireCooldown = 0
-                            shoot()
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    val pid = ev.getPointerId(ev.actionIndex)
+                    if (pid != steerId && fireId == -1) fireId = pid
+                    return true
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    val pid = ev.getPointerId(ev.actionIndex)
+                    if (pid == fireId) fireId = -1
+                    if (pid == steerId) {
+                        if (fireId != -1) {
+                            steerId = fireId
+                            fireId = -1
+                            val i = pointerIndexOf(ev, steerId)
+                            if (i >= 0) applySteer(ev, i) else stopSteer()
+                        } else {
+                            steerId = -1
+                            stopSteer()
                         }
                     }
                     return true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    touchId = -1
-                    turningLeft = false; turningRight = false; accelerating = false
+                    steerId = -1; fireId = -1
+                    stopSteer()
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (steerId != -1) {
+                        val i = pointerIndexOf(ev, steerId)
+                        if (i >= 0) applySteer(ev, i)
+                    }
                     return true
                 }
             }
@@ -424,8 +468,8 @@ class AsteroidsActivity : MiniGameBase() {
         var y: Float,
         radians: Float
     ) {
-        private val dx = cos(radians) * 400f
-        private val dy = sin(radians) * 400f
+        private val dx = cos(radians) * 520f
+        private val dy = sin(radians) * 520f
 
         fun update(dt: Float, w: Float, h: Float) {
             x += dx * dt
@@ -453,6 +497,8 @@ class AsteroidsActivity : MiniGameBase() {
         private var radians: Float
         val shapeX: FloatArray
         val shapeY: FloatArray
+        private val offX: FloatArray
+        private val offY: FloatArray
 
         init {
             val r = Random(System.currentTimeMillis() + x.toInt() + y.toInt())
@@ -488,9 +534,13 @@ class AsteroidsActivity : MiniGameBase() {
             }
             shapeX = FloatArray(numPoints)
             shapeY = FloatArray(numPoints)
+            offX = FloatArray(numPoints)
+            offY = FloatArray(numPoints)
             for (i in 0 until numPoints) {
                 val dist = r.nextFloat() * radius / 2f + radius / 2f
                 val angle = i * 2f * Math.PI.toFloat() / numPoints
+                offX[i] = cos(angle) * dist
+                offY[i] = sin(angle) * dist
                 shapeX[i] = x + cos(angle + radians) * dist
                 shapeY[i] = y + sin(angle + radians) * dist
             }
@@ -502,15 +552,17 @@ class AsteroidsActivity : MiniGameBase() {
             radians += rotationSpeed * dt
             x = wrapX(x, w.toInt())
             y = wrapY(y, h.toInt())
+            // Rotazione rigida attorno al centro: gli offset sono fissati alla
+            // nascita, quindi il poligono non "esplode" dopo il wrap dei bordi.
+            val c = cos(radians)
+            val s = sin(radians)
             for (i in shapeX.indices) {
-                val angle = i * 2f * Math.PI.toFloat() / shapeX.size
-                val dist = sqrt((shapeX[i] - x) * (shapeX[i] - x) + (shapeY[i] - y) * (shapeY[i] - y))
-                shapeX[i] = x + cos(angle + radians) * dist
-                shapeY[i] = y + sin(angle + radians) * dist
+                shapeX[i] = x + offX[i] * c - offY[i] * s
+                shapeY[i] = y + offX[i] * s + offY[i] * c
             }
         }
 
         fun contains(bx: Float, by: Float): Boolean =
-            sqrt((bx - x) * (bx - x) + (by - y) * (by - y)) < radius * 0.8f
+            sqrt((bx - x) * (bx - x) + (by - y) * (by - y)) < radius
     }
 }

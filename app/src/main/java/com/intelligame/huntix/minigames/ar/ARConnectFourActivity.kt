@@ -135,7 +135,7 @@ class ARConnectFourActivity : ARGameActivity() {
         val x = (col - (COLS - 1) / 2f) * CELL
         val (rx, rz) = rotOffset(x, 0.04f)
         disc.position = Position(rx, 0.13f + row * CELL, rz)
-        parent?.addChildNode(disc)
+        if (parent != null) parent.addChildNode(disc)
         slots[row] = disc
         if (who == PLAYER) playerDiscs++ else cpuDiscs++
         scoreText.text = "$playerDiscs-$cpuDiscs"

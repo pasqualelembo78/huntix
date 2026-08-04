@@ -92,7 +92,7 @@ class MotoX3MActivity : MiniGameBase() {
             textSize = 12f; setTextColor(Color.parseColor(UiKit.TEXT_DIM))
             setPadding(0, 0, 0, UiKit.dp(ctx, 10))
         })
-        root.addView(levelBanner(MiniGameManager.GAME_PONG))
+        root.addView(levelBanner(MiniGameManager.GAME_MOTO_X3M))
 
         val hudRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -125,7 +125,7 @@ class MotoX3MActivity : MiniGameBase() {
     }
 
     private fun startGame() {
-        val diff = levelDifficulty(MiniGameManager.GAME_PONG)
+        val diff = levelDifficulty(MiniGameManager.GAME_MOTO_X3M)
         bikeX = 0f
         bikeY = 0f
         bikeVelY = 0f
@@ -149,7 +149,7 @@ class MotoX3MActivity : MiniGameBase() {
     }
 
     private fun update() {
-        val diff = levelDifficulty(MiniGameManager.GAME_PONG)
+        val diff = levelDifficulty(MiniGameManager.GAME_MOTO_X3M)
         val w = gameView.viewW
         val h = gameView.viewH
         if (w <= 0 || h <= 0) return
@@ -294,7 +294,7 @@ class MotoX3MActivity : MiniGameBase() {
         val xp = (score + distance.toInt() / 10).coerceAtLeast(5)
         val result = try {
             MiniGameManager.completePlay(
-                this, MiniGameManager.GAME_PONG, score * 10 + distance.toInt(),
+                this, MiniGameManager.GAME_MOTO_X3M, score * 10 + distance.toInt(),
                 mvc = mvc, xp = xp,
                 label = "Moto X3M: ${String.format("%.0f", distance)}m",
                 isWin = won,
