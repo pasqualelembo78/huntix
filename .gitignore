@@ -56,6 +56,11 @@ backend/static/
 # ── Licenza Unity: dipendenze di automazione e log (mai su Git) ──
 unitylic/tools/node_modules/
 unitylic/unity-license-check.log
+unitylic/unity-export.log
+
+# ── Export gradle project da Unity (rigenerabile via build_release.sh) ──
+unity-export.gradle/
+unity-export/
 
 # ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
 unityLibrary/build/

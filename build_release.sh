@@ -27,6 +27,20 @@
 #   export UNITY_EMAIL=... UNITY_PASSWORD=...
 #   oppure file /root/.unity-credentials (email=/password=, chmod 600).
 #
+# INTEGRAZIONE UNITY → AAR (facoltativa, prima dell'APK):
+#   All'avvio lo script chiede se serve creare/ricreare il file AAR Unity.
+#   Se sì: export del gradle project da Unity (batchmode), build del modulo
+#   :unityLibrary (Il2Cpp) con Gradle 7.5.1, copia degli AAR Unity in
+#   app/libs/ e wiring automatico del gradle (app dipende dagli AAR Unity,
+#   stub unityLibrary disattivato). Se no, l'APK viene compilato contro gli
+#   stub unityLibrary (nessuna dipendenza da Unity).
+#   Idempotente: se le fonti Unity sono invariate e l'AAR c'è già, salta.
+#   ENV utili:
+#     BUILD_UNITY_AAR=1   -> risponde "sì" senza chiedere
+#     SKIP_UNITY_AAR=1    -> risponde "no" senza chiedere (usa gli stub)
+#     FORCE_UNITY_AAR=1   -> forza la ricreazione anche se già aggiornato
+#     UNITY_EDITOR=...    -> percorso dell'editor Unity (auto-rilevato)
+#
 # Logica di build/firma ripresa da build_app.sh (aria):
 #   - rilevamento ANDROID_HOME
 #   - creazione local.properties
@@ -247,6 +261,222 @@ APKSIGNER="$BUILD_TOOLS/apksigner"
 if [ ! -x "$APKSIGNER" ] || [ ! -x "$ZIPALIGN" ]; then
     echo "!! zipalign/apksigner non trovati in $BUILD_TOOLS" >&2
     exit 1
+fi
+
+# ════════════════════════════════════════════════════════════════
+#  INTEGRAZIONE UNITY → AAR (facoltativa, prima dell'APK)
+#  Chiede se serve creare/ricreare il file AAR Unity. Se sì:
+#    1) export del gradle project da Unity (batchmode, licenza verificata sopra)
+#    2) build :unityLibrary:assembleRelease (Il2Cpp) con Gradle 7.5.1
+#    3) copia AAR + dipendenze Unity in app/libs/
+#    4) wiring gradle: app dipende dagli AAR Unity, stub unityLibrary disattivato
+#  Idempotente: se le fonti Unity sono invariate e l'AAR c'è già, non rifà
+#  nulla. Forzare con FORCE_UNITY_AAR=1; saltare il prompt con
+#  SKIP_UNITY_AAR=1 (usa lo stub unityLibrary se non c'è l'AAR).
+# ════════════════════════════════════════════════════════════════
+UNITY_PROJECT_DIR="$(dirname "$0")/unity-project"
+UNITY_EXPORT_DIR="$(dirname "$0")/unity-export.gradle"
+UNITY_AAR_DEST="$(dirname "$0")/app/libs"
+UNITY_AAR_FILE="app/libs/unityLibrary-release.aar"
+UNITY_GRADLE_HOME="$(dirname "$0")/unitylic/tools/gradle-7.5.1"
+
+# Trova l'editor Unity (più recente in $HOME/Unity/Hub/Editor), o usa UNITY_EDITOR.
+find_unity_editor() {
+    if [ -n "${UNITY_EDITOR:-}" ] && [ -x "$UNITY_EDITOR" ]; then
+        UNITY_EDITOR_BIN="$UNITY_EDITOR"
+        return 0
+    fi
+    local cand
+    cand=$(ls -d "$HOME/Unity/Hub/Editor"/*/Editor/Unity 2>/dev/null | sort -V | tail -1)
+    if [ -n "${cand:-}" ] && [ -x "$cand" ]; then
+        UNITY_EDITOR_BIN="$cand"
+        return 0
+    fi
+    echo "!! Editor Unity non trovato (esporta UNITY_EDITOR=/path/to/Unity)." >&2
+    return 1
+}
+
+# Assicura Gradle 7.5.1 (toolchain dell'export Unity, AGP 7.4.2). Idempotente.
+ensure_gradle_7_5_1() {
+    if [ -x "$UNITY_GRADLE_HOME/bin/gradle" ]; then
+        GRADLE_UNITY="$UNITY_GRADLE_HOME/bin/gradle"
+        return 0
+    fi
+    if [ -x "/opt/gradle/gradle-7.5.1/bin/gradle" ]; then
+        GRADLE_UNITY="/opt/gradle/gradle-7.5.1/bin/gradle"
+        return 0
+    fi
+    echo ">> Scarico Gradle 7.5.1 (toolchain dell'export Unity) in unitylic/tools/..."
+    mkdir -p "$(dirname "$UNITY_GRADLE_HOME")"
+    local zip_tmp="$UNITY_GRADLE_HOME.zip"
+    curl -fsSL -o "$zip_tmp" "https://services.gradle.org/distributions/gradle-7.5.1-bin.zip" \
+        || { echo "!! Download Gradle 7.5.1 fallito." >&2; return 1; }
+    unzip -q "$zip_tmp" -d "$(dirname "$UNITY_GRADLE_HOME")" \
+        || { echo "!! Estrazione Gradle 7.5.1 fallita." >&2; rm -f "$zip_tmp"; return 1; }
+    rm -f "$zip_tmp"
+    GRADLE_UNITY="$UNITY_GRADLE_HOME/bin/gradle"
+    echo ">> Gradle 7.5.1 pronto: $GRADLE_UNITY"
+}
+
+# Fingerprint delle fonti Unity (Assets + ProjectSettings + Packages).
+unity_sources_fingerprint() {
+    if [ -d "$UNITY_PROJECT_DIR" ]; then
+        find "$UNITY_PROJECT_DIR/Assets" "$UNITY_PROJECT_DIR/ProjectSettings" \
+             "$UNITY_PROJECT_DIR/Packages" -type f -printf '%P %T@ %s\n' 2>/dev/null \
+            | sort | md5sum | awk '{print $1}'
+    else
+        echo ""
+    fi
+}
+
+# Attiva la modalità AAR Unity: app dipende dagli AAR in app/libs/.
+enable_unity_aar_mode() {
+    local F="app/build.gradle"
+    if [ -f "$F" ]; then
+        python3 - "$F" <<'PY' || { echo "!! [wiring] aggiornamento app/build.gradle fallito." >&2; return 1; }
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = re.sub(r"(?m)^\s*implementation project\(':unityLibrary'\)\s*$", "", s)
+if "useLegacyPackaging" not in s:
+    s = s.replace("    lint {\n",
+        "    packaging {\n"
+        "        // [build_release.sh] Unity AAR: .so non compressi (richiesto da Unity)\n"
+        "        jniLibs {\n"
+        "            useLegacyPackaging = true\n"
+        "        }\n"
+        "    }\n\n"
+        "    lint {\n", 1)
+marker = "    // \u2500\u2500 Unity AAR (hybrid integration) \u2500\u2500\n"
+if "implementation files('libs/unityLibrary-release.aar')" not in s:
+    add = (marker
+           + "    implementation files('libs/unityLibrary-release.aar')\n"
+           + "    implementation files('libs/unityandroidpermissions.aar')\n"
+           + "    implementation files('libs/xrmanifest.androidlib-release.aar')\n")
+    if marker in s:
+        s = s.replace(marker, add, 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+        echo ">> [wiring] app/build.gradle: dipende dagli AAR Unity."
+    fi
+    if [ -f "settings.gradle" ]; then
+        sed -i "/^include ':unityLibrary'$/d" settings.gradle || { echo "!! [wiring] settings.gradle fallito." >&2; return 1; }
+        echo ">> [wiring] settings.gradle: stub unityLibrary rimosso."
+    fi
+}
+
+# Torna alla modalità stub unityLibrary (nessuna dipendenza da Unity).
+disable_unity_aar_mode() {
+    local F="app/build.gradle"
+    if [ -f "$F" ]; then
+        python3 - "$F" <<'PY' || { echo "!! [wiring] ripristino app/build.gradle fallito." >&2; return 1; }
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+for line in [
+    "    implementation files('libs/unityLibrary-release.aar')\n",
+    "    implementation files('libs/unityandroidpermissions.aar')\n",
+    "    implementation files('libs/xrmanifest.androidlib-release.aar')\n",
+]:
+    s = s.replace(line, "")
+marker = "    // \u2500\u2500 Unity AAR (hybrid integration) \u2500\u2500\n"
+if "implementation project(':unityLibrary')" not in s and marker in s:
+    s = s.replace(marker, marker + "    implementation project(':unityLibrary')\n", 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+        echo ">> [wiring] app/build.gradle: torna allo stub unityLibrary."
+    fi
+    if [ -f "settings.gradle" ] && ! grep -q "^include ':unityLibrary'$" settings.gradle; then
+        sed -i "s/^include ':app'$/include ':app'\ninclude ':unityLibrary'/" settings.gradle || { echo "!! [wiring] settings.gradle fallito." >&2; return 1; }
+        echo ">> [wiring] settings.gradle: stub unityLibrary riattivato."
+    fi
+}
+
+# Procedura completa di creazione AAR (export Unity + build Il2Cpp + copia + wiring).
+build_unity_aar() {
+    find_unity_editor || return 1
+
+    echo ">> [Unity] Export del gradle project in $UNITY_EXPORT_DIR (può richiedere minuti)..."
+    rm -rf "$UNITY_EXPORT_DIR"
+    local JDKROOT="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+    local JDK_ARGS=""
+    [ -d "$JDKROOT" ] && JDK_ARGS="-jdkRoot $JDKROOT"
+    local SDK_ARGS=""
+    [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ] && SDK_ARGS="-sdkRoot $ANDROID_HOME"
+    "$UNITY_EDITOR_BIN" -batchmode -nographics -quit \
+        -projectPath "$UNITY_PROJECT_DIR" \
+        $SDK_ARGS $JDK_ARGS \
+        -executeMethod Huntix.EditorTools.HuntixBuild.ExportAndroidGradleProject \
+        -logFile "$(dirname "$0")/unitylic/unity-export.log" \
+        || { echo "!! Export Unity fallito (log: unitylic/unity-export.log)." >&2; return 1; }
+    if [ ! -d "$UNITY_EXPORT_DIR" ]; then
+        echo "!! Export Unity non ha prodotto $UNITY_EXPORT_DIR." >&2
+        return 1
+    fi
+
+    ensure_gradle_7_5_1 || return 1
+    echo ">> [Gradle] :unityLibrary:assembleRelease (Il2Cpp: 20-40 min alla prima volta)..."
+    ( cd "$UNITY_EXPORT_DIR" && "$GRADLE_UNITY" :unityLibrary:assembleRelease --console=plain ) \
+        || { echo "!! Build AAR Unity fallita." >&2; return 1; }
+
+    mkdir -p "$UNITY_AAR_DEST"
+    cp "$UNITY_EXPORT_DIR/unityLibrary/build/outputs/aar/"*release*.aar "$UNITY_AAR_DEST/" 2>/dev/null || true
+    cp "$UNITY_EXPORT_DIR/unityLibrary/xrmanifest.androidlib/build/outputs/aar/"*release*.aar "$UNITY_AAR_DEST/" 2>/dev/null || true
+    cp "$UNITY_EXPORT_DIR/unityLibrary/libs/"*.aar "$UNITY_AAR_DEST/" 2>/dev/null || true
+
+    if [ ! -f "$UNITY_AAR_FILE" ]; then
+        echo "!! AAR Unity non trovato dopo la build ($UNITY_AAR_FILE)." >&2
+        return 1
+    fi
+
+    echo "$(unity_sources_fingerprint)" > "$UNITY_EXPORT_DIR/.huntix.fingerprint"
+    enable_unity_aar_mode || return 1
+    echo ">> AAR Unity aggiornato: $UNITY_AAR_FILE (+ dipendenze Unity in app/libs/)."
+}
+
+# ── Prompt AAR (idempotente: niente lavoro se fonti invariate) ──
+AAR_PRESENT=0
+[ -f "$UNITY_AAR_FILE" ] && AAR_PRESENT=1
+AAR_UP_TO_DATE=0
+FP_AAR="$(unity_sources_fingerprint)"
+if [ "$AAR_PRESENT" = "1" ] && [ -n "$FP_AAR" ] \
+   && [ -f "$UNITY_EXPORT_DIR/.huntix.fingerprint" ] \
+   && [ "$(cat "$UNITY_EXPORT_DIR/.huntix.fingerprint")" = "$FP_AAR" ]; then
+    AAR_UP_TO_DATE=1
+fi
+
+BUILD_UNITY_AAR=""
+if [ "${SKIP_UNITY_AAR:-0}" = "1" ]; then
+    BUILD_UNITY_AAR="0"
+    echo ">> SKIP_UNITY_AAR=1 — passo oltre senza creare AAR."
+elif [ "${FORCE_UNITY_AAR:-0}" = "1" ] || [ "$AAR_UP_TO_DATE" != "1" ]; then
+    while [ -z "$BUILD_UNITY_AAR" ]; do
+        def="N"; [ "$AAR_PRESENT" = "0" ] && def="Y"
+        read -rp "Vuoi creare/ricreare l'AAR Unity prima dell'APK? [y/N] (default $def): " choice
+        case "$choice" in
+            y|Y|s|S|si|yes) BUILD_UNITY_AAR="1" ;;
+            n|N|no|"")       BUILD_UNITY_AAR="0" ;;
+            *) echo "Rispondi 'y' o 'n'." ;;
+        esac
+    done
+else
+    echo ">> AAR Unity già aggiornato (fonti invariate): nessuna ricreazione."
+    BUILD_UNITY_AAR="0"
+fi
+
+if [ "$BUILD_UNITY_AAR" = "1" ]; then
+    echo "============================================================"
+    echo " Creazione AAR Unity (export + Il2Cpp + wiring)"
+    echo "============================================================"
+    build_unity_aar || { echo "!! Creazione AAR Unity fallita." >&2; exit 1; }
+else
+    if [ "$AAR_PRESENT" = "1" ]; then
+        echo ">> Modalità AAR Unity attiva (AAR già presenti in app/libs/)."
+        enable_unity_aar_mode || exit 1
+    else
+        echo ">> Modalità stub unityLibrary (nessun AAR Unity: APK contro gli stub)."
+        disable_unity_aar_mode || exit 1
+    fi
 fi
 
 # ── Build APK + AAB (logica da build_app.sh) ───────────────
