@@ -11,12 +11,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3830d743f3c76888c7aaddd5b2d8c5c4, type: 3}
   m_Name: library
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   buildingId: library
   buildingType: 6
   name: Biblioteca
-  emoji: 📚
-  color3D: {r: 1.000000, g: 0.878431, b: 0.509804, a: 1.0}
+  emoji: "\U0001F4DA"
+  color3D: {r: 1, g: 0.878431, b: 0.509804, a: 1}
   position: {x: 0, y: 0, z: 0}
   interiorSceneName: Indoor
   prefab: {fileID: 100000, guid: 8d511b79a39ec36ec8866adadb50f089, type: 3}
