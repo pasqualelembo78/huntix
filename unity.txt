@@ -157,46 +157,45 @@ STATO ATTUALE (aggiornato 2026-08-05)
   UI/Bridge/Inventory, System.Collections.Generic), \n letterale in
   EggOpening.cs:15, tipo preferenze PlayerPreferences annidata,
   GetRarityBoost con EggElement, CanvasGroup?.alpha non assegnabile
-- RISULTATO: "Exiting batchmode successfully now!" — 53 asset con
+  - RISULTATO: "Exiting batchmode successfully now!" — 53 asset con
   GUID validi, tutti importati in Library (ScriptableObject, materiali,
   prefab, scene), script compilati senza errori
-- ATTENZIONE (bug noto): Building.prefab ha un componente MonoBehaviour
-  con m_Script = BuildingDefSO (che è uno ScriptableObject, non un
-  MonoBehaviour) → componente invalido da rimuovere in editor.
+- ✅ Risolto bug Building.prefab: rimosso il componente MonoBehaviour
+  invalido (m_Script = BuildingDefSO, uno ScriptableObject non attaccabile
+  a un GameObject). Validazione: 0 errori CS.
+- ✅ Wiring BuildingDefSO → prefab: i 9 BuildingDefSO ora referenziano
+  il prefab tipo (HOUSE/SCHOOL/...). Verificabile aprendo un .asset.
 
-✅ BUILD CON VERIFICA LICENZA AUTOMATICA (2026-08-05):
-- build_release.sh ORA controlla la licenza ad ogni build:
-  1. verifica che systemd esista e che il servizio unity-license sia
-     installato; se manca, lo REINSTALLA da solo (unit + wrapper)
-  2. avvia il servizio se non attivo e attende il CDP del Hub (:9222)
-  3. CHECK VELOCE: servizio attivo + XML valida (UpdateDate>ora)
-     + Hub firmato → OK (pochi secondi)
-  4. CHECK PROFONDO (se il veloce fallisce): run batchmode editor
-     → "Successfully resolved entitlement details" (rigenera la XML)
-  5. RE-LOGIN AUTONOMO (se serve): hub-login.js con credenziali
-     da ENV o /root/.unity-credentials; se Unity chiede il 2FA
-     via email, scrive un messaggio e attende il codice nel file
-     (default /tmp/opencode/unity-lic/2fa.txt)
-- Se dopo tutti i tentativi la licenza è invalida → la build si
-  ferma con messaggio chiaro. Per forzare: SKIP_UNITY_LICENSE_CHECK=1
-- File coinvolti:
-  unitylic/ensure_unity_license.sh     (logica di verifica/ripristino)
-  unitylic/tools/hub-login.js          (login automatico, puppeteer-core)
-  unitylic/tools/hub-probe.js          (sonda stato login)
-  /root/.unity-credentials             (email=/password=, chmod 600)
-  unitylic/unity-license-check.log     (log della verifica)
-- Testati: fast path OK, servizio fermo→avvio automatico OK,
-  file servizio mancanti→reinstall OK
+✅ INTEGRAZIONE AAR UNITY IN BUILD_RELEASE.SH (2026-08-05):
+- build_release.sh chiede "creare/ricreare AAR Unity?" prima dell'APK:
+  - sì: export gradle project (batchmode) → build :unityLibrary:assembleRelease
+    (IL2CPP) con Gradle 7.5.1 (auto-scaricato) → copia AAR + dipendenze
+    (unityandroidpermissions, xrmanifest) in app/libs/ → wiring idempotente
+    di app/build.gradle + settings.gradle (AAR mode vs stub)
+  - no (default): APK contro gli stub unityLibrary
+- Idempotento: fingerprint SHA delle fonti Unity (Assets/ProjectSettings/Packages);
+  se invariate e AAR esiste, salta. Forzare con FORCE_UNITY_AAR=1.
+  Skip: SKIP_UNITY_AAR=1; risposta sì non interattiva: BUILD_UNITY_AAR=1.
+- Player Settings configurati (vedi sotto) in un batchmode editoria:
+  applicationIdentifier Android = com.intelligame.huntix, scriptingBackend =
+  IL2CPP, ARM64, minSdk 29, targetSdk 34, scene in build: Menu/Outdoor/Indoor.
+- Esportazione gradle testata a mano: :unityLibrary:assembleRelease prosegue
+  (Il2Cpp genera 2700 .cpp, poi gradle ndk-build). Prima esecuzione è lenta
+  (20-40 min); le successive riusano la cache Il2Cpp.
+- Il wrapper unityLibrary/ (repo root) rimane gli stub di fallback (kotlin/java
+  UnityPlayer/Activity). L'AAR vero va generato; build_release.sh lo sostituisce.
 
-⏳ IN CORSO / PROSSIMI:
-- Collegare ufficialmente gli ScriptableObject ai prefab nelle scene
-  (asset già importati; wiring nei prefab da verificare in editor)
-  → VALIDAZIONE in corso: editor script di check batchmode
-    (risoluzione GUID, campi EggRaritySO/BuildingDefSO nei prefab,
-    materiali URP, script mancanti nelle scene/prefab)
-- Esportare AAR reale da Unity (sostituisce gli stub) — richiede
-  Android SDK/NDK + IL2CPP + Player Settings (package id, ARM64)
-- Configurare Player Settings e build Android
+✅ ASSET PROCEDURAL (2026-08-05):
+- HuntixAssetGenerator.cs (Editor menu "Huntix > Generate > ..."):
+  - 9 palazzi low-poly distinti (House=pyramid roof, School=tower, Restaurant=
+    gable, Supermarket=grande, Hospital+cross, Gym, Library=a due pila,
+    Park=albero, Other) → mesh, mesh collider, UV
+  - Materiali wall/roof per tipo con texture albedo+rumore procedurali
+    (ProceduralTextureUtility, C# puro, 64x64 PNG)
+  - Assegna il prefab a ciascun BuildingDefSO
+  - Bake 17 istanze nella scena Outdoor.unity (cerchio raggio 40m)
+- Risultato: 9 mesh, 18 materiali, 18 texture, 9 prefab, Outdoor con edifici.
+- Compile: 0 errori CS. Totale asset ~290KB (nessun download, nessuna licenza).
 
 ----------------------------------------
 FASE 1: SETUP UNITY + INTEGRAZIONE (1 settimana)
@@ -601,15 +600,24 @@ PROSSIMI PASSI IMMEDIATI
    script compilati, Library costruita ("Exiting batchmode successfully")
 3. ✅ Licenza resa auto-rinnovante (systemd unity-license + token Hub:
    la XML si rigenera a ogni run editor, vedi STATO ATTUALE)
-4. ✅ build_release.sh verifica/ripristina la licenza ad ogni build
-   (systemd + Hub + XML + re-login automatico, vedi STATO ATTUALE)
-5. Verificare wiring ScriptableObject→prefab→scene (validazione
-   batchmode in editor, in corso)
-6. Configurare Player Settings (package id, IL2CPP, ARM64, minSdk)
-7. Esportare Unity come AAR reale
-8. Sostituire gli stub unityLibrary con l'AAR esportato
-9. Creare BridgeActivity per avviare Unity dall'Android
+ 4. ✅ build_release.sh verifica/ripristina la licenza ad ogni build
+    (systemd + Hub + XML + re-login automatico, vedi STATO ATTUALE)
+ 5. ✅ Wiring ScriptableObject→prefab→scene validato:
+    - BuildingDefSO prefab assegnati (9/9)
+    - Building.prefab: rimosso componente ScriptableObject-monobehaviour invalido
+    - 0 errori CS in batchmode; Outdoor.unity popolata di edifici
+ 6. ✅ Configurare Player Settings (package id=com.intelligame.huntix,
+    IL2CPP, ARM65, minSdk 29, targetSdk 34, scene build Menu/Outdoor/Indoor)
+ 7. ✅ Esportare Unity come AAR reale — procedura in build_release.sh
+    (prompt "creare AAR Unity?", export batchmode → gradle 7.5.1
+    :unityLibrary:assembleRelease, copia AAR in app/libs/, wiring)
+    * Prima build AAR manuale: `./build_release.sh` → rispondi s (20-40 min)
+ 8. ✅ Sostituire gli stub unityLibrary con l'AAR esportato — done via wiring
+    (app dipende da app/libs/*.aar; stub disattivato in AAR mode)
+ 9. Creare BridgeActivity per avviare Unity dall'Android
 10. Testare la scena Outdoor base su dispositivo reale
+11. ✅ Aggiungere asset grafici procedurali: 9 palazzi low-poly distinti,
+    materiali+texture, uovo, baking scena (vedi sezione AAR/asset sopra)
 
 Dopo il primo test funzionante, il resto del porting procede
 in modo naturale e progressivo, sezione per sezione.
