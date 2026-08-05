@@ -297,19 +297,19 @@ if (!board.contentEquals(before)) {
                     textPaint.textSize = size * 0.20f
                     c.drawText(label, cx, cy - eggRadius - 4f, textPaint)
                 }
-c.drawText(valueText, cx, baseline + size * 0.15f, textPaint)
-             }
-         }
-         if (flashAlpha > 0f) {
-             val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                 color = Color.WHITE
-                 alpha = (flashAlpha * 80f).toInt()
-             }
-             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), flashPaint)
-             flashAlpha *= 0.9f
-             if (flashAlpha < 0.01f) flashAlpha = 0f
-         }
-     }
+                c.drawText(valueText, cx, baseline + size * 0.15f, textPaint)
+            }
+
+        if (flashAlpha > 0f) {
+            val flashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                alpha = (flashAlpha * 80f).toInt()
+            }
+            c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), flashPaint)
+            flashAlpha *= 0.9f
+            if (flashAlpha < 0.01f) flashAlpha = 0f
+        }
+    }
 
      override fun onTouchEvent(ev: MotionEvent): Boolean {
             when (ev.action) {

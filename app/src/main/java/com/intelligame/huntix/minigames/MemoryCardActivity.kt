@@ -192,9 +192,9 @@ class MemoryCardActivity : MiniGameBase() {
     private fun flashGreen(view: View) {
         val ll = view as LinearLayout
         ll.background = GradientDrawable().apply {
-            cornerRadius = UiKit.dp(this@MemoryActivity, 8).toFloat()
+            cornerRadius = UiKit.dp(this@MemoryCardActivity, 8).toFloat()
             setColor(Color.parseColor(UiKit.GREEN))
-            setStroke(UiKit.dp(this@MemoryActivity, 2), Color.parseColor(UiKit.GREEN))
+            setStroke(UiKit.dp(this@MemoryCardActivity, 2), Color.parseColor(UiKit.GREEN))
         }
     }
 

@@ -143,7 +143,7 @@ class OutdoorTutorialActivity : AppCompatActivity() {
             params.leftMargin = UiKit.dp(this@OutdoorTutorialActivity, 4)
             params.rightMargin = UiKit.dp(this@OutdoorTutorialActivity, 4)
             dot.layoutParams = params
-            dot.setBackgroundColor(if (i == currentStep) UiKit.ACCENT.toInt() else 0x44FFFFFF.toInt())
+            dot.setBackgroundColor(if (i == currentStep) Color.parseColor(UiKit.ACCENT) else 0x44FFFFFF.toInt())
             indicator?.addView(dot)
         }
 

@@ -126,7 +126,7 @@ class PacmanActivity : MiniGameBase() {
         if (pacmanDirX != 0f || pacmanDirY != 0f) {
             val nx = pacmanX + pacmanDirX
             val ny = pacmanY + pacmanDirY
-            if (nx in 0f until BOARD_W && ny in 0f until BOARD_H) {
+            if (nx >= 0f && nx < BOARD_W && ny >= 0f && ny < BOARD_H) {
                 val bx = nx.toInt()
                 val by = ny.toInt()
                 if (board[by][bx] != 1) {

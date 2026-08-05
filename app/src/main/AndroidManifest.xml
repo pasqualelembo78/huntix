@@ -158,6 +158,8 @@
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".ui.OutdoorGuestActivity"
             android:exported="false" android:screenOrientation="portrait"/>
+        <activity android:name=".ui.OutdoorTutorialActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".OutdoorSetupActivity"
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".ui.OutdoorHuntActivity"
@@ -307,6 +309,14 @@
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
         <activity android:name=".minigames.MemoryGameActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.MemoryCardActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"/>
+
+        <activity android:name=".minigames.PacmanActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>
 
@@ -509,5 +519,15 @@
         <receiver android:name=".gamification.DailyEventReceiver"
             android:exported="false"/>
 
-</application>
+        <!-- ── Unity Bridge Activities ── -->
+        <activity android:name=".bridge.BridgeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
+            android:theme="@style/Theme.ARProto"/>
+
+        <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+        <meta-data android:name="unityplayer.ForwardNativeEventsToDalvik" android:value="false" />
+
+    </application>
 </manifest>

@@ -29,6 +29,7 @@ class ARFlappyEggActivity : ARGameActivity() {
         private const val BOTTOM = -1.15f
         private const val PIPE_W = 0.30f
         private const val PIPE_D = 0.30f
+        private const val GAP_H = 0.78f
         private val C_EGG = 0xFFF8F8FF.toInt()
         private val C_PIPE = 0xFF3DDC84.toInt()
         private val C_PIPE_EDGE = 0xFF2FA96B.toInt()

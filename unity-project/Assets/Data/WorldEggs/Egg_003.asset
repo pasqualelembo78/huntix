@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cd5e48c2e3cd9701bb1be1548a836247, type: 3}
+  m_Name: Egg_003
+  m_EditorClassIdentifier:
+  id: Egg_003
+  name: Uovo Raro del Monte
+  latitude: 45.4642
+  longitude: 9.19
+  rarity: 0
+  element: 4
+  isHatched: 0
+  isCaptured: 0
+  captureRadius: 5.000000
+  spawnInterval: 600.000000
+  weatherBoost: 0
+  zoneType: 2
+  prefab: {fileID: 100000, guid: fa3902daa5077b34b44fc2d46683cbda, type: 3}
+  icon: {fileID: 0}

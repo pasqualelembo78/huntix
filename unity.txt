@@ -1,0 +1,615 @@
+HUNTIX — PIANO DI MIGRAZIONE A UNITY (STRATEGIA IBRIDA)
+==========================================================
+
+OBIETTIVO
+Trasformare Huntix da gioco Android nativo a un sistema ibrido:
+Android nativo per UI/menu/mini-giochi + Unity come motore di gioco
+per le sezioni 3D/AR (outdoor, RealLife, indoor).
+
+PERCHÉ LA STRATEGIA IBRIDA
+- Huntix ha sezioni che NON necessitano di Unity (mini-giochi 2D,
+  termoculla, squadre, profilo, impostazioni).
+- Convertire TUTTO in Unity è uno spreco: più complesso, APK più
+  grande, due codebase da mantenere per nulla.
+- La strategia ibrida massimizza i vantaggi di Unity dove servono
+  (AR, 3D, fisica, animazioni) e mantiene Android nativo dove è
+  sufficiente (layout, liste, timer).
+
+SEZIONI: DOVE VANNO
+===================
+
+→ UNITY (motore di gioco 3D/AR):
+  - Outdoor AR (caccia alle uova stile Pokémon GO)
+  - RealLife (negozi, lavoro, social, NPC)
+  - Indoor 3D (caccia uova dentro casa)
+  - Mini-giochi AR (se presenti in futuro)
+
+→ ANDROID NATIVO (Kotlin):
+  - Mini-giochi 2D (carte, solitario, briscola, ecc.)
+  - Termoculla / schiusa uova (UI timer + barre)
+  - Squadre / classifiche (liste, layout, Firebase)
+  - Profilo / inventario (UI di configurazione)
+  - Impostazioni (toggle, preferenze)
+  - Menu principale e navigazione
+  - Login / registrazione
+
+COMUNICAZIONE ANDROID ↔ UNITY
+==============================
+
+Unity si integra come libreria AAR nel progetto Android.
+L'app Android avvia Activity Unity quando serve il gameplay 3D/AR
+e torna ad Android quando il giocatore è nei menu.
+
+Bridge Android → Unity:
+  UnityPlayer.UnitySendMessage("GameManager", "OnEvent", jsonData)
+
+Bridge Unity → Android:
+  AndroidJavaClass("com.intelligame.huntix.Bridge").CallStatic(...)
+
+Dati condivisi:
+  - Firebase Firestore (stesso schema in entrambi)
+  - SharedPreferences (Android) → PlayerPrefs (Unity) per cache locale
+  - File JSON su storage condiviso per dati offline
+
+----------------------------------------
+STATO ATTUALE (aggiornato 2026-08-05)
+----------------------------------------
+
+✅ COMPLETATO:
+- unityLibrary configurata come module Gradle (minSdk 26, senza shrinkResources)
+- Stub runtime Unity creati e funzionanti:
+  - unityLibrary/src/main/java/com/unity3d/player/UnityPlayerActivity.java
+  - unityLibrary/src/main/java/com/unity3d/player/UnityPlayer.java
+- UnityBridge.java nel modulo app (no dipendenza circolare unityLibrary→app)
+- Manifest unityLibrary minimale (solo permission + uses-feature camera.ar)
+- Manifest app: aggiunte activity mancanti (MemoryCardActivity, PacmanActivity,
+  OutdoorTutorialActivity, BridgeActivity)
+- Build VERIFICATE:
+  - assembleDebug SUCCESS (app-debug.apk ~53 MB)
+  - bundleRelease SUCCESS (app-release.aab ~28 MB)
+  - assembleRelease firmato SUCCESS (app-release-signed.apk ~36.7 MB)
+- Crash su device (Samsung SM-A356B, API 36) FIXATI:
+  - ActivityNotFoundException TetrisActivity → era APK vecchio
+  - ActivityNotFoundException OutdoorTutorialActivity → aggiunta al manifest
+  - NumberFormatException "#A78BFA" in OutdoorTutorialActivity.kt:146
+    → Color.parseColor(UiKit.ACCENT) al posto di .toInt()
+- App stabile sul telefono (non crasha)
+- Mini-giochi fixati (errori compilazione preesistenti):
+  Game2048, MemoryCard, Pacman, Tetris, ARFlappyEgg
+
+✅ ASSET UNITY CREATI (a mano, con .meta e GUID deterministici):
+- Data/ (ScriptableObject, 37 file):
+  Rarities (5: Common→Legendary), Elements (5: WATER..NORMAL),
+  Weather (7: CLEAR..WINDY), Zones (8: UNKNOWN..BEACH),
+  Buildings (9: HOUSE..OTHER), WorldEggs (3 esempi)
+- Materials/ (11 materiali URP/Lit): uova per rarità, terreno, edifici,
+  personaggio, indicatore
+- Prefabs/ (4 prefab):
+  Eggs/Egg.prefab (sfera + collider trigger)
+  Eggs/EggIndicator.prefab (con script EggIndicator)
+  Buildings/Building.prefab (con BuildingDefSO)
+  Characters/Player.prefab (capsule, tag Player)
+- Scenes/ (3 scene popolate):
+  Menu.unity: GameManager + camera + luce + terreno
+  Outdoor.unity: GameManager, OutdoorManager, EggSpawner (prefab collegati),
+    WeatherSystem (riferimento alla luce), ARSessionManager, Player,
+    camera, luce, terreno
+  Indoor.unity: GameManager, IndoorManager, Player, 3 edifici, camera, luce, pavimento
+- Tutti gli script C# hanno .meta (26 file)
+- Verifica: 55 file YAML validi, 0 GUID irrisolti, 0 duplicati
+
+✅ LICENZA UNITY PERSONAL ATTIVATA E AUTO-RINNOVANTE (2026-08-05):
+- Metodo: login Unity ID nel Unity Hub 3.18.0 in ambiente headless
+  via Xvfb (:99) + automazione CDP (puppeteer-core)
+- Credenziali: email + password + verifica 2FA via email (codice OTP)
+- Risultato: UnityEntitlementLicense.xml aggiornata (IssueDate
+  2026-08-05, User 6872201292598, Personal + entitlement editor,
+  headless, dark-skin, piattaforme android/ios/uwp)
+- Verifica: LicensingClient log "Successfully resolved entitlement
+  details"; editor: "Serial number assigned to: 6872201292598-UnityPersXXXX"
+- Il file .alf manuale NON serve più (attivazione manuale Personal
+  chiusa da Unity nel 2026)
+
+✅ LICENZA: COME FUNZIONA E COME SI RINNOVA DA SOLA:
+- La licenza Personal è un documento XML firmato:
+  /root/.config/unity3d/Unity/licenses/UnityEntitlementLicense.xml
+  Campi chiave: IssueDate (data rigenerazione) e UpdateDate
+  (scadenza validità OFFLINE = IssueDate + 30 giorni)
+- Il token di sessione Unity ID vive nella cache del daemon
+  Unity.Licensing.Client (spawnato dal Hub) e nei Local Storage
+  del Hub (/root/.config/unityhub/Local Storage/leveldb/)
+- OGNI volta che l'editor parte (anche batchmode) il Licensing
+  Client usa il token per contattare i server Unity e RIGENERA
+  la XML → IssueDate avanza, la licenza resta valida all'infinito.
+  Verificato: in una singola run l'IssueDate è passata da
+  15:24:16 a 15:26:20 (rinnovo automatico confermato).
+- SENZA internet per >30 giorni la XML scade (UpdateDate) e
+  l'editor torna a "No valid license". Serve solo riaprire il Hub
+  online per rigenerarla (niente ri-attivazione manuale).
+- Servizio di mantenimento: creato il systemd unit
+  /etc/systemd/system/unity-license.service (avviato e abilitato
+  al boot) che lancia /usr/local/bin/unity-license-keeper.sh:
+  Xvfb :99 + Unity Hub con --remote-debugging-port=9222, con
+  Restart=always. Il Hub ripristina la sessione salvata su disco
+  (verificato: "Intelligame / lembopasquale78@gmail.com" dopo
+  restart), quindi il daemon licenze non muore mai.
+- Comandi utili:
+  systemctl status unity-license        # stato servizio
+  systemctl restart unity-license       # riavvia Hub
+  Verifica manuale licenza:
+  timeout 240 <editor> -batchmode -quit -nographics -projectPath
+    <progetto> -logFile /tmp/lic.log
+  → grep "Successfully resolved entitlement details" /tmp/lic.log
+  → grep IssueDate/UpdateDate nella XML
+
+✅ PROGETTO UNITY IMPORTATO E VALIDATO (2026-08-05):
+- Fix ProjectSettings: il ProjectSettings.asset scritto a mano era
+  troncato (82 righe) e causava "TagManager is NULL" → sostituito con
+  quello completo del progetto base (764 righe) + riapplicati:
+  productName=Huntix, companyName=IntelliGame, minSdk 29, targetSdk 34,
+  ARM64 (bitmask 2), scriptingBackend Android=IL2CPP
+- Copiati tutti i ProjectSettings mancanti dal progetto base
+- Fix manifest.json: rimossi com.unity.xr.arsubsystems@5.1.3 (non
+  esiste nel registry) e i 5 package Firebase (com.google.firebase.*
+  non più su registry UPM; distribuiti come .tgz — da riaggiungere
+  solo se il lato Unity li usa; Firebase vive lato Android nativo)
+- Fix compilazione C# (~20 file): using mancanti (Huntix.Core/Outdoor/
+  UI/Bridge/Inventory, System.Collections.Generic), \n letterale in
+  EggOpening.cs:15, tipo preferenze PlayerPreferences annidata,
+  GetRarityBoost con EggElement, CanvasGroup?.alpha non assegnabile
+- RISULTATO: "Exiting batchmode successfully now!" — 53 asset con
+  GUID validi, tutti importati in Library (ScriptableObject, materiali,
+  prefab, scene), script compilati senza errori
+- ATTENZIONE (bug noto): Building.prefab ha un componente MonoBehaviour
+  con m_Script = BuildingDefSO (che è uno ScriptableObject, non un
+  MonoBehaviour) → componente invalido da rimuovere in editor.
+
+✅ BUILD CON VERIFICA LICENZA AUTOMATICA (2026-08-05):
+- build_release.sh ORA controlla la licenza ad ogni build:
+  1. verifica che systemd esista e che il servizio unity-license sia
+     installato; se manca, lo REINSTALLA da solo (unit + wrapper)
+  2. avvia il servizio se non attivo e attende il CDP del Hub (:9222)
+  3. CHECK VELOCE: servizio attivo + XML valida (UpdateDate>ora)
+     + Hub firmato → OK (pochi secondi)
+  4. CHECK PROFONDO (se il veloce fallisce): run batchmode editor
+     → "Successfully resolved entitlement details" (rigenera la XML)
+  5. RE-LOGIN AUTONOMO (se serve): hub-login.js con credenziali
+     da ENV o /root/.unity-credentials; se Unity chiede il 2FA
+     via email, scrive un messaggio e attende il codice nel file
+     (default /tmp/opencode/unity-lic/2fa.txt)
+- Se dopo tutti i tentativi la licenza è invalida → la build si
+  ferma con messaggio chiaro. Per forzare: SKIP_UNITY_LICENSE_CHECK=1
+- File coinvolti:
+  unitylic/ensure_unity_license.sh     (logica di verifica/ripristino)
+  unitylic/tools/hub-login.js          (login automatico, puppeteer-core)
+  unitylic/tools/hub-probe.js          (sonda stato login)
+  /root/.unity-credentials             (email=/password=, chmod 600)
+  unitylic/unity-license-check.log     (log della verifica)
+- Testati: fast path OK, servizio fermo→avvio automatico OK,
+  file servizio mancanti→reinstall OK
+
+⏳ IN CORSO / PROSSIMI:
+- Collegare ufficialmente gli ScriptableObject ai prefab nelle scene
+  (asset già importati; wiring nei prefab da verificare in editor)
+  → VALIDAZIONE in corso: editor script di check batchmode
+    (risoluzione GUID, campi EggRaritySO/BuildingDefSO nei prefab,
+    materiali URP, script mancanti nelle scene/prefab)
+- Esportare AAR reale da Unity (sostituisce gli stub) — richiede
+  Android SDK/NDK + IL2CPP + Player Settings (package id, ARM64)
+- Configurare Player Settings e build Android
+
+----------------------------------------
+FASE 1: SETUP UNITY + INTEGRAZIONE (1 settimana)
+----------------------------------------
+
+1.1 Installazione Unity
+- Unity Hub → Unity 2022.3 LTS
+- Moduli: Android Build Support, iOS Build Support, AR Foundation
+- Crea progetto 3D URP (Universal Render Pipeline)
+
+1.2 Configurazione progetto Unity
+- Package ID: com.intelligame.huntix (stesso di Android)
+- Bundle Identifier: com.intelligame.huntix
+- Min SDK: Android 10 (API 29)
+- Target SDK: Android 14 (API 34)
+- Orientamento: Portrait
+- XR Plugin Management → ARCore attivato
+- Scripting Backend: IL2CPP
+- Target Architectures: ARM64
+
+1.3 Integrazione Firebase
+- Firebase Unity SDK (firebase.google.com/download)
+- Integra: Authentication, Firestore, Analytics, Remote Config
+- Stessa struttura dati Firestore (nessuna migrazione DB necessaria)
+
+1.4 Esportazione Unity come AAR
+- Build Settings → Android → Export Project (gradle)
+- Genera AAR: Assets/Plugins/Android/unityLibrary.aar
+- Importa l'AAR nel progetto Android esistente
+- Aggiungi dipendenze Gradle necessarie
+
+1.5 Integrazione nel progetto Android
+- Aggiungi unityLibrary come module nel progetto Android
+- Configura AndroidManifest.xml per le Activity Unity
+- Crea BridgeActivity che avvia Unity quando necessario
+- Mantieni tutte le Activity Android esistenti funzionanti
+
+1.6 Struttura cartelle Unity
+Assets/
+├── Scripts/
+│   ├── Bridge/         (comunicazione Android↔Unity)
+│   ├── Core/           (GameManager, SaveManager, ProfileManager)
+│   ├── Outdoor/        (OutdoorManager, EggSpawn, WeatherSystem)
+│   ├── AR/             (ARNavigation, GeospatialAnchor, ARSession)
+│   ├── Indoor/         (BuildingInterior, NPC, ShopSystem)
+│   ├── Inventory/      (EggInventory, Bestiary, CatchDialog)
+│   ├── Gamification/   (LiveEvents, ResearchTasks, Leaderboard)
+│   └── UI/             (HUD, Menus, Dialogs, BestiaryUI)
+├── Prefabs/
+│   ├── Characters/
+│   ├── Eggs/
+│   ├── Buildings/
+│   └── UI/
+├── Models/             (GLB/GLTF 3D models)
+├── Animations/         (Mecanim controllers)
+├── Audio/
+├── Materials/
+├── Scenes/
+│   ├── Outdoor.unity   (AR outdoor scene)
+│   ├── Indoor.unity    (3D building interior)
+│   └── Menu.unity      (main menu, setup)
+└── Plugins/
+    └── Firebase/
+
+----------------------------------------
+FASE 2: PORTING CORE SYSTEMS (2 settimane)
+----------------------------------------
+
+2.1 Dati condivisi (ScriptableObjects)
+- EggRarity → ScriptableObject con campo rarityId, displayName, color, etc.
+- EggElement → Enum: WATER, EARTH, AIR, FIRE, NORMAL
+- WeatherType → Enum con rarityBoost map
+- ZoneType → Enum: UNKNOWN, SNOW, WATER, MOUNTAIN
+- WorldEgg → MonoBehaviour con tutti i campi (id, name, lat, lng, rarity, etc.)
+- BuildingDef → ScriptableObject con type, name, emoji, color3D, actions
+- BuildingType → Enum: HOUSE, SCHOOL, RESTAURANT, SUPERMARKET, HOSPITAL, GYM, etc.
+
+2.2 OutdoorManager → Unity Singleton
+- Stessa logica di spawn uova, POI, rigenerazione
+- Usa Unity's Coroutine al posto di Kotlin Coroutines
+- Firebase Firestore per dati online (stessa struttura)
+- Salvataggio locale con PlayerPrefs o SQLite (Unity)
+
+2.3 LiveEventManager → Unity Singleton
+- Stessa logica eventi settimanali
+- EventType enum identico
+- Firestore per stato partecipazione
+
+2.4 PlayerProfileManager → Unity ScriptableObject
+- Stessa struttura livelli, XP, MVC
+- Firebase per sync cloud
+
+2.5 ResearchTaskManager → Unity MonoBehaviour
+- Stessa logica task di ricerca
+- Firestore per progresso
+
+2.6 SavedManager → Unity
+- Stessa logica salvataggio MVC
+- SQLite per cache locale
+
+2.7 Bridge Android↔Unity
+- Classe AndroidJavaBridge in Kotlin (Android side)
+- Classe UnityBridge in C# (Unity side)
+- Metodi esposti:
+  - SaveData(json) → Unity salva su Firebase
+  - LoadData() → Unity legge da Firebase
+  - ShowToast(message) → Unity chiama Android toast
+  - OpenAndroidActivity(className) → Unity apre Activity Android
+  - GetSharedPreference(key) → Unity legge da Android prefs
+  - SetSharedPreference(key, value) → Unity scrive su Android prefs
+
+----------------------------------------
+FASE 3: AR OUTDOOR MODE (2 settimane)
+----------------------------------------
+
+3.1 AR Foundation Setup
+- AR Session → AR Session Origin → AR Camera
+- AR Plane Detection: disattivato (outdoor)
+- AR Raycast per placement
+- AR Geospatial API (ARCore Geospatial) per anchor GPS
+
+3.2 Geospatial Anchoring
+- Sostituisci GeospatialAnchorManager con AR Foundation Geospatial
+- createAnchor() → ARAnchor con lat/lng/alt
+- getCameraGeospatialPose() → ARSessionOrigin camera pose
+- Tracking state → ARSession.state
+
+3.3 Egg Rendering in AR
+- Prefab "Egg" con Sphere + glow (Shader Graph)
+- Posizionamento tramite geospatial anchor
+- Raggio di cattura visuale (circle on ground)
+- Rarità → colore + dimensione + glow intensity
+
+3.4 Compass Arrow
+- Mantieni CompassArrowView come prefab 3D
+- Freccia 3D che punta verso l'uovo
+- Distanza visualizzata come testo 3D o UI overlay
+
+3.5 Catch Mechanic
+- Quando dist <= raggio → bottone "Cattura"
+- Animazione prendi (Mecanim)
+- Vibrazione (Handheld.Vibrate())
+- Flash screen (RenderTexture + color overlay)
+- Transizione a EggOpeningAnimation
+
+3.6 HUD AR
+- Canvas overlay (Screen Space - Camera)
+- Livello, XP, MVC, emoji meteo, conteggio uova
+- Bottone AR (sempre visibile)
+- Bottone Mappa (per tornare alla mappa 2D Android)
+
+----------------------------------------
+FASE 4: 3D REALLIFE + INDOOR (3 settimane)
+----------------------------------------
+
+4.1 NavMesh Setup
+- Ogni negozio ha un NavMesh bakeato
+- NavMeshSurface componente su ogni building prefab
+- Agente del personaggio con NavMeshAgent
+
+4.2 Character Controller
+- Prefab "Player" con modello 3D (asset store o custom)
+- Animator Controller con stati: Idle, Walk, Run, Interact
+- Input: touch joystick (mobile) o WASD (desktop)
+- Camera: terza persona follow cam (Cinemachine)
+
+4.3 Building Interior Scene
+- Ogni edificio ha una scena Unity dedicata
+- Modello 3D dell'interno (shelf, counter, etc.)
+- Oggetti interattivi: raycast su click/touch
+- NPC: personaggi con dialogo (UI text)
+
+4.4 Shop System
+- Oggetti sugli scaffali → interactable
+- Click → popup con info + azione (compra, ordina, lavora)
+- Inventario locale + cloud sync
+- MVC currency per ricompense
+
+4.5 NPC AI
+- State machine semplice: Idle → Interact → GiveQuest → Reward
+- Dialogo con UI text (tipo chat bubble)
+- NPC ricorrenti con memoria
+
+4.6 Transizione Outdoor ↔ Indoor
+- Quando il giocatore si avvicina a un edificio → prompt "Entra"
+- Click → caricamento scena Indoor con fade
+- Dall'interno → porta → ritorno a Outdoor
+- Coordinate GPS mappate a posizione interna
+
+4.7 Transizione Unity ↔ Android
+- Dall'interno di un negozio → bottone "Torna alla mappa"
+- Unity chiama Bridge.OpenAndroidActivity("OutdoorWorldActivity")
+- Android riprende il controllo con tutti i dati aggiornati
+
+----------------------------------------
+FASE 5: POLISH & FEATURES (2 settimane)
+----------------------------------------
+
+5.1 UI/UX
+- TextMeshPro per tutto il testo
+- Tema visivo coerente (dark, purple/gold accents)
+- Animazioni UI (tweening con DOTween)
+- Bestiary UI: griglia di uova collezionate con rarità
+- Live Events UI: countdown timer, reward preview
+
+5.2 Audio
+- AudioManager singleton
+- SFX: cattura, interazione, NPC, notifica
+- Music: ambient outdoor, indoor, event
+- AudioMixer per volume control
+
+5.3 Day/Night Cycle in AR
+- Light Probe Group per illuminazione indoor
+- Skybox che cambia con DayNightManager
+- Luci degli edifici si accendono di notte
+- Window brightness → realtime light adjustment
+
+5.4 Weather Effects in AR
+- Particle systems per pioggia/neve/nebbia
+- Flash per temporale
+- Overlay colorato per nebbia
+- Influenza su spawn e gameplay
+
+5.5 Bestiary / Collection
+- Schermata bestiary con tutte le uova
+- Uova trovate: modello 3D + info
+- Uova non trovate: silhouette
+- Percentuale collezione
+- Condivisione social (screenshot bestiary)
+
+5.6 Social Features
+- Leaderboard outdoor (Firebase)
+- Classifica regione
+- Condivisione cattura (share intent Android)
+- Profilo pubblico con stats
+
+----------------------------------------
+FASE 6: MINI-GIOCHI E SEZIONI NATIVE (1 settimana)
+----------------------------------------
+
+6.1 Android-native UI per sezioni non-Unity
+- Menu principale Android con navigazione tra:
+  - Outdoor (Unity)
+  - RealLife (Unity)
+  - Mini-giochi (Android nativo)
+  - Termoculla (Android nativo)
+  - Squadre (Android nativo)
+  - Profilo (Android nativo)
+  - Impostazioni (Android nativo)
+
+6.2 Bridge Activity
+- BridgeActivity.java: punto di ingresso per avviare Unity
+- Passa parametri (modalità: outdoor, reallife, indoor)
+- Riceve dati di ritorno da Unity (uova catturate, MVC guadagnati)
+
+6.3 Android mini-giochi esistenti
+- Tutti i mini-giochi 2D restano in Kotlin
+- Nessuna modifica necessaria
+- Funzionano come prima, solo navigazione aggiornata
+
+6.4 Termoculla Android nativo
+- UI con ProgressBar + Handler per polling
+- Notifiche push quando un uovo è pronto
+- Nessuna necessità di Unity
+
+----------------------------------------
+FASE 7: BUILD & DEPLOY (1 settimana)
+----------------------------------------
+
+7.1 Android Build con Unity AAR
+- Unity esporta AAR (gradle export)
+- Android Studio importa unityLibrary come module
+- Gradle sync e build
+- Firma APK/AAB con stesso keystore di prima
+
+7.2 Android Build
+- Player Settings → Other Settings:
+  - Scripting Backend: IL2CPP
+  - Target Architectures: ARM64
+  - Minimum API Level: 29
+  - Package Name: com.intelligame.huntix
+- Build Settings → Android → Build and Run
+- Test su 3 dispositivi reali (vecchio, medio, nuovo)
+
+7.3 iOS Build (opzionale, fase successiva)
+- Player Settings → iOS
+- ARKit capability attivata
+- Build e Test su Xcode
+
+7.4 Performance
+- Profiler Unity → identifica bottleneck
+- Object pooling per uova/POI
+- LOD per modelli 3D
+- Texture compression: ASTC
+- Target: 60fps su device medio (Snapdragon 680 / A13)
+
+7.5 Store Assets
+- Screenshot: outdoor AR + indoor 3D
+- Icon: design coerente con Huntix brand
+- Descrizione: focus su AR + 3D indoor
+- Keywords: AR, geolocation, outdoor, 3D, eggs, hunt
+
+----------------------------------------
+RISCHI E MITIGAZIONI
+----------------------------------------
+
+Rischio: Curva di apprendimento Unity
+Mitigazione: Inizia con tutorial Unity ufficiali + AR Foundation samples
+
+Rischio: Asset 3D di qualità
+Mitigazione: Usa Asset Store (Poly Pizza, Synty, etc.) + personalizza
+
+Rischio: Integrazione Firebase
+Mitigazione: Firebase Unity SDK è ufficiale e ben documentato
+
+Rischio: AR Foundation su Android
+Mitigazione: AR Foundation 5.x supporta ARCore nativamente, testare su Pixel
+
+Rischio: APK size troppo grande
+Mitigazione: Asset Bundle loading, texture compression, strip unused code
+Unity AAR è ~20-30MB, si carica on-demand
+
+Rischio: Perdita di dati esistenti
+Mitigazione: Mantieni stesso schema Firestore, migra PlayerPrefs → Unity
+
+Rischio: Comunicazione Android↔Unity fragile
+Mitigazione: Bridge ben testato, JSON schema versionato, fallback su errori
+
+Rischio: Due codebase da mantenere
+Mitigazione: Documentazione chiara, moduli ben separati, shared Firestore schema
+
+Rischio: Build complessa
+Mitigazione: CI/CD con GitHub Actions automatizza build Android + Unity
+
+----------------------------------------
+TEMPI STIMATI
+----------------------------------------
+
+Fase 1: Setup Unity + Integrazione    → 1 settimana
+Fase 2: Porting Core Systems           → 2 settimane
+Fase 3: AR Outdoor Mode                → 2 settimane
+Fase 4: 3D RealLife + Indoor           → 3 settimane
+Fase 5: Polish & Features              → 2 settimane
+Fase 6: Mini-giochi + Sezioni Native   → 1 settimana
+Fase 7: Build & Deploy                 → 1 settimana
+-----------------------------------
+TOTALE                                 → 12 settimane (~3 mesi)
+
+----------------------------------------
+RISORSE NECESSARIE
+----------------------------------------
+
+- Unity 2022.3 LTS (gratuito per revenue < $100k)
+- AR Foundation package (gratuito)
+- Firebase Unity SDK (gratuito)
+- 3D Models: Asset Store (~$100-300 per pacchetto)
+- Audio: libreria royalty-free o creazione custom
+- DOTween: asset gratuito (asset store)
+- TextMeshPro: incluso in Unity URP
+- Cinemachine: incluso in Unity URP
+
+----------------------------------------
+CONFRONNO: STRATEGIE POSSIBILI
+----------------------------------------
+
+Strategia A: Tutto in Unity
++ Un solo codice base
++ Massima coerenza grafica
+- APK enorme (~80-100MB)
+- Mini-giochi 2D in Unity sono contorti
+- Build lente
+- Troppo complesso per sezioni semplici
+
+Strategia B: Tutto in Android nativo
++ APK leggero (~30MB)
++ Build veloci
++ Mini-giochi semplici
+- Nessuna fisica, no NavMesh, no animazioni
+- 3D limitatissimo, no character controller
+- Non scalabile per un gioco 3D completo
+
+Strategia C: Ibrida (SCELTA CONSIGLIATA)
++ Unity dove serve (AR, 3D, fisica, animazioni)
++ Android nativo dove basta (UI, mini-giochi, timer)
++ APK dimensione controllata (Unity on-demand)
++ Ogni sezione usa lo strumento giusto
++ Scalabile e manutenibile
+- Due codebase (Kotlin + C#)
+- Bridge da implementare e testare
+- Build leggermente più complessa
+
+CONCLUSIONE: La strategia ibrida è la scelta migliore per Huntix.
+Unity gestisce il gameplay 3D/AR, Android gestisce l'UI e i mini-giochi.
+Il risultato è un gioco professionale, performante e manutenibile.
+
+----------------------------------------
+PROSSIMI PASSI IMMEDIATI
+----------------------------------------
+
+1. ✅ Licenza Unity Personal attivata (via Unity Hub login, vedi STATO ATTUALE)
+2. ✅ Progetto Unity 2022.3 importato in batchmode: asset validati,
+   script compilati, Library costruita ("Exiting batchmode successfully")
+3. ✅ Licenza resa auto-rinnovante (systemd unity-license + token Hub:
+   la XML si rigenera a ogni run editor, vedi STATO ATTUALE)
+4. ✅ build_release.sh verifica/ripristina la licenza ad ogni build
+   (systemd + Hub + XML + re-login automatico, vedi STATO ATTUALE)
+5. Verificare wiring ScriptableObject→prefab→scene (validazione
+   batchmode in editor, in corso)
+6. Configurare Player Settings (package id, IL2CPP, ARM64, minSdk)
+7. Esportare Unity come AAR reale
+8. Sostituire gli stub unityLibrary con l'AAR esportato
+9. Creare BridgeActivity per avviare Unity dall'Android
+10. Testare la scena Outdoor base su dispositivo reale
+
+Dopo il primo test funzionante, il resto del porting procede
+in modo naturale e progressivo, sezione per sezione.

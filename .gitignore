@@ -52,3 +52,10 @@ backend/.env.example
 backend/.hf_token
 backend/.gen_status.json
 backend/static/
+
+# ── Licenza Unity: dipendenze di automazione e log (mai su Git) ──
+unitylic/tools/node_modules/
+unitylic/unity-license-check.log
+
+# ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
+unityLibrary/build/

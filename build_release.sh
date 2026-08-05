@@ -16,6 +16,17 @@
 #   export WEB_CLIENT_ID=....apps.googleusercontent.com
 # Se non settate, build.gradle usa i default hardcoded (AdMob di Huntix).
 #
+# LICENZA UNITY (automatica):
+#   Ad ogni build lo script verifica systemd + servizio unity-license
+#   (Xvfb + Unity Hub) + validità della UnityEntitlementLicense.xml.
+#   Se qualcosa non va, avvia/ripara il servizio e rigenera la licenza
+#   da solo (unitylic/ensure_unity_license.sh). Solo se anche il
+#   re-login automatico fallisce, la build si ferma con un messaggio.
+#   Per saltare il check: SKIP_UNITY_LICENSE_CHECK=1
+#   Credenziali per il re-login automatico (se la sessione è scaduta):
+#   export UNITY_EMAIL=... UNITY_PASSWORD=...
+#   oppure file /root/.unity-credentials (email=/password=, chmod 600).
+#
 # Logica di build/firma ripresa da build_app.sh (aria):
 #   - rilevamento ANDROID_HOME
 #   - creazione local.properties
@@ -49,6 +60,30 @@ while [ -z "$AUTH_MODE" ]; do
     esac
 done
 echo ">> Modalita' scelta: $AUTH_MODE"
+
+# ── Verifica/ripristino licenza Unity (auto-sufficiente) ─────
+# Ad ogni build: controlla systemd, avvia il servizio unity-license
+# (Xvfb + Unity Hub) se assente/non attivo, valida la licenza e, se ci
+# sono problemi, la rigenera in automatico (vedi unitylic/ensure_unity_license.sh).
+# Per saltare del tutto: SKIP_UNITY_LICENSE_CHECK=1
+echo "============================================================"
+echo " Verifica licenza Unity (systemd + Hub + XML)"
+echo "============================================================"
+UNITY_LICENSE_SCRIPT="$(dirname "$0")/unitylic/ensure_unity_license.sh"
+if [ "${SKIP_UNITY_LICENSE_CHECK:-0}" = "1" ]; then
+    echo ">> SKIP_UNITY_LICENSE_CHECK=1 — verifica licenza Unity saltata."
+elif [ -x "$UNITY_LICENSE_SCRIPT" ]; then
+    if "$UNITY_LICENSE_SCRIPT"; then
+        echo ">> Licenza Unity: OK."
+    else
+        echo "!! Licenza Unity NON valida dopo tutti i tentativi automatici." >&2
+        echo "   Log: unitylic/unity-license-check.log" >&2
+        echo "   Per forzare la build senza check: SKIP_UNITY_LICENSE_CHECK=1" >&2
+        exit 1
+    fi
+else
+    echo ">> ensure_unity_license.sh non trovato — verifica licenza saltata."
+fi
 
 KEYSTORE_FILE="huntix-release.keystore"
 PROPS_FILE="keystore.properties"

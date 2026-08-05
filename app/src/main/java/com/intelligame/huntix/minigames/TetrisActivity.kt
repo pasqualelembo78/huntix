@@ -260,10 +260,10 @@ class TetrisActivity : MiniGameBase() {
             }
             val p = currentPiece
             if (p != null) {
-                for (r in 0 until 4) for (c in 0 until 4) {
-                    val idx = r * 4 + c
+                for (r in 0 until 4) for (cc in 0 until 4) {
+                    val idx = r * 4 + cc
                     if (p.cells[idx] == 0) continue
-                    val x = offsetX + (pieceX + c) * cs
+                    val x = offsetX + (pieceX + cc) * cs
                     val y = offsetY + (pieceY + r) * cs
                     if (pieceY + r >= 0) {
                         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = p.color }

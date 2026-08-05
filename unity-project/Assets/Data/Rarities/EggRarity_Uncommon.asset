@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8fa5bb12dfe27467bbb6fbf1324ef3e, type: 3}
+  m_Name: EggRarity_Uncommon
+  m_EditorClassIdentifier:
+  rarityId: 1
+  displayName: Uncommon
+  color: {r: 0.494118, g: 0.827451, b: 0.129412, a: 1.0}
+  captureDifficulty: 1.300000
+  mvcReward: 20
+  minLevelRequired: 2
+  icon: {fileID: 0}
+  prefab: {fileID: 100000, guid: fa3902daa5077b34b44fc2d46683cbda, type: 3}
