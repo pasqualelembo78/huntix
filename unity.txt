@@ -304,13 +304,19 @@ FASE 2: PORTING CORE SYSTEMS (2 settimane)
   - LoadData() → Unity legge da Firebase
   - ShowToast(message) → Unity chiama Android toast
   - OpenAndroidActivity(className) → Unity apre Activity Android
-   - GetSharedPreference(key) → Unity legge da Android prefs
-   - SetSharedPreference(key, value) → Unity scrive su Android prefs
-   - GetCurrentLocation() -> JSON {lat,lng,mock,acc}: posizione reale/mock della mappa 3D
-   - SetMockWalk(bool): attiva "cammina senza muoversi" (FusedLocation offset + heading)
-   - TryCatch(storeId): cattura POI/creatura da AR proximity → risposta via
-     GameManager.SendMessage("OnEvent","CatchResult|{json}") (Unity→Android bridge inverso)
+    - GetSharedPreference(key) → Unity legge da Android prefs
+    - SetSharedPreference(key, value) → Unity scrive su Android prefs
+    - GetCurrentLocation() -> JSON {lat,lng,mock,acc}: posizione reale/mock della mappa 3D
+    - SetMockWalk(bool): attiva "cammina senza muoversi" (FusedLocation offset + heading)
+    - TryCatch(storeId): cattura POI/creatura da AR proximity → risposta via
+      GameManager.SendMessage("OnEvent","CatchResult|{json}") (Unity→Android bridge inverso)
     - onUnityMessage(event): Android gestisce CatchRequest/PoiSelected da Unity
+    NOTA POI: OnlinePoiManager (app/manager) NON è stato rimosso — è la fonte
+    primaria POI online (huntix-poi su GitHub, migliaia di negozi). PoiMapBridge
+    usa OnlinePoiManager (online-first) con fallback a PoiRepository locale
+    (assets/shops.json) quando offline. Due OutdoorManager coesistono:
+      app/manager/OutdoorManager.kt  (madre, OnlinePoiManager, RealLife/outdoor mode)
+      huntix/.../legacy/poi/gps/OutdoorManager.kt  (modulo clone, GPS+fused+mock per Unity/AR)
 
 ✅ COMPLETATO (2026-08-06) — Bridge Kotlin↔Unity sincronizzato:
 - OutdoorManager.cs (Unity) chiama Bridge.GetCurrentLocation() ogni 5s → parse JSON
