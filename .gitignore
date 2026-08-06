@@ -67,3 +67,6 @@ unity-export/
 app/libs/*.aar
 *.aar
 
+# ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
+unityLibrary/build/
+

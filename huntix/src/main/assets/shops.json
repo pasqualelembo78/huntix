@@ -18,5 +18,15 @@
     "poiType": "FOOD",
     "url": "https://example.com/shop_002.json",
     "pageType": "json"
+  },
+  {
+    "id": "pasticceria_bolognese",
+    "name": "Pasticceria Bolognese",
+    "lat": 41.9011,
+    "lng": 12.4922,
+    "buildingType": "PASTRY",
+    "poiType": "FOOD",
+    "url": "https://example.com/bolognese.json",
+    "pageType": "json"
   }
 ]

@@ -32,6 +32,7 @@ object PoiMapBridge {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val (lat, lng) = currentLocation(context)
+                val repo = com.intelligame.huntix.legacy.poi.data.PoiRepository(context)
                 val result = OnlinePoiManager().fetchPoiForLocation(
                     context, lat, lng, maxPois = MAX_POIS
                 )
@@ -49,7 +50,15 @@ object PoiMapBridge {
                         )
                     }
                     com.intelligame.huntix.legacy.poi.domain.PoiBridge.setPois(stores)
-                    AppLog.d("PoiMapBridge", "Bridge POI aggiornati: ${stores.size}")
+                    AppLog.d("PoiMapBridge", "Bridge POI (online) aggiornati: ${stores.size}")
+                }.onFailure {
+                    // Fallback offline: usa assets/shops.json locale
+                    val local = repo.fetchPoiForLocation(lat, lng, MAX_POIS)
+                    local.onSuccess { stores ->
+                        com.intelligame.huntix.legacy.poi.domain.PoiBridge.setPois(stores)
+                        AppLog.d("PoiMapBridge", "Bridge POI (locale) aggiornati: ${stores.size}")
+                    }
+                    local.onFailure { e -> AppLog.w("PoiMapBridge", "feed locale fallito: ${e.message}") }
                 }
             } catch (e: Exception) {
                 AppLog.w("PoiMapBridge", "feed fallito: ${e.message}")
