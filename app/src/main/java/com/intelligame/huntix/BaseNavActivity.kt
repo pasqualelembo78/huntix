@@ -143,17 +143,18 @@ open class BaseNavActivity : AppCompatActivity() {
     }
 
     private fun showAltroMenu() {
-        val items = arrayOf("Profilo", "Personaggio", "Impostazioni", "Abilità", "Eventi Live", "Eventi Speciali", "Borsa", "Invita Amico", "Info e Legale")
+        val items = arrayOf("Profilo", "Personaggio", "Mappa POI", "Impostazioni", "Abilità", "Eventi Live", "Eventi Speciali", "Borsa", "Invita Amico", "Info e Legale")
         AlertDialog.Builder(this).setTitle("Altro").setItems(items) { _, i -> when (i) {
             0 -> startActivity(Intent(this, PlayerProfileActivity::class.java))
             1 -> startActivity(Intent(this, GenderChangeActivity::class.java))
-            2 -> startActivity(Intent(this, SettingsActivity::class.java))
-            3 -> startActivity(Intent(this, AbilityActivity::class.java))
-            4 -> startActivity(Intent(this, LiveEventsActivity::class.java))
-            5 -> startActivity(Intent(this, SpecialEventsActivity::class.java))
-            6 -> startActivity(Intent(this, SurpriseInventoryActivity::class.java))
-            7 -> com.intelligame.huntix.social.ReferralManager.getMyCode(this) { code -> runOnUiThread { if (code.isNotBlank()) com.intelligame.huntix.social.ReferralManager.shareCode(this, code) } }
-            8 -> startActivity(Intent(this, InfoLegalActivity::class.java))
+            2 -> startActivity(Intent(this, PoiListActivity::class.java))
+            3 -> startActivity(Intent(this, SettingsActivity::class.java))
+            4 -> startActivity(Intent(this, AbilityActivity::class.java))
+            5 -> startActivity(Intent(this, LiveEventsActivity::class.java))
+            6 -> startActivity(Intent(this, SpecialEventsActivity::class.java))
+            7 -> startActivity(Intent(this, SurpriseInventoryActivity::class.java))
+            8 -> com.intelligame.huntix.social.ReferralManager.getMyCode(this) { code -> runOnUiThread { if (code.isNotBlank()) com.intelligame.huntix.social.ReferralManager.shareCode(this, code) } }
+            9 -> startActivity(Intent(this, InfoLegalActivity::class.java))
         }}.show()
     }
 

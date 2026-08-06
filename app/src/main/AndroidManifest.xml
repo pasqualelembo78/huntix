@@ -122,7 +122,10 @@
             android:configChanges="orientation|keyboardHidden|screenSize"/>
 
         <activity android:name=".HomeActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
+            android:exported="false" android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        <activity android:name=".ui.PoiListActivity"
+            android:exported="true" android:screenOrientation="portrait"/>
         <activity android:name=".PlayersSetupActivity"
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".SettingsActivity"

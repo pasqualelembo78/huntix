@@ -641,3 +641,75 @@ PROSSIMI PASSI IMMEDIATI
 
 Dopo il primo test funzionante, il resto del porting procede
 in modo naturale e progressivo, sezione per sezione.
+================================================================================
+STATO GIORNALIERO — 2026-08-06 (STRAVOLGIMENTO CLONE -> HYBRID PIR)
+================================================================================
+L'intero modulo "pokemon GO clone" (java legacy) e' stato RESCRITTO in Kotlin
+da zero in com.intelligame.huntix.legacy.poi.*: nessun file nuovo contiene
+"pokemon/pokemn/pokeball/pokedex/incubad". Verificato via grep (0 match).
+
+FEATURE COMPLETE:
+  [x] Mappa + negozi (POI): assets/shops.json locale + OnlinePoiManager rete
+      (fallback offline in PoiMapBridge); UI alternativa kotlin PoiListFragment.
+  [x] Cattura + crescita: CatchEngine (raggio 40m, roll rarita), Trainer (exp/lvl),
+      Persistence (SharedPreferences). Nomi: Creature/Trainer (NO pokemon).
+  [x] GPS reale (FusedLocationProviderClient) + "cammina senza muoversi" mock-walk:
+      OutdoorManager.enableMockWalk(true) simula offset + heading.
+  [x] Bridge Kotlin<->Unity COMPATIBILE:
+        Android -> Unity:  PoiUnityBridge.sendEvent("CatchResult","{json}")
+                              -> GameManager.UnitySendMessage("GameManager","OnEvent",...)
+        Unity -> Android:  UnityBridge.CallStatic("tryCatch"|onUnityMessage)
+                              -> Bridge.onUnityMessage -> CatchController.
+        getCurrentLocation/setMockWalk/TryCatch esposti (vedi FASE 2.7).
+  [x] ARCore Geospatial: fallback planare GeoWorldOffset (equirettangolare, valido 5km);
+      ARCore Extensions (AREarth) attivabile via manifest.json (vedi sotto).
+  [x] Build verificato:
+        ./gradlew :app:assembleDebug  -> SUCCESS
+        Unity 2022.3.52f1 -batchmode  -> 0 errori CS ("Mono: successfully reloaded assembly")
+
+ARCHITETTURA (package) - DOPPIO LIVELLO, ZERO CONFLITTO:
+  com.intelligame.huntix.poi.*           -> [NON USATO: riserervato per futuro refactor]
+  com.intelligame.huntix.legacy.poi.*    -> modulo clone (data/domain/gps/creature/unity)
+  com.intelligame.huntix.bridge           -> Bridge.kt (contract Unity)
+  com.intelligame.huntix.manager          -> PoiMapBridge (app, madre, usa OnlinePoiManager)
+  com.intelligame.huntix.ui               -> PoiListActivity + PoiListFragment (UI kotlin negozi)
+  due OutdoorManager coesistono (namespace diversi):
+    app/.../manager/OutdoorManager.kt     -> madre (RealLife mode, POI spin, rete)
+    huntix/.../legacy/poi/gps/OutdoorManager.kt -> clone (GPS fused+mock, Unity/AR)
+
+COME AGGIUNGERE NEGOZI (negozi POI) - 2 MODI:
+  1) REMOTO (migliaia di negozi): il repo github.com/pasqualelembo78/huntix-poi
+     e' il source. Ogni regione ha /italia/{regione}/{citta}/_all.csv.
+     Per aggiungere un negozio al repo: clona huntix-poi, modifica il CSV, push;
+     OnlinePoiManager lo fetcha in automatico (cache 24h).
+  2) LOCALE (offline, demo, custom): assets/shops.json.
+     ./scripts/add-store.sh --name "Bar New" --lat 41.9 --lng 12.5 \
+            --buildingType "BAR" --poiType "FOOD" \
+            --url "https://x.example/json" --pageType json
+     oppure batch CSV:
+     ./scripts/add-store.sh --csv my_stores.csv   # header: id,name,lat,lng,buildingType,poiType,url,pageType
+     REUTILIZZABILE NEL REPO huntix-poi: export SHOPS_JSON=/percorso/shops.json
+  pageType: "json" (apre POICustomPageActivity in-app) | "url" (apre POIWebViewActivity).
+
+DEBUG SU DEVICE (quando sei pronto):
+  ./scripts/debug-runner.sh        # build debug -> install -r -> logcat tags
+  ./scripts/debug-runner.sh uninstall # reset install
+  logcat tags: OutdoorManager|CatchEngine|PoiBridge|PoiUnityBridge|Bridge|GameManager
+
+COME ATTIVARE ARCORE GEOSPATIAL REALE (facoltativo, offline build usa fallback piano):
+  - apri Packages/manifest.json
+  - aggiungi "com.unity.xr.arcore-extensions": "5.1.3" a dependencies
+  - ribuilda: il metodo GeospatialAnchor.GeoWorldOffset passa automaticamente
+    al ramo AREarth (reflection) se il package e' importato in runtime; se
+    offline/fallisce, usa il fallback equirettangolare planare (sempre valido).
+
+NOTE BUILD:
+  - gli AAR (app/libs/*.aar) NON sono su git (rigenerabili -> build_release.sh).
+  - .gitignore: esclude keystore.properties, *.jks, google-services.json,
+    unityLibrary/build/, app/libs/*.aar.
+
+PROSSIMI STEP (facoltativi, da decidere):
+  (i-finale) ARCore Extensions reale (AREarth) — richiede rete/online build.
+  (j-finale) UI mappa kotlin (PoiMapFragment con MapLibre) come default,
+             sostituendo MapActivity Java (ora legacy/maeniale).
+  (k) AAB firmato su unity + tag versione.

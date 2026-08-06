@@ -92,24 +92,53 @@ namespace Huntix.AR
         return Quaternion.identity;
     }
 
-    // ── Geo → World (proiezione planare equirectangolare, valida fino a ~5km)
-    // Sostituibile con ARCore Geospatial (AREarth cameraGeospatialPose) quando
-    // disponibile; fallback piano per device/ROM senza ARCore Extensions.
+    // ── Geo → World ─────────────────────────────────────────────
+    // 1) se ARCore Extensions è presente in runtime, usa AREarth (geospatial reale);
+    // 2) altrimenti fallback equirettangolare planare (valido ~5km).
+    // Aggiungere il pacchetto com.unity.xr.arcore-extensions in manifest.json per
+    // attivare il ramo 1 (offline build con fallback piano).
     // offsetMeters = distanza in metri da playerLat/playerLng (nord/est positivi).
     public static Vector3 GeoWorldOffset(
         double lat, double lng, double alt,
         double playerLat, double playerLng, double playerAlt
     )
     {
-        const double EARTH = 6371000.0;                 // raggio medio Terra [m]
+        if (TryEarthOffset(lat, lng, playerLat, playerLng, out Vector3 v)) return v;
+
+        const double EARTH = 6371000.0;
         double dLat = (lat - playerLat) * System.Math.PI / 180.0;
         double dLng = (lng - playerLng) * System.Math.PI / 180.0;
         double mPerDegLat = EARTH * System.Math.PI / 180.0;
         double mPerDegLng = EARTH * System.Math.PI / 180.0 * System.Math.Cos(playerLat * System.Math.PI / 180.0);
-        double y = dLat * mPerDegLat;                  // nord (metri)
-        double x = dLng * mPerDegLng;                  // est  (metri)
-        double z = (alt - playerAlt);                  // altezza (metri, relativa)
+        double y = dLat * mPerDegLat;
+        double x = dLng * mPerDegLng;
+        double z = (alt - playerAlt);
         return new Vector3((float)x, (float)y, (float)z);
+    }
+
+    private static bool TryEarthOffset(
+        double lat, double lng, double playerLat, double playerLng, out Vector3 offset
+    )
+    {
+        offset = Vector3.zero;
+        try
+        {
+            // Reflection: AREarth esiste solo se ARCore Extensions è importato.
+            var earthType = System.Type.GetType("UnityEngine.XR.ARCoreExtensions.ARCoreExtensions, Unity.XR.ARCoreExtensions");
+            if (earthType == null) return false;
+            var earth = UnityEngine.Object.FindObjectOfType(earthType);
+            if (earth == null) return false;
+            var camPose = earthType.GetProperty("CameraGeospatialPose");
+            if (camPose == null) return false;
+            var pose = camPose.GetValue(earth);
+            var latP = pose.GetType().GetField("Latitude").GetValue(pose);
+            var lngP = pose.GetType().GetField("Longitude").GetValue(pose);
+            var altP = pose.GetType().GetField("Altitude").GetValue(pose);
+            double pl = System.Convert.ToDouble(latP), pn = System.Convert.ToDouble(lngP), pa = System.Convert.ToDouble(altP);
+            offset = GeoWorldOffset(lat, lng, 0, pl, pn, pa);
+            return true;
+        }
+        catch { return false; }
     }
 }
 }
