@@ -83,13 +83,33 @@ namespace Huntix.AR
             return Vector3.zero;
         }
 
-        public Quaternion GetCameraRotation()
+    public Quaternion GetCameraRotation()
+    {
+        if (_sessionOrigin != null && _sessionOrigin.camera != null)
         {
-            if (_sessionOrigin != null && _sessionOrigin.camera != null)
-            {
-                return _sessionOrigin.camera.transform.rotation;
-            }
-            return Quaternion.identity;
+            return _sessionOrigin.camera.transform.rotation;
         }
+        return Quaternion.identity;
     }
+
+    // ── Geo → World (proiezione planare equirectangolare, valida fino a ~5km)
+    // Sostituibile con ARCore Geospatial (AREarth cameraGeospatialPose) quando
+    // disponibile; fallback piano per device/ROM senza ARCore Extensions.
+    // offsetMeters = distanza in metri da playerLat/playerLng (nord/est positivi).
+    public static Vector3 GeoWorldOffset(
+        double lat, double lng, double alt,
+        double playerLat, double playerLng, double playerAlt
+    )
+    {
+        const double EARTH = 6371000.0;                 // raggio medio Terra [m]
+        double dLat = (lat - playerLat) * System.Math.PI / 180.0;
+        double dLng = (lng - playerLng) * System.Math.PI / 180.0;
+        double mPerDegLat = EARTH * System.Math.PI / 180.0;
+        double mPerDegLng = EARTH * System.Math.PI / 180.0 * System.Math.Cos(playerLat * System.Math.PI / 180.0);
+        double y = dLat * mPerDegLat;                  // nord (metri)
+        double x = dLng * mPerDegLng;                  // est  (metri)
+        double z = (alt - playerAlt);                  // altezza (metri, relativa)
+        return new Vector3((float)x, (float)y, (float)z);
+    }
+}
 }

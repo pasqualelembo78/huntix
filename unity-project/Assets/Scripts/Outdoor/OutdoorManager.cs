@@ -42,6 +42,7 @@ namespace Huntix.Outdoor
             public bool isActive;
             public long spawnTime;
             public EggRarity rarityData;
+            public Vector3 worldOffset;   // offset mondo Unity (geo -> planare)
         }
 
         private void Awake()
@@ -125,20 +126,23 @@ namespace Huntix.Outdoor
 
         private void SpawnEgg()
         {
+            double eggLat = _playerLat + (UnityEngine.Random.Range(0f, 1f) - 0.5f) * (spawnRadius / 111000f);
+            double eggLng = _playerLng + (UnityEngine.Random.Range(0f, 1f) - 0.5f) * (spawnRadius / 111000f);
             var egg = new EggData
             {
                 id = System.Guid.NewGuid().ToString(),
-                // Coordinate reali del giocatore + offset casuale (rispetto a GPS reale/mock)
-                latitude = _playerLat + (UnityEngine.Random.Range(0f, 1f) - 0.5f) * (spawnRadius / 111000f),
-                longitude = _playerLng + (UnityEngine.Random.Range(0f, 1f) - 0.5f) * (spawnRadius / 111000f),
+                latitude = eggLat,
+                longitude = eggLng,
                 rarity = UnityEngine.Random.Range(0f, 1f),
                 captureRadius = 5f,
                 isActive = true,
                 spawnTime = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                rarityData = GetRandomRarity()
+                rarityData = GetRandomRarity(),
+                worldOffset = Huntix.AR.GeospatialAnchor.GeoWorldOffset(
+                    eggLat, eggLng, 0.0, _playerLat, _playerLng, 0.0)
             };
             _activeEggs.Add(egg);
-            Debug.Log($"[OutdoorManager] Spawned egg {egg.id} at ({egg.latitude},{egg.longitude}) rarity={egg.rarityData.ToString()} mock={_mockMode}");
+            Debug.Log($"[OutdoorManager] Spawned egg {egg.id} at ({egg.latitude},{egg.longitude}) worldOffset={egg.worldOffset} mock={_mockMode}");
         }
 
         private EggRarity GetRandomRarity()
