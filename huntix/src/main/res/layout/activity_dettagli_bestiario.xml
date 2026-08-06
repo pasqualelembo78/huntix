@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.intelligame.huntix.legacy.Controller.DettagliBestiarioActivity">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/view_fundo_barra_navegacao"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:id="@+id/barraIndietroDettagliBestiario">
+
+        <ImageButton
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_margin="5dp"
+            android:scaleType="centerInside"
+            android:adjustViewBounds="true"
+            android:layout_centerVertical="true"
+            android:src="@drawable/ic_action_back"
+            android:background="@android:color/transparent"
+            android:id="@+id/indietroDettagliBestiario"
+            android:onClick="clickIndietroDettaglio"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:text="Dettagli Semeletto"
+            android:textStyle="normal"
+            android:textColor="#FFFFFF"
+            android:layout_marginLeft="10dp"
+            android:id="@+id/txtTitoloDettagliBestiario"
+            android:layout_centerVertical="true"
+            android:layout_toRightOf="@+id/indietroDettagliBestiario" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/barraIndietroDettagliBestiario">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:layout_width="210dp"
+                android:layout_height="wrap_content"
+                android:id="@+id/imgDettaglioCreatura"
+                android:padding="10dp"
+                android:scaleType="centerInside"
+                android:adjustViewBounds="true"
+                android:src="@drawable/creatura_1"
+                android:layout_marginTop="10dp"
+                android:layout_alignParentTop="true"
+                android:layout_centerHorizontal="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="#001"
+                android:textColor="#808080"
+                android:id="@+id/txtNumCreaturaDettagli"
+                android:layout_below="@+id/imgDettaglioCreatura"
+                android:layout_alignLeft="@+id/imgDettaglioCreatura"
+                android:layout_marginLeft="0dp"
+                android:layout_marginTop="10dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Semeletto"
+                android:textColor="#000000"
+                android:id="@+id/txtNomeCreaturaDettagli"
+                android:layout_alignBottom="@+id/txtNumCreaturaDettagli"
+                android:layout_toRightOf="@+id/txtNumCreaturaDettagli"
+                android:layout_marginLeft="30dp"
+                android:layout_marginTop="10dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Catturati: 3"
+                android:textColor="#000000"
+                android:layout_marginTop="10dp"
+                android:id="@+id/txtCreaturaCatturatiDettagli"
+                android:layout_below="@+id/txtNumCreaturaDettagli"
+                android:layout_alignLeft="@+id/txtNumCreaturaDettagli" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Caramelle ottenute: 100"
+                android:textColor="#000000"
+                android:layout_marginTop="10dp"
+                android:layout_alignStart="@id/txtCreaturaCatturatiDettagli"
+                android:id="@+id/txtQuantitaCaramelleDettagli"
+                android:layout_below="@id/txtCreaturaCatturatiDettagli"                />
+
+            <Button
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:paddingRight="10dp"
+                android:paddingLeft="10dp"
+                android:text="Evolvi!"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:background="@drawable/bottone_style"
+                android:id="@+id/btnEvolviDettagli"
+                android:layout_toEndOf="@id/txtQuantitaCaramelleDettagli"
+                android:layout_alignBaseline="@id/txtQuantitaCaramelleDettagli"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="25dp"
+                android:layout_marginStart="15dp"
+                android:onClick="clickEvolvi"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Elemento:"
+                android:paddingRight="5dp"
+                android:paddingBottom="5dp"
+                android:paddingTop="5dp"
+                android:textColor="#000000"
+                android:layout_marginTop="15dp"
+                android:id="@+id/txtLabelElementoCreaturaDettagli"
+                android:layout_below="@+id/txtQuantitaCaramelleDettagli"
+                android:layout_alignStart="@+id/txtQuantitaCaramelleDettagli" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="5dp"
+                android:text="Erba"
+                android:textStyle="bold"
+                android:layout_marginLeft="20dp"
+                android:background="#00FF00"
+                android:textColor="#FFFFFF"
+                android:id="@+id/txtElemento1CreaturaDettagli"
+                android:layout_alignBottom="@+id/txtLabelElementoCreaturaDettagli"
+                android:layout_toRightOf="@+id/txtNumCreaturaDettagli" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="5dp"
+                android:text="Veleno"
+                android:textStyle="bold"
+                android:layout_marginLeft="3dp"
+                android:background="#8A2BE2"
+                android:textColor="#FFFFFF"
+                android:id="@+id/txtElemento2CreaturaDettagli"
+                android:layout_alignBottom="@+id/txtElemento1CreaturaDettagli"
+                android:layout_toRightOf="@+id/txtElemento1CreaturaDettagli" />
+
+            <Button
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:text="Luoghi delle catture"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/bottone_style"
+                android:id="@+id/btnLuoghiCattureDettagli"
+                android:layout_below="@+id/txtLabelElementoCreaturaDettagli"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="25dp"
+                android:onClick="clickLuoghi"/>
+
+
+        </RelativeLayout>
+
+    </ScrollView>
+
+
+
+</RelativeLayout>

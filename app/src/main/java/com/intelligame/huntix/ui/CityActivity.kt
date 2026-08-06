@@ -1067,8 +1067,9 @@ override fun onPause() {
         }
     }
 
-    private fun loadNpcs() {
+     private fun loadNpcs() {
         lifecycleScope.launch {
+            AppLog.d(TAG, "loadNpcs: START (roadCenters=${roadCenters.size})")
             val state = withContext(Dispatchers.IO) { RealLifeClient.getMap() }.getOrNull() ?: return@launch
             if (destroyed) return@launch
             val grid = state.width.toFloat()
@@ -1100,9 +1101,10 @@ override fun onPause() {
                     val npc = NpcData(root, mn, snapX, snapZ, snapX, snapZ)
                     pickNextTarget(npc)
                     npcs.add(npc)
-                    loaded++
+                     loaded++
                 } catch (e: Exception) { Sentry.captureException(e) }
             }
+            AppLog.d(TAG, "loadNpcs: COMPLETE (loaded=$loaded, total nodes=${sceneView.childNodes.size})")
         }
     }
 
@@ -1336,6 +1338,8 @@ override fun onPause() {
                         AppLog.d(TAG, "loadOsmData: dismissing loading overlay")
                         osmStatusLabel?.text = "Mappa OSM (mini) — aggiornamento in corso..."
                         dismissLoading()
+                        // NPCs are loaded inside rebuildCityWithOsm after roadCenters is populated
+                        AppLog.d(TAG, "loadOsmData: mini-chunk visible, NPCs will load after roadCenters populated")
                     }
                 }
             } else {
@@ -1386,10 +1390,17 @@ override fun onPause() {
                 osmDownloadFailed = true
                 withContext(Dispatchers.Main) {
                     if (!destroyed) {
-                        AppLog.d(TAG, "Rebuilding with grid city after OSM failure (fallback)")
-                        osmStatusLabel?.text = "Aggiornamento OSM fallito (città griglia)"
-                        clearCityNodes()
-                        buildCityGridPhased()
+                        // Keep the mini-chunk city visible — do NOT clear it.
+                        // Previously we called clearCityNodes() + buildCityGridPhased() here,
+                        // but buildCityGridPhased relies on Choreographer frame callbacks
+                        // which won't fire if the activity is paused → blue skybox with no city.
+                        // The mini-chunk city already works; just inform the user.
+                        AppLog.d(TAG, "OSM full download failed — keeping mini-chunk city visible (nodes=${sceneView.childNodes.size})")
+                        osmStatusLabel?.text = "OSM: download fallito (città mini OK)"
+                        // NPCs / world state may not have been loaded yet on the mini path
+                        AppLog.d(TAG, "OSM failure: ensuring NPCs + world state loaded on mini-chunk path")
+                        try { loadNpcs() } catch (ex: Exception) { AppLog.e(TAG, "loadNpcs failed (OSM fallback)", ex); Sentry.captureException(ex) }
+                        try { loadWorldState() } catch (ex: Exception) { AppLog.e(TAG, "loadWorldState failed (OSM fallback)", ex); Sentry.captureException(ex) }
                     }
                 }
             }
@@ -1424,9 +1435,18 @@ override fun onPause() {
             // Cancel any previous rebuild in progress
             rebuildJob?.cancel()
 
-            // Remove old grid city nodes to prevent handle arena overflow
-            clearCityNodes()
-            AppLog.d(TAG, "Old nodes cleared")
+            // Snapshot old non-camera non-light nodes so we can remove ONLY those
+            // after Phase 1 (keeping the newly-built Phase 1 roads/terrain visible).
+            val oldNodes = sceneView.childNodes.filter {
+                it != cameraNode && it.javaClass.simpleName != "LightNode"
+            }.toList()
+            val hasExistingCity = oldNodes.isNotEmpty()
+            if (hasExistingCity) {
+                AppLog.d(TAG, "rebuildCityWithOsm: deferring clear of ${oldNodes.size} old nodes until after Phase 1")
+            } else {
+                clearCityNodes()
+                AppLog.d(TAG, "Old nodes cleared (no existing city)")
+            }
 
             osmCityBuilder = OsmCityBuilder(sceneView)
             osmPhase = 0
@@ -1446,7 +1466,7 @@ override fun onPause() {
 
                     if (destroyed) return@launch
 
-                    // Populate roadCenters from OSM roads (for NPC navigation + minimap)
+                     // Populate roadCenters from OSM roads (for NPC navigation + minimap)
                     val rcSet = mutableSetOf<Float>()
                     for (way in data.roads) {
                         for (node in way.nodes) {
@@ -1454,11 +1474,31 @@ override fun onPause() {
                             rcSet.add(node.localZ)
                         }
                     }
+                    roadCenters.clear()
                     roadCenters.addAll(rcSet)
                     // Re-place player and sync camera after clearing old nodes
                     try { placePlayer() } catch (e: Exception) { Sentry.captureException(e) }
                     syncCamera()
                     minimap.setRoads(roadCenters, HALF)
+                    AppLog.d(TAG, "roadCenters populated (count=${roadCenters.size}), loading NPCs")
+
+                    // Clear old mini-chunk nodes now that Phase 1 is complete.
+                    // Remove ONLY the old nodes (not the just-built Phase 1 roads/terrain).
+                    if (hasExistingCity) {
+                        for (node in oldNodes) {
+                            sceneView.removeChildNode(node)
+                        }
+                        buildingAABBs.clear()
+                        windowMaterials.clear()
+                        playerRoot = null
+                        AppLog.d(TAG, "Old nodes cleared after Phase 1 (deferred, removed ${oldNodes.size} nodes)")
+                        // Re-place player and sync camera after clearing
+                        try { placePlayer() } catch (e: Exception) { AppLog.e(TAG, "placePlayer after deferred clear failed", e) }
+                        syncCamera()
+                    }
+
+                    // Spawn NPCs now that roadCenters is populated
+                    try { loadNpcs() } catch (ex: Exception) { AppLog.e(TAG, "loadNpcs failed after Phase 1", ex) }
 
                     if (destroyed) return@launch
 
@@ -1889,6 +1929,7 @@ override fun onPause() {
     private fun syncCamera() {
         val camX = playerX + cameraDistance * kotlin.math.cos(cameraAngle.toDouble()).toFloat()
         val camZ = playerZ + cameraDistance * kotlin.math.sin(cameraAngle.toDouble()).toFloat()
+        AppLog.d(TAG, "syncCamera: pos=($camX, $CAM_H, $camZ) → looking at ($playerX, 0, $playerZ)")
         cameraNode.position = Position(camX, CAM_H, camZ)
         cameraNode.lookAt(Position(playerX, 0f, playerZ))
     }

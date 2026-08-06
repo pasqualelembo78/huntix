@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.intelligame.huntix.legacy.Controller.ScambioListaCreaturaActivity">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/view_fundo_barra_navegacao"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:id="@+id/barraIndietroScambio">
+
+        <ImageButton
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="5dp"
+            android:layout_centerVertical="true"
+            android:scaleType="centerInside"
+            android:adjustViewBounds="true"
+            android:src="@drawable/ic_action_back"
+            android:background="@android:color/transparent"
+            android:id="@+id/indietroScambio"
+            android:onClick="clickIndietro"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:text="Scambio della Creatura"
+            android:textStyle="normal"
+            android:textColor="#FFFFFF"
+            android:layout_marginLeft="10dp"
+            android:id="@+id/txtTitoloScambio"
+            android:layout_centerVertical="true"
+            android:layout_toRightOf="@+id/indietroScambio" />
+
+
+    </RelativeLayout>
+    <LinearLayout
+        android:id="@+id/creature_selezionate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/barraIndietroScambio"
+        android:gravity="center">
+
+        <ImageView
+            android:id="@+id/euAceitei"
+            android:layout_marginRight="20dp"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@android:drawable/checkbox_off_background"
+            android:layout_toLeftOf="@+id/Enviando"
+            />
+        <TextView
+            android:id="@+id/Enviando"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Invio "/>
+        <ImageView
+            android:id="@+id/mia_creatura_selezionata"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:src="@android:drawable/alert_light_frame"
+            />
+        <ImageView
+            android:id="@+id/altra_creatura_selezionata"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:src="@android:drawable/alert_light_frame"
+            />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""/>
+        <TextView
+            android:id="@+id/Ricezione"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Ricezione"/>
+        <ImageView
+            android:id="@+id/outroAceitou"
+            android:layout_marginLeft="10dp"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:src="@android:drawable/checkbox_off_background"
+            android:layout_toRightOf="@+id/Ricezione"
+            />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/bottoniScambio"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/creature_selezionate"
+        android:gravity="center">
+        <Button
+            android:id="@+id/bottoneAccetta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Accetta"
+            android:layout_marginLeft="10dp"
+            android:onClick="accettaScambio"/>
+        <Button
+            android:id="@+id/bottoneRifiuta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Rifiuta"
+            android:layout_marginLeft="10dp"
+            android:layout_toRightOf="@+id/bottoneAccetta"
+            android:onClick="rifiutaScambio"/>
+
+    </LinearLayout>
+
+    <ListView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/listaScambioCreature"
+        android:layout_below="@id/bottoniScambio" />
+
+
+</RelativeLayout>

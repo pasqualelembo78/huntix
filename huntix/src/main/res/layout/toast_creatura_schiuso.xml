@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/toast_creatura_schiuso"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:background="#DAAA"
+    android:paddingLeft="10dp"
+    android:paddingRight="10dp">
+
+    <ImageView
+        android:id="@+id/imgCreatura"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="10dp"
+        android:src="@drawable/creatura_69" />
+
+    <TextView
+        android:id="@+id/txtCreatura"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/imgCreatura"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="10dp"
+        android:layout_toEndOf="@+id/imgCreatura"
+        android:textColor="#FFF"
+        android:textSize="15dp"
+        android:textStyle="bold" />
+
+</RelativeLayout>

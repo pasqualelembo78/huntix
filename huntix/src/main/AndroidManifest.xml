@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera" />
+    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <uses-feature
+        android:name="android.hardware.sensor.gyroscope"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Bluetooth permissions: used for exchanging creature -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+
+    <application android:largeHeap="true">
+
+        <activity
+            android:name=".Controller.SplashActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.LoginActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.RegistrareActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.MapActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.CatturaActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.PoiActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.ProfiloActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.BestiarioActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.DettagliBestiarioActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.UovaActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.MappaCattureActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.ScambioListaCreaturaActivity"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".Controller.ScambioListaUtentiActivity"
+            android:screenOrientation="portrait" />
+
+    </application>
+
+</manifest>

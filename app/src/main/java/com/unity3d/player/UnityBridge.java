@@ -38,7 +38,7 @@ public class UnityBridge {
     public static void LoadData() {
         if (sInstance != null && sInstance.mUnityPlayer != null) {
             String data = Bridge.loadData();
-            sInstance.mUnityPlayer.UnitySendMessage("GameManager", "OnEvent", data);
+            UnityPlayer.UnitySendMessage("GameManager", "OnEvent", data);
         }
     }
 

@@ -55,6 +55,48 @@ class EggHuntApplication : Application() {
             Log.e("HuntixApp", "Sentry init failed: ${e.message}")
         }
 
+        // Huntix Legacy: fornisce il context per il DB SQLite del gioco
+        try {
+            com.intelligame.huntix.legacy.Util.MyApp.initContext(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "Huntix legacy context init failed: ${e.message}")
+        }
+
+        try {
+            com.intelligame.huntix.legacy.poi.creature.Persistence.init(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "Persistence init failed: ${e.message}")
+        }
+
+        // Registra il sender Unity (compatibile con GameManager.OnEvent)
+        try {
+            com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.registerMessenger(
+                object : com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.Messenger {
+                    override fun sendEvent(event: String, data: String) {
+                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", "$event|$data")
+                    }
+                    override fun openStoreJson(storeId: String, json: String) {
+                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnStoreOpened", json)
+                    }
+                    override fun openStoreUrl(storeId: String, url: String) {
+                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OpenStoreUrl", url)
+                    }
+                    override fun onPoiSelected(storeId: String, lat: Double, lng: Double) {
+                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnPoiSelected", "{\"id\":\"$storeId\",\"lat\":$lat,\"lng\":$lng}")
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
+        }
+
+        // Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
+        try {
+            com.intelligame.huntix.manager.PoiMapBridge.feed(this)
+        } catch (e: Exception) {
+            Log.e("HuntixApp", "PoiMapBridge prefeed failed: ${e.message}")
+        }
+
         // Billing: inizializza il client e sincronizza lo stato VIP all'avvio
         try {
             BillingManager.init(this)

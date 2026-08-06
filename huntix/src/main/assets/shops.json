@@ -1,0 +1,22 @@
+[
+  {
+    "id": "shop_001",
+    "name": "Tabaccheria Piazza Via",
+    "lat": 41.9028,
+    "lng": 12.4964,
+    "buildingType": "SHOP",
+    "poiType": "RETAIL",
+    "url": "https://example.com/shop_001",
+    "pageType": "url"
+  },
+  {
+    "id": "shop_002",
+    "name": "Caffè Luna",
+    "lat": 41.9035,
+    "lng": 12.4972,
+    "buildingType": "CAFE",
+    "poiType": "FOOD",
+    "url": "https://example.com/shop_002.json",
+    "pageType": "json"
+  }
+]

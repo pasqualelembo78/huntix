@@ -416,7 +416,7 @@ build_unity_aar() {
 
     ensure_gradle_7_5_1 || return 1
     echo ">> [Gradle] :unityLibrary:assembleRelease (Il2Cpp: 20-40 min alla prima volta)..."
-    ( cd "$UNITY_EXPORT_DIR" && "$GRADLE_UNITY" :unityLibrary:assembleRelease --console=plain ) \
+    ( cd "$UNITY_EXPORT_DIR" && "$GRADLE_UNITY" :unityLibrary:assembleRelease :unityLibrary:xrmanifest.androidlib:assembleRelease --console=plain ) \
         || { echo "!! Build AAR Unity fallita." >&2; return 1; }
 
     mkdir -p "$UNITY_AAR_DEST"

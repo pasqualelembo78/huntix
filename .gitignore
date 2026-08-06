@@ -19,6 +19,7 @@ google-services.json
 # ── Build outputs ─────────────────────────────────────────────
 /build
 /app/build
+/huntix/build
 *.apk
 *.aab
 *.dex
@@ -62,5 +63,7 @@ unitylic/unity-export.log
 unity-export.gradle/
 unity-export/
 
-# ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
-unityLibrary/build/
+# ── AR/Unity AAR (rigenerabili via build_release.sh, mai su Git) ──
+app/libs/*.aar
+*.aar
+

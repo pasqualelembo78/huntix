@@ -19,7 +19,7 @@ e crescendo il proprio team di creature.
 |---|---|
 | 🥚 Uova rare | Uova con elementi (Acqua, Terra, Aria, Fuoco, Normale) e rarità crescenti |
 | 🪣 Secchielli | Strumenti di cattura con rate diversi (Base, Super, Ultra) |
-| 🏟 Palestre | Allenamento e sfida Pokémon-free |
+| 🏟 Palestre | Allenamento e sfida tra giocatori |
 | 🏛 Edifici | Visita luoghi con bisogni da soddisfare e ricompense |
 | 🌐 Mappa 3D | MapLibre 3D con edifici realistici, cielo dinamico, tilt 60° |
 | 📡 Proximity | Rilevamento uova vicine (<50m) con vibrazione e notifiche |

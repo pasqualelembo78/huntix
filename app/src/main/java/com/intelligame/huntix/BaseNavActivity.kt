@@ -80,6 +80,7 @@ open class BaseNavActivity : AppCompatActivity() {
             addView(navItem("Uova",   "\uD83E\uDD5A", active == "Uova")   { navigateTo("Uova") })
             addView(navItem("Chat",   "\uD83D\uDCAC", active == "Chat")   { navigateTo("Chat") })
             addView(navItem("Social", "\uD83D\uDC65", active == "Social") { navigateTo("Social") })
+            addView(navItem("Esplora", "\uD83C\uDF0D", active == "Esplora") { navigateTo("Esplora") })
             addView(navItem("Altro",  "\u2699\uFE0F", active == "Altro")  { showAltroMenu() })
         }
     }
@@ -117,6 +118,16 @@ open class BaseNavActivity : AppCompatActivity() {
 
     private fun navigateTo(tab: String) {
         if (tab == activeTab()) return
+        if (tab == "Esplora") {
+            // Alimenta la mappa con i POI reali Huntix (negozi OSM) prima di aprirla
+            com.intelligame.huntix.manager.PoiMapBridge.feed(this)
+            startActivity(Intent(this, com.intelligame.huntix.legacy.Controller.SplashActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            })
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+            return
+        }
         val targetClass = when (tab) {
             "Home"   -> HomeActivity::class.java
             "Uova"   -> HatchingActivity::class.java

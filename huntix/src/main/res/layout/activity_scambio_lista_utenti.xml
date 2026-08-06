@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.intelligame.huntix.legacy.Controller.ScambioListaUtentiActivity">
+
+    <!-- Header bar -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/view_fundo_barra_navegacao"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:id="@+id/barraIndietroScambio">
+
+        <ImageButton
+            android:layout_width="25dp"
+            android:layout_height="25dp"
+            android:layout_marginLeft="5dp"
+            android:layout_marginRight="5dp"
+            android:layout_centerVertical="true"
+            android:scaleType="centerInside"
+            android:adjustViewBounds="true"
+            android:src="@drawable/ic_action_back"
+            android:background="@android:color/transparent"
+            android:id="@+id/indietroScambio"
+            android:onClick="clickIndietro"/>
+
+        <TextView
+            android:id="@+id/txtTitoloBestiario"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_toRightOf="@+id/indietroScambio"
+            android:layout_marginLeft="10dp"
+
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:text="Utenti vicini"
+            android:textStyle="normal"
+            android:textColor="#FFFFFF" />
+
+    </RelativeLayout>
+
+
+    <!-- Lista degli utenti disponibili -->
+    <ListView
+        android:id="@+id/bluetooth_user_list"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/barraIndietroScambio"
+        android:layout_above="@id/cerca"
+        />
+
+
+    <!-- Pulsanti di controllo della Ricerca/Elencazione dei dispositivi via Bluetooth-->
+    <Button
+        android:id="@+id/cerca"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_alignParentBottom="true"
+
+        android:text="Cerca utenti"
+        android:textStyle="normal"
+        android:textSize="20dp"
+        android:textColor="#000000"
+
+        android:onClick="aggiornaBluetooth"/>
+
+
+
+</RelativeLayout>

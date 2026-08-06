@@ -19,7 +19,7 @@ SEZIONI: DOVE VANNO
 ===================
 
 → UNITY (motore di gioco 3D/AR):
-  - Outdoor AR (caccia alle uova stile Pokémon GO)
+  - Outdoor AR (caccia alle uova nel mondo reale)
   - RealLife (negozi, lavoro, social, NPC)
   - Indoor 3D (caccia uova dentro casa)
   - Mini-giochi AR (se presenti in futuro)

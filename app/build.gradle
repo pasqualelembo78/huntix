@@ -39,7 +39,7 @@ android {
 
     defaultConfig {
         applicationId "com.intelligame.huntix"
-        minSdk 26
+         minSdk 29
         targetSdk 35
         versionCode 1
         versionName "1.0"
@@ -142,6 +142,13 @@ compileOptions {
         buildConfig true
     }
 
+    packaging {
+        // [build_release.sh] Unity AAR: .so non compressi (richiesto da Unity)
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     lint {
         // Il controllo lint "vital" sulle build release è costoso (es. lintVitalRelease)
         // e rallenta ogni assembleRelease/bundleRelease. Lo si esegue solo esplicitamente
@@ -197,6 +204,9 @@ dependencies {
     implementation 'org.maplibre.gl:android-sdk:11.8.0'
     implementation 'com.google.android.gms:play-services-location:21.3.0'
 
+    // ── Huntix Legacy (gioco "Real Life" demo) ──
+    implementation project(':huntix')
+
     implementation 'io.sentry:sentry-android:7.14.0'
     implementation 'io.sentry:sentry-android-okhttp:7.14.0'
     implementation 'com.google.code.gson:gson:2.10.1'
@@ -222,7 +232,9 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.10.0'
 
     // ── Unity AAR (hybrid integration) ──
-    implementation project(':unityLibrary')
+    implementation files('libs/unityLibrary-release.aar')
+    implementation files('libs/unityandroidpermissions.aar')
+    implementation files('libs/xrmanifest.androidlib-release.aar')
 
     // ── Test ──────────────────────────────────────────────────
     testImplementation 'junit:junit:4.13.2'

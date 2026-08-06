@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Huntix"
 include ':app'
-include ':unityLibrary'
+include ':huntix'

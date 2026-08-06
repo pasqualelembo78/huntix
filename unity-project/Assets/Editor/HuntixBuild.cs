@@ -50,13 +50,15 @@ namespace Huntix.EditorTools
         {
             ConfigurePlayerSettings();
 
-            // Path relativo al progetto: <root repo>/unity-export.gradle
+            // Path relativo al progetto: dobbiamo esportare in "<repo>/unity-export.gradle"
+            // perché build_release.sh si aspetta proprio questo nome. Unity usa locationPathName
+            // così comé (NON aggiunge .gradle), quindi lo passiamo esplicitamente.
             string rootDir = Directory.GetParent(Directory.GetParent(Application.dataPath).FullName).FullName;
             string exportBase = Path.Combine(rootDir, "unity-export");
-            string exportPath = exportBase + ".gradle";
-            if (Directory.Exists(exportPath))
+            string exportDir = exportBase + ".gradle"; // dir reale che Unity crea
+            if (Directory.Exists(exportDir))
             {
-                Directory.Delete(exportPath, true);
+                Directory.Delete(exportDir, true);
             }
 
             string[] scenes = Array.ConvertAll(EditorBuildSettings.scenes, s => s.path);
@@ -64,18 +66,43 @@ namespace Huntix.EditorTools
             BuildPlayerOptions options = new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = exportPath + ".gradle",
+                locationPathName = exportDir,
                 target = BuildTarget.Android,
                 options = BuildOptions.AcceptExternalModificationsToPlayer
             };
 
-            BuildReport report = BuildPipeline.BuildPlayer(options);
-            if (report.summary.result != BuildResult.Succeeded)
-            {
-                throw new InvalidOperationException("Export gradle project fallito: " + report.summary.result);
-            }
+             BuildReport report = BuildPipeline.BuildPlayer(options);
+             if (report.summary.result != BuildResult.Succeeded)
+             {
+                 throw new InvalidOperationException("Export gradle project fallito: " + report.summary.result);
+             }
 
-            Debug.Log("[HuntixBuild] Gradle project esportato in: " + exportPath);
+             EnsureUnityLibraryStrings(exportDir);
+
+             Debug.Log("[HuntixBuild] Gradle project esportato in: " + exportDir);
+        }
+
+        // Unity 2022.3 non genera strings.xml in unityLibrary quando l'evento
+        // androidProjectConfiguration fallisce. Lo creiamo noi per evitare
+        // errori AAPT (resource string/app_name not found) durante la build.
+        private static void EnsureUnityLibraryStrings(string exportDir)
+        {
+            string resValuesDir = Path.Combine(exportDir, "unityLibrary", "src", "main", "res", "values");
+            string stringsXmlPath = Path.Combine(resValuesDir, "strings.xml");
+            if (File.Exists(stringsXmlPath))
+            {
+                Debug.Log("[HuntixBuild] strings.xml già presente, salto.");
+                return;
+            }
+            Directory.CreateDirectory(resValuesDir);
+            string appName = PlayerSettings.productName;
+            string content =
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+                "<resources>\n" +
+                "  <string name=\"app_name\">" + appName + "</string>\n" +
+                "</resources>\n";
+            File.WriteAllText(stringsXmlPath, content);
+            Debug.Log("[HuntixBuild] Generato strings.xml (app_name=" + appName + ") in: " + stringsXmlPath);
         }
     }
 }
