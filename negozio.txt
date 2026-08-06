@@ -1,0 +1,102 @@
+HUNTIX — SEZIONE NEGOZIO INDOOR
+===========================
+
+OBIETTIVO
+Trasformare ogni negozio/POI in una stanza 3D interagibile in Unity,
+caricata dinamicamente da un preset definito nel file shops.json.
+
+----------------------------------------
+FLUSSO COMPLETO (Android ↔ Unity)
+----------------------------------------
+
+1. POI MAP (Android)
+   - PoiMapFragment mostra marker
+   - Tap su negozio → PoiMapBridge.enterIndoorStore(poi: POI)
+   - Salva posizione camera e stato corrente
+
+2. INDOOR ACTIVITY (Android)
+   - IndoorActivity.kt estende BridgeActivity
+   - Riceve JSON POI tramite intent extra "POI_DATA"
+   - Mostra UI di loading (View Android)
+   - Chiama UnityPlayer.UnitySendMessage("IndoorLoader", "LoadStoreFromPOI", poiJson)
+
+3. UNITY SCENE LOADER (C#)
+   - IndoorLoader.cs riceve JSON
+   - Carica prefab StoreLayout da Assets/Resources/Indoor/[scene_key]
+   - Applica FurnitureSpawner con preset da JSON "furniture_preset"
+   - Builda NavMesh async per movimento player
+   - Notifica Android tramite AndroidBridge.OnIndoorSceneReady(poiId)
+
+4. INTERAZIONI INDOOR (Runtime)
+   - Player si muove con joystick (NavMeshAgent)
+   - Tap su mobile → StoreFurniture.OnPointerClick()
+   - AndroidBridge.sendFurnitureInteraction(type,name,pos[])
+   - Eventuale interazione con NPC o oggetti
+
+5. USCITA
+   - IndoorManager.ExitIndoor() chiama AndroidBridge.OpenMapActivity()
+   - Salva progresso in PlayerPrefs
+   - IndoorActivity termina con RESULT_OK + dati interazione
+
+----------------------------------------
+ELENCO FILE CREATI/MODIFICATI
+----------------------------------------
+
+UNITY (C#):
+- IndoorManager.cs     → controllo scena, uscita
+- IndoorLoader.cs      → caricamento dinamico da JSON POI
+- StoreLayoutAdapter.cs → applicazione preset mobili  
+- StoreFurniture.cs    → interazioni base mobili
+- FurnitureSpawner.cs  → setup oggetti in scena
+- InteractableItem.cs  → oggetti raccoglibili
+
+ANDROID (Kotlin/Java):
+- IndoorActivity.kt    → activity principale indoor (estende BridgeActivity)
+- indoort_loading.xml  → layout UI loading iniziale
+- Bridge.java          → metodi:
+     onPOISelected(json)     → lancia IndoorActivity
+     sendFurnitureInteraction(type,name,pos) → evento click Unity→Android
+     OnIndoorSceneReady(poiId)  → callback loaded OK
+     OnIndoorClosed(data)      → ritorno mappa con dati
+
+POI JSON FORMAT (shops.json):
+{
+  "id": "roma_bar_001",
+  "name": "Bar Pinco", 
+  "type": "BAR",
+  "coordinates": {"lat": 41.9, "lng": 12.5},
+  "indoor": {
+    "scene_key": "store_bar_01",     ← prefab in Assets/Resources/Indoor/
+    "furniture_preset": "bar_stools"  ← configurazione in StoreLayoutAdapter
+  }
+}
+
+----------------------------------------
+PRESET FURNITURE (esempio)
+----------------------------------------
+
+preset "bar_stools_only": {
+  items: [
+    { prefab: "CashRegister", pos: [0,0,2], rot: [0,180,0] },
+    { prefab: "TableChair",   pos: [-2,0,1], rot: [0,45,0]  },
+    { prefab: "DisplayTV",    pos: [3,1.5,5], rot: [0,-90,0] }
+  ]
+}
+
+----------------------------------------
+TEST VERIFICATI
+----------------------------------------
+[x] ./gradlew :app:assembleDebug  → SUCCESS
+[x] Unity -batchmode indoor scene  → 0 CS errors
+[x] ADB logcat → "IndoorSceneReady" ricevuto
+[x] Player si muove con NavMesh agent
+[x] Uscita ritorna correttamente alla mappa
+
+----------------------------------------
+PROSSIMI STEP OPCZIONALI
+----------------------------------------
+- Aggiungere effetti sonori per interazioni
+- Sincronizzare inventory locale con Firebase
+- Animazioni NPC conversazionali (dialog UI)
+- Assetbundle loading per scene indoor pesanti
+

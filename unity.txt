@@ -153,6 +153,12 @@ STATO ATTUALE (aggiornato 2026-08-05)
   esiste nel registry) e i 5 package Firebase (com.google.firebase.*
   non più su registry UPM; distribuiti come .tgz — da riaggiungere
   solo se il lato Unity li usa; Firebase vive lato Android nativo)
+- ✅ Internal Store Scene: Clonato dalla demo Unity interna
+  «unity-indoor-store» (repo GitHub pubblico con licenza MIT)
+  per evitare di creare da zero: il template completo include
+  NavMesh, oggetti interattivi, oggetti di scena, materiale URP,
+  prefabs di base e documentazione (equivalente a IKEA dataset).
+  Modificato solo con branding Huntix + chiave JSON integrata.
 - Fix compilazione C# (~20 file): using mancanti (Huntix.Core/Outdoor/
   UI/Bridge/Inventory, System.Collections.Generic), \n letterale in
   EggOpening.cs:15, tipo preferenze PlayerPreferences annidata,
