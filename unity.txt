@@ -304,8 +304,13 @@ FASE 2: PORTING CORE SYSTEMS (2 settimane)
   - LoadData() → Unity legge da Firebase
   - ShowToast(message) → Unity chiama Android toast
   - OpenAndroidActivity(className) → Unity apre Activity Android
-  - GetSharedPreference(key) → Unity legge da Android prefs
-  - SetSharedPreference(key, value) → Unity scrive su Android prefs
+   - GetSharedPreference(key) → Unity legge da Android prefs
+   - SetSharedPreference(key, value) → Unity scrive su Android prefs
+   - GetCurrentLocation() -> JSON {lat,lng,mock,acc}: posizione reale/mock della mappa 3D
+   - SetMockWalk(bool): attiva "cammina senza muoversi" (FusedLocation offset + heading)
+   - TryCatch(storeId): cattura POI/creatura da AR proximity → risposta via
+     GameManager.SendMessage("OnEvent","CatchResult|{json}") (Unity→Android bridge inverso)
+   - onUnityMessage(event): Android gestisce CatchRequest/PoiSelected da Unity
 
 ----------------------------------------
 FASE 3: AR OUTDOOR MODE (2 settimane)

@@ -77,5 +77,34 @@ namespace Huntix.Bridge
             OpenAndroidActivity("com.intelligame.huntix.ui.OutdoorWorldActivity");
             #endif
         }
+
+        // ── Huntix POI (clone rewrite, Kotlin bridge) ──────────────
+        // Coordinate corrente (reale o mock-walk) della mappa 3D.
+        // Ritorna JSON: {"lat":..,"lng":..,"mock":bool,"acc":float}
+        public static string GetCurrentLocation()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            return _bridge?.Call<string>("getCurrentLocation") ?? "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
+            #endif
+            return "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
+        }
+
+        // Attiva/disattiva la simulazione di camminata (levetta "cammina senza muoversi").
+        public static void SetMockWalk(bool enable)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            _bridge?.Call("setMockWalk", enable);
+            #endif
+        }
+
+        // Cattura la creatura/POI con storeId (chiamato ad es. da AR proximity).
+        // La risposta arriva Unity → Android via Bridge.tryCatch, che a sua volta
+        // riconosce con GameManager.SendMessage("OnEvent", "CatchResult|{json}")
+        public static void TryCatch(string storeId)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            _bridge?.Call("tryCatch", storeId);
+            #endif
+        }
     }
 }
