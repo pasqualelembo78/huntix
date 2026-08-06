@@ -310,7 +310,16 @@ FASE 2: PORTING CORE SYSTEMS (2 settimane)
    - SetMockWalk(bool): attiva "cammina senza muoversi" (FusedLocation offset + heading)
    - TryCatch(storeId): cattura POI/creatura da AR proximity → risposta via
      GameManager.SendMessage("OnEvent","CatchResult|{json}") (Unity→Android bridge inverso)
-   - onUnityMessage(event): Android gestisce CatchRequest/PoiSelected da Unity
+    - onUnityMessage(event): Android gestisce CatchRequest/PoiSelected da Unity
+
+✅ COMPLETATO (2026-08-06) — Bridge Kotlin↔Unity sincronizzato:
+- OutdoorManager.cs (Unity) chiama Bridge.GetCurrentLocation() ogni 5s → parse JSON
+  lat/lng/mock → spawna uova intorno a coordinate REALI (non random) → compatibile
+  ARCore Geospatial. CaptureEgg → SendMessageToAndroid("Catch","{json}") →
+  Bridge.onUnityMessage → CatchController (Kotlin) → CatchResult a GameManager.OnEvent.
+- SetMockWalk ↔ OutdoorManager.enableMockWalk (levetta "cammina senza muoversi").
+- C# validato in Unity 2022.3.52f1 (-batchmode): "Mono: successfully reloaded assembly".
+
 
 ----------------------------------------
 FASE 3: AR OUTDOOR MODE (2 settimane)
