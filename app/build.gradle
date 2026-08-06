@@ -235,6 +235,10 @@ dependencies {
     implementation files('libs/unityLibrary-release.aar')
     implementation files('libs/unityandroidpermissions.aar')
     implementation files('libs/xrmanifest.androidlib-release.aar')
+    // AAR dello store Unity open source (breineng/supermarket-simulator).
+    // Generato esportando unity-store/ (o il progetto merge) da Unity 2023.2.6f1
+    // e copiato qui da build_release.sh. Vedere unity-store/HUNTIX_INTEGRATION.md.
+    implementation files('libs/store-release.aar')
 
     // ── Test ──────────────────────────────────────────────────
     testImplementation 'junit:junit:4.13.2'

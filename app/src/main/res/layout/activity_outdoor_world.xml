@@ -519,6 +519,29 @@
         android:textSize="20sp"
         android:background="@drawable/btn_purple" />
 
+    <!-- Levetta analogica: toggle camminata mock (walk mode) -->
+    <TextView
+        android:id="@+id/btnWalkJoy"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="148dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center"
+        android:text="\uD83D\uDD79\uFE0F"
+        android:textSize="20sp"
+        android:background="@drawable/btn_accent" />
+
+    <!-- Joystick overlay (bottom-left, sopra il radar) -->
+    <com.intelligame.huntix.ui.WalkJoystickView
+        android:id="@+id/walkJoystick"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="12dp"
+        android:layout_marginBottom="240dp"
+        android:visibility="gone" />
+
     <!-- Central catch button (bottom-center) -->
     <FrameLayout
         android:id="@+id/btnCatch"

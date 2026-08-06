@@ -275,6 +275,8 @@
         <activity android:name=".ui.BuildingInteriorActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.POIWebViewActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.POICustomPageActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.StoreIndoorActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.IndoorActivity" android:exported="false"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         <activity android:name=".ui.AvatarCustomizeActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.NpcListActivity" android:screenOrientation="portrait" android:exported="false"/>

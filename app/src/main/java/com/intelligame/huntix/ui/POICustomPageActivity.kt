@@ -27,11 +27,15 @@ class POICustomPageActivity : AppCompatActivity() {
     }
 
     private var needs = mutableMapOf<String, Float>()
+    private var poiName = ""
+    private var jsonUrl = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val jsonUrl = intent.getStringExtra(EXTRA_JSON_URL) ?: run { finish(); return }
         val poiName = intent.getStringExtra(EXTRA_POI_NAME) ?: ""
+        this.jsonUrl = jsonUrl
+        this.poiName = poiName
         needs = LocalNeeds.load(this).toMutableMap()
 
         val root = ScrollView(this)
@@ -158,6 +162,59 @@ class POICustomPageActivity : AppCompatActivity() {
                 renderSection(content, section)
             }
         }
+
+        // Entra nel negozio: apre lo store 3D Unity (supermarket open source).
+        // Se l'AAR Unity non è disponibile, usa la vista nativa StoreIndoorActivity.
+        content.addView(Button(this).apply {
+            text = "\uD83D\uDEAA  Entra nel negozio (3D)"
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
+            setBackgroundColor(Color.parseColor(UiKit.GREEN))
+            setOnClickListener {
+                val banner = config.optJSONObject("banner")
+                val poiJson = JSONObject().apply {
+                    put("id", poiName)
+                    put("name", poiName)
+                    put("type", banner?.optString("type", "") ?: "")
+                    put("json_url", jsonUrl)
+                }.toString()
+                try {
+                    // Solo l'AAR Unity reale include NativeLoader: se assente
+                    // (build senza Unity) si ripiega sulla vista nativa.
+                    val hasRealUnity = try {
+                        Class.forName("com.unity3d.player.NativeLoader")
+                        true
+                    } catch (_: ClassNotFoundException) {
+                        false
+                    }
+                    if (hasRealUnity) {
+                        val intent = Intent(this@POICustomPageActivity, IndoorActivity::class.java).apply {
+                            putExtra(IndoorActivity.EXTRA_POI_DATA, poiJson)
+                        }
+                        startActivity(intent)
+                    } else {
+                        val intent = Intent(this@POICustomPageActivity, StoreIndoorActivity::class.java).apply {
+                            putExtra(StoreIndoorActivity.EXTRA_POI_NAME, poiName)
+                            putExtra(StoreIndoorActivity.EXTRA_JSON_URL, jsonUrl)
+                        }
+                        startActivity(intent)
+                    }
+                } catch (_: Exception) {
+                    val intent = Intent(this@POICustomPageActivity, StoreIndoorActivity::class.java).apply {
+                        putExtra(StoreIndoorActivity.EXTRA_POI_NAME, poiName)
+                        putExtra(StoreIndoorActivity.EXTRA_JSON_URL, jsonUrl)
+                    }
+                    startActivity(intent)
+                }
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(16, 12, 16, 8)
+            }
+        })
     }
 
     private fun renderSection(content: LinearLayout, section: JSONObject) {

@@ -144,6 +144,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var btnCaptureMethod: TextView
     private lateinit var btnLever: TextView
     private lateinit var btnArToggle: TextView
+    private lateinit var btnWalkJoy: TextView
+    private lateinit var walkJoystick: WalkJoystickView
     private lateinit var schiusaProgress: LinearLayout
     private lateinit var tvSchiusaKm: TextView
     private lateinit var schiusaBarFill: View
@@ -319,6 +321,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnCaptureMethod = findViewById(R.id.btnCaptureMethod)
         btnLever = findViewById(R.id.btnLever)
         btnArToggle = findViewById(R.id.btnArToggle)
+        btnWalkJoy = findViewById(R.id.btnWalkJoy)
+        walkJoystick = findViewById(R.id.walkJoystick)
         schiusaProgress = findViewById(R.id.schiusaProgress)
         tvSchiusaKm = findViewById(R.id.tvSchiusaKm)
         schiusaBarFill = findViewById(R.id.schiusaBarFill)
@@ -503,6 +507,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         btnLever.setOnClickListener {
             if (mgr.isSimulating) {
                 mgr.stopSimulation()
+                mgr.stopWalk()
                 Toast.makeText(this, "Simulazione GPS disattivata", Toast.LENGTH_SHORT).show()
                 refreshUi()
                 return@setOnClickListener
@@ -511,6 +516,19 @@ class OutdoorWorldActivity : BaseNavActivity() {
             Toast.makeText(this, result, Toast.LENGTH_SHORT).show()
             refreshUi()
         }
+
+        // Levetta analogica: toggle della camminata mock (walk mode)
+        btnWalkJoy.setOnClickListener {
+            if (walkJoystick.visibility == View.VISIBLE) {
+                walkJoystick.visibility = View.GONE
+                mgr.stopWalk()
+                btnWalkJoy.setBackgroundResource(R.drawable.btn_accent)
+            } else {
+                walkJoystick.visibility = View.VISIBLE
+                btnWalkJoy.setBackgroundResource(R.drawable.btn_purple)
+            }
+        }
+        walkJoystick.onWalkVector = { x, y -> mgr.setWalkVector(x, y) }
 
         // AR toggle: switch to AR camera view (PRIMARY mode)
         btnArToggle.setOnClickListener {

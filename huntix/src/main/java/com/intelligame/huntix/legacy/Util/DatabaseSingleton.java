@@ -11,6 +11,10 @@ import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import com.intelligame.huntix.legacy.R;
 
@@ -19,6 +23,11 @@ public final class DatabaseSingleton {
     protected SQLiteDatabase db;
     private final String NOME_BANCO = "huntix_bd";
     private static DatabaseSingleton INSTANCE = new DatabaseSingleton();
+
+    private static final String[] TABELAS = {
+            "creatura", "caramella", "elemento", "creaturaelemento", "utente",
+            "creatura_utente", "elemento_uovo", "uovo", "poi", "interazionepoi", "traduzione"
+    };
 
     private final String[] SCRIPT_DATABASE_CREATE = new String[] {
             "CREATE TABLE creatura (" +
@@ -140,7 +149,7 @@ public final class DatabaseSingleton {
                     "(104, 'Teschinello', 'C', "+ R.drawable.creatura_104+", "+ R.drawable.creatura_104_icona+", 46, null)," +
                     "(105, 'Guerriero d''Osso', 'I', "+ R.drawable.creatura_105+", "+ R.drawable.creatura_105_icona+", 46, 104)," +
                     "(106, 'Gambalone', 'I', "+ R.drawable.creatura_106+", "+ R.drawable.creatura_106_icona+", 47, null)," +
-                    "(107, 'Pugno d'Acciaio', 'I', "+ R.drawable.creatura_107+", "+ R.drawable.creatura_107_icona+", 47, 106)," +
+                    "(107, 'Pugno d''Acciaio', 'I', "+ R.drawable.creatura_107+", "+ R.drawable.creatura_107_icona+", 47, 106)," +
                     "(108, 'Linguetta', 'I', "+ R.drawable.creatura_108+", "+ R.drawable.creatura_108_icona+", 48, null)," +
                     "(109, 'Nuvoletta', 'C', "+ R.drawable.creatura_109+", "+ R.drawable.creatura_109_icona+", 49, null)," +
                     "(110, 'Nembo Regale', 'I', "+ R.drawable.creatura_110+", "+ R.drawable.creatura_110_icona+", 49, 109)," +
@@ -591,7 +600,7 @@ public final class DatabaseSingleton {
                     "('airport','Aeroporto'),"+
                     "('amusement_park','Parco Divertimenti'),"+
                     "('aquarium','Acquario'),"+
-                    "('art_gallery','Galleria d'Arte'),"+
+                    "('art_gallery','Galleria d''Arte'),"+
                     "('atm','Bancamat'),"+
                     "('bakery','Panetteria'),"+
                     "('bank','Banca'),"+
@@ -689,24 +698,18 @@ public final class DatabaseSingleton {
         //Apre il database già esistente oppure crea un database nuovo
         db = ctx.openOrCreateDatabase(NOME_BANCO, Context.MODE_PRIVATE, null);
 
-        //cerca le tabelle esistenti nel database = "show tables" di MySQL
-        //SELECT * FROM sqlite_master WHERE type = "table"
-        Cursor c = cerca("sqlite_master", null, "type = 'table'", "");
-
-        //Crea le tabelle del database se è vuoto.
-        //Tutti i database creati dal metodo openOrCreateDatabase() possiedono una tabella predefinita "android_metadata"
-        if(c.getCount() == 1){
-            for(int i = 0; i < SCRIPT_DATABASE_CREATE.length; i++){
-                db.execSQL(SCRIPT_DATABASE_CREATE[i]);
-            }
-            Log.i("DATABASE", "Create le tabelle del database e le ha popolate.");
+        //Database inesistente, parziale o corrotto → ricrea da zero.
+        //NB: una creazione fallita in passato lascia tabelle incomplete che
+        //   farebbero esplodere le query successive ("no such table").
+        if(!bancoCompleto()){
+            criaBanco();
         }
         else{
             //Database già creato
             //dobbiamo garantire che gli hash delle risorse siano gli stessi
 
             //prima cerchiamo nel database i dati delle creature
-            c = cerca("creatura", new String[]{"idCreatura,foto,icona"}, "", "");
+            Cursor c = cerca("creatura", new String[]{"idCreatura,foto,icona"}, "", "");
 
             Class res = R.drawable.class;
             while (c.moveToNext()){
@@ -738,10 +741,44 @@ public final class DatabaseSingleton {
                     e.printStackTrace();
                 }
             }
+            c.close();
         }
 
-        c.close();
         Log.i("DATABASE", "Aperta connessione con il database.");
+    }
+
+    //Verifica che tutte le tabelle attese esistano (rileva DB parziale/corrotto)
+    private boolean bancoCompleto(){
+        try{
+            Cursor c = db.query("sqlite_master", new String[]{"name"}, "type = 'table'", null, null, null, null);
+            Set<String> tabelas = new HashSet<>();
+            while (c.moveToNext()) tabelas.add(c.getString(0));
+            c.close();
+            for (String t : TABELAS){
+                if(!tabelas.contains(t)) return false;
+            }
+            return true;
+        }catch (Exception e){
+            return false;
+        }
+    }
+
+    //Crea tutte le tabelle (drop di un eventuale DB parziale rimasto da creazioni fallite)
+    private void criaBanco(){
+        try{
+            Cursor c = db.query("sqlite_master", new String[]{"name"}, "type = 'table'", null, null, null, null);
+            List<String> tabelas = new ArrayList<>();
+            while (c.moveToNext()) tabelas.add(c.getString(0));
+            c.close();
+            for (String t : tabelas){
+                if(!t.equals("android_metadata")) db.execSQL("DROP TABLE IF EXISTS " + t);
+            }
+        }catch (Exception ignored){}
+
+        for(int i = 0; i < SCRIPT_DATABASE_CREATE.length; i++){
+            db.execSQL(SCRIPT_DATABASE_CREATE[i]);
+        }
+        Log.i("DATABASE", "Create le tabelle del database e le ha popolate.");
     }
 
     public static DatabaseSingleton getInstance(){

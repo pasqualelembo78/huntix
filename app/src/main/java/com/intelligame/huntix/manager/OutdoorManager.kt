@@ -32,6 +32,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.os.Handler
+import android.os.Looper
+import kotlin.math.hypot
 
 class OutdoorManager private constructor() : SensorEventListener {
 
@@ -88,6 +91,8 @@ class OutdoorManager private constructor() : SensorEventListener {
         const val MAX_POIS = 500
         const val POI_COOLDOWN_MS = 5 * 60 * 1000L  // 5 minutes
         const val LEVER_COOLDOWN_MS = 5_000L
+        private const val WALK_SPEED_MPS = 10f
+        private const val WALK_TICK_MS = 250L
     }
 
     private var locationManager: LocationManager? = null
@@ -637,6 +642,75 @@ class OutdoorManager private constructor() : SensorEventListener {
 
     fun stopSimulation() {
         isSimulating = false
+    }
+
+    // ─── Levetta analogica: camminata continua (mock walk) ───
+    // Il giocatore "cammina" sul posto: la posizione GPS viene spostata
+    // nella direzione della levetta senza bisogno di spostarsi davvero.
+
+    @Volatile private var walkVecX = 0f
+    @Volatile private var walkVecY = 0f
+    private var walkHandler: Handler? = null
+    private var walkTickCount = 0
+
+    /**
+     * Imposta la direzione della camminata.
+     * @param x componente est(+)/ovest(-) in [-1, 1]
+     * @param y componente nord(+)/sud(-) in [-1, 1]
+     */
+    fun setWalkVector(x: Float, y: Float) {
+        val mag = hypot(x, y)
+        walkVecX = if (mag > 1f) x / mag else x
+        walkVecY = if (mag > 1f) y / mag else y
+        if (walkVecX != 0f || walkVecY != 0f) {
+            isSimulating = true
+            if (walkHandler == null) {
+                val runnable = object : Runnable {
+                    override fun run() {
+                        walkStep()
+                        if (walkVecX != 0f || walkVecY != 0f) {
+                            walkHandler?.postDelayed(this, WALK_TICK_MS)
+                        } else {
+                            walkHandler = null
+                        }
+                    }
+                }
+                walkHandler = Handler(Looper.getMainLooper()).apply { post(runnable) }
+            }
+        } else {
+            walkVecX = 0f
+            walkVecY = 0f
+            isSimulating = false
+        }
+    }
+
+    fun stopWalk() {
+        walkVecX = 0f
+        walkVecY = 0f
+        isSimulating = false
+    }
+
+    private fun walkStep() {
+        val loc = currentLocation ?: return
+        val vx = walkVecX
+        val vy = walkVecY
+        val mag = hypot(vx, vy)
+        if (mag < 1e-4f) return
+        val stepM = WALK_SPEED_MPS * (WALK_TICK_MS / 1000f) * mag
+        val dLat = stepM / 111320.0
+        val cosLat = kotlin.math.cos(Math.toRadians(loc.latitude))
+        val dLng = if (kotlin.math.abs(cosLat) > 1e-10) stepM / (111320.0 * cosLat) else 0.0
+        val newLat = loc.latitude + (vy / mag) * dLat
+        val newLng = loc.longitude + (vx / mag) * dLng
+        currentLocation = Location("walk").apply {
+            latitude = newLat
+            longitude = newLng
+        }
+        ensureSpawns(currentLocation!!)
+        walkTickCount++
+        if (walkTickCount % 4 == 0) {
+            appCtx?.let { WeatherZoneManager.refreshAsync(it, newLat, newLng) }
+        }
     }
 
     fun getEggs(): List<WorldEgg> = synchronized(lock) { eggs.toList() }
