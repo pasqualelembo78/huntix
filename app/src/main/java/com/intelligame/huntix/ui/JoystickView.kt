@@ -17,6 +17,10 @@ class JoystickView(context: Context) : View(context) {
     var dx = 0f; private set
     var dy = 0f; private set
 
+    private var targetDx = 0f
+    private var targetDy = 0f
+    private var activePointerId = -1
+
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0x50FFFFFF.toInt()
         style = Paint.Style.FILL
@@ -41,25 +45,57 @@ class JoystickView(context: Context) : View(context) {
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val cx = width / 2f
-                val cy = height / 2f
-                val rx = event.x - cx
-                val ry = event.y - cy
-                val dist = sqrt(rx * rx + ry * ry)
-                val maxR = bgRadius
-                dx = if (dist > maxR) rx / dist else rx / maxR
-                dy = if (dist > maxR) ry / dist else ry / maxR
-                if (dx * dx + dy * dy < 0.04f) { dx = 0f; dy = 0f }
-                invalidate()
+            MotionEvent.ACTION_DOWN -> {
+                activePointerId = event.getPointerId(0)
+                computeInput(event.x, event.y)
+                return true
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (activePointerId == -1) {
+                    val idx = event.actionIndex
+                    activePointerId = event.getPointerId(idx)
+                    computeInput(event.getX(idx), event.getY(idx))
+                    return true
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val idx = event.findPointerIndex(activePointerId)
+                if (idx >= 0) computeInput(event.getX(idx), event.getY(idx))
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                activePointerId = -1
+                targetDx = 0f; targetDy = 0f
                 dx = 0f; dy = 0f
                 invalidate()
                 return true
             }
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == activePointerId) {
+                    activePointerId = -1
+                    targetDx = 0f; targetDy = 0f
+                    dx = 0f; dy = 0f
+                    invalidate()
+                    return true
+                }
+            }
         }
         return super.onTouchEvent(event)
+    }
+
+    private fun computeInput(x: Float, y: Float) {
+        val cx = width / 2f
+        val cy = height / 2f
+        val rx = x - cx
+        val ry = y - cy
+        val dist = sqrt(rx * rx + ry * ry)
+        val maxR = bgRadius
+        targetDx = if (dist > maxR) rx / dist else rx / maxR
+        targetDy = if (dist > maxR) ry / dist else ry / maxR
+        if (targetDx * targetDx + targetDy * targetDy < 0.04f) { targetDx = 0f; targetDy = 0f }
+        dx += (targetDx - dx) * 0.3f
+        dy += (targetDy - dy) * 0.3f
+        if (dx * dx + dy * dy < 0.001f) { dx = 0f; dy = 0f }
+        invalidate()
     }
 }

@@ -62,6 +62,7 @@ import com.intelligame.huntix.legacy.Model.GiocoSingleton;
 import com.intelligame.huntix.legacy.Model.HuntixPoi;
 import com.intelligame.huntix.legacy.Model.InterazionePoi;
 import com.intelligame.huntix.legacy.Model.Poi;
+import com.intelligame.huntix.legacy.Model.Utente;
 import com.intelligame.huntix.legacy.R;
 import com.intelligame.huntix.legacy.Util.DatabaseSingleton;
 import com.intelligame.huntix.legacy.Util.HuntixPoiBridge;
@@ -126,6 +127,10 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
         MapLibre.getInstance(this);
         setContentView(R.layout.activity_map);
 
+        //carica la sessione legacy salvata (login effettuato in un flusso precedente)
+        if (GiocoSingleton.getInstance().getUtente() == null)
+            GiocoSingleton.getInstance().sessione();
+
         mapView = findViewById(R.id.mappa);
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(this);
@@ -153,14 +158,16 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
 
         //Sceglie l'immagine del pulsante di profilo in base al sesso dell'utente
         ImageButton imgProfilo = (ImageButton) findViewById(R.id.bottoneProfilo);
-        if(GiocoSingleton.getInstance().getUtente().getSesso().equals("M"))
+        Utente utente = GiocoSingleton.getInstance().getUtente();
+        if (utente != null && utente.getSesso() != null && utente.getSesso().equals("M"))
             imgProfilo.setImageResource(R.drawable.male_profile);
         else
             imgProfilo.setImageResource(R.drawable.female_profile);
 
         //Configura il nome dell'utente sotto il pulsante di profilo
         TextView txtNomeUser = (TextView) findViewById(R.id.txtNomeUser);
-        txtNomeUser.setText(GiocoSingleton.getInstance().getUtente().getLogin());
+        if (utente != null)
+            txtNomeUser.setText(utente.getLogin());
         PackageManager packageManager = getPackageManager();
         boolean hasCam = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA);
         if (hasCam)

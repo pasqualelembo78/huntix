@@ -42,8 +42,8 @@ class ArcadeControls(context: Context) : View(context) {
     )
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val joystickBaseRadius = 50f
-    private val joystickThumbRadius = 20f
+    private val joystickBaseRadius = 50f * resources.displayMetrics.density
+    private val joystickThumbRadius = 20f * resources.displayMetrics.density
     private var joystickCx = 0f
     private var joystickCy = 0f
     private var thumbX = 0f
@@ -51,7 +51,7 @@ class ArcadeControls(context: Context) : View(context) {
     private var joystickPressed = false
     private var joystickTouchId = -1
 
-    private var buttonRadius = 24f
+    private var buttonRadius = 24f * resources.displayMetrics.density
     private var buttonTouchId = -1
     private var activeButton: ButtonDef? = null
 
@@ -203,7 +203,7 @@ class ArcadeControls(context: Context) : View(context) {
         thumbX = joystickCx + dx
         thumbY = joystickCy + dy
 
-        if (dist > 15f) {
+        if (dist > joystickBaseRadius * 0.15f) {
             val angle = atan2(dy, dx)
             val deg = Math.toDegrees(angle.toDouble()).toFloat()
             val newDir = when {
@@ -241,7 +241,7 @@ class ArcadeControls(context: Context) : View(context) {
         paint.color = Color.parseColor("#1A0A2A")
         paint.alpha = 180
         paint.style = Paint.Style.FILL
-        c.drawCircle(joystickCx, joystickCy, joystickBaseRadius * d / density, paint)
+        c.drawCircle(joystickCx, joystickCy, joystickBaseRadius, paint)
 
         paint.color = Color.parseColor("#3A2860")
         paint.style = Paint.Style.STROKE
@@ -252,7 +252,7 @@ class ArcadeControls(context: Context) : View(context) {
         paint.color = dirColor
         paint.style = Paint.Style.FILL
         paint.alpha = if (currentDir != 0) 100 else 40
-        c.drawCircle(joystickCx, joystickCy, joystickBaseRadius - 4f, paint)
+        c.drawCircle(joystickCx, joystickCy, joystickBaseRadius - 4f * d, paint)
         paint.alpha = 255
 
         paint.color = if (currentDir != 0) Color.parseColor("#CC88FF") else Color.parseColor("#6A50A0")
@@ -262,7 +262,7 @@ class ArcadeControls(context: Context) : View(context) {
         paint.color = Color.WHITE
         paint.alpha = 80
         paint.style = Paint.Style.FILL
-        c.drawCircle(thumbX - 3f, thumbY - 3f, joystickThumbRadius * 0.35f, paint)
+        c.drawCircle(thumbX - 3f * d, thumbY - 3f * d, joystickThumbRadius * 0.35f, paint)
         paint.alpha = 255
 
         drawDirArrows(c, joystickCx, joystickCy, joystickBaseRadius * 0.7f, d)

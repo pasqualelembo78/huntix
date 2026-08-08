@@ -26,6 +26,7 @@ import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.reallife.AvatarConfig
 import com.intelligame.huntix.manager.OnlinePoi
 import com.intelligame.huntix.manager.OnlinePoiManager
+import com.intelligame.huntix.managers.PoiSearchManager
 import com.intelligame.huntix.reallife.BuildingDef
 import com.intelligame.huntix.reallife.BuildingDefs
 import com.intelligame.huntix.reallife.BuildingType
@@ -581,6 +582,33 @@ class CityActivity : AppCompatActivity() {
                 true
             }
         }
+
+        // ═══ POI SEARCH OVERLAY (regione + città + ricerca realtime) ═══
+        val dp8 = (resources.displayMetrics.density * 8).toInt()
+        val poiSearchRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(dp8, dp8, dp8, 0)
+        }
+
+        val poiSearchPanel = PoiSearchPanel(this).apply {
+            onOpenPoi = { r ->
+                val url = PoiSearchManager().getJsonPageUrl(r)
+                startActivity(Intent(this@CityActivity, POICustomPageActivity::class.java).apply {
+                    putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
+                    putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
+                    putExtra(POICustomPageActivity.EXTRA_POI_TYPE, r.poiType)
+                })
+            }
+        }
+        poiSearchRoot.addView(poiSearchPanel)
+        root.addView(poiSearchRoot, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.TOP or Gravity.START })
 
         setContentView(root)
         joystickView.bringToFront()

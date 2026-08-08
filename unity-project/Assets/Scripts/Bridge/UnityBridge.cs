@@ -19,6 +19,28 @@ namespace Huntix.Bridge
             #endif
         }
 
+        // Modalità con cui è stata lanciata l'Activity Unity (extra "unity_mode"
+        // di BridgeActivity: esplora/outdoor/indoor/reallife). Vuota se assente.
+        public static string GetMode()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var intent = activity.Call<AndroidJavaObject>("getIntent"))
+                {
+                    return intent.Call<string>("getStringExtra", "unity_mode") ?? "";
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[UnityBridge] GetMode: " + e.Message);
+            }
+            #endif
+            return "";
+        }
+
         public static void SaveData(string json)
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
@@ -66,7 +88,7 @@ namespace Huntix.Bridge
         public static void SendMessageToAndroid(string eventName, string jsonData)
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
-            var jc = new AndroidJavaClass("com.intelligame.huntix.Bridge");
+            var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.Bridge");
             jc.CallStatic("onUnityMessage", eventName, jsonData);
             #endif
         }
@@ -84,7 +106,10 @@ namespace Huntix.Bridge
         public static string GetCurrentLocation()
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
-            return _bridge?.Call<string>("getCurrentLocation") ?? "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
+            using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+            {
+                return jc.CallStatic<string>("getCurrentLocation") ?? "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
+            }
             #endif
             return "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
         }
@@ -104,6 +129,31 @@ namespace Huntix.Bridge
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
             _bridge?.Call("tryCatch", storeId);
+            #endif
+        }
+
+        // ── Esplora: richiede POI OSM intorno a (lat,lng) entro [radiusMeters]. ──
+        // Il risultato arriva da Android via UnitySendMessage("GameManager",
+        // "OnPoisReceived", "{\"pois\":[...],\"count\":N,...}").
+        public static void RequestPoisNearby(double lat, double lng, int radiusMeters)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+            {
+                jc.CallStatic("requestPoisNearby", lat, lng, radiusMeters);
+            }
+            #endif
+        }
+
+        // Apre la pagina del POI (custom JSON / web / fallback OSM).
+        public static void OpenPoiPage(string osmId, string name, string poiType,
+                                       string pageType, string url)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+            {
+                jc.CallStatic("openPoiPage", osmId, name, poiType, url, pageType);
+            }
             #endif
         }
     }

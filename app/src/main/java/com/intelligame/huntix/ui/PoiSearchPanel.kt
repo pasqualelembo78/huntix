@@ -9,9 +9,14 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.view.ViewGroup
+import android.location.Location
 import android.widget.*
 import android.widget.AdapterView.OnItemSelectedListener
+import com.intelligame.huntix.managers.OsmPoiRepository
 import com.intelligame.huntix.managers.PoiSearchManager
+
+/** Lambda di carico POI in modalità nearby: (lat, lng, raggio, callback). */
+typealias NearbyLoader = (lat: Double, lng: Double, radiusMeters: Int, (List<PoiSearchManager.SearchResult>) -> Unit) -> Unit
 
 /**
  * 🔎 Pannello di ricerca POI riutilizzabile (Home e OutdoorWorld).
@@ -40,6 +45,21 @@ class PoiSearchPanel @JvmOverloads constructor(
 
     /** Notificato a ogni cambio di selezione regione/città. */
     var onSelectionChanged: ((regionSlug: String, citySlug: String) -> Unit)? = null
+
+    /** Filtro opzionale sui risultati (es. mostra solo i negozi). */
+    var resultFilter: ((PoiSearchManager.SearchResult) -> Boolean)? = null
+
+    /**
+     * ✅ MODALITÀ "NEARBY": se impostato, il pannello non usa i dropdown
+     * Regione/Città ma scarica i POI intorno al GPS tramite [nearbyLoader] e li
+     * filtra con [resultFilter]. Nasconde i dropdown e mostra un header dinamico.
+     */
+    var nearbyLoader: NearbyLoader? = null
+    /** Fornisce l'ultima posizione nota (es. OutdoorManager.currentLocation). */
+    var locationSupplier: (() -> Location?)? = null
+    /** Notifica quando il carico nearby è completato (per aggiornare il contatore). */
+    var onNearbyLoaded: (() -> Unit)? = null
+    private var nearbyHeader: TextView? = null
 
     /** Selezione corrente (aggiornata in modo sincrono al cambio dei menu). */
     var currentRegionSlug: String = ""
@@ -254,11 +274,67 @@ class PoiSearchPanel @JvmOverloads constructor(
         val currentGen = ++lastQueryGen
         val pois = loadedPois
         searchExecutor.submit {
-            val results = mgr.filterPois(q, pois)
+            val results = mgr.filterPois(q, pois).let { list ->
+                resultFilter?.let { list.filter(it) } ?: list
+            }
             handler?.post {
                 if (currentGen != lastQueryGen) return@post
                 renderResults(results, q)
             }
+        }
+    }
+
+    /** Riaplica la query corrente (es. dopo un cambio di filtro categoria). */
+    fun reapplyQuery() {
+        runQuery(searchEdit.text.toString())
+    }
+
+    // ─── MODALITÀ NEARBY (GPS) ───────────────────────────────────
+
+    /**
+     * Attiva la modalità nearby: nasconde i dropdown Regione/Città e mostra
+     * un header dinamico. Da chiamare prima di [loadNearby].
+     */
+    fun enableNearbyMode() {
+        val ctx = context
+        regionSpinner.visibility = GONE
+        citySpinner.visibility = GONE
+        searchEdit.hint = "🔍 Cerca tra i locali vicini..."
+        nearbyHeader = TextView(ctx).apply {
+            text = "📍 Caricamento locali vicini…"
+            textSize = 12f
+            setTextColor(Color.parseColor("#88FFFFFF"))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setBackground(GradientDrawable().apply {
+                cornerRadius = dp(8).toFloat()
+                setColor(0x22FFFFFF)
+            })
+        }
+        addView(nearbyHeader, indexOfChild(searchEdit))
+        nearbyHeader?.setOnClickListener { loadNearby() }
+    }
+
+    /** (Ri)carica i POI intorno alla posizione corrente. */
+    fun loadNearby(radiusMeters: Int = OsmPoiRepository.DEFAULT_RADIUS_METERS) {
+        val loader = nearbyLoader
+        val supplier = locationSupplier
+        if (loader == null || supplier == null) {
+            showMessage("Ricerca per zona non configurata.")
+            return
+        }
+        val loc = supplier.invoke()
+        if (loc == null) {
+            showMessage("Posizione non disponibile. Abilita il GPS o apri la mappa.")
+            nearbyHeader?.text = "📍 Posizione non disponibile — tocca per riprovare"
+            return
+        }
+        showMessage("Caricamento locali (${radiusMeters}m)…")
+        nearbyHeader?.text = "📍 ${loadedPois.size} locali disponibili"
+        loader.invoke(loc.latitude, loc.longitude, radiusMeters) { pois ->
+            loadedPois = pois
+            nearbyHeader?.text = "📍 ${pois.size} locali vicini a te  ·  ↻"
+            runQuery(searchEdit.text.toString())
+            onNearbyLoaded?.invoke()
         }
     }
 

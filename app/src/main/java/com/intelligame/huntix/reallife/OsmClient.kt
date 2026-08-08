@@ -339,6 +339,11 @@ object OsmClient {
   node["natural"="tree"]($south,$west,$north,$east);
   node["amenity"]($south,$west,$north,$east);
   node["shop"]($south,$west,$north,$east);
+  node["tourism"]($south,$west,$north,$east);
+  node["leisure"]($south,$west,$north,$east);
+  node["craft"]($south,$west,$north,$east);
+  node["office"]($south,$west,$north,$east);
+  node["healthcare"]($south,$west,$north,$east);
 );
 out body;
 >;

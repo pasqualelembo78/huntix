@@ -1,0 +1,51 @@
+using UnityEngine;
+using UnityEngine.EventSystems;
+
+namespace Huntix.Outdoor
+{
+    /// <summary>
+    /// ExploreInputHandler — intercetta i tap nel mondo Esplora.
+    /// 1) se il tocco cade su un marker POI (collider) → OnPoiTapped;
+    /// 2) altrimenti → tap su punto vuoto del terreno → OnGroundTapped.
+    /// I tap sopra elementi UI vengono ignorati (ricerca, tab, popup).
+    /// </summary>
+    public class ExploreInputHandler : MonoBehaviour
+    {
+        private void Update()
+        {
+            if (!Input.GetMouseButtonDown(0)) return;
+
+            // Popup modale aperto: nessun input al mondo.
+            if (ExplorePopup.IsOpen) return;
+
+            // Tap su UI (ricerca, categorie, bottoni): lascia gestire all'EventSystem.
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
+            var cam = Camera.main;
+            if (cam == null) return;
+
+            var ray = cam.ScreenPointToRay(Input.mousePosition);
+
+            // 1) Marker POI
+            if (Physics.Raycast(ray, out var hit, 5000f))
+            {
+                var pm = hit.collider.GetComponentInParent<POIMarker>();
+                if (pm != null && pm.Poi != null && ExploreManager.Instance != null)
+                {
+                    ExploreManager.Instance.OnPoiTapped(pm.Poi);
+                    return;
+                }
+            }
+
+            // 2) Terreno vuoto: piano orizzontale dei marker (z = altitudine 0).
+            var plane = new Plane(Vector3.forward, Vector3.zero);
+            if (plane.Raycast(ray, out float enter))
+            {
+                var point = ray.GetPoint(enter);
+                if (ExploreManager.Instance != null)
+                    ExploreManager.Instance.OnGroundTapped(point);
+            }
+        }
+    }
+}

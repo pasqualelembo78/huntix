@@ -63,9 +63,9 @@ unitylic/unity-export.log
 unity-export.gradle/
 unity-export/
 
-# ── AR/Unity AAR (rigenerabili via build_release.sh, mai su Git) ──
-app/libs/*.aar
+# ── AR/Unity AAR (backup binario del player Unity, mantenuto su Git) ──
 *.aar
+!app/libs/*.aar
 
 # ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
 unityLibrary/build/

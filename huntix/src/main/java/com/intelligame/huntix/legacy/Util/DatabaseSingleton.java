@@ -22,7 +22,7 @@ public final class DatabaseSingleton {
 
     protected SQLiteDatabase db;
     private final String NOME_BANCO = "huntix_bd";
-    private static DatabaseSingleton INSTANCE = new DatabaseSingleton();
+    private static volatile DatabaseSingleton INSTANCE;
 
     private static final String[] TABELAS = {
             "creatura", "caramella", "elemento", "creaturaelemento", "utente",
@@ -781,7 +781,10 @@ public final class DatabaseSingleton {
         Log.i("DATABASE", "Create le tabelle del database e le ha popolate.");
     }
 
-    public static DatabaseSingleton getInstance(){
+    public static synchronized DatabaseSingleton getInstance(){
+        if (INSTANCE == null) {
+            INSTANCE = new DatabaseSingleton();
+        }
         return INSTANCE;
     }
 

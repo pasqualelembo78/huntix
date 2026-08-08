@@ -96,6 +96,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var tvSheetInfo: TextView
     private lateinit var btnSheetHunt: LinearLayout
     private lateinit var tvSheetHunt: TextView
+    private lateinit var btnSheetViewPage: LinearLayout
     private lateinit var btnSheetAr: LinearLayout
     private lateinit var tvSheetAr: TextView
     private lateinit var btnReportPosition: TextView
@@ -241,6 +242,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
                 startActivity(Intent(this@OutdoorWorldActivity, POICustomPageActivity::class.java).apply {
                     putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
                     putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
+                    putExtra(POICustomPageActivity.EXTRA_POI_TYPE, r.poiType)
                 })
                 mapLibre?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(r.lat, r.lng), 18.0))
             }
@@ -300,6 +302,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetInfo = findViewById(R.id.tvSheetInfo)
         btnSheetHunt = findViewById(R.id.btnSheetHunt)
         tvSheetHunt = findViewById(R.id.tvSheetHunt)
+        btnSheetViewPage = findViewById(R.id.btnSheetViewPage)
         btnSheetAr = findViewById(R.id.btnSheetAr)
         tvSheetAr = findViewById(R.id.tvSheetAr)
         btnReportPosition = findViewById(R.id.btnReportPosition)
@@ -429,7 +432,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
                                 } else {
                                     when (poi.pageType) {
                                         "web" -> if (poi.url.isNotBlank()) openWebView(poi) else showPoiSheet(poi)
-                                        "custom" -> if (poi.url.isNotBlank()) openCustomPage(poi) else showPoiSheet(poi)
+                                        "custom", "json" -> if (poi.url.isNotBlank()) openCustomPage(poi) else showPoiSheet(poi)
                                         else -> {
                                             val bt = BuildingDefs.resolveBuildingType(poi.buildingType, poi.type)
                                             if (bt != null) openBuilding(poi, bt)
@@ -568,6 +571,15 @@ class OutdoorWorldActivity : BaseNavActivity() {
             }
         }
 
+        btnSheetViewPage.setOnClickListener {
+            activePoiId?.let { poiId ->
+                val poi = mgr.getPois().firstOrNull { it.id == poiId }
+                if (poi != null && poi.url.isNotBlank()) {
+                    openCustomPage(poi)
+                }
+            }
+        }
+
         btnSheetAr.setOnClickListener {
             activeEggId?.let { doArNavigation(it) }
         }
@@ -652,6 +664,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         AppLog.i(TAG, "onPause — stopping tick, sensor, mgr")
         refresh.removeCallbacks(tick)
         mapView?.onPause()
+        mgr.stopWalk()
         mgr.stopSimulation()
         mgr.stop()
         if (hasSensor) sensorManager?.unregisterListener(sensorListener)
@@ -913,7 +926,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         val poiFeatures = currentPois.map { poi ->
             val onCooldown = mgr.isPoiOnCooldown(poi)
             poiCooldownState[poi.id] = onCooldown
-            val iconId = if (poi.type == "building" && poi.buildingType.isNotEmpty()) {
+            val iconId = if (poi.buildingType.isNotEmpty() && com.intelligame.huntix.reallife.BuildingDefs.resolveBuildingType(poi.buildingType, poi.type) != null) {
                 "building_${poi.buildingType.lowercase()}"
             } else {
                 "poi_${poi.type}${if (onCooldown) "_gray" else ""}"
@@ -1289,6 +1302,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSheetInfo.text = "${egg.rarity.displayName} — ${d.toInt()} m — ${egg.element.name}"
         tvSheetHunt.text = "\uD83C\uDFAF Cattura"
         btnSheetHunt.visibility = View.VISIBLE
+        btnSheetViewPage.visibility = View.GONE
         btnSheetAr.visibility = View.VISIBLE
         btnReportPosition.visibility = View.GONE
         bottomSheet.visibility = View.VISIBLE
@@ -1313,6 +1327,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
             btnReportPosition.visibility = View.VISIBLE
         }
         btnSheetHunt.visibility = View.VISIBLE
+        btnSheetViewPage.visibility = if (poi.url.isNotBlank()) View.VISIBLE else View.GONE
         bottomSheet.visibility = View.VISIBLE
     }
 
@@ -1691,6 +1706,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         startActivity(Intent(this, POICustomPageActivity::class.java).apply {
             putExtra(POICustomPageActivity.EXTRA_JSON_URL, poi.url)
             putExtra(POICustomPageActivity.EXTRA_POI_NAME, poi.name)
+            putExtra(POICustomPageActivity.EXTRA_POI_TYPE, poi.type)
         })
         hideBottomSheet()
     }

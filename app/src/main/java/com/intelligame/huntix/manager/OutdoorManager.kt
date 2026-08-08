@@ -84,6 +84,14 @@ class OutdoorManager private constructor() : SensorEventListener {
         private var instance: OutdoorManager? = null
         fun get(): OutdoorManager = instance ?: OutdoorManager().also { instance = it }
 
+        /** Ultima posizione conosciuta (one-shot, senza avviare engine). Null se GPS negato. */
+        fun lastKnownLocation(ctx: Context): Location? = runCatching {
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return@runCatching null
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return@runCatching null
+            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        }.getOrNull()
+
         private const val BASE_CATCH_RADIUS_M = 50f
         private const val DEFAULT_LAT = 41.9028
         private const val DEFAULT_LNG = 12.4964
@@ -91,7 +99,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         const val MAX_POIS = 500
         const val POI_COOLDOWN_MS = 5 * 60 * 1000L  // 5 minutes
         const val LEVER_COOLDOWN_MS = 5_000L
-        private const val WALK_SPEED_MPS = 10f
+        private const val WALK_SPEED_MPS = 2.5f
         private const val WALK_TICK_MS = 250L
     }
 
@@ -448,6 +456,7 @@ class OutdoorManager private constructor() : SensorEventListener {
                     mgr.fetchPoiForLocation(ctx, loc.latitude, loc.longitude, maxPois = MAX_POIS)
                 }
                 result.onSuccess { onlinePois ->
+                    AppLog.d("OutdoorManager", "fetchOnlinePois success: ${onlinePois.size} POIs from OnlinePoiManager")
                     val newPois = onlinePois.mapNotNull { op ->
                         if (op.id == "house_player") return@mapNotNull null
                         Poi(
@@ -476,6 +485,9 @@ class OutdoorManager private constructor() : SensorEventListener {
                         }
                         AppLog.d("OutdoorManager", "Online POI caricati: ${newPois.size}, total: ${pois.size}")
                     }
+                }
+                result.onFailure { e ->
+                    AppLog.w("OutdoorManager", "fetchOnlinePois failed: ${e.message}")
                 }
             } catch (e: Exception) {
                 AppLog.w("OutdoorManager", "fetchOnlinePois fallito: ${e.message}")

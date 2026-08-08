@@ -28,7 +28,7 @@ public final class GiocoSingleton {
     private Map<String,List<Creatura>> creature;
     private Apparizione[] apparizioni = new Apparizione[10];
     private List<Elemento> elementiCreatura;
-    private static GiocoSingleton INSTANCE = new GiocoSingleton();
+    private static volatile GiocoSingleton INSTANCE;
     private boolean sorteggiatoLeggendario = false;
     private List<Uovo> uova = new ArrayList<>();
 
@@ -222,7 +222,10 @@ public final class GiocoSingleton {
 
     }
 
-    public static GiocoSingleton getInstance(){
+    public static synchronized GiocoSingleton getInstance(){
+        if (INSTANCE == null) {
+            INSTANCE = new GiocoSingleton();
+        }
         return INSTANCE;
     }
 

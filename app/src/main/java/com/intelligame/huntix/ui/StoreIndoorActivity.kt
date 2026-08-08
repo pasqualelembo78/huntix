@@ -1,6 +1,5 @@
 package com.intelligame.huntix.ui
 
-import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -9,7 +8,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -18,7 +16,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.UiKit
 import kotlin.math.hypot
-import kotlin.math.min
 import kotlin.math.sin
 
 /**
@@ -35,6 +32,9 @@ class StoreIndoorActivity : AppCompatActivity() {
         const val EXTRA_POI_NAME = "poi_name"
         const val EXTRA_POI_TYPE = "poi_type"
         const val EXTRA_JSON_URL = "json_url"
+        private const val ROOM_W = 4200f
+        private const val ROOM_H = 3000f
+        private const val WALK_SPEED = 380f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +51,17 @@ class StoreIndoorActivity : AppCompatActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         root.addView(roomView)
+
+        val joystick = JoystickView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                160, 160
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.START
+                marginStart = 32
+                bottomMargin = 64
+            }
+        }
+        root.addView(joystick)
 
         val hud = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -87,6 +98,16 @@ class StoreIndoorActivity : AppCompatActivity() {
         root.addView(hud)
 
         setContentView(root)
+
+        val handler = Handler(Looper.getMainLooper())
+        val tick = object : Runnable {
+            override fun run() {
+                roomView.vecX = joystick.dx
+                roomView.vecY = joystick.dy
+                handler.postDelayed(this, 16L)
+            }
+        }
+        handler.post(tick)
     }
 
     private var hintShown = false
@@ -97,13 +118,7 @@ class StoreIndoorActivity : AppCompatActivity() {
         Toast.makeText(this, "Sei uscito dal negozio \uD83D\uDEE0\uFE0F", Toast.LENGTH_SHORT).show()
     }
 
-    inner class StoreRoomView(context: Context, private val onExit: () -> Unit) : View(context) {
-
-        companion object {
-            private const val ROOM_W = 4200f
-            private const val ROOM_H = 3000f
-            private const val WALK_SPEED = 380f
-        }
+    inner class StoreRoomView(context: android.content.Context, private val onExit: () -> Unit) : View(context) {
 
         private val floorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#1E1533") }
         private val gridPaint = Paint().apply { color = 0x14000000.toInt() }
@@ -129,13 +144,6 @@ class StoreIndoorActivity : AppCompatActivity() {
         private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66000000.toInt() }
         private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#7C4DFF") }
         private val skinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FFCC80") }
-        private val joyBase = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33A78BFA.toInt() }
-        private val joyRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor(UiKit.ACCENT)
-            style = Paint.Style.STROKE
-            strokeWidth = 3f
-        }
-        private val joyKnob = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor(UiKit.ACCENT) }
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = 30f
             textAlign = Paint.Align.CENTER
@@ -152,18 +160,11 @@ class StoreIndoorActivity : AppCompatActivity() {
 
         private var playerX = ROOM_W / 2f
         private var playerY = ROOM_H - 420f
-        private var vecX = 0f
-        private var vecY = 0f
+        var vecX = 0f; internal set
+        var vecY = 0f; internal set
         private var walkPhase = 0f
         private var walking = false
         private var exited = false
-
-        private var joyCX = 0f
-        private var joyCY = 0f
-        private var joyR = 0f
-        private var activeJoy = false
-        private var knobX = 0f
-        private var knobY = 0f
 
         init {
             handler.post(tick)
@@ -172,64 +173,6 @@ class StoreIndoorActivity : AppCompatActivity() {
         override fun onDetachedFromWindow() {
             super.onDetachedFromWindow()
             handler.removeCallbacks(tick)
-        }
-
-        override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-            super.onSizeChanged(w, h, oldw, oldh)
-            joyR = min(w, h) * 0.11f
-            joyCX = w * 0.16f
-            joyCY = h * 0.84f
-            knobX = joyCX
-            knobY = joyCY
-        }
-
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    val dx = event.x - joyCX
-                    val dy = event.y - joyCY
-                    if (dx * dx + dy * dy <= joyR * joyR * 4f) {
-                        activeJoy = true
-                        updateKnob(event.x, event.y)
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (activeJoy) {
-                        updateKnob(event.x, event.y)
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    activeJoy = false
-                    vecX = 0f
-                    vecY = 0f
-                    knobX = joyCX
-                    knobY = joyCY
-                    invalidate()
-                }
-            }
-            return super.onTouchEvent(event)
-        }
-
-        private fun updateKnob(x: Float, y: Float) {
-            var dx = x - joyCX
-            var dy = y - joyCY
-            val len = hypot(dx, dy)
-            if (len > joyR) {
-                dx = dx / len * joyR
-                dy = dy / len * joyR
-            }
-            knobX = joyCX + dx
-            knobY = joyCY + dy
-            if (len < 1f) {
-                vecX = 0f
-                vecY = 0f
-            } else {
-                vecX = dx / joyR
-                vecY = dy / joyR
-            }
-            invalidate()
         }
 
         private fun step() {
@@ -323,11 +266,6 @@ class StoreIndoorActivity : AppCompatActivity() {
             canvas.drawCircle(ppx + nx, ppy + ny + bob - 12f, 27f, skinPaint)
 
             canvas.restore()
-
-            // Levetta (spazio schermo)
-            canvas.drawCircle(joyCX, joyCY, joyR, joyBase)
-            canvas.drawCircle(joyCX, joyCY, joyR, joyRing)
-            canvas.drawCircle(knobX, knobY, joyR * 0.42f, joyKnob)
         }
 
         private fun drawWall(canvas: Canvas, x: Float, y: Float, w: Float, h: Float) {

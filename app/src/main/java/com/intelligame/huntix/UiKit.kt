@@ -27,6 +27,7 @@ object UiKit {
     const val GREEN     = "#00FF88"
     const val TEXT_DIM  = "#6B5B95"
     const val PURPLE    = "#6A1B9A"
+    const val INDIGO    = "#4F46E5"
 
     fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
 

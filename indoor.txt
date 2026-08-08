@@ -1,0 +1,443 @@
+================================================================================
+INDOOR AR "NASCONDI E CERCA" — PIANO DI SVILUPPO COMPLETO
+File di riferimento per lo sviluppo. Aggiorna questo file man mano che implementi.
+================================================================================
+
+CONTEXT GENERALE
+================
+
+Obiettivo: Arricchire il gioco indoor AR "Nascondi e Cerca" di Huntix con un
+sistema di "Room Scan + Interazione Mobili" che permette all'utente di:
+
+1. Scansionare la stanza una volta sola (Modalità Interattiva)
+2. Marcare i mobili come POI interattivi (tocca → si apre un cassetto, si accende una TV)
+3. Salvare la stanza (locale + backup Firebase)
+4. Riconoscere la stanza alla riapertura (pose matching ARCore anchors)
+5. Giocare: uova nascoste vicino ai POI, POI come fonti di indizi
+
+Tecnologie in uso:
+- Android: SceneView 2.2.1 + ARCore (NON AR Foundation)
+- Unity: Progetto separato in /unity-project/ per asset 3D
+- Backend: Firebase Firestore + Realtime Database (esistente)
+- Persistenza: SharedPreferences (esistente) + Firebase backup (da aggiungere)
+
+MODIFICHE PRINCIPALI AL MENU
+============================
+
+File: /app/src/main/java/com/intelligame/huntix/IndoorModeSelectionActivity.kt
+
+Aggiungere un terzo blocco "Stanza Interattiva" accanto ai blocchi esistenti:
+
+UI Kit card:
+  Titolo: "🏠 Stanza Interattiva"
+  Descrizione: "Scansiona la stanza, rendi i mobili interagibili"
+  Pulsante "✨ Inizia" (colore #FF00C8BA):
+    -> Intent a MainActivity con extras:
+       - game_mode = "interactive_room"
+       - ar_mode = "room_scan"
+       - egg_setup_mode = "auto"
+  Pulsante "📂 Carica stanza" (colore #FF00C8BA):
+    -> Mostra RoomListDialog per caricare stanze salvate
+
+NUOVI GAME PHASE
+================
+
+File: /app/src/main/java/com/intelligame/huntix/model/GameModels.kt
+
+Aggiungere al enum GamePhase:
+  INTERACTIVE_SCAN    -- scansione stanza interattiva (seleziona POI)
+  INTERACTIVE_EDIT    -- editing POI (marca, elimina, rinomina)
+  INTERACTIVE_PLAY    -- gioco con POI interagibili attivi
+
+NUOVI FILE — DATA MODEL
+=======================
+
+File: /app/src/main/java/com/intelligame/huntix/data/InteractivePOI.kt
+
+data class InteractivePOI(
+    val poiId: String,              // UUID del POI
+    val anchorId: String,            // ARCore anchor ID locale
+    val label: String,             // "wall_shelf", "tv_stand", "sofa_left", "desk_top"
+    val customName: String,        // nome dato dall'utente
+    val worldPose: FloatArray,     // 7 float: tx, ty, tz, qx, qy, qz, qw
+    val planeIndex: Int = -1,      // indice del piano ARCore
+    val interaction: String,       // "open_drawer", "toggle_tv", "spin", "pull_out"
+    val metadata: Map<String, String> = emptyMap(),
+    val isFound: Boolean = false,  // se l'indizio del POI è stato scoperto
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+data class InteractiveRoom(
+    val roomId: String,             // UUID stanza
+    val name: String,               // nome utente
+    val ownerUid: String,           // UID Firebase
+    val semanticPlanes: List<RoomMapRepository.SemanticPlane>,
+    val pois: List<InteractivePOI>,
+    val safePos: FloatArray?,       // pose cassaforte (7 float)
+    val eggMeta: List<EggMeta>,    // offset + colore + forma uova
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+data class EggMeta(
+    val idx: Int,
+    val offset: FloatArray,  // offset da safe (3 float) o assoluto (7 float)
+    val colorIdx: Int,
+    val shape: String,
+    val isTrap: Boolean,
+    val nearbyPOI: String?   // POI a cui l'uovo è associato
+)
+
+File: /app/src/main/java/com/intelligame/huntix/model/GamePhaseExt.kt
+
+// Nuove fasi GamePhase (vedi sezione "NUOVI GAME PHASE")
+// Aggiungere INTERACTIVE_SCAN, INTERACTIVE_EDIT, INTERACTIVE_PLAY
+
+--------------------------------------------------------------------------------
+NUOVI FILE — MANAGER E LOGICA
+================================================================================
+
+1. InteractiveRoomManager.kt
+   Posizione: /app/src/main/java/com/intelligame/huntix/InteractiveRoomManager.kt
+
+   Responsabilità:
+   - startInteractiveScan(): avvia modalità scansione interattiva
+   - markPOIAt(hit, suggestedLabel): crea POI quando utente tocca un piano
+   - spawnPOIVisual(poi, anchor, label): istanzia asset 3D per il POI
+   - tryLoadRoom(session): riconosce stanza tramite pose matching
+   - roomRecognitionScore(room, planes): calcola matching score (soglia 0.8)
+   - loadRoom(room, session): ricostruisce tutti i POI
+   - queuePOISave(poi): persiste POI (SharedPreferences + Firebase)
+   - restoreSafeAndEggs(room): ripristina safe + uova
+
+   Dipendenze:
+   - RoomMapRepository (esistente) per SemanticPlane
+   - LocalAnchorStore (esistente) per persistenza locale
+   - SceneView ARSceneView per accesso a session/engine
+
+2. FurnitureInteractionManager.kt
+   Posizione: /app/src/main/java/com/intelligame/huntix/FurnitureInteractionManager.kt
+
+   Responsabilità:
+   - onPOITapped(poiId): gestisce tap su POI (open_drawer, toggle_tv, spin)
+   - provideHintForNearbyEgg(eggIdx, poiId): POI fornisce indizi vicino uova
+   - checkPOITap(event): raycast su POI interattivi in fase PLAY
+
+   Dipendenze:
+   - UnityPlayer.UnitySendMessage per trigger animazioni Unity
+   - MainActivity per overlay hint suoni
+
+3. RoomFingerprintManager.kt  [OPZIONALE — v2]
+   Posizione: /app/src/main/java/com/intelligame/huntix/manager/RoomFingerprintManager.kt
+
+   Responsabilità:
+   - Genera fingerprint stanza (distanze relative tra POI)
+   - Matching robusto: invece di pose assolute, usa configurazione relativa
+
+4. ARAssetSpawner.kt  [OPZIONALE — v2]
+   Posizione: /app/src/main/java/com/intelligame/huntix/manager/ARAssetSpawner.kt
+
+   Responsabilità:
+   - Mappa label → asset Kenney
+   - Carica asset SceneView in memoria
+   - Gestisce pooling per performance
+
+--------------------------------------------------------------------------------
+NUOVI FILE — UI
+================================================================================
+
+1. furniture_picker.xml
+   Posizione: /app/src/main/res/layout/furniture_picker.xml
+
+   Componenti:
+   - RecyclerView o GridLayout con anteprime 3D (icone PNG dei mobili Kenney)
+   - Label: "Mensole", "TV Stand", "Divano", "Scrivania", "Lampada"
+   - Pulsante conferma + annulla
+
+2. activity_main.xml — MODIFICHE
+   Posizione: /app/src/main/res/layout/activity_main.xml
+
+   Aggiungere:
+   a) TextView poiLabelOverlay (label quando ti avvicini a un POI)
+   b) FloatingActionButton btnEditPOIs (modalità editing POI)
+   c) FrameLayout poiScanOverlay (overlay istruzioni + carosello tipi mobile)
+   d) LinearLayout poiTypeSelector (pulsanti per tipo di mobile)
+
+--------------------------------------------------------------------------------
+NUOVI FILE — UNITY (C#)
+================================================================================
+
+Cartella: /unity-project/Assets/Scripts/InteractiveRoom/
+
+1. InteractivePOISpawner.cs
+   Responsabilità:
+   - Riceve dati POI da Android via UnitySendMessage
+   - Spawn prefab 3D corretto (Resource.Load da Assets/Resources/InteractivePOI/)
+   - Mantiene dictionary poiId → GameObject spawned
+
+   API per Android:
+   - SpawnPOI(string jsonData): jsonData è JSON con poiId, label, worldPose, interaction
+   - TriggerInteraction(string poiId): chiama FurnitureAnimator.TriggerInteraction()
+
+2. FurnitureAnimator.cs
+   Responsabilità:
+   - Gestisce animazioni per ogni tipo di interazione:
+     "open_drawer": Drawer slides out (0.3s ease)
+     "toggle_tv": TV screen material swap (off→on) + emissive glow
+     "spin": GameObject rotates 360° (loop continuo)
+     "pull_out": Object slides forward on rail
+
+3. POITarget.cs  (component da aggiungere ai prefab POI)
+   Responsabilità:
+   - Riferimento a InteractivePOISpawner per trigger interazioni
+   - Eventi: OnPOISelected(), OnPOIOpened()
+
+Cartella: /unity-project/Assets/Resources/InteractivePOI/
+
+Asset Kenney CC0 da importare (72 modelli):
+  - Shelf_Drawer.fbx
+  - TV_Stand.fbx
+  - Sofa.fbx
+  - Desk.fbx
+  - Lamp.fbx
+  - Chair.fbx
+  - Bookcase.fbx
+  - Wardrobe.fbx
+  - Nightstand.fbx
+  - Entertainment_Center.fbx
+  - Etc...
+
+Link Kenney: https://kenney.nl/assets/kenney-furniture (licenza CC0)
+
+--------------------------------------------------------------------------------
+MODIFICHE A FILE ESISTENTI
+================================================================================
+
+1. MainActivity.kt
+   Modifiche:
+   a) onCreate:
+      - Se intent.getStringExtra("game_mode") == "interactive_room":
+        - Inizializza InteractiveRoomManager e FurnitureInteractionManager
+        - Imposta viewModel gamePhase = INTERACTIVE_SCAN
+        - Carica stanza esistente o inizia scansione
+
+   b) ArSceneManager.onSessionUpdated:
+      - Se gamePhase INTERACTIVE_SCAN: startInteractiveScanFlow()
+      - Se gamePhase INTERACTIVE_PLAY: proximity check + POI hint
+
+   c) ArSceneManager.handleTouch:
+      - INTERACTIVE_SCAN / EDIT: touch → markPOIAt()
+      - INTERACTIVE_PLAY: raycast su POI → ToggleInteraction(); altrimenti gioco Nascondi Cerca
+
+   d) Aggiungere delegation properties per InteractiveRoomManager
+
+2. ArSceneManager.kt
+   Aggiungere:
+   - startInteractiveScanFlow(frame): UI diversa per room scan interattivo
+   - updateInteractiveProximity(): vicino a POI → mostra label
+
+3. IndoorGameViewModel.kt
+   Aggiungere:
+   - gameMode: String = "classic_solo" (nuovo campo)
+   - poiCount, interactiveMode flag nel UiState
+
+4. GameDataManager.kt
+   Aggiungere:
+   - Metodi per salvare InteractiveRoom (SharedPreferences + Firestore)
+   - getInteractiveRooms(), saveInteractiveRoom(), deleteInteractiveRoom()
+
+5. LocalAnchorStore.kt
+   Aggiungere:
+   - localPOIs: List<InteractivePOI>
+   - addInteractivePOI(poi: InteractivePOI, roomId: String)
+   - loadInteractivePOIs(roomId: String): List<InteractivePOI>
+
+--------------------------------------------------------------------------------
+FLUSSO COMPLETO (step by step)
+================================================================================
+
+FASE 1: SESSIONE INIZIALE (modalità Interattiva)
+------------------------------------------------
+1. Utente: IndoorModeSelectionActivity → "✨ Inizia" (Modalità Interattiva)
+2. MainActivity: riceve intent con game_mode="interactive_room"
+3. MainActivity: inizializza InteractiveRoomManager.startInteractiveScan()
+4. RoomScanManager: guida utente a camminare (UI "scanOverlay" personalizzato)
+5. RoomScanManager: quando >= 5 piani → "Scansione completa"
+6. UI cambia: mostra carosello "Seleziona tipo di mobile da marcare"
+7. Utente tocca un piano → FurnitureTypeDialog (sceglie: mensole, TV, divano, etc.)
+8. InteractiveRoomManager: markPOIAt() → crea anchor + spawn asset 3D + salva POI
+9. Ripete per ogni mobile (parete attrezzata, TV, divano, scrivania)
+10. Utente: piazza cassaforte (SETUP_SAFE) e uova (SETUP_EGGS) — flow esistente
+11. InteractiveRoomManager: saveRoom() → salva POI + safe + uova su SharedPreferences + Firebase
+
+FASE 2: SESSIONE SUCCESSIVA (ricarica stanza)
+----------------------------------------------
+1. Utente: IndoorModeSelectionActivity → "📂 Carica stanza"
+2. RoomListDialog: mostra stanze salvate (SharedPreferences + Firestore)
+3. Utente tocca una stanza → MainActivity con extras: game_mode="interactive_room", room_id="xxx"
+4. InteractiveRoomManager: tryLoadRoom(session) → roomRecognitionScore() matching pose
+5. Se matching > 0.8:
+   a) loadRoom(): ricrea anchor ARCore per ogni POI
+   b) spawnPOIVisual(): istanzia asset 3D (visibili solo in edit mode)
+   c) restoreSafeAndEggs(): ricostruisce safe + uova
+6. Se matching < 0.8:
+   - Dialog: "Stanza non riconosciuta. Rifare scansione? Posizionare manualmente?"
+   - Se "Posiziona manualmente": passa alla modalità editing
+
+FASE 3: GIOCO (INTERACTIVE_PLAY)
+---------------------------------
+1. Utente: "Avvia caccia" (btnStart)
+2. GamePhase → INTERACTIVE_PLAY (simile a PLAYING ma con POI)
+3. ArSceneManager.checkProximity():
+   - Distanza camera→uovo → mostra/nasconde uovo
+   - Distanza camera→POI → mostra poiLabelOverlay ("📺 TV Stand")
+4. FurnitureInteractionManager.checkPOITap():
+   - Raycast su POI → TriggerInteraction() → UnitySendMessage
+   - Unity: FurnitureAnimator trigger → animazione (cassetto aperto, TV accesa)
+5. MainActivityHints: se POI aperto → fornisce indizio ("Cerca sotto il divano!")
+6. Gioco Nascondi e Cerca avanza come oggi:
+   - Trova uovo → raccogli → vai alla cassaforte
+   - POI forniscono indizi bonus (se già interagiti)
+
+--------------------------------------------------------------------------------
+ASSET LIST (72 modelli Kenney CC0)
+================================================================================
+
+MENSOLE / ARMADI (10):
+  - Shelf_01, Shelf_02, Cabinet_with_Drawers, Wardrobe, Bookcase
+  - Entertainment_Center, TV_Stand, Media_Rack, Sideboard, Display_Case
+
+TV / APPARATI (5):
+  - TV_Flat, TV_Old, Speaker_Set, Gaming_Console, Projector
+
+DIVANI / SEDIE (8):
+  - Couch_Large, Couch_Small, Lounge_Chair, Office_Chair, Dining_Chair
+  - Bar_Stool, Bean_Bag, Hammock
+
+SCRIBANIE / MOBILI UOMO (8):
+  - Desk_Modern, Desk_Rustic, Desk_Office, Nightstand, Dresser,
+  - Vanity_Table, Bar_Cart, Filing_Cabinet
+
+LUCINE / ILLUMINAZIONE (8):
+  - Table_Lamp, Floor_Lamp, Pendant_Light, Desk_Lamp,
+  - Wall_Light, Ceiling_Fan, Chandelier, Spotlight
+
+OGGETTI VARIE (31):
+  - Rug, Mirror, Picture_Frame, Clock, Plant_1, Plant_2,
+  - Trash_Can, Laundry_Basket, Shoe_Rack, Coat_Rack,
+  - Safe, Toolbox, Suitcase, Backpack, Books, Magazines,
+  - Remote_Control, Game_Controller, Headphones, Speaker,
+  - Keyboard, Mouse, Monitor, Printer, Router, Plant_Pot,
+  - Vase, Candle, Picture_Frame_2, Trophy, Picture_Frame_3
+
+LINK KENNEY: https://kenney.nl/assets/kenney-furniture
+
+--------------------------------------------------------------------------------
+TIMELINE (7 settimane)
+================================================================================
+
+SEMANA 1 — Room Scan + POI Marker + Persistenza Locale
+  - InteractiveRoomManager.kt: startInteractiveScan, markPOIAt, saveRoom, tryLoadRoom
+  - InteractivePOI.kt: data class
+  - GamePhaseExt.kt: enum esteso
+  - activity_main.xml: poiScanOverlay, btnEditPOIs, poiLabelOverlay
+  - IndoorModeSelectionActivity.kt: nuovo pulsante "Stanza Interattiva"
+  - Import 72 asset FBX Kenney in Unity → unity-project/Assets/Resources/InteractivePOI/
+  RISULTATO ATTESO: PUOI SCANSIONARE UNA STANZA E MARCare POI. I POI si salvano in locale.
+
+SEMANA 2 — Riconoscimento Stanza + UI Editing + Menu Carica
+  - RoomFingerprintManager.kt: pose matching e room recognition
+  - FurnitureTypeDialog.kt: picker tipi di mobile
+  - RoomListDialog.kt: carica stanze salvate
+  - GameDataManager.kt: save/load InteractiveRoom
+  - LocalAnchorStore.kt: persistenza POI
+  RISULTATO ATTESO: RICONOSCI LA STANZA AL RITORNO, PUOI CARICARE STANZE SALVATE.
+
+SEMANA 3 — Interazioni Base (open_drawer, toggle_tv)
+  - FurnitureInteractionManager.kt: onPOITapped, checkPOITap
+  - Unity: InteractivePOISpawner.cs, FurnitureAnimator.cs (open_drawer + toggle_tv)
+  - Unity: POITarget.cs (component su prefab POI)
+  - MainActivity.kt: integrazione touch handling
+  RISULTATO ATTESO: TOCCHI IL DIVANO → SI APRE IL CASSETTO. TOCCHI LA TV → SI ACCENDE.
+
+SEMANA 4 — Integrazione Nascondi e Cerca + Indizi POI
+  - ArSceneManager.kt: proximity check + POI hint
+  - MainActivityHints.kt: provideHintForNearbyEgg
+  - Unity: animazioni avanzate + sync coneggio
+  RISULTATO ATTESO: LE UOVA SONO VICINO AI POI. INDAGINI POI → RICEVI INDENTRO.
+
+SEMANA 5 — Animazioni Avanzate + Suoni 3D
+  - FurnitureAnimator.cs: tutte le animazioni (spin, pull_out, lamp swing)
+  - RoomScanOverlay.kt: UI migliorata (feedback visivo POI)
+  RISULTATO ATTESO: OGNI POI HA ANIMAZIONE UNICA + SUONO 3D.
+
+SEMANA 6 — Backup Firebase + UI Carica Stanza
+  - RoomMapRepository.kt (esteso): salva POI su Firestore
+  - RoomListDialog.kt: sync con Firebase
+  RISULTATO ATTESO: LE STANZE SALVATE SONO DISPONIBILI ANCHE DA UN ALTRO DISPOSITIVO.
+
+SEMANA 7 — Test End-to-End + Polish
+  - QA su device fisico (Android phone con ARCore)
+  - Unity build AAR → import in Android Studio
+  - Fine-tuning performance + UI
+  RISULTATO ATTESO: GIOCO COMPLETO — SCANSIONA, MARCA, RISCOPRI, GIOCA.
+
+--------------------------------------------------------------------------------
+NOTE TECNICHE IMPORTANTI
+================================================================================
+
+1. ARCore Persistent Anchors
+   - Android non supporta nativamente persistent anchors (solo Cloud Anchors)
+   - La soluzione adottata: salva pose assoluta + usa room pose matching
+   - Soglia di matching: 0.5m di tolleranza per pose, 0.8 di soglia per score
+   - Se matching fallisce: UI per riconoscimento manuale
+
+2. Asset Pipeline (Unity → Android)
+   - Assets 3D devono essere in unity-project/Assets/Resources/InteractivePOI/
+   - UnitySendMessage richiede che gli script Unity siano compilati nell'AAR
+   - Il pomeriggio: ricostruisci AAR Unity con nuovi script C#
+
+3. Firebase Backup
+   - Salva su Firestore: room_maps/{roomId} con pois[], planes[], safePos
+   - Backup automatico quando utente lascia la stanza
+   - Restore manuale: "Carica stanza" → RoomListDialog → carica da Firebase
+
+4. Performance
+   - POI visibili: MAX 15 POI per stanza (per performance SceneView)
+   - Asset 3D: ogni POI usa un modello Kenney semplice (< 2k poligoni)
+   - Pooling: riusa AnchorNode + modelNode invece di distruggere/ricostruire
+
+5. Errori da evitare
+   - NON usare Cloud Anchors per POI singoli (lenti, TTL 30 giorni)
+   - NON salvare pose absolute in Coordinate ARCore (drift over time)
+   - USA offset relativo + room fingerprint per matching robusto
+
+--------------------------------------------------------------------------------
+FILE DA CREARE/MODIFICARE (CHECKLIST)
+================================================================================
+
+CREARE:
+- [ ] app/src/main/java/com/intelligame/huntix/data/InteractivePOI.kt
+- [ ] app/src/main/java/com/intelligame/huntix/model/GamePhaseExt.kt
+- [ ] app/src/main/java/com/intelligame/huntix/InteractiveRoomManager.kt
+- [ ] app/src/main/java/com/intelligame/huntix/FurnitureInteractionManager.kt
+- [ ] app/src/main/java/com/intelligame/huntix/manager/RoomFingerprintManager.kt
+- [ ] app/src/main/java/com/intelligame/huntix/manager/ARAssetSpawner.kt
+- [ ] app/src/main/res/layout/furniture_picker.xml
+- [ ] unity-project/Assets/Scripts/InteractiveRoom/InteractivePOISpawner.cs
+- [ ] unity-project/Assets/Scripts/InteractiveRoom/FurnitureAnimator.cs
+- [ ] unity-project/Assets/Scripts/InteractiveRoom/POITarget.cs
+
+MODIFICARE:
+- [ ] app/src/main/java/com/intelligame/huntix/IndoorModeSelectionActivity.kt
+- [ ] app/src/main/java/com/intelligame/huntix/MainActivity.kt
+- [ ] app/src/main/java/com/intelligame/huntix/manager/ArSceneManager.kt
+- [ ] app/src/main/java/com/intelligame/huntix/viewmodel/IndoorGameViewModel.kt
+- [ ] app/src/main/java/com/intelligame/huntix/GameDataManager.kt
+- [ ] app/src/main/java/com/intelligame/huntix/LocalAnchorStore.kt
+- [ ] app/src/main/res/layout/activity_main.xml
+- [ ] unity-project/Assets/Scripts/Indoor/StoreBuilder.cs (per room scan integration)
+
+================================================================================
+FINE DEL PIANO — AGGIORNA QUESTO FILE DURANTE LO SVILUPPO
+================================================================================

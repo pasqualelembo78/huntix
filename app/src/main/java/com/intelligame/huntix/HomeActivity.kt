@@ -28,6 +28,14 @@ import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.DistanceTracker
 import com.intelligame.huntix.managers.PoiSearchManager
 import android.widget.Toast
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.intelligame.huntix.managers.CustomPageRegistry
+import com.intelligame.huntix.managers.OsmPoiRepository
+import com.intelligame.huntix.manager.OutdoorManager
+import com.intelligame.huntix.reallife.OsmClient
 import io.sentry.Sentry
 
 /**
@@ -39,6 +47,9 @@ import io.sentry.Sentry
  * - Banner eventi live
  */
 class HomeActivity : BaseNavActivity() {
+
+    private val RC_LOCATION = 101
+    private lateinit var homeSearchPanel: PoiSearchPanel
 
     override fun activeTab() = "Home"
     private val RC_RPM_AVATAR = 900
@@ -52,12 +63,59 @@ class HomeActivity : BaseNavActivity() {
             if (!DistanceTracker.isListening(this)) {
                 DistanceTracker.startListening(this) { /* handled internally */ }
             }
+            loadHomeNearby()
         } catch (e: Exception) { Sentry.captureException(e) }
     }
 
     override fun onPause() {
         super.onPause()
         try { DistanceTracker.stopListening(this) } catch (_: Exception) {}
+    }
+
+    /** Carica i locali vicini sul pannello Home (richiede eventuale permesso GPS). */
+    private fun loadHomeNearby() {
+        if (!::homeSearchPanel.isInitialized) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            ActivityCompat.requestPermissions(
+                this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), RC_LOCATION
+            )
+            return
+        }
+        homeSearchPanel.loadNearby()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == RC_LOCATION && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            homeSearchPanel.loadNearby()
+        }
+    }
+
+    /** Apertura locale: pagina personalizzata / web / OSM (stesso comportamento di Esplora). */
+    private fun openPoiPage(r: PoiSearchManager.SearchResult) {
+        val res = CustomPageRegistry.resolve(r.id)
+        val url = res?.url
+        when (res?.pageType) {
+            "custom" -> startActivity(Intent(this, POICustomPageActivity::class.java).apply {
+                putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
+                putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
+                putExtra(POICustomPageActivity.EXTRA_POI_TYPE, r.category)
+            })
+            "web" -> startActivity(Intent(this, POIWebViewActivity::class.java).apply {
+                putExtra(POIWebViewActivity.EXTRA_URL, url)
+                putExtra(POIWebViewActivity.EXTRA_TITLE, r.name)
+            })
+            else -> {
+                val osmUrl = "https://www.openstreetmap.org/?mlat=${r.lat}&mlon=${r.lng}#map=18/${r.lat}/${r.lng}"
+                startActivity(Intent(this, POIWebViewActivity::class.java).apply {
+                    putExtra(POIWebViewActivity.EXTRA_URL, osmUrl)
+                    putExtra(POIWebViewActivity.EXTRA_TITLE, r.name)
+                })
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,17 +398,20 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
 
-        // ═══ POI SEARCH (regione + città + ricerca realtime) ═══
-        root.addView(PoiSearchPanel(this).apply {
+        // ═══ RICERCA LOCALI VICINI AL GPS (Overpass) ═══
+        // Trova i locali intorno alla posizione corrente (negozi, bar, ristoranti,
+        // gym, musei…) anche dove huntix-poi è sparso (es. Foggia). Ogni locale
+        // apre la sua pagina personalizzata se presente nel CustomPageRegistry.
+        homeSearchPanel = PoiSearchPanel(this).apply {
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
-            onOpenPoi = { r ->
-                val url = PoiSearchManager().getJsonPageUrl(r)
-                startActivity(Intent(this@HomeActivity, POICustomPageActivity::class.java).apply {
-                    putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
-                    putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
-                })
+            enableNearbyMode()
+            nearbyLoader = { lat, lng, r, cb ->
+                OsmPoiRepository.loadNearby(lat, lng, r, applicationContext, cb)
             }
-        })
+            locationSupplier = { OutdoorManager.get().currentLocation ?: OutdoorManager.lastKnownLocation(applicationContext) }
+            onOpenPoi = { r -> openPoiPage(r) }
+        }
+        root.addView(homeSearchPanel)
 
         // Debug log (hidden but accessible)
         root.addView(TextView(this).apply {

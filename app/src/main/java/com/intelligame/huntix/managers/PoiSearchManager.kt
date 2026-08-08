@@ -42,6 +42,19 @@ class PoiSearchManager {
         val category: String
     )
 
+    /**
+     * 🏪 Categoria di negozio per la ricerca filtrata.
+     *
+     * I [keywords] vengono matchati (case-insensitive, substring) su
+     * [buildingType] e [poiType] del POI (codici Overture/OSM, es. "SHOP",
+     * "RETAIL", "CAFE", "FOOD"). Una categoria con [keywords] vuoto
+     * (es. "Tutti i negozi") non applica alcun filtro.
+     */
+    data class StoreCategory(val label: String, val emoji: String, val keywords: Set<String>) {
+        /** True se corrisponde a tutti i negozi (nessun filtro specifico). */
+        val isAll: Boolean get() = keywords.isEmpty()
+    }
+
     companion object {
         private const val BASE_URL = "https://raw.githubusercontent.com/pasqualelembo78/huntix-poi/main"
         private const val CACHE_DIR = "poi_search_cache"
@@ -68,6 +81,57 @@ class PoiSearchManager {
             Region("Umbria", "umbria"),
             Region("Valle d'Aosta", "valle_daosta"),
             Region("Veneto", "veneto")
+        )
+
+        /**
+         * 🏪 Categorie di locale per la ricerca filtrata in Esplora.
+         *
+         * I keyword sono i valori canonici OSM (lower-case, corrispondenza
+         * ESATTA su buildingType/poiType così da evitare falsi positivi come
+         * "bar" dentro "barber"). Coprono sia i dati huntix-poi (es. ristorante,
+         * bar_cafe, palestra) sia i dati live Overpass (es. restaurant, cafe,
+         * bar, shop, fitness_centre, museum).
+         *
+         * Il primo elemento ("Tutti i locali") ha keywords vuoto (isAll) e con
+         * [isStore] mostra l'insieme di tutti i locali commerciali/culturali
+         * (esclude ospedali, amministrazioni, parcheggi…).
+         *
+         * L'ordine determina la classificazione: un POI è assegnato alla PRIMA
+         * categoria i cui keyword combacia (es. amenity=cafe → "Bar & Caffè" non
+         * "Negozi" anche se shop=coffee).
+         */
+        val STORE_CATEGORIES: List<StoreCategory> = listOf(
+            StoreCategory("Tutti i locali", "🏪", emptySet()),
+            StoreCategory("Ristoranti", "🍝", setOf(
+                "restaurant","ristorante","pub","bistro","fast_food",
+                "pizzeria","trattoria","osteria","kebab","doner"
+            )),
+            StoreCategory("Bar & Caffè", "☕", setOf(
+                "cafe","caffè","coffee","bar","bar_cafe","coffee_house","caffè","juice_bar"
+            )),
+            StoreCategory("Negozi", "🛍️", setOf(
+                "supermarket","supermercato","convenience","grocery","market","mall",
+                "clothing","apparel","fashion","electronics","computer","books","bookstore",
+                "florist","pharmacy","chemist","perfume","alcohol","wine","beer","bakery",
+                "panetteria","butcher","greengrocer","frutteto","confectionery","gelato",
+                "gelateria","gift","stationery","kiosk","newsagent","tea","jewellery",
+                "jewelry","pet","beauty","cosmetics","furniture","hardware","mobile_phone",
+                "mobile","bicycle","car","car_repair","laundry","dry_cleaning","tailor",
+                "optician","optometrist","money","lottery","video_games","music","photo",
+                "sports","outdoors","general","variety_store","department_store",
+                "minimarket","tabaccheria","edicola","negozio","shop","food_shop",
+                "convenience_store","supermercato","barber","shoemaker","cleaner",
+                "photographer","electronics_repair","jewellery_repair"
+            )),
+            StoreCategory("Gym & Fitness", "💪", setOf(
+                "gym","palestra","palestre","fitness_centre","fitness","yoga","sports_centre"
+            )),
+            StoreCategory("Musei & Cultura", "🏛️", setOf(
+                "museum","museo","gallery","monument","monumento","library","biblioteca",
+                "church","cathedral","cattedrale","monastery","castle","castello","ruin",
+                "memorial","statue","viewpoint","tourist_information","theme_park","zoo",
+                "attraction","planetarium","theatre","opera"
+            ))
         )
     }
 
@@ -166,6 +230,34 @@ class PoiSearchManager {
         if (result.url.isNotBlank()) return result.url
         val slug = result.name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "-").trim('-')
         return "$BASE_URL/italia/${result.region}/${result.city}/pages/$slug.json"
+    }
+
+    // ── Negozi / locali ───────────────────────────────────────────
+
+    /** Token canonici (lower-case) di classificazione di un POI. */
+    private fun typeTokens(result: SearchResult): Set<String> = buildSet {
+        val b = result.buildingType.lowercase(Locale.ROOT).trim()
+        val p = result.poiType.lowercase(Locale.ROOT).trim()
+        if (b.isNotEmpty()) add(b)
+        if (p.isNotEmpty()) add(p)
+    }
+
+    /** True se il POI è un locale commerciale/culturale (negozio, bar, ristorante, gym, museo…). */
+    fun isStore(result: SearchResult): Boolean {
+        val tokens = typeTokens(result)
+        // "Tutti i locali" (isAll) corrisponde all'unione di tutte le categorie.
+        return STORE_CATEGORIES.drop(1).any { cat ->
+            cat.keywords.any { it in tokens }
+        }
+    }
+
+    /** Classifica il POI nella categoria di locale corrispondente. */
+    fun categoryOf(result: SearchResult): StoreCategory {
+        if (!isStore(result)) return STORE_CATEGORIES.first()
+        val tokens = typeTokens(result)
+        return STORE_CATEGORIES.drop(1).firstOrNull { cat ->
+            cat.keywords.any { it in tokens }
+        } ?: STORE_CATEGORIES.first()
     }
 
     // --- PRIVATE ---

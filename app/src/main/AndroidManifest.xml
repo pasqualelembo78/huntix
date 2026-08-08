@@ -531,6 +531,8 @@
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
 
+
+
         <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
         <meta-data android:name="unityplayer.ForwardNativeEventsToDalvik" android:value="false" />
 

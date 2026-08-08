@@ -121,12 +121,13 @@ class OnlinePoiManager {
                 AppLog.d("OnlinePoi", "City POIs empty, fallback to region: $regionSlug")
                 val regionPois = fetchRegionPois(regionSlug, lat, lng, maxPois)
                 if (regionPois.isNotEmpty()) {
-                    Result.success(regionPois)
-                } else {
-                    Result.success(pois)
+                    AppLog.d("OnlinePoi", "Got ${regionPois.size} region fallback POIs")
+                    return@withContext Result.success(regionPois)
                 }
-            } else pois
-            AppLog.d("OnlinePoi", "Got ${pois.size} POIs")
+                AppLog.d("OnlinePoi", "Region POIs also empty, using fallbackPois")
+                return@withContext Result.success(fallbackPois())
+            }
+            AppLog.d("OnlinePoi", "Got ${pois.size} POIs from city ${nearestCity.slug}")
 
             // 4. Salva in cache solo se ci sono POI
             if (pois.isNotEmpty()) {

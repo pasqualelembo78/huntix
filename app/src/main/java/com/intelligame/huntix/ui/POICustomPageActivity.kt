@@ -24,18 +24,22 @@ class POICustomPageActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_JSON_URL = "json_url"
         const val EXTRA_POI_NAME = "poi_name"
+        const val EXTRA_POI_TYPE = "poi_type"
     }
 
     private var needs = mutableMapOf<String, Float>()
     private var poiName = ""
+    private var poiType = ""
     private var jsonUrl = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val jsonUrl = intent.getStringExtra(EXTRA_JSON_URL) ?: run { finish(); return }
         val poiName = intent.getStringExtra(EXTRA_POI_NAME) ?: ""
+        val poiType = intent.getStringExtra(EXTRA_POI_TYPE) ?: ""
         this.jsonUrl = jsonUrl
         this.poiName = poiName
+        this.poiType = poiType
         needs = LocalNeeds.load(this).toMutableMap()
 
         val root = ScrollView(this)
@@ -196,6 +200,7 @@ class POICustomPageActivity : AppCompatActivity() {
                     } else {
                         val intent = Intent(this@POICustomPageActivity, StoreIndoorActivity::class.java).apply {
                             putExtra(StoreIndoorActivity.EXTRA_POI_NAME, poiName)
+                            putExtra(StoreIndoorActivity.EXTRA_POI_TYPE, poiType)
                             putExtra(StoreIndoorActivity.EXTRA_JSON_URL, jsonUrl)
                         }
                         startActivity(intent)
@@ -203,6 +208,7 @@ class POICustomPageActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                     val intent = Intent(this@POICustomPageActivity, StoreIndoorActivity::class.java).apply {
                         putExtra(StoreIndoorActivity.EXTRA_POI_NAME, poiName)
+                        putExtra(StoreIndoorActivity.EXTRA_POI_TYPE, poiType)
                         putExtra(StoreIndoorActivity.EXTRA_JSON_URL, jsonUrl)
                     }
                     startActivity(intent)
