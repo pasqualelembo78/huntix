@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.reallife.LocalNeeds
+import com.intelligame.huntix.reallife.PoiJsonFactory
 import com.intelligame.huntix.UiKit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,23 +24,34 @@ class POICustomPageActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_JSON_URL = "json_url"
+        const val EXTRA_JSON_INLINE = "json_inline"
         const val EXTRA_POI_NAME = "poi_name"
         const val EXTRA_POI_TYPE = "poi_type"
+        const val EXTRA_POI_LAT = "poi_lat"
+        const val EXTRA_POI_LNG = "poi_lng"
     }
 
     private var needs = mutableMapOf<String, Float>()
     private var poiName = ""
     private var poiType = ""
     private var jsonUrl = ""
+    private var inlineJson = ""
+    private var poiLat = 0.0
+    private var poiLng = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val jsonUrl = intent.getStringExtra(EXTRA_JSON_URL) ?: run { finish(); return }
+        val jsonUrl = intent.getStringExtra(EXTRA_JSON_URL) ?: ""
+        val inlineJson = intent.getStringExtra(EXTRA_JSON_INLINE) ?: ""
+        if (jsonUrl.isBlank() && inlineJson.isBlank()) { finish(); return }
         val poiName = intent.getStringExtra(EXTRA_POI_NAME) ?: ""
         val poiType = intent.getStringExtra(EXTRA_POI_TYPE) ?: ""
         this.jsonUrl = jsonUrl
+        this.inlineJson = inlineJson
         this.poiName = poiName
         this.poiType = poiType
+        this.poiLat = intent.getDoubleExtra(EXTRA_POI_LAT, 0.0)
+        this.poiLng = intent.getDoubleExtra(EXTRA_POI_LNG, 0.0)
         needs = LocalNeeds.load(this).toMutableMap()
 
         val root = ScrollView(this)
@@ -90,7 +102,13 @@ class POICustomPageActivity : AppCompatActivity() {
         // Fetch and render JSON
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val jsonText = httpGet(jsonUrl)
+                // url "osm:..." → pagina JSON sintetica (POI live senza pagina dedicata)
+                val jsonText = when {
+                    inlineJson.isNotBlank() -> inlineJson
+                    jsonUrl.startsWith("osm:") ->
+                        PoiJsonFactory.build(jsonUrl, poiName, "", poiType, poiLat, poiLng).toString()
+                    else -> httpGet(jsonUrl)
+                }
                 if (jsonText != null) {
                     val config = JSONObject(jsonText)
                     withContext(Dispatchers.Main) {
@@ -169,6 +187,10 @@ class POICustomPageActivity : AppCompatActivity() {
 
         // Entra nel negozio: apre lo store 3D Unity (supermarket open source).
         // Se l'AAR Unity non è disponibile, usa la vista nativa StoreIndoorActivity.
+        // Mostrato solo per i POI "store" (config.store=true, default per le
+        // pagine custom); i POI non commerciali (parchi, fontane, scuole…)
+        // mostrano solo le sezioni (es. link OSM) senza pulsante 3D.
+        if (config.optBoolean("store", true)) {
         content.addView(Button(this).apply {
             text = "\uD83D\uDEAA  Entra nel negozio (3D)"
             setTextColor(Color.WHITE)
@@ -221,6 +243,7 @@ class POICustomPageActivity : AppCompatActivity() {
                 setMargins(16, 12, 16, 8)
             }
         })
+        }
     }
 
     private fun renderSection(content: LinearLayout, section: JSONObject) {

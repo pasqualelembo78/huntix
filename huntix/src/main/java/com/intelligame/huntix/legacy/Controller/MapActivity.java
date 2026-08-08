@@ -68,6 +68,8 @@ import com.intelligame.huntix.legacy.Util.DatabaseSingleton;
 import com.intelligame.huntix.legacy.Util.HuntixPoiBridge;
 import com.intelligame.huntix.legacy.Util.directionshelpers.FetchURL;
 import com.intelligame.huntix.legacy.Util.directionshelpers.TaskLoadedCallback;
+import com.intelligame.huntix.legacy.poi.domain.PoiBridge;
+import com.intelligame.huntix.legacy.poi.domain.PoiRenderer;
 
 public class MapActivity extends Activity implements LocationListener, Runnable, TaskLoadedCallback, OnMapReadyCallback {
 
@@ -147,6 +149,21 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
 
         //alloca la map dei POI reali Huntix (OSM)
         huntixPoiMap = new HashMap<String, HuntixPoi>();
+
+        // Quando il feed POI (PoiMapBridge, app) completa il caricamento, riplotta
+        // subito i POI reali sulla mappa (render chiamato fuori dal main thread).
+        PoiBridge.setRenderer(new PoiRenderer() {
+            @Override
+            public void render(List<com.intelligame.huntix.legacy.poi.data.PoiStore> stores) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (mappaPronto && posizioneAttuale != null)
+                            plotarHuntixPois();
+                    }
+                });
+            }
+        });
 
         targetCreatura = null;
 
@@ -479,6 +496,9 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
                         "com.intelligame.huntix.ui.POICustomPageActivity");
                 it.putExtra("json_url", poi.url);
                 it.putExtra("poi_name", poi.name);
+                it.putExtra("poi_type", poi.poiType);
+                it.putExtra("poi_lat", poi.lat);
+                it.putExtra("poi_lng", poi.lng);
                 startActivity(it);
                 return;
             } catch (Exception e) {

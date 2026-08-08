@@ -12,10 +12,12 @@ object PoiBridge {
 
     private var renderer: PoiRenderer? = null
 
+    @JvmStatic
     fun setRenderer(renderer: PoiRenderer) {
         this.renderer = renderer
     }
 
+    @JvmStatic
     fun setPois(stores: List<PoiStore>) {
         renderer?.render(stores)
         convert(stores).let { HuntixPoiBridge.setPois(it) }

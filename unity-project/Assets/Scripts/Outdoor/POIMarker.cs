@@ -25,9 +25,19 @@ namespace Huntix.Outdoor
 
         private void Awake()
         {
-            // Necessario per la raycast dei tap (InputHandler).
+            // Necessario per la raycast dei tap (InputHandler). Collider sferico
+            // con raggio generoso così i POI lontani (fino a 10 km) restano facili
+            // da toccare. Non influisce sulle creature (cattura via prossimità AR).
             if (GetComponent<Collider>() == null)
-                gameObject.AddComponent<SphereCollider>();
+            {
+                var col = gameObject.AddComponent<SphereCollider>();
+                col.radius = 3f;
+                col.isTrigger = true;
+            }
+            else if (GetComponent<SphereCollider>() is SphereCollider sc && sc.radius < 1f)
+            {
+                sc.radius = 3f;
+            }
         }
 
         private void Update()

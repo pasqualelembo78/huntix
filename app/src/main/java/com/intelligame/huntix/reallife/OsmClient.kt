@@ -36,8 +36,8 @@ object OsmClient {
 
     // --- HTTP client ---
     private val client = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
@@ -77,17 +77,50 @@ object OsmClient {
         centerLat: Double,
         centerLon: Double,
         radiusMeters: Int = 1000
+    ): OsmData = fetchInternal(
+        cachePrefix = "osm_", label = "fetchArea",
+        centerLat = centerLat, centerLon = centerLon, radiusMeters = radiusMeters
+    ) { south, west, north, east ->
+        buildOverpassQuery(south, west, north, east)
+    }
+
+    /**
+     * Scarica SOLO i POI (nodi + way con amenity/shop/tourism/leisure/craft/
+     * office/healthcare/fontane/parchi/scuole/supermercati) per un'area circolare.
+     *
+     * È la versione "leggera" pensata per raggi grandi (fino a 10 km): NON
+     * include edifici, strade né alberi, quindi la risposta Overpass resta
+     * contenuta anche su aree urbane vaste. Cache disco separata ("osm_poi_").
+     */
+    suspend fun fetchPois(
+        centerLat: Double,
+        centerLon: Double,
+        radiusMeters: Int = 1000
+    ): OsmData = fetchInternal(
+        cachePrefix = "osm_poi_", label = "fetchPois",
+        centerLat = centerLat, centerLon = centerLon, radiusMeters = radiusMeters
+    ) { south, west, north, east ->
+        buildPoiQuery(south, west, north, east)
+    }
+
+    private suspend fun fetchInternal(
+        cachePrefix: String,
+        label: String,
+        centerLat: Double,
+        centerLon: Double,
+        radiusMeters: Int,
+        queryBuilder: (Double, Double, Double, Double) -> String
     ): OsmData = withContext(Dispatchers.IO) {
-        val cacheKey = makeCacheKey(centerLat, centerLon, radiusMeters)
-        AppLog.d(TAG, "fetchArea: START (lat=$centerLat, lon=$centerLon, radius=${radiusMeters}m, cache=$cacheKey)")
+        val cacheKey = makeCacheKey(cachePrefix, centerLat, centerLon, radiusMeters)
+        AppLog.d(TAG, "$label: START (lat=$centerLat, lon=$centerLon, radius=${radiusMeters}m, cache=$cacheKey)")
 
         val cached = loadFromDisk(cacheKey)
         if (cached != null) {
-            AppLog.d(TAG, "fetchArea: cache HIT (roads=${cached.roads.size}, buildings=${cached.buildings.size})")
+            AppLog.d(TAG, "$label: cache HIT (nodes=${cached.nodes.size}, roads=${cached.roads.size}, buildings=${cached.buildings.size})")
             CoordinateConverter.init(centerLat, centerLon)
             return@withContext cached
         }
-        AppLog.d(TAG, "fetchArea: cache MISS, downloading from Overpass API...")
+        AppLog.d(TAG, "$label: cache MISS, downloading from Overpass API...")
 
         CoordinateConverter.init(centerLat, centerLon)
 
@@ -98,7 +131,7 @@ object OsmClient {
         val west = centerLon - lonDelta
         val east = centerLon + lonDelta
 
-        val query = buildOverpassQuery(south, west, north, east)
+        val query = queryBuilder(south, west, north, east)
         val requestBody = FormBody.Builder()
             .add("data", query)
             .build()
@@ -106,10 +139,10 @@ object OsmClient {
         val body = downloadWithMirrors(requestBody)
 
         val data = parseOverpassResponse(body, south, north, west, east)
-        AppLog.d(TAG, "fetchArea: parsed (nodes=${data.nodes.size}, roads=${data.roads.size}, buildings=${data.buildings.size}, trees=${data.trees.size})")
+        AppLog.d(TAG, "$label: parsed (nodes=${data.nodes.size}, roads=${data.roads.size}, buildings=${data.buildings.size}, trees=${data.trees.size})")
 
         saveToDisk(cacheKey, body, south, north, west, east)
-        AppLog.d(TAG, "fetchArea: saved to disk cache ($cacheKey)")
+        AppLog.d(TAG, "$label: saved to disk cache ($cacheKey)")
 
         data
     }
@@ -189,10 +222,10 @@ object OsmClient {
      * Genera un nome file cache basato su coordinate arrotondate + raggio.
      * Arrotonda a 2 decimali (~1.1km) per gruppare zone vicine.
      */
-    private fun makeCacheKey(centerLat: Double, centerLon: Double, radiusMeters: Int): String {
+    private fun makeCacheKey(prefix: String, centerLat: Double, centerLon: Double, radiusMeters: Int): String {
         val latRounded = (centerLat * 100).toLong() / 100.0
         val lonRounded = (centerLon * 100).toLong() / 100.0
-        return "osm_${latRounded}_${lonRounded}_${radiusMeters}m.json"
+        return "${prefix}${latRounded}_${lonRounded}_${radiusMeters}m.json"
     }
 
     private fun loadFromDisk(cacheKey: String): OsmData? {
@@ -351,6 +384,45 @@ out skel qt;
         """.trimIndent()
     }
 
+    /**
+     * Query "solo POI" (leggera, pensata per raggi fino a 10 km):
+     * niente strade/edifici/alberi → risposta contenuta su aree vaste.
+     * Copre: amenity, shop, tourism, leisure, craft, office, healthcare,
+     * fontane (man_made/natural), sorgenti e punti acqua. Include anche le
+     * way (poligoni) così parchi, scuole e supermercati diventano POI.
+     */
+    private fun buildPoiQuery(
+        south: Double, west: Double,
+        north: Double, east: Double
+    ): String {
+        return """
+[out:json][timeout:60];
+(
+  node["amenity"]($south,$west,$north,$east);
+  node["shop"]($south,$west,$north,$east);
+  node["tourism"]($south,$west,$north,$east);
+  node["leisure"]($south,$west,$north,$east);
+  node["craft"]($south,$west,$north,$east);
+  node["office"]($south,$west,$north,$east);
+  node["healthcare"]($south,$west,$north,$east);
+  node["man_made"="fountain"]($south,$west,$north,$east);
+  node["natural"="fountain"]($south,$west,$north,$east);
+  node["natural"="spring"]($south,$west,$north,$east);
+  way["amenity"]($south,$west,$north,$east);
+  way["shop"]($south,$west,$north,$east);
+  way["tourism"]($south,$west,$north,$east);
+  way["leisure"]($south,$west,$north,$east);
+  way["craft"]($south,$west,$north,$east);
+  way["office"]($south,$west,$north,$east);
+  way["healthcare"]($south,$west,$north,$east);
+  way["man_made"="fountain"]($south,$west,$north,$east);
+);
+out body;
+>;
+out skel qt;
+        """.trimIndent()
+    }
+
     // ========================
     //  PARSING
     // ========================
@@ -428,6 +500,17 @@ out skel qt;
         radiusMeters: Int = 1000
     ): OsmData = runBlocking {
         fetchArea(centerLat, centerLon, radiusMeters)
+    }
+
+    /**
+     * Wrapper bloccante per la query "solo POI" (usata da Esplora Unity).
+     */
+    fun fetchPoisCached(
+        centerLat: Double,
+        centerLon: Double,
+        radiusMeters: Int = 1000
+    ): OsmData = runBlocking {
+        fetchPois(centerLat, centerLon, radiusMeters)
     }
 
     /**

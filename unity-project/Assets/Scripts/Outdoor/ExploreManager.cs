@@ -11,19 +11,21 @@ namespace Huntix.Outdoor
 {
     /// <summary>
     /// ExploreManager — modulo Esplora (mappa pokemon-go in AR).
-    /// Riceve da Android (Overpass) i POI OSM vicino al giocatore, li colloca
-    /// nel mondo 3D con GeospatialAnchor.GeoWorldOffset e li filtra per categoria
-    /// (Tutti / Ristoranti / Bar & Caffè / Negozi / Gym / Musei).
-    /// Ogni marker tappabile apre la pagina del locale (custom JSON / web / OSM).
+    /// Riceve da Android (Overpass) i POI OSM vicino al giocatore (fino a 10 km),
+    /// li colloca nel mondo 3D con GeospatialAnchor.GeoWorldOffset e li filtra per
+    /// categoria (Tutti / Ristoranti / Bar & Caffè / Supermercati / Negozi & Tabacchi /
+    /// Gym & Fitness / Musei & Cultura / Parchi & Natura / Scuole & Istruzione).
+    /// Ogni marker tappabile apre la pagina del POI (custom JSON / web / JSON
+    /// sintetico OSM costruito da Android).
     /// </summary>
     public class ExploreManager : MonoBehaviour
     {
         public static ExploreManager Instance { get; private set; }
 
         [Header("POI Settings")]
-        public float searchRadiusMeters = 1000f;
-        public float reloadDistanceThreshold = 300f;
-        public int maxVisiblePois = 150;
+        public float searchRadiusMeters = 10000f;
+        public float reloadDistanceThreshold = 500f;
+        public int maxVisiblePois = 400;
 
         [Header("Prefabs")]
         public GameObject poiMarkerPrefab;
@@ -39,6 +41,7 @@ namespace Huntix.Outdoor
             public string buildingType;
             public string poiType;
             public string category;
+            public string emoji;
             public string pageType;
             public string url;
             public bool hasCustom;
@@ -80,17 +83,20 @@ namespace Huntix.Outdoor
                 "trattoria","osteria","kebab","doner" }},
             new StoreCategory { label = "Bar & Caffè", emoji = "☕", keywords = new[] {
                 "cafe","caffè","coffee","bar","bar_cafe","coffee_house","juice_bar" }},
-            new StoreCategory { label = "Negozi", emoji = "🛍️", keywords = new[] {
-                "supermarket","supermercato","convenience","grocery","market","mall",
+            new StoreCategory { label = "Supermercati", emoji = "🛒", keywords = new[] {
+                "supermarket","supermercato","hypermarket","ipermercato","hyper","mall",
+                "wholesale","minimarket","convenience","convenience_store","grocery",
+                "general","variety_store","department_store","food_shop","market" }},
+            new StoreCategory { label = "Negozi & Tabacchi", emoji = "🛍️", keywords = new[] {
+                "tobacco","tabacchi","tabaccheria","kiosk","edicola","newsagent",
                 "clothing","apparel","fashion","electronics","computer","books","bookstore",
                 "florist","pharmacy","chemist","perfume","alcohol","wine","beer","bakery",
                 "panetteria","butcher","greengrocer","confectionery","gelato","gelateria",
-                "gift","stationery","kiosk","newsagent","tea","jewellery","jewelry","pet",
+                "gift","stationery","tea","jewellery","jewelry","pet",
                 "beauty","cosmetics","furniture","hardware","mobile_phone","mobile","bicycle",
                 "car","car_repair","laundry","dry_cleaning","tailor","optician","optometrist",
-                "money","lottery","video_games","music","photo","sports","outdoors","general",
-                "variety_store","department_store","minimarket","tabaccheria","edicola",
-                "negozio","shop","food_shop","convenience_store","barber","shoemaker",
+                "money","lottery","video_games","music","photo","sports","outdoors",
+                "negozio","shop","barber","shoemaker",
                 "cleaner","photographer","electronics_repair","jewellery_repair" }},
             new StoreCategory { label = "Gym & Fitness", emoji = "💪", keywords = new[] {
                 "gym","palestra","palestre","fitness_centre","fitness","yoga","sports_centre" }},
@@ -98,7 +104,13 @@ namespace Huntix.Outdoor
                 "museum","museo","gallery","monument","monumento","library","biblioteca",
                 "church","cathedral","cattedrale","monastery","castle","castello","ruin",
                 "memorial","statue","viewpoint","tourist_information","theme_park","zoo",
-                "attraction","planetarium","theatre","opera" }}
+                "attraction","planetarium","theatre","opera" }},
+            new StoreCategory { label = "Parchi & Natura", emoji = "🌳", keywords = new[] {
+                "park","parco","garden","giardino","playground","nature_reserve","forest",
+                "fountain","fontana","spring","drinking_water","hot_spring" }},
+            new StoreCategory { label = "Scuole & Istruzione", emoji = "🎓", keywords = new[] {
+                "school","scuola","kindergarten","college","university","università",
+                "music_school","language_school","driving_school" }}
         };
 
         private List<PoiData> _allPois = new List<PoiData>();
@@ -328,43 +340,29 @@ namespace Huntix.Outdoor
 
             // Imposta il testo emoji in un eventuale TextMesh/UI dentro il prefab
             var label = marker.GetComponentInChildren<TextMesh>();
-            if (label != null) label.text = EmojiFor(poi);
+            if (label != null) label.text = string.IsNullOrEmpty(poi.emoji) ? EmojiFor(poi) : poi.emoji;
 
             return marker;
         }
 
-        /// <summary>Apre la pagina del locale (via Android: custom/web/OSM).</summary>
+        /// <summary>Apre la pagina del locale (via Android: custom JSON / web / JSON sintetico OSM).</summary>
         public void OpenPoi(PoiData poi)
         {
             if (poi == null) return;
             Debug.Log($"[Esplora] Apri locale: {poi.name} ({poi.id}) pageType={poi.pageType}");
-            UnityBridge.OpenPoiPage(poi.id, poi.name, poi.poiType, poi.pageType, poi.url);
+            UnityBridge.OpenPoiPage(poi.id, poi.name, poi.buildingType, poi.poiType,
+                                    poi.pageType, poi.url, poi.lat, poi.lng, poi.category);
         }
 
         // ── Interazione tap (InputHandler) ──────────────────────────
-        // 1) marker POI → JSON negozio (custom) / web / popup segnalazione;
+        // 1) marker POI → pagina del POI (custom JSON / web / JSON sintetico OSM);
         // 2) punto vuoto → ricerca POI vicini (0 / 1 / molti) e popup.
 
-        /// <summary>Tap su un marker POI.</summary>
+        /// <summary>Tap su un marker POI: apre sempre la pagina del POI.</summary>
         public void OnPoiTapped(PoiData poi)
         {
             if (poi == null) return;
-
-            // Negozi con JSON custom → pagina del negozio; con link web → browser.
-            if (poi.hasCustom || HasWebUrl(poi))
-            {
-                OpenPoi(poi);
-                return;
-            }
-
-            // Nessun "negozio" registrato (solo nodo OSM): popup + segnalazione.
-            Debug.Log($"[Esplora] POI senza negozio: {poi.name} ({poi.id})");
-            ExplorePopup.Show(
-                "Nessun negozio registrato",
-                $"Il punto '{poi.name}' non ha un negozio attivo.\n\nVuoi inviare la segnalazione?",
-                null, null,
-                ("Invia segnalazione", () => ShowReportForm(poi.lat, poi.lng)),
-                ("Annulla", null));
+            OpenPoi(poi);
         }
 
         /// <summary>Tap su un punto vuoto del terreno.</summary>
@@ -457,9 +455,6 @@ namespace Huntix.Outdoor
             }
             #endif
         }
-
-        private static bool HasWebUrl(PoiData poi) =>
-            !string.IsNullOrEmpty(poi.url) && !poi.url.StartsWith("osm:");
 
         /// <summary>Distanza in metri sul piano dei marker (x=east, y=north, z=alt).</summary>
         private static float DistanceOnPlane(Vector3 a, Vector3 b)

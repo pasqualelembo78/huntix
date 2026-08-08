@@ -145,14 +145,16 @@ namespace Huntix.Bridge
             #endif
         }
 
-        // Apre la pagina del POI (custom JSON / web / fallback OSM).
-        public static void OpenPoiPage(string osmId, string name, string poiType,
-                                       string pageType, string url)
+        // Apre la pagina del POI (custom JSON / web / JSON sintetico OSM).
+        public static void OpenPoiPage(string osmId, string name, string buildingType,
+                                       string poiType, string pageType, string url,
+                                       double lat, double lng, string category)
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
             using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
             {
-                jc.CallStatic("openPoiPage", osmId, name, poiType, url, pageType);
+                jc.CallStatic("openPoiPage", osmId, name, buildingType, poiType,
+                              url, pageType, lat, lng, category);
             }
             #endif
         }

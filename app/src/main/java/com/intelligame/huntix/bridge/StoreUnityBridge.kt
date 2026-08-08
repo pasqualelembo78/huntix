@@ -7,9 +7,14 @@ import com.intelligame.huntix.ui.POICustomPageActivity
 import com.intelligame.huntix.managers.CustomPageRegistry
 import com.intelligame.huntix.reallife.OsmClient
 import com.intelligame.huntix.reallife.OsmPoiRepository
+import com.intelligame.huntix.reallife.PoiJsonFactory
 import com.unity3d.player.UnityPlayer
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * StoreUnityBridge — ponte chiamato DALLO store Unity.
@@ -18,6 +23,8 @@ import org.json.JSONObject
  * via `AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge")`.
  */
 object StoreUnityBridge {
+
+    private const val MAX_POIS = 1200
 
     /** Chiamato da Unity quando la scena del negozio è pronta. */
     @JvmStatic
@@ -73,8 +80,9 @@ object StoreUnityBridge {
     fun getCurrentLocation(): String =
         com.intelligame.huntix.bridge.Bridge.getCurrentLocation()
 
-    /** Richiede i POI OSM entro [radiusMeters] da (lat,lng). Il risultato
-     *  arriva in Unity via UnitySendMessage("GameManager","OnPoisReceived",json). */
+    /** Richiede i POI OSM entro [radiusMeters] (max 10 km) da (lat,lng).
+     *  Il risultato arriva in Unity via UnitySendMessage("GameManager","OnPoisReceived",json).
+     *  I POI vengono ordinati per distanza e limitati (1200) per non saturare Unity. */
     @JvmStatic
     fun requestPoisNearby(lat: Double, lng: Double, radiusMeters: Int) {
         val activity = UnityPlayer.currentActivity ?: return
@@ -84,6 +92,8 @@ object StoreUnityBridge {
             try {
                 OsmClient.init(ctx)
                 val pois = OsmPoiRepository.loadNearby(lat, lng, radiusMeters)
+                    .sortedBy { distanceMeters(lat, lng, it.lat, it.lng) }
+                    .take(MAX_POIS)
                 val arr = JSONArray()
                 for (p in pois) {
                     val custom = CustomPageRegistry.resolve(p.id)
@@ -95,6 +105,7 @@ object StoreUnityBridge {
                     jo.put("buildingType", p.buildingType)
                     jo.put("poiType", p.poiType)
                     jo.put("category", p.category)
+                    jo.put("emoji", PoiJsonFactory.emojiFor(p.buildingType, p.poiType, p.category))
                     if (custom != null) {
                         jo.put("pageType", custom.pageType)
                         jo.put("url", custom.url)
@@ -117,9 +128,10 @@ object StoreUnityBridge {
         }.start()
     }
 
-    /** Apre la pagina del POI da Unity (custom JSON / web / fallback OSM). */
+    /** Apre la pagina del POI da Unity (custom JSON / web / JSON sintetico OSM). */
     @JvmStatic
-    fun openPoiPage(osmId: String, name: String, poiType: String, url: String, pageType: String) {
+    fun openPoiPage(osmId: String, name: String, buildingType: String, poiType: String,
+                    url: String, pageType: String, lat: Double, lng: Double, category: String) {
         val activity = UnityPlayer.currentActivity ?: return
         try {
             val custom = CustomPageRegistry.resolve(osmId)
@@ -132,13 +144,29 @@ object StoreUnityBridge {
             } else if (url.isNotBlank() && !url.startsWith("osm:")) {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))
             } else {
-                val nodeId = osmId.substringAfterLast(":", "")
-                Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/node/$nodeId"))
+                Intent(activity, POICustomPageActivity::class.java).apply {
+                    putExtra(POICustomPageActivity.EXTRA_JSON_INLINE, PoiJsonFactory.build(osmId, name, buildingType, poiType, lat, lng).toString())
+                    putExtra(POICustomPageActivity.EXTRA_POI_NAME, name)
+                    putExtra(POICustomPageActivity.EXTRA_POI_TYPE, poiType)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LAT, lat)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LNG, lng)
+                }
             }
             activity.startActivity(intent)
         } catch (e: Exception) {
-            val nodeId = osmId.substringAfterLast(":", "")
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/node/$nodeId")))
+            val osmType = osmId.removePrefix("osm:").substringBefore(":")
+            val ref = osmId.removePrefix("osm:").substringAfter(":", "")
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/$osmType/$ref")))
         }
+    }
+
+    private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+        val r = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLng = Math.toRadians(lng2 - lng1)
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLng / 2) * sin(dLng / 2)
+        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 }

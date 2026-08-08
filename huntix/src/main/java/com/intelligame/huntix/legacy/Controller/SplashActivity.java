@@ -54,12 +54,7 @@ public class SplashActivity extends Activity {
         navegou = true;
         try { if (mp != null) mp.stop(); } catch (Exception ignored) {}
         if(GiocoSingleton.getInstance().sessione()) {
-            // Esplora: dopo la splash si entra nel mondo Unity (scena Outdoor,
-            // personaggio Player.prefab al centro + ricerca locali/POI cliccabili).
-            // Riferimento per nome di classe (app module) per evitare dipendenze circolari.
-            Intent i = new Intent();
-            i.setClassName(getPackageName(), "com.intelligame.huntix.bridge.BridgeActivity");
-            i.putExtra("unity_mode", "esplora");
+            Intent i = new Intent(getBaseContext(), MapActivity.class);
             startActivity(i);
             finish();
         }else {

@@ -27,8 +27,9 @@ namespace Huntix.Outdoor
 
             var ray = cam.ScreenPointToRay(Input.mousePosition);
 
-            // 1) Marker POI
-            if (Physics.Raycast(ray, out var hit, 5000f))
+            // 1) Marker POI: raggio lungo (fino a 20 km) così i POI lontani
+            //    restano tappabili anche a 10 km di raggio di ricerca.
+            if (Physics.Raycast(ray, out var hit, 20000f))
             {
                 var pm = hit.collider.GetComponentInParent<POIMarker>();
                 if (pm != null && pm.Poi != null && ExploreManager.Instance != null)

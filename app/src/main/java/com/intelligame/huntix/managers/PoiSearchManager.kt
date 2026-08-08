@@ -107,20 +107,23 @@ class PoiSearchManager {
                 "pizzeria","trattoria","osteria","kebab","doner"
             )),
             StoreCategory("Bar & Caffè", "☕", setOf(
-                "cafe","caffè","coffee","bar","bar_cafe","coffee_house","caffè","juice_bar"
+                "cafe","caffè","coffee","bar","bar_cafe","coffee_house","juice_bar"
             )),
-            StoreCategory("Negozi", "🛍️", setOf(
-                "supermarket","supermercato","convenience","grocery","market","mall",
+            StoreCategory("Supermercati", "🛒", setOf(
+                "supermarket","supermercato","hypermarket","ipermercato","hyper","mall",
+                "wholesale","minimarket","convenience","convenience_store","grocery",
+                "general","variety_store","department_store","food_shop","market"
+            )),
+            StoreCategory("Negozi & Tabacchi", "🛍️", setOf(
+                "tobacco","tabacchi","tabaccheria","kiosk","edicola","newsagent",
                 "clothing","apparel","fashion","electronics","computer","books","bookstore",
                 "florist","pharmacy","chemist","perfume","alcohol","wine","beer","bakery",
-                "panetteria","butcher","greengrocer","frutteto","confectionery","gelato",
-                "gelateria","gift","stationery","kiosk","newsagent","tea","jewellery",
+                "panetteria","butcher","greengrocer","confectionery","gelato",
+                "gelateria","gift","stationery","tea","jewellery",
                 "jewelry","pet","beauty","cosmetics","furniture","hardware","mobile_phone",
                 "mobile","bicycle","car","car_repair","laundry","dry_cleaning","tailor",
                 "optician","optometrist","money","lottery","video_games","music","photo",
-                "sports","outdoors","general","variety_store","department_store",
-                "minimarket","tabaccheria","edicola","negozio","shop","food_shop",
-                "convenience_store","supermercato","barber","shoemaker","cleaner",
+                "sports","outdoors","negozio","shop","barber","shoemaker","cleaner",
                 "photographer","electronics_repair","jewellery_repair"
             )),
             StoreCategory("Gym & Fitness", "💪", setOf(
@@ -131,6 +134,14 @@ class PoiSearchManager {
                 "church","cathedral","cattedrale","monastery","castle","castello","ruin",
                 "memorial","statue","viewpoint","tourist_information","theme_park","zoo",
                 "attraction","planetarium","theatre","opera"
+            )),
+            StoreCategory("Parchi & Natura", "🌳", setOf(
+                "park","parco","garden","giardino","playground","nature_reserve","forest",
+                "fountain","fontana","spring","drinking_water","hot_spring"
+            )),
+            StoreCategory("Scuole & Istruzione", "🎓", setOf(
+                "school","scuola","kindergarten","college","university","università",
+                "music_school","language_school","driving_school"
             ))
         )
     }
