@@ -217,6 +217,7 @@ class POICustomPageActivity : AppCompatActivity() {
                     if (hasRealUnity) {
                         val intent = Intent(this@POICustomPageActivity, IndoorActivity::class.java).apply {
                             putExtra(IndoorActivity.EXTRA_POI_DATA, poiJson)
+                            putExtra("unity_mode", "indoor")
                         }
                         startActivity(intent)
                     } else {

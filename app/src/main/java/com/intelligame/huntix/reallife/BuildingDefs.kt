@@ -11,7 +11,10 @@ import android.graphics.Color
  */
 enum class BuildingType {
     HOUSE, RESTAURANT, SUPERMARKET, HOSPITAL, GYM, MONUMENT, MUSEUM,
-    GOVERNMENT, BANK, POST_OFFICE, LIBRARY, SCHOOL
+    GOVERNMENT, BANK, POST_OFFICE, LIBRARY, SCHOOL,
+    PHARMACY, HOTEL, TOBACCO, BUTCHER, WHOLESALE, CLOTHING, BEAUTY,
+    ELECTRONICS, HARDWARE, BOOKSTORE, GAS_STATION, AUTOMOTIVE, SPORT,
+    ENTERTAINMENT, PET, LAUNDRY, TRAVEL
 }
 
 data class BuildingAction(
@@ -49,6 +52,27 @@ object BuildingDefs {
 
     /** Raggio massimo per considerare il player "vicino" a un edificio (per label e "Entra") */
     const val NEAR_DISTANCE = 4.5f
+
+    /** Icone (emoji, colore) per i tipi senza edificio fisso nella città 3D */
+    val EXTRA_TYPE_ICONS = mapOf(
+        BuildingType.PHARMACY to ("\uD83D\uDC8A" to 0xFF00838F.toInt()),
+        BuildingType.HOTEL to ("\uD83C\uDFE8" to 0xFF6A1B9A.toInt()),
+        BuildingType.TOBACCO to ("\uD83D\uDEAC" to 0xFF795548.toInt()),
+        BuildingType.BUTCHER to ("\uD83E\uDD69" to 0xFF8D6E63.toInt()),
+        BuildingType.WHOLESALE to ("\uD83C\uDFED" to 0xFF455A64.toInt()),
+        BuildingType.CLOTHING to ("\uD83D\uDC55" to 0xFFEC407A.toInt()),
+        BuildingType.BEAUTY to ("\uD83D\uDC87" to 0xFFAD1457.toInt()),
+        BuildingType.ELECTRONICS to ("\uD83D\uDCBB" to 0xFF263238.toInt()),
+        BuildingType.HARDWARE to ("\uD83D\uDD27" to 0xFF5D4037.toInt()),
+        BuildingType.BOOKSTORE to ("\uD83D\uDCD5" to 0xFF7B1FA2.toInt()),
+        BuildingType.GAS_STATION to ("\u26FD" to 0xFFF57F17.toInt()),
+        BuildingType.AUTOMOTIVE to ("\uD83D\uDE97" to 0xFF546E7A.toInt()),
+        BuildingType.SPORT to ("\u26BD" to 0xFF00695C.toInt()),
+        BuildingType.ENTERTAINMENT to ("\uD83C\uDFAC" to 0xFFE65100.toInt()),
+        BuildingType.PET to ("\uD83D\uDC3E" to 0xFF8E24AA.toInt()),
+        BuildingType.LAUNDRY to ("\uD83E\uDDFA" to 0xFF78909C.toInt()),
+        BuildingType.TRAVEL to ("\u2708\uFE0F" to 0xFF0277BD.toInt()),
+    )
 
     /** Tutti gli edifici speciali */
     val BUILDINGS = listOf(
@@ -314,6 +338,39 @@ object BuildingDefs {
             "school" to BuildingType.SCHOOL,
             "scuola" to BuildingType.SCHOOL,
             "schools" to BuildingType.SCHOOL,
+            "pharmacy" to BuildingType.PHARMACY,
+            "farmacia" to BuildingType.PHARMACY,
+            "hotel" to BuildingType.HOTEL,
+            "hotels" to BuildingType.HOTEL,
+            "tobacco" to BuildingType.TOBACCO,
+            "tabacchi" to BuildingType.TOBACCO,
+            "butcher" to BuildingType.BUTCHER,
+            "macelleria" to BuildingType.BUTCHER,
+            "wholesale" to BuildingType.WHOLESALE,
+            "ingrosso" to BuildingType.WHOLESALE,
+            "clothing" to BuildingType.CLOTHING,
+            "abbigliamento" to BuildingType.CLOTHING,
+            "beauty" to BuildingType.BEAUTY,
+            "bellezza" to BuildingType.BEAUTY,
+            "electronics" to BuildingType.ELECTRONICS,
+            "elettronica" to BuildingType.ELECTRONICS,
+            "hardware" to BuildingType.HARDWARE,
+            "ferramenta" to BuildingType.HARDWARE,
+            "bookstore" to BuildingType.BOOKSTORE,
+            "libreria" to BuildingType.BOOKSTORE,
+            "gas_station" to BuildingType.GAS_STATION,
+            "benzinaio" to BuildingType.GAS_STATION,
+            "automotive" to BuildingType.AUTOMOTIVE,
+            "autofficina" to BuildingType.AUTOMOTIVE,
+            "sport" to BuildingType.SPORT,
+            "intrattenimento" to BuildingType.ENTERTAINMENT,
+            "entertainment" to BuildingType.ENTERTAINMENT,
+            "pet" to BuildingType.PET,
+            "animali" to BuildingType.PET,
+            "laundry" to BuildingType.LAUNDRY,
+            "lavanderia" to BuildingType.LAUNDRY,
+            "travel" to BuildingType.TRAVEL,
+            "viaggi" to BuildingType.TRAVEL,
         )[poiType.lowercase().trim()]
     }
 

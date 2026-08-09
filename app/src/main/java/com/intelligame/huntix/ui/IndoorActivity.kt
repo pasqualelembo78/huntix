@@ -60,6 +60,7 @@ class IndoorActivity : UnityPlayerActivity() {
         super.onCreate(savedInstanceState)
         instance = this
         poiJson = intent.getStringExtra(EXTRA_POI_DATA) ?: "{}"
+        intent.putExtra("unity_mode", "indoor")
         addOverlay()
 
         // Invia il POI al loader Unity una volta inizializzato.

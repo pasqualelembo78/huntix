@@ -151,6 +151,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
     private lateinit var tvSchiusaKm: TextView
     private lateinit var schiusaBarFill: View
     private lateinit var skyOverlay: SkyEventOverlay
+    private var loadingPoiOverlay: View? = null
 
     // ── Phase 3: sensor + animation state ─────────────────────
     private var currentHeading: Float = 0f
@@ -257,6 +258,12 @@ class OutdoorWorldActivity : BaseNavActivity() {
 
         mgr.onLocationOverrideApplied = { centerOnUser() }
 
+        mgr.onOnlinePoisLoading = { loadingPoiOverlay?.visibility = View.VISIBLE }
+        mgr.onOnlinePoisLoaded = {
+            loadingPoiOverlay?.visibility = View.GONE
+            refreshMapMarkers(force = true)
+        }
+
         manualToggleBtn.setOnClickListener {
             if (mgr.isManualOverrideActive()) {
                 mgr.clearManualOverride()
@@ -330,6 +337,7 @@ class OutdoorWorldActivity : BaseNavActivity() {
         tvSchiusaKm = findViewById(R.id.tvSchiusaKm)
         schiusaBarFill = findViewById(R.id.schiusaBarFill)
         skyOverlay = findViewById(R.id.skyOverlay)
+        loadingPoiOverlay = findViewById(R.id.loadingPoiOverlay)
 
         mapView = findViewById(R.id.mapView)
         mapView?.onCreate(savedInstanceState)
@@ -682,6 +690,8 @@ class OutdoorWorldActivity : BaseNavActivity() {
         poiCooldownState.clear()
         mapView?.onDestroy()
         mgr.onLocationOverrideApplied = null
+        mgr.onOnlinePoisLoading = null
+        mgr.onOnlinePoisLoaded = null
         mgr.stop()
         super.onDestroy()
     }
@@ -849,6 +859,9 @@ class OutdoorWorldActivity : BaseNavActivity() {
             }
             BuildingDefs.BUILDINGS.forEach { bDef ->
                 style.addImage("building_${bDef.type.name.lowercase()}", makeBuildingBitmap(bDef.emoji, bDef.color3D))
+            }
+            BuildingDefs.EXTRA_TYPE_ICONS.forEach { (bType, icon) ->
+                style.addImage("building_${bType.name.lowercase()}", makeBuildingBitmap(icon.first, icon.second))
             }
             AppLog.d(TAG, "Static style images added to style")
         } catch (e: OutOfMemoryError) {

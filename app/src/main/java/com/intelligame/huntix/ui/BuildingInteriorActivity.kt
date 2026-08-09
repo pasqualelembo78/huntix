@@ -959,6 +959,12 @@ class BuildingInteriorActivity : AppCompatActivity() {
                     textPaint.textSize = w * 0.04f
                     canvas.drawText("\uD83D\uDCDA", cx, h * 0.08f, textPaint)
                 }
+                else -> {
+                    objectPaint.color = 0xFF90A4AE.toInt()
+                    canvas.drawRoundRect(w * 0.15f, baseY - h * 0.12f, w * 0.85f, baseY, 4f, 4f, objectPaint)
+                    objectPaint.color = 0xFFB0BEC5.toInt()
+                    canvas.drawRoundRect(w * 0.18f, baseY - h * 0.09f, w * 0.82f, baseY - h * 0.02f, 2f, 2f, objectPaint)
+                }
             }
         }
 

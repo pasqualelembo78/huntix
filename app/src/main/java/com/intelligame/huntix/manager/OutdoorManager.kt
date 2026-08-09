@@ -141,6 +141,10 @@ class OutdoorManager private constructor() : SensorEventListener {
     private var manualOverride: Pair<String, String>? = null
     var onLocationOverrideApplied: (() -> Unit)? = null
 
+    /** Notifica all'UI l'inizio/fine del caricamento POI online (mostra/nasconde l'indicatore) */
+    var onOnlinePoisLoading: (() -> Unit)? = null
+    var onOnlinePoisLoaded: (() -> Unit)? = null
+
     fun isManualOverrideActive(): Boolean = manualOverride != null
 
     /** ✋ Forza i POI della regione/città scelta, ignorando il GPS. */
@@ -447,6 +451,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         val mgr = onlinePoiManager ?: return
         val ctx = appCtx ?: return
         val override = manualOverride
+        onOnlinePoisLoading?.invoke()
         scope?.launch {
             try {
                 // Manuale: usa regione/città scelta; altrimenti posizione GPS (reale o levetta)
@@ -484,13 +489,16 @@ class OutdoorManager private constructor() : SensorEventListener {
                             }
                         }
                         AppLog.d("OutdoorManager", "Online POI caricati: ${newPois.size}, total: ${pois.size}")
+                        onOnlinePoisLoaded?.invoke()
                     }
                 }
                 result.onFailure { e ->
                     AppLog.w("OutdoorManager", "fetchOnlinePois failed: ${e.message}")
+                    withContext(Dispatchers.Main) { onOnlinePoisLoaded?.invoke() }
                 }
             } catch (e: Exception) {
                 AppLog.w("OutdoorManager", "fetchOnlinePois fallito: ${e.message}")
+                withContext(Dispatchers.Main) { onOnlinePoisLoaded?.invoke() }
             }
         }
     }

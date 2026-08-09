@@ -26,6 +26,9 @@ class OnlinePoiManager {
 
     private val BASE_URL = "https://raw.githubusercontent.com/pasqualelembo78/huntix-poi/main"
 
+    /** Raggio entro cui preferire la città con più POI (invece della sola più vicina) */
+    private val SEARCH_RADIUS_KM = 10.0
+
     private val REGION_MAP = listOf(
         "abruzzo"          to listOf(39.5, 13.0, 42.5, 14.8),
         "basilicata"       to listOf(39.5, 15.5, 41.5, 17.0),
@@ -54,7 +57,8 @@ class OnlinePoiManager {
         val lat: Double,
         val lng: Double,
         val name: String,
-        val slug: String
+        val slug: String,
+        val poiCount: Int = 0
     )
 
     /** Cache: slug_citta -> (timestamp, pois) */
@@ -248,26 +252,43 @@ class OnlinePoiManager {
             val lng = parts[1].toDoubleOrNull() ?: continue
             val name = parts[2].trim()
             val slug = parts[3].trim()
-            cities.add(CityEntry(lat, lng, name, slug))
+            var poiCount = 0
+            for (i in 4 until parts.size) {
+                poiCount += parts[i].toIntOrNull() ?: 0
+            }
+            cities.add(CityEntry(lat, lng, name, slug, poiCount))
         }
         return cities
     }
 
-    /** Trova città più vicina alla posizione data */
+    /**
+     * Trova la città da usare.
+     * L'indice _citta.csv contiene frammenti quasi vuoti (frazioni/CAP, es. "Incoronata" o
+     * "00185 Roma (RM)") che per pura distanza "rubano" la scelta alla città vera (Foggia/Roma).
+     * Tra le città entro SEARCH_RADIUS_KM preferisce quella con più POI; se nessuna è nel
+     * raggio (località isolate) ricade sulla più vicina.
+     */
     private fun findNearestCity(cities: List<CityEntry>, lat: Double, lng: Double): CityEntry? {
         if (cities.isEmpty()) return null
-        var best: CityEntry? = null
-        var bestDist = Double.MAX_VALUE
+        var nearest: CityEntry? = null
+        var nearestDist = Double.MAX_VALUE
+        var inRadius: CityEntry? = null
+        var inRadiusPois = -1
+        val radiusDeg = SEARCH_RADIUS_KM / 111.0
         for (c in cities) {
             val dLat = c.lat - lat
             val dLng = (c.lng - lng) * cos(Math.toRadians(lat))
             val dist = sqrt(dLat * dLat + dLng * dLng)
-            if (dist < bestDist) {
-                bestDist = dist
-                best = c
+            if (dist < nearestDist) {
+                nearestDist = dist
+                nearest = c
+            }
+            if (dist <= radiusDeg && c.poiCount > inRadiusPois) {
+                inRadiusPois = c.poiCount
+                inRadius = c
             }
         }
-        return best
+        return inRadius ?: nearest
     }
 
     /** Fetch italia/{regione}/{citta}/_all.csv */

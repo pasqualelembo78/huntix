@@ -603,4 +603,30 @@
         android:textColor="#B0BEC5"
         android:visibility="gone" />
 
+    <!-- Indicatore caricamento attività online (POI da GitHub) -->
+    <LinearLayout
+        android:id="@+id/loadingPoiOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@drawable/bg_hud_overlay"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:indeterminateTint="#FFFFFF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Caricamento attività…"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+    </LinearLayout>
+
 </FrameLayout>
