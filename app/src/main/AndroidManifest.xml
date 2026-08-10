@@ -101,9 +101,7 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".avatar.GenderSelectionActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        
         <activity android:name=".GenderChangeActivity"
             android:exported="false" android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto"/>
@@ -112,26 +110,19 @@
             android:exported="true" android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <activity android:name=".ui.OutdoorArCatchActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"
-            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        
 
-        <activity android:name=".ui.ArNavigationActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        
 
         <activity android:name=".HomeActivity"
             android:exported="false" android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|screenSize"/>
         <activity android:name=".ui.PoiListActivity"
             android:exported="true" android:screenOrientation="portrait"/>
-        <activity android:name=".PlayersSetupActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
+        
         <activity android:name=".SettingsActivity"
             android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".StatsActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
+        
         <activity android:name=".ShopActivity"
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".LegalActivity"
@@ -148,40 +139,26 @@
         <activity android:name=".GameModeActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>
-        <activity android:name=".SaveSlotActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
         <!--
             OSMDroid (OpenStreetMap) — nessuna API Key richiesta.
             I tile sono scaricati da tile.openstreetmap.org (gratuito, open-source).
             Rispetta la tile usage policy OSM: https://operations.osmfoundation.org/policies/tiles/
         -->
 
-        <activity android:name=".OutdoorModeActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".ui.OutdoorGuestActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".ui.OutdoorTutorialActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".OutdoorSetupActivity"
-            android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".ui.OutdoorHuntActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        
+        
+        
+        
+        
         <activity android:name=".ui.RaidLootActivity"
             android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".ui.OutdoorWorldActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:configChanges="orientation|keyboardHidden|screenSize"/>
+        
         <activity android:name=".ui.PlayerProfileActivity"
             android:exported="false" android:screenOrientation="portrait"/>
-        <activity android:name=".ui.CharacterSelectionActivity"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto" />
+        
 
-        <activity android:name=".MultiplayerLobbyActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
 
         <!-- ── Nuove Activity Indoor Multiplayer ────────────────── -->
         <activity android:name=".IndoorModeSelectionActivity"
@@ -193,9 +170,7 @@
         <activity android:name=".IndoorMultiplayerLobbyActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>
-        <activity android:name=".EggInventoryActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
 
         <!-- Hatching & Mining MVC Activity -->
         <activity android:name=".HatchingActivity"
@@ -218,21 +193,15 @@
             android:screenOrientation="portrait"/>
 
         <!-- Classifica Mondiale outdoor -->
-        <activity android:name=".LeaderboardActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
-        <activity android:name=".ui.POIInteractionActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
+        
 
         <!-- ═══════════════════════════════════════════════════════
              GAMIFICATION SYSTEM — Brawl Stars Style
              ═══════════════════════════════════════════════════════ -->
 
         <!-- Missioni giornaliere / settimanali -->
-        <activity android:name=".ui.QuestActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
 
         <!-- Sistema Squadre + Chat real-time -->
         <activity android:name=".ui.TeamActivity"
@@ -250,9 +219,7 @@
             android:screenOrientation="portrait"/>
 
         <!-- Personalizzazione Avatar / Skin / Titoli / Temi -->
-        <activity android:name=".ui.CustomizationActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
 
         <!-- Apertura Uovo Animata Premium -->
         <activity android:name=".ui.EggOpeningAnimationActivity"
@@ -267,7 +234,7 @@
 
     
         <activity android:name=".ui.BattleActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.RealLifeActivity" android:screenOrientation="portrait" android:exported="false"/>
+        
         <activity android:name=".ui.CityActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityDebugLogActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CitySearchActivity" android:screenOrientation="portrait" android:exported="false"/>
@@ -278,17 +245,17 @@
         <activity android:name=".ui.StoreIndoorActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.IndoorActivity" android:exported="false"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
-        <activity android:name=".ui.AvatarCustomizeActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.NpcListActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.JobsActivity" android:screenOrientation="portrait" android:exported="false"/>
+        
+        
+        
         <activity android:name=".ui.ShopActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.DeliveryMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.CookMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.TaxiMiniGameActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.Character3DActivity" android:screenOrientation="portrait" android:exported="false"/>
+        
+        
+        
+        
         <activity android:name=".ui.FighterSelectActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.FightingGame3DActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.SurpriseRevealActivity" android:screenOrientation="portrait" android:exported="false"/>
+        
         <activity android:name=".ui.SurpriseInventoryActivity" android:screenOrientation="portrait" android:exported="false"/>
 
         <!-- ═══════════════════════════════════════════════════════
@@ -321,9 +288,7 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
-        <activity android:name=".minigames.PacmanActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
+        
 
         <!-- Giochi di Abilità -->
         <activity android:name=".minigames.CatchEggActivity"
@@ -371,15 +336,9 @@
             android:exported="false"
             android:screenOrientation="portrait"/>
 
-        <activity android:name=".minigames.PongActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        
 
-        <activity android:name=".minigames.ar.ARPongActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        
 
         <activity android:name=".minigames.MotoX3MActivity"
             android:exported="false"
@@ -470,11 +429,7 @@
     </provider>
 
     <!-- ═══ TRADE ACTIVITY (NUOVO) ═══════════════════════════ -->
-    <activity
-        android:name=".social.TradeActivity"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-        android:screenOrientation="portrait"
-        android:exported="false" />
+    
 
 
     <!-- ═══ SOCIAL: FRIENDS + CHAT (FIX crash) ══════════════ -->
@@ -511,15 +466,9 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <activity android:name=".minigames.card.SolitaireActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        
 
-        <activity android:name=".minigames.card.ScopaActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto.Fullscreen"/>
+        
 
         <receiver android:name=".gamification.DailyEventReceiver"
             android:exported="false"/>

@@ -104,7 +104,7 @@ namespace Huntix.Bridge
         public static void QuitToAndroid()
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
-            OpenAndroidActivity("com.intelligame.huntix.ui.OutdoorWorldActivity");
+            OpenAndroidActivity("com.intelligame.huntix.HomeActivity");
             #endif
         }
 
