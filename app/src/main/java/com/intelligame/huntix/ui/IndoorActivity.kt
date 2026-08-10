@@ -57,10 +57,12 @@ class IndoorActivity : UnityPlayerActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Imposta unity_mode PRIMA di super.onCreate() così GameManager.Start()
+        // (che gira durante l'inizializzazione di Unity) lo legge e carica Indoor.
+        intent.putExtra("unity_mode", "indoor")
         super.onCreate(savedInstanceState)
         instance = this
         poiJson = intent.getStringExtra(EXTRA_POI_DATA) ?: "{}"
-        intent.putExtra("unity_mode", "indoor")
         addOverlay()
 
         // Invia il POI al loader Unity una volta inizializzato.
@@ -168,7 +170,12 @@ class IndoorActivity : UnityPlayerActivity() {
             FrameLayout.LayoutParams.WRAP_CONTENT
         ))
 
-        setContentView(root)
+        // addContentView (NON setContentView) aggiunge l'overlay SULLA view di Unity
+        // invece di sostituirla: setContentView(root) cancellava la UnityPlayer surface
+        addContentView(root, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
     }
 
     /** Called from UnityBridge when an interactable is found/lost. */

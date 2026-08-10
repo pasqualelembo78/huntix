@@ -67,7 +67,7 @@ namespace Huntix.Indoor
 
         private void Update()
         {
-            if (_agent == null || !_agent.isOnNavMesh) return;
+            if (_agent == null) return;
 
             float distToPlayer = _playerTransform != null
                 ? Vector3.Distance(transform.position, _playerTransform.position)
@@ -76,7 +76,7 @@ namespace Huntix.Indoor
             // If player is in dialogue range, stop and face them
             if (distToPlayer <= dialogueRange && !_isTalking)
             {
-                if (_agent.hasPath) _agent.ResetPath();
+                if (_agent.isOnNavMesh && _agent.hasPath) _agent.ResetPath();
                 LookAtPlayer();
                 SetTalking(true);
 
@@ -87,14 +87,14 @@ namespace Huntix.Indoor
             else if (distToPlayer > dialogueRange * 1.5f && _isTalking)
             {
                 SetTalking(false);
-                GoToNextPatrolPoint();
+                if (_agent.isOnNavMesh) GoToNextPatrolPoint();
 
                 UnityBridge.SendMessageToAndroid("IndoorNPCFar",
                     $"{{\"id\":\"{npcId}\"}}");
             }
 
-            // Patrol behavior
-            if (!_isTalking)
+            // Patrol behavior (solo se NavMesh disponibile)
+            if (!_isTalking && _agent.isOnNavMesh)
             {
                 if (_isWaiting)
                 {

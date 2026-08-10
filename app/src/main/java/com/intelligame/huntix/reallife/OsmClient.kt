@@ -343,6 +343,22 @@ object OsmClient {
     }
 
     /**
+     * True se esiste in cache disco una risposta "solo POI" valida (non scaduta)
+     * per quella zona/raggio. Usata da Esplora per saltare le fasi progressive
+     * quando l'area completa è già scaricata (risposta quasi immediata).
+     */
+    fun hasPoisCache(centerLat: Double, centerLon: Double, radiusMeters: Int): Boolean {
+        val ctx = appContext ?: return false
+        return try {
+            val key = makeCacheKey("osm_poi_", centerLat, centerLon, radiusMeters)
+            val file = File(ctx.filesDir, key)
+            file.exists() && (System.currentTimeMillis() - file.lastModified()) < CACHE_MAX_AGE_MS
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Elimina tutte le cache disco (per forzare re-download).
      */
     fun clearDiskCache() {

@@ -146,6 +146,15 @@ namespace Huntix.Core
         public void OnPoisFailed(string message)
         {
             Debug.LogWarning($"[GameManager] Pois fetch failed: {message}");
+            var em = ExploreManager.Instance;
+            if (em != null) em.OnPoisFailed(message);
+        }
+
+        /// <summary>Avanzamento del caricamento POI a fasi (barra in Esplora).</summary>
+        public void OnPoisProgress(string jsonData)
+        {
+            var em = ExploreManager.Instance;
+            if (em != null) em.OnPoisProgress(jsonData);
         }
 
         public void RequestPois(double lat, double lng, int radiusMeters)

@@ -34,6 +34,11 @@ object OsmPoiRepository {
     fun loadNearby(lat: Double, lng: Double, radiusMeters: Int = 1000): List<PoiSearchManager.SearchResult> {
         val radius = radiusMeters.coerceIn(100, MAX_RADIUS_METERS)
         val data = OsmClient.fetchPoisCached(lat, lng, radius)
+        return classify(data)
+    }
+
+    /** Classifica un OsmData scaricato in POI Esplora (solo store-like, con categoria). */
+    fun classify(data: OsmData): List<PoiSearchManager.SearchResult> {
         val mgr = PoiSearchManager()
         val out = ArrayList<PoiSearchManager.SearchResult>()
 

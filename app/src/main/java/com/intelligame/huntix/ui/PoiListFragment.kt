@@ -59,6 +59,7 @@ class PoiListFragment : Fragment(R.layout.fragment_poi_list) {
             startActivity(Intent(requireContext(), POICustomPageActivity::class.java).apply {
                 putExtra("json_url", poi.url)
                 putExtra("poi_name", poi.name)
+                putExtra("poi_building_type", poi.buildingType)
             })
         } else if (poi.hasWebPage()) {
             startActivity(Intent(requireContext(), POIWebViewActivity::class.java).apply {

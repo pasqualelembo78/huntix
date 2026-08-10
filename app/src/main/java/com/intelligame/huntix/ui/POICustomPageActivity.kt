@@ -29,6 +29,7 @@ class POICustomPageActivity : AppCompatActivity() {
         const val EXTRA_POI_TYPE = "poi_type"
         const val EXTRA_POI_LAT = "poi_lat"
         const val EXTRA_POI_LNG = "poi_lng"
+        const val EXTRA_POI_BUILDING_TYPE = "poi_building_type"
     }
 
     private var needs = mutableMapOf<String, Float>()
@@ -46,6 +47,7 @@ class POICustomPageActivity : AppCompatActivity() {
         if (jsonUrl.isBlank() && inlineJson.isBlank()) { finish(); return }
         val poiName = intent.getStringExtra(EXTRA_POI_NAME) ?: ""
         val poiType = intent.getStringExtra(EXTRA_POI_TYPE) ?: ""
+        val poiBuildingType = intent.getStringExtra(EXTRA_POI_BUILDING_TYPE) ?: ""
         this.jsonUrl = jsonUrl
         this.inlineJson = inlineJson
         this.poiName = poiName
@@ -106,7 +108,7 @@ class POICustomPageActivity : AppCompatActivity() {
                 val jsonText = when {
                     inlineJson.isNotBlank() -> inlineJson
                     jsonUrl.startsWith("osm:") ->
-                        PoiJsonFactory.build(jsonUrl, poiName, "", poiType, poiLat, poiLng).toString()
+                        PoiJsonFactory.build(jsonUrl, poiName, poiBuildingType, poiType, poiLat, poiLng).toString()
                     else -> httpGet(jsonUrl)
                 }
                 if (jsonText != null) {
@@ -202,7 +204,8 @@ class POICustomPageActivity : AppCompatActivity() {
                 val poiJson = JSONObject().apply {
                     put("id", poiName)
                     put("name", poiName)
-                    put("type", banner?.optString("type", "") ?: "")
+                    put("type", poiType)
+                    put("buildingType", poiType)
                     put("json_url", jsonUrl)
                 }.toString()
                 try {

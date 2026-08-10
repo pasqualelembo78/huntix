@@ -31,6 +31,16 @@ namespace Huntix.Outdoor
         public GameObject poiMarkerPrefab;
         public Transform markersRoot;
 
+        [Header("NPC Guide Settings")]
+        public bool enableNPCGuides = true;
+        public float npcSpawnRadius = 45f;
+        public int maxNPCs = 20;
+        private GameObject _npcPrefab;
+        private Transform _npcRoot;
+        private OutdoorNPCDispatcher _npcDispatcher;
+        private readonly List<OutdoorNPC> _spawnedNPCs = new List<OutdoorNPC>();
+        private int _npcCounter = 0;
+
         [System.Serializable]
         public class PoiData
         {
@@ -54,6 +64,10 @@ namespace Huntix.Outdoor
         private class PoiEnvelope
         {
             public PoiData[] pois;
+            public int radiusMeters;
+            public int stage = 1;
+            public int stages = 1;
+            public bool done = true;
         }
 
         [System.Serializable]
@@ -120,6 +134,8 @@ namespace Huntix.Outdoor
         private double _originLat, _originLng;
         private bool _hasOrigin = false;
         private bool _isLoading = false;
+        private float _loadStartedAt = -1f;
+        private const float LOAD_MAX_SECONDS = 90f;
 
         private void Awake()
         {
@@ -147,6 +163,9 @@ namespace Huntix.Outdoor
                 markersRoot = root.transform;
             }
 
+            // NPC guide system
+            EnsureNPCDispatcher();
+
             _current = categories.Length > 0 ? categories[0] : null;
         }
 
@@ -169,8 +188,55 @@ namespace Huntix.Outdoor
             return go.AddComponent<ExploreManager>();
         }
 
+        /// <summary>Assicura che il NPCDispatcher esista (necessario per UnitySendMessage da Android).</summary>
+        public void EnsureNPCDispatcher()
+        {
+            if (_npcDispatcher == null)
+            {
+                var existing = GameObject.Find("OutdoorNPC") as GameObject ?? 
+                    GameObject.Find("OutdoorNPC")?.GetComponent<OutdoorNPCDispatcher>()?.gameObject;
+                if (existing != null)
+                {
+                    _npcDispatcher = existing.GetComponent<OutdoorNPCDispatcher>();
+                    if (_npcDispatcher == null) _npcDispatcher = existing.AddComponent<OutdoorNPCDispatcher>();
+                }
+                else
+                {
+                    var go = new GameObject("OutdoorNPC");
+                    go.transform.SetParent(transform);
+                    _npcDispatcher = go.AddComponent<OutdoorNPCDispatcher>();
+                }
+
+                if (_npcRoot == null)
+                {
+                    _npcRoot = new GameObject("NPC_Guides").transform;
+                    _npcRoot.SetParent(transform);
+                }
+
+                Debug.Log("[ExploreManager] OutdoorNPCDispatcher inizializzato");
+            }
+
+            // Ensure dialogue UI exists
+            if (OutdoorDialogueUI.Instance == null)
+            {
+                var uiGO = new GameObject("OutdoorDialogueUI");
+                uiGO.transform.SetParent(transform);
+                uiGO.AddComponent<OutdoorDialogueUI>();
+                Debug.Log("[ExploreManager] OutdoorDialogueUI created");
+            }
+        }
+
         private void CheckReload()
         {
+            // Failsafe: se una richiesta è rimasta in corso troppo a lungo
+            // (es. rete lenta), sblocca lo stato per non bloccare i reload.
+            if (_isLoading && _loadStartedAt > 0f && Time.time - _loadStartedAt > LOAD_MAX_SECONDS)
+            {
+                Debug.LogWarning("[Esplora] Timeout caricamento, sblocco lo stato");
+                FinishLoading();
+                return;
+            }
+
             if (_isLoading || !_hasOrigin) return;
             var (lat, lng) = ReadPlayerGeo();
             double d = HaversineM(_originLat, _originLng, lat, lng);
@@ -194,8 +260,23 @@ namespace Huntix.Outdoor
             }
 
             _isLoading = true;
+            _loadStartedAt = Time.time;
             Debug.Log($"[Esplora] Richiesti POI a ({lat},{lng}) raggio={searchRadiusMeters}m");
+            EnsureLoadingUI().Show("Caricamento negozi…");
             GameManager.Instance.RequestPois(lat, lng, (int)searchRadiusMeters);
+        }
+
+        /// <summary>Assicura che l'overlay di caricamento esista e lo restituisce.</summary>
+        private OutdoorLoadingUI EnsureLoadingUI()
+        {
+            if (OutdoorLoadingUI.Instance == null)
+            {
+                var uiGO = new GameObject("OutdoorLoadingUI");
+                uiGO.transform.SetParent(transform);
+                uiGO.AddComponent<OutdoorLoadingUI>();
+                Debug.Log("[ExploreManager] OutdoorLoadingUI created");
+            }
+            return OutdoorLoadingUI.Instance;
         }
 
         private void ReOrigin(double lat, double lng)
@@ -208,26 +289,36 @@ namespace Huntix.Outdoor
             }
             foreach (var p in _allPois)
                 p.worldPosition -= delta;
+
+            // Sposta anche gli NPC guide dello stesso delta
+            foreach (var npc in _spawnedNPCs)
+            {
+                if (npc != null && npc.transform != null)
+                    npc.transform.position -= delta;
+            }
+
             _originLat = lat;
             _originLng = lng;
         }
 
-        /// <summary>Callback da Android (GameManager.OnPoisReceived).</summary>
+        /// <summary>Callback da Android (GameManager.OnPoisReceived).
+        /// Arriva una volta per fase di caricamento (vicini → zona più ampia);
+        /// solo l'ultima ha done=true e chiude il caricamento.</summary>
         public void OnPoisReceived(string json)
         {
-            _isLoading = false;
             try
             {
                 var env = JsonUtility.FromJson<PoiEnvelope>(json);
                 if (env == null || env.pois == null)
                 {
                     Debug.LogWarning("[Esplora] Nessun POI nella risposta");
+                    if (env != null && env.done) FinishLoading();
                     return;
                 }
 
-                ClearMarkers();
+                // Aggiorna i marker in-place (merge per id): le fasi successive
+                // sostituiscono le precedenti senza re-instantiation di tutto.
                 _allPois.Clear();
-
                 foreach (var p in env.pois)
                 {
                     if (string.IsNullOrEmpty(p.id)) continue;
@@ -236,13 +327,110 @@ namespace Huntix.Outdoor
                     _allPois.Add(p);
                 }
 
-                Debug.Log($"[Esplora] Caricati {_allPois.Count} POI");
+                ApplyPois(_allPois);
                 ApplyFilter(_current);
+                SpawnNPCGuides();
+
+                // Ogni envelope valido (anche parziale) sblocca lo stato: i negozi
+                // vicini sono già visibili e usabili mentre le fasi continuano.
+                _isLoading = false;
+
+                if (env.done)
+                {
+                    FinishLoading();
+                }
+                else
+                {
+                    EnsureLoadingUI().SetProgress(
+                        Mathf.Clamp01(env.stage / (float)Mathf.Max(1, env.stages)),
+                        LoadingLabelFor(env.radiusMeters));
+                }
+
+                Debug.Log($"[Esplora] Caricati {_allPois.Count} POI (fase {env.stage}/{env.stages}, done={env.done})");
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"[Esplora] Errore parsing POI: {e.Message}");
             }
+        }
+
+        /// <summary>Aggiornamento di avanzamento dal fetch a fasi (GameManager.OnPoisProgress).</summary>
+        public void OnPoisProgress(string json)
+        {
+            try
+            {
+                var mStage = Regex.Match(json, "\"stage\"\\s*:\\s*(\\d+)");
+                var mStages = Regex.Match(json, "\"stages\"\\s*:\\s*(\\d+)");
+                var mRadius = Regex.Match(json, "\"radiusMeters\"\\s*:\\s*(\\d+)");
+                if (!mStage.Success || !mStages.Success) return;
+
+                int stage = int.Parse(mStage.Groups[1].Value, CultureInfo.InvariantCulture);
+                int stages = int.Parse(mStages.Groups[1].Value, CultureInfo.InvariantCulture);
+                int radius = mRadius.Success
+                    ? int.Parse(mRadius.Groups[1].Value, CultureInfo.InvariantCulture)
+                    : 0;
+
+                EnsureLoadingUI().SetProgress(
+                    Mathf.Clamp01(stage / (float)Mathf.Max(1, stages)),
+                    LoadingLabelFor(radius));
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[Esplora] OnPoisProgress: {e.Message}");
+            }
+        }
+
+        /// <summary>Chiude il caricamento: nasconde la barra e sblocca nuovi fetch.</summary>
+        private void FinishLoading()
+        {
+            _isLoading = false;
+            _loadStartedAt = -1f;
+            if (OutdoorLoadingUI.Instance != null) OutdoorLoadingUI.Instance.Hide();
+        }
+
+        /// <summary>Etichetta della fase: "Caricamento negozi entro 1 km…", "…entro 10 km…".</summary>
+        private static string LoadingLabelFor(int radiusMeters)
+        {
+            if (radiusMeters <= 0) return "Caricamento negozi…";
+            string km = (radiusMeters / 1000f).ToString("0.#", CultureInfo.InvariantCulture)
+                .Replace('.', ',');
+            return $"Caricamento negozi entro {km} km…";
+        }
+
+        /// <summary>Merge dei marker per id: crea i nuovi, riposiziona i presenti, distrugge i rimossi.</summary>
+        private void ApplyPois(List<PoiData> pois)
+        {
+            var wanted = new HashSet<string>(pois.Select(p => p.id));
+
+            var toDestroy = _markers.Keys.Where(id => !wanted.Contains(id)).ToList();
+            foreach (var id in toDestroy)
+            {
+                if (_markers.TryGetValue(id, out var m) && m != null) Destroy(m);
+                _markers.Remove(id);
+            }
+
+            foreach (var poi in pois)
+            {
+                if (_markers.TryGetValue(poi.id, out var existing))
+                {
+                    existing.transform.position = poi.worldPosition;
+                    existing.SetActive(true);
+                    poi.markerObject = existing;
+                }
+                else
+                {
+                    poi.markerObject = CreateMarker(poi);
+                    _markers[poi.id] = poi.markerObject;
+                }
+            }
+        }
+
+        /// <summary>Callback da Android quando il fetch POI fallisce (GameManager.OnPoisFailed).</summary>
+        public void OnPoisFailed(string message)
+        {
+            FinishLoading();
+            Debug.LogWarning($"[Esplora] POI fetch fallito: {message}");
+            UnityBridge.ShowToast("Caricamento negozi non riuscito");
         }
 
         /// <summary>Filtra per categoria (indice delle tab).</summary>
@@ -345,7 +533,121 @@ namespace Huntix.Outdoor
             return marker;
         }
 
-        /// <summary>Apre la pagina del locale (via Android: custom JSON / web / JSON sintetico OSM).</summary>
+        /// <summary>Spawn NPC guide vicino ai POI culturali/attrattori principali.</summary>
+        private void SpawnNPCGuides()
+        {
+            if (!enableNPCGuides) return;
+            ClearNPCs();
+
+            // Carica il prefab del personaggio da Resources
+            if (_npcPrefab == null)
+            {
+                _npcPrefab = Resources.Load<GameObject>("KenneyMiniMarket/character-employee");
+                if (_npcPrefab == null)
+                {
+                    Debug.LogWarning("[ExploreManager] character-employee prefab non trovato, NPC non spawnati");
+                    return;
+                }
+            }
+
+            EnsureNPCDispatcher();
+
+            // Filtra POI che possono avere una guida (culturali, panorami, ecc.)
+            var spawnable = _allPois
+                .Where(p => ShouldSpawnNPCAtPOI(p))
+                .OrderBy(p => p.worldPosition.sqrMagnitude)
+                .Take(maxNPCs)
+                .ToList();
+
+            _npcCounter = 0;
+            foreach (var poi in spawnable)
+            {
+                SpawnNPCAtPosition(poi);
+            }
+
+            if (_spawnedNPCs.Count > 0)
+                Debug.Log($"[ExploreManager] Spawnati {_spawnedNPCs.Count} NPC guide su {spawnable.Count} POI idonei");
+        }
+
+        /// <summary>
+        /// Determina se un POI è idoneo a ospitare una guida turistica.
+        /// Preferiamo luoghi culturali, panorami e attrazioni principali.
+        /// </summary>
+        private bool ShouldSpawnNPCAtPOI(PoiData poi)
+        {
+            if (string.IsNullOrEmpty(poi.name)) return false;
+            string combined = $"{poi.poiType} {poi.buildingType} {poi.category} {poi.name}".ToLowerInvariant();
+
+            string[] preferredTypes = {
+                "church","cattedrale","monument","museum","museo","gallery","monastery",
+                "castle","castello","memorial","statue","viewpoint","tourist_information",
+                "attraction","theatre","opera","planetarium","park","parco","garden",
+                "nature_reserve","ruins","archaeological"
+            };
+
+            foreach (var t in preferredTypes)
+                if (combined.Contains(t)) return true;
+
+            if (combined.Contains("piazza") || combined.Contains("square"))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>Spawn un NPC guida vicino al POI specificato.</summary>
+        private void SpawnNPCAtPosition(PoiData poi)
+        {
+            if (_npcPrefab == null || _npcRoot == null || _npcDispatcher == null) return;
+
+            _npcCounter++;
+            string npcId = $"npc_guide_{_npcCounter}_{poi.id}";
+
+            // Posizione leggermente a lato rispetto al POI, a terra (y=0)
+            Vector3 basePos = poi.worldPosition;
+            basePos.y = 0f;
+            Vector2 rand = Random.insideUnitCircle * 3.5f;
+            Vector3 offset = new Vector3(rand.x, 0, rand.y);
+
+            var obj = Instantiate(_npcPrefab, _npcRoot);
+            obj.transform.position = basePos + offset;
+            obj.transform.rotation = Quaternion.identity;
+            obj.name = $"NPC_Guide_{npcId}";
+            obj.transform.localScale = Vector3.one * 0.8f;
+
+            var npc = obj.AddComponent<OutdoorNPC>();
+            npc.npcId = npcId;
+            npc.npcName = $"Guida di {poi.name}";
+            npc.role = "guide";
+            npc.emoji = "🧑\u200d\u57f9";
+            npc.poiId = poi.id;
+            npc.poiName = poi.name;
+            npc.poiType = poi.poiType;
+            npc.buildingType = poi.buildingType;
+            npc.poiCategory = poi.category;
+            npc.dialogueRange = 6f;
+
+            _npcDispatcher.RegisterNPC(npc);
+            _spawnedNPCs.Add(npc);
+        }
+
+        /// <summary>Rimuove tutti gli NPC guide esistenti.</summary>
+        private void ClearNPCs()
+        {
+            foreach (var npc in _spawnedNPCs)
+            {
+                if (npc != null)
+                {
+                    _npcDispatcher?.UnregisterNPC(npc);
+                    if (npc.gameObject != null) Destroy(npc.gameObject);
+                }
+            }
+            _spawnedNPCs.Clear();
+            _npcCounter = 0;
+        }
+
+        /// <summary>
+        /// Apre la pagina del locale (via Android: custom JSON / web / JSON sintetico OSM).
+        /// </summary>
         public void OpenPoi(PoiData poi)
         {
             if (poi == null) return;
@@ -479,13 +781,6 @@ namespace Huntix.Outdoor
             foreach (var c in categories.Skip(1))
                 if (c.Matches(poi)) return c.emoji;
             return poi.hasCustom ? "⭐" : "📍";
-        }
-
-        private void ClearMarkers()
-        {
-            foreach (var m in _markers.Values)
-                if (m != null) Destroy(m);
-            _markers.Clear();
         }
 
         private (double lat, double lng) ReadPlayerGeo()

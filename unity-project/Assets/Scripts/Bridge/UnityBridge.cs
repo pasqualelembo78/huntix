@@ -11,10 +11,18 @@ namespace Huntix.Bridge
         public static void Init()
         {
             #if UNITY_ANDROID && !UNITY_EDITOR
-            using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            try
             {
-                var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                _bridge = activity.Call<AndroidJavaObject>("getBridge");
+                using (var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                {
+                    var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    _bridge = activity.Call<AndroidJavaObject>("getBridge");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[UnityBridge] getBridge() non disponibile, continuo senza bridge: " + e.Message);
+                _bridge = null;
             }
             #endif
         }

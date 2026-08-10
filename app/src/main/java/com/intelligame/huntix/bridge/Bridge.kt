@@ -61,7 +61,7 @@ object Bridge {
                 val id = extractJsonField(jsonData, "storeId")
                 if (id != null) tryCatch(id)
             }
-            "PoiSelected" -> {
+             "PoiSelected" -> {
                 val id = extractJsonField(jsonData, "id")
                 val lat = extractJsonField(jsonData, "lat")?.toDoubleOrNull()
                 val lng = extractJsonField(jsonData, "lng")?.toDoubleOrNull()
@@ -69,6 +69,24 @@ object Bridge {
                     PoiUnityBridge.onPoiSelected(id, lat, lng)
                 }
             }
+            // ── Indoor store events (Unity → IndoorActivity) ──
+            "IndoorSceneReady" -> {
+                val poiId = extractJsonField(jsonData, "poiId") ?: ""
+                StoreUnityBridge.onIndoorSceneReady(poiId)
+            }
+            "ExitIndoor" -> StoreUnityBridge.exitIndoor()
+            "IndoorInteractable" -> StoreUnityBridge.onInteractableFound(jsonData)
+            "IndoorInteractionResult" -> StoreUnityBridge.onInteractionResult(jsonData)
+            "IndoorNPCNearby" -> StoreUnityBridge.onNPCNearby(jsonData)
+            "IndoorNPCFar" -> StoreUnityBridge.onNPCFar(jsonData)
+            "IndoorNPCDialogue" -> StoreUnityBridge.onNPCDialogue(jsonData)
+            "IndoorNPCQuestAccepted" -> {} // TODO: gestire accettazione quest in IndoorActivity
+            "IndoorARPlaneFound" -> {}     // TODO: gestire in IndoorActivity se necessario
+             // ── Outdoor NPC events (Unity → BridgeActivity/Outdoor) ──
+            "OutdoorNPCNearby" -> StoreUnityBridge.onOutdoorNPCNearby(jsonData)
+            "OutdoorNPCFar" -> StoreUnityBridge.onOutdoorNPCFar(jsonData)
+            "OutdoorNPCDialogue" -> StoreUnityBridge.onOutdoorNPCDialogue(jsonData)
+            "OutdoorNPCInfo" -> StoreUnityBridge.onOutdoorNPCInfo(jsonData)
         }
     }
 
