@@ -119,13 +119,25 @@ public class MappaCattureActivity extends Activity implements OnMapReadyCallback
         try {
             android.graphics.Bitmap bmp = BitmapUtils.getBitmapFromDrawable(getResources().getDrawable(drawableRes, getTheme()));
             if (bmp != null) {
-                style.addImage(nome, bmp);
+                style.addImage(nome, scalaIcona(bmp));
                 iconasAdicionados.add(nome);
             }
         } catch (Exception e) {
             Log.e("MAPA_CATTURE", "Errore nell'aggiunta dell'icona " + nome + ": " + e.getMessage());
         }
         return nome;
+    }
+
+    private android.graphics.Bitmap scalaIcona(android.graphics.Bitmap src){
+        if (src.getDensity() == 0) src.setDensity(getResources().getDisplayMetrics().densityDpi);
+        float density = getResources().getDisplayMetrics().density;
+        int maxPx = Math.max(1, Math.round(20f * density));
+        int w = src.getWidth();
+        int h = src.getHeight();
+        if (w <= maxPx && h <= maxPx) return src;
+        float scale = Math.min((float) maxPx / w, (float) maxPx / h);
+        return android.graphics.Bitmap.createScaledBitmap(
+                src, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), true);
     }
 
     @Override

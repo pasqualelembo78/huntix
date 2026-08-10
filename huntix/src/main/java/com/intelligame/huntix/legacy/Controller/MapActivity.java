@@ -88,6 +88,9 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
     private static final String LAYER_ROTA = "rota-layer";
     private static final String SOURCE_ROTA = "rota-source";
 
+    private static final float ICONA_MAX_DP = 20f;
+    private static final float PERSONAGGIO_MAX_DP = 36f;
+
     private boolean mappaPronto = false;
     private final Set<String> iconasAdicionados = new HashSet<>();
 
@@ -351,7 +354,7 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
         GeoJsonSource src = style.getSourceAs(SOURCE_EU);
         if(src == null) return;
         boolean masculino = GiocoSingleton.getInstance().getUtente().getSesso().equals("M");
-        addIconaAoStyle(style, masculino ? R.drawable.male : R.drawable.female, "personagem");
+        addIconaAoStyle(style, masculino ? R.drawable.male : R.drawable.female, "personagem", PERSONAGGIO_MAX_DP);
         Point p = Point.fromLngLat(posizioneAttuale.getLongitude(), posizioneAttuale.getLatitude());
         src.setGeoJson(FeatureCollection.fromFeature(featureCom(p, "eu", "", "personagem", null)));
     }
@@ -967,17 +970,33 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
     }
 
     private String addIconaAoStyle(Style style, int drawableRes, String nome){
+        return addIconaAoStyle(style, drawableRes, nome, ICONA_MAX_DP);
+    }
+
+    private String addIconaAoStyle(Style style, int drawableRes, String nome, float maxDp){
         if (iconasAdicionados.contains(nome)) return nome;
         try {
             Bitmap bmp = BitmapUtils.getBitmapFromDrawable(getResources().getDrawable(drawableRes, getTheme()));
             if (bmp != null) {
-                style.addImage(nome, bmp);
+                style.addImage(nome, scalaIcona(bmp, maxDp));
                 iconasAdicionados.add(nome);
             }
         } catch (Exception e) {
             Log.e("MAPA", "Errore nell'aggiunta dell'icona " + nome + ": " + e.getMessage());
         }
         return nome;
+    }
+
+    private Bitmap scalaIcona(Bitmap src, float maxDp){
+        if (src.getDensity() == 0) src.setDensity(getResources().getDisplayMetrics().densityDpi);
+        float density = getResources().getDisplayMetrics().density;
+        int maxPx = Math.max(1, Math.round(maxDp * density));
+        int w = src.getWidth();
+        int h = src.getHeight();
+        if (w <= maxPx && h <= maxPx) return src;
+        float scale = Math.min((float) maxPx / w, (float) maxPx / h);
+        return Bitmap.createScaledBitmap(
+                src, Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)), true);
     }
 
     @Override
