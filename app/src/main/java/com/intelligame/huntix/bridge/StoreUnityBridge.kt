@@ -151,6 +151,27 @@ object StoreUnityBridge {
     fun getCurrentLocation(): String =
         com.intelligame.huntix.bridge.Bridge.getCurrentLocation()
 
+    /** Bisogni locali (LocalNeeds) come JSON: {"hunger":..,"sleep":..,"hygiene":..,"fun":..,"thirst":..}.
+     *  Usato dall'HUD bisogni di Esplora per mostrare le barre. */
+    @JvmStatic
+    fun getNeedsJson(): String {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{}"
+        return needsJson(com.intelligame.huntix.reallife.LocalNeeds.load(ctx))
+    }
+
+    /** Applica un'azione ai bisogni locali (needKey + gain) e restituisce il JSON aggiornato. */
+    @JvmStatic
+    fun applyNeedAction(needKey: String, gain: Float): String {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{}"
+        return needsJson(com.intelligame.huntix.reallife.LocalNeeds.applyAction(ctx, needKey, gain))
+    }
+
+    private fun needsJson(needs: Map<String, Float>): String {
+        val jo = JSONObject()
+        for ((k, v) in needs) jo.put(k, v.toDouble())
+        return jo.toString()
+    }
+
     /** Richiede i POI OSM entro [radiusMeters] (max 10 km) da (lat,lng).
      *  Il risultato arriva in Unity via UnitySendMessage("GameManager","OnPoisReceived",json).
      *  I POI vengono ordinati per distanza e limitati (1200) per non saturare Unity.

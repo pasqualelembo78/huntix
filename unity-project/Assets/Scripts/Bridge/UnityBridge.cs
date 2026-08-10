@@ -153,6 +153,46 @@ namespace Huntix.Bridge
             #endif
         }
 
+        // ── Esplora: bisogni (LocalNeeds). Ritorna JSON {"hunger":..,"sleep":..,"hygiene":..,"fun":..,"thirst":..}.
+        // In editor (nessun Android) ritorna "{}" e l'HUD usa il fallback PlayerPrefs.
+        public static string GetNeedsJson()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("getNeedsJson") ?? "{}";
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[UnityBridge] GetNeedsJson: " + e.Message);
+            }
+            #endif
+            return "{}";
+        }
+
+        // Applica un'azione a un bisogno (needKey: hunger/sleep/hygiene/fun/thirst) e
+        // restituisce il JSON aggiornato.
+        public static string ApplyNeedAction(string needKey, float gain)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("applyNeedAction", needKey, gain) ?? "{}";
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[UnityBridge] ApplyNeedAction: " + e.Message);
+            }
+            #endif
+            return "{}";
+        }
+
         // Apre la pagina del POI (custom JSON / web / JSON sintetico OSM).
         public static void OpenPoiPage(string osmId, string name, string buildingType,
                                        string poiType, string pageType, string url,

@@ -51,7 +51,13 @@ namespace Huntix.Core
                 _ => null
             };
             if (scene != null && SceneManager.GetActiveScene().name != scene)
+            {
                 SceneManager.LoadScene(scene);
+                if (scene == "Outdoor")
+                    NeedsHUD.EnsureInstance();
+                else
+                    NeedsHUD.DestroyInstance();
+            }
         }
 
         // Crea il modulo Esplora (marker POI AR) e la sua UI se assenti in scena.

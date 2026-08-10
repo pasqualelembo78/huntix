@@ -349,26 +349,17 @@ class HomeActivity : BaseNavActivity() {
         }
         row1.addView(gameTile("\uD83C\uDFE0", "INDOOR", "Nascondi e cerca", "#3F51B5", "#1A237E") { startActivity(Intent(this, IndoorModeSelectionActivity::class.java)) })
         row1.addView(spacerH(dp(8)))
-        row1.addView(gameTile("\uD83C\uDF0D", "OUTDOOR", "Esplora la mappa", "#43A047", "#1B5E20") { startActivity(Intent(this, OutdoorModeActivity::class.java)) })
+        row1.addView(gameTile("\uD83C\uDFAE", "MINIGIOCHI", "9 + 13 AR", "#FF6F00", "#E65100") { startActivity(Intent(this, MiniGamesHubActivity::class.java)) })
         grid.addView(row1)
         // Row 2
         val row2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW)
         }
-        row2.addView(gameTile("\uD83C\uDFAE", "MINIGIOCHI", "9 + 13 AR", "#FF6F00", "#E65100") { startActivity(Intent(this, MiniGamesHubActivity::class.java)) })
+        row2.addView(gameTile("\uD83E\uDD5A", "UOVA", "Termoculle e schiusa", "#9C27B0", "#4A148C") { startActivity(Intent(this, HatchingActivity::class.java)) })
         row2.addView(spacerH(dp(8)))
-        row2.addView(gameTile("\uD83D\uDC65", "REAL LIFE", "Persone vere", "#00897B", "#004D40") { startActivity(Intent(this, RealLifeActivity::class.java)) })
+        row2.addView(gameTile("\uD83C\uDFDF\uFE0F", "RAID", "Boss battles", "#D32F2F", "#B71C1C") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
         grid.addView(row2)
-        // Row 3
-        val row3 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW)
-        }
-        row3.addView(gameTile("\uD83E\uDD5A", "UOVA", "Termoculle e schiusa", "#9C27B0", "#4A148C") { startActivity(Intent(this, HatchingActivity::class.java)) })
-        row3.addView(spacerH(dp(8)))
-        row3.addView(gameTile("\uD83C\uDFDF\uFE0F", "RAID", "Boss battles", "#D32F2F", "#B71C1C") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
-        grid.addView(row3)
         root.addView(grid)
 
         // ═══ 5. QUICK ACCESS ROW ═══
