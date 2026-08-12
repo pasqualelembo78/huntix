@@ -1,0 +1,173 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &5245235966809926720
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1842664862475929438, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3877841175310950318, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_Name
+      value: EnemyView
+      objectReference: {fileID: 0}
+    - target: {fileID: 7869178279990298191, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_Sprite
+      value: 
+      objectReference: {fileID: 21300000, guid: 8200ea603b4dd10419ae01a0342a3f42, type: 3}
+    - target: {fileID: 7869178279990298191, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_Color.b
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7869178279990298191, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_Color.g
+      value: 0.01900063
+      objectReference: {fileID: 0}
+    - target: {fileID: 7869178279990298191, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      propertyPath: m_SortingOrder
+      value: 3
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 3877841175310950318, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 769979600053820637}
+  m_SourcePrefab: {fileID: 100100000, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+--- !u!212 &2737693388169308687 stripped
+SpriteRenderer:
+  m_CorrespondingSourceObject: {fileID: 7869178279990298191, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+  m_PrefabInstance: {fileID: 5245235966809926720}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &9014533351918547950 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 3877841175310950318, guid: 8308c698f48c09a419918c8b9ebb173d, type: 3}
+  m_PrefabInstance: {fileID: 5245235966809926720}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &769979600053820637
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9014533351918547950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bb345f8540a4db38c6de6b8066993a8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  spriteRenderer: {fileID: 2737693388169308687}
+  scaredSprite: {fileID: 21300000, guid: 3ea9acbc1be4c5c4eb2de335f590fce5, type: 3}
+  scaredColor: {r: 1, g: 0.59542704, b: 0, a: 1}
+  scareDuration: 0.2
+  scareScaleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: -0.49999997
+      outSlope: -0.49999997
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 0.4
+      value: 0.8
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0.3333333
+      outSlope: 0.3333333
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  normalSprite: {fileID: 21300000, guid: 8200ea603b4dd10419ae01a0342a3f42, type: 3}
+  normalColor: {r: 1, g: 0.019607844, b: 0, a: 1}
+  unScareDuration: 0.35
+  unScareScaleCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 1
+      inSlope: 0.32905674
+      outSlope: 0.32905674
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 0.30389902
+      value: 1.1
+      inSlope: 0.09269969
+      outSlope: 0.09269969
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0.33333334
+      outWeight: 0.33333334
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.1598023
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4

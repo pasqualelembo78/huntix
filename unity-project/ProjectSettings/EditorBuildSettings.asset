@@ -14,5 +14,18 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Indoor.unity
     guid: 00ba635891f78b56be34134dedd671b5
+  - enabled: 1
+    path: Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity
+    guid: 3deeba0268d97a1488f86f720fd91961
+  - enabled: 1
+    path: Assets/ThirdParty/ARDice/Scenes/MainScene.unity
+    guid: 9fc0d4010bbf28b4594072e72b8655ab
+  - enabled: 1
+    path: Assets/ThirdParty/SupermarketPrototype/Scenes/MainGame.unity
+    guid: 43d2c38a55ddfc23f901967ce37a2bcd
+  - enabled: 1
+    path: Assets/Scenes/Room.unity
+    guid: f0d8aa424628cf7de9fd28b117f980d2
   m_configObjects:
+    com.unity.addressableassets: {fileID: 11400000, guid: ec6166c48296079449978afbd0c886c1, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 25c3be061cf5888d9aae82a3948ea9fb, type: 2}

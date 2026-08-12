@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.AI;
 using Huntix.Bridge;
+using Huntix.Core;
 using System.Collections.Generic;
 
 namespace Huntix.Indoor
@@ -28,6 +29,18 @@ namespace Huntix.Indoor
 
         [Header("Unlocked Furniture")]
         public List<FurnitureItem> unlockedItems = new List<FurnitureItem>();
+
+        // Registry Kenney (risoluzione asset senza Resources.Load).
+        public KenneyAssetRegistry kenneyRegistry;
+        private KenneyAssetRegistry KenneyReg
+        {
+            get
+            {
+                if (kenneyRegistry == null && GameManager.Instance != null)
+                    kenneyRegistry = GameManager.Instance.kenneyRegistry;
+                return kenneyRegistry;
+            }
+        }
 
         private bool _isPlacing;
         private FurnitureItem _currentItem;
@@ -106,7 +119,7 @@ namespace Huntix.Indoor
             _isPlacing = true;
 
             // Create preview object
-            var prefab = Resources.Load<GameObject>("KenneyMiniMarket/" + item.prefabName);
+            var prefab = KenneyReg != null ? KenneyReg.Get(item.prefabName) : null;
             if (prefab != null)
             {
                 _previewObject = Instantiate(prefab);

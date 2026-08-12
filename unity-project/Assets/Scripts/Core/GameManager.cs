@@ -11,6 +11,10 @@ namespace Huntix.Core
     {
         public static GameManager Instance { get; private set; }
 
+        // Registry asset Kenney (referenziata qui per essere inclusa nel build).
+        // Risolve gli asset via riferimento diretto invece di Resources.Load.
+        public KenneyAssetRegistry kenneyRegistry;
+
         public string CurrentMode { get; private set; }
         public bool IsInUnity { get; private set; }
 
@@ -48,6 +52,10 @@ namespace Huntix.Core
             {
                 "outdoor" or "esplora" or "reallife" => "Outdoor",
                 "indoor" => "Indoor",
+                "game" or "sheep" => "Preload",
+                "argame" or "ardice" => "MainScene",
+                "supermarket_proto" => "MainGame",
+                "room" => "Room",
                 _ => null
             };
             if (scene != null && SceneManager.GetActiveScene().name != scene)

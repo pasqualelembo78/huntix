@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11f987eb49c25b24c89d3c375c9d54ee, type: 3}
+  m_Name: Shelf
+  m_EditorClassIdentifier: 
+  m_ProductId: 6
+  m_Icon: {fileID: 21300000, guid: d23ca167431570245a76f8e6d4ed7a6e, type: 3}
+  m_ProductType: 1
+  m_UnitCost:
+    value: 57.35
+  m_MarketPrice:
+    value: 0
+  m_UnitPerPack: 1
+  m_Company: {fileID: 11400000, guid: 20f6839c12f89b243a1fa37cf1056d20, type: 2}
+  m_ProductOnSale: {fileID: 0}
+  m_Furniture: {fileID: 657880464709435056, guid: ebf00590517edf04a8003f858703ab2e, type: 3}
+  m_PlaceEffect: {fileID: 697154571028990947, guid: 641afd412cd77964d9f0be4a9800d594, type: 3}
+  m_Shape: 0
+  m_Size: {x: 2.1, y: 0, z: 0.7}
+  m_Radius: 0

@@ -542,7 +542,8 @@ namespace Huntix.Outdoor
             // Carica il prefab del personaggio da Resources
             if (_npcPrefab == null)
             {
-                _npcPrefab = Resources.Load<GameObject>("KenneyMiniMarket/character-employee");
+                var reg = GameManager.Instance != null ? GameManager.Instance.kenneyRegistry : null;
+                _npcPrefab = reg != null ? reg.Get("character-employee") : null;
                 if (_npcPrefab == null)
                 {
                     Debug.LogWarning("[ExploreManager] character-employee prefab non trovato, NPC non spawnati");

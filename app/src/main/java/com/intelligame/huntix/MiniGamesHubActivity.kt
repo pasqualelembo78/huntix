@@ -66,7 +66,9 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_TETRIS, "Tetris", "🧱", TetrisActivity::class.java, ARTetrisActivity::class.java),
         GameEntry(MiniGameManager.GAME_FLOOD, "Flood", "🌊", FloodActivity::class.java, ARFloodActivity::class.java),
         GameEntry(MiniGameManager.GAME_ASTEROIDS, "Asteroids", "🚀", AsteroidsActivity::class.java, ARAsteroidsActivity::class.java),
-        GameEntry(MiniGameManager.GAME_SUDOKU, "Sudoku", "🔢", SudokuActivity::class.java, ARSudokuActivity::class.java)
+        GameEntry(MiniGameManager.GAME_SUDOKU, "Sudoku", "🔢", SudokuActivity::class.java, ARSudokuActivity::class.java),
+        GameEntry(MiniGameManager.GAME_UNITY_SHEEP, "Pecorelle", "🐑", com.intelligame.huntix.ui.UnityGameActivity::class.java, null),
+        GameEntry(MiniGameManager.GAME_UNITY_AR_DICE, "AR Dadi", "🎲", null, com.intelligame.huntix.ui.UnityARGameActivity::class.java)
     )
 
     private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR

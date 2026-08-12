@@ -13,8 +13,14 @@ object Bridge {
 
     @JvmStatic
     fun openUnityActivity(context: Context, mode: String) {
+        openUnityActivity(context, mode, null)
+    }
+
+    @JvmStatic
+    fun openUnityActivity(context: Context, mode: String, poiData: String?) {
         val intent = Intent(context, BridgeActivity::class.java)
         intent.putExtra(BridgeActivity.EXTRA_MODE, mode)
+        if (!poiData.isNullOrEmpty()) intent.putExtra(BridgeActivity.EXTRA_POI_DATA, poiData)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }

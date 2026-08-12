@@ -8,14 +8,19 @@ import com.unity3d.player.UnityPlayerActivity;
 public class BridgeActivity extends UnityPlayerActivity {
 
     public static final String EXTRA_MODE = "unity_mode";
+    public static final String EXTRA_POI_DATA = "POI_DATA";
     public static final String MODE_OUTDOOR = "outdoor";
     public static final String MODE_REALLIFE = "reallife";
     public static final String MODE_INDOOR = "indoor";
+    public static final String MODE_SUPERMARKET_PROTO = "supermarket_proto";
+    public static final String MODE_ROOM = "room";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String mode = getIntent().getStringExtra(EXTRA_MODE);
+        String poi = getIntent().getStringExtra(EXTRA_POI_DATA);
+        android.util.Log.d("HuntixBridge", "BridgeActivity.onCreate mode=" + mode + " poiData=" + poi);
         if (mode != null) {
             com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", "{\"action\":\"setMode\",\"mode\":\"" + mode + "\"}");
         }

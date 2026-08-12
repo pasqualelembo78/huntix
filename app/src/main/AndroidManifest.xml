@@ -243,7 +243,23 @@
         <activity android:name=".ui.POIWebViewActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.POICustomPageActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.StoreIndoorActivity" android:screenOrientation="portrait" android:exported="false"/>
-        <activity android:name=".ui.IndoorActivity" android:exported="false"/>
+        <activity android:name=".ui.IndoorActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
+            android:theme="@style/Theme.ARProto"/>
+        <!-- Minigioco Unity normale (Laugh Little Lamb) -->
+        <activity android:name=".ui.UnityGameActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
+            android:theme="@style/Theme.ARProto"/>
+        <!-- Minigioco Unity in AR (AR-Dice) -->
+        <activity android:name=".ui.UnityARGameActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
+            android:theme="@style/Theme.ARProto"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         
         

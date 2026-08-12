@@ -64,14 +64,32 @@ object AppLog {
         val default = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                log(Level.E, "AppLog", "UNCAUGHT ${throwable.javaClass.name}: ${throwable.message}")
-                throwable.stackTrace.take(25).forEach {
-                    log(Level.E, "AppLog", "    at $it")
+                val sb = StringBuilder()
+                sb.append("UNCAUGHT on thread [${thread.name}]\n")
+                var t: Throwable? = throwable
+                var depth = 0
+                while (t != null && depth < 6) {
+                    if (depth > 0) sb.append("Caused by: ")
+                    sb.append(t.javaClass.name).append(": ").append(t.message).append('\n')
+                    t.stackTrace.take(60).forEach { sb.append("    at $it\n") }
+                    t = t.cause
+                    depth++
                 }
+                crashWrite(sb.toString())
             } catch (_: Exception) {}
             default?.uncaughtException(thread, throwable)
                 ?: Runtime.getRuntime().halt(1)
         }
+    }
+
+    /** Scrive il dump di crash in modo SINCRONO (il processo muore subito dopo). */
+    private fun crashWrite(text: String) {
+        val f = logFile ?: return
+        try {
+            val line = "${sdf.format(Date())} E AppLog: $text\n"
+            synchronized(lock) { f.appendText(line) }
+            Log.e("AppLog", text)
+        } catch (_: Exception) {}
     }
 
     /**

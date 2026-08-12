@@ -1,0 +1,24 @@
+{
+    "name": "Game.Controllers",
+    "rootNamespace": "",
+    "references": [
+        "GUID:9df57a9df7b765b4da2a47e28d0da382",
+        "GUID:ccde824741f367849a3ff0744b1ad400",
+        "GUID:9e24947de15b9834991c9d8411ea37cf",
+        "GUID:84651a3751eca9349aac36a66bba901b",
+        "GUID:240794c47bc67694bae52737d87dce0b",
+        "GUID:9c321ef1968791f45851e4ba3535aff4",
+        "GUID:75469ad4d38634e559750d17036d5f7c",
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:4307f53044263cf4b835bd812fc161a4"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

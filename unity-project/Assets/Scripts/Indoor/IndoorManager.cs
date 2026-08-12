@@ -17,6 +17,11 @@ namespace Huntix.Indoor
         [Header("Store Builder")]
         public StoreBuilder storeBuilder;
 
+        // Riferimenti espliciti ai prefab "Cute Supermarket Lite" (cibo/prodotti),
+        // popolati a build-time da CuteAssetsSetup. Evitano la dipendenza da
+        // Resources.Load (che nel build AAR non risolve gli asset di Resources).
+        public GameObject[] cuteDecorPrefabs;
+
         private List<BuildingDef> _currentBuildings;
         private NavMeshAgent _playerAgent;
         private Transform _playerTransform;
@@ -124,6 +129,7 @@ namespace Huntix.Indoor
         public void LoadStoreFromPOI(string poiJson)
         {
             Debug.Log($"[IndoorManager] LoadStoreFromPOI: {poiJson}");
+            try { using (var log = new AndroidJavaClass("android.util.Log")) log.CallStatic<int>("d", "HuntixUnity", "[Indoor] LoadStoreFromPOI poiType=" + (_currentPoiType ?? "") + " json=" + poiJson); } catch {}
 
             var data = JsonUtility.FromJson<PoiData>(poiJson);
             _currentPoiType = data.type ?? "";
@@ -136,7 +142,9 @@ namespace Huntix.Indoor
                 storeBuilder = builderObj.AddComponent<StoreBuilder>();
             }
 
-            storeBuilder.BuildStore(_currentPoiType);
+            storeBuilder.cuteDecorPrefabs = cuteDecorPrefabs;
+            storeBuilder.BuildStore(_currentPoiType,
+                System.StringComparer.OrdinalIgnoreCase.Equals(data.asset, "cute"));
 
             // Build NavMesh at runtime for NPC patrol (includes spawned walls as obstacles)
             BuildRuntimeNavMesh();
@@ -327,14 +335,15 @@ namespace Huntix.Indoor
             return nearby;
         }
 
-        [System.Serializable]
-        private class PoiData
-        {
-            public string id;
-            public string name;
-            public string type;
-            public string buildingType;
-        }
+         [System.Serializable]
+         private class PoiData
+         {
+             public string id;
+             public string name;
+             public string type;
+             public string buildingType;
+             public string asset;
+         }
 
         // ── Player movement ──
         [Header("Player Movement")]

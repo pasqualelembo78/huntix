@@ -19,6 +19,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 class POICustomPageActivity : AppCompatActivity() {
 
@@ -35,6 +36,7 @@ class POICustomPageActivity : AppCompatActivity() {
     private var needs = mutableMapOf<String, Float>()
     private var poiName = ""
     private var poiType = ""
+    private var poiBuildingType = ""
     private var jsonUrl = ""
     private var inlineJson = ""
     private var poiLat = 0.0
@@ -47,7 +49,7 @@ class POICustomPageActivity : AppCompatActivity() {
         if (jsonUrl.isBlank() && inlineJson.isBlank()) { finish(); return }
         val poiName = intent.getStringExtra(EXTRA_POI_NAME) ?: ""
         val poiType = intent.getStringExtra(EXTRA_POI_TYPE) ?: ""
-        val poiBuildingType = intent.getStringExtra(EXTRA_POI_BUILDING_TYPE) ?: ""
+        poiBuildingType = intent.getStringExtra(EXTRA_POI_BUILDING_TYPE) ?: ""
         this.jsonUrl = jsonUrl
         this.inlineJson = inlineJson
         this.poiName = poiName
@@ -200,12 +202,13 @@ class POICustomPageActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.create("sans-serif-black", android.graphics.Typeface.BOLD)
             setBackgroundColor(Color.parseColor(UiKit.GREEN))
             setOnClickListener {
-                val banner = config.optJSONObject("banner")
+                     val banner = config.optJSONObject("banner")
+                val inferred = inferBuildingType(poiBuildingType.ifBlank { poiType })
                 val poiJson = JSONObject().apply {
                     put("id", poiName)
                     put("name", poiName)
-                    put("type", poiType)
-                    put("buildingType", poiType)
+                    put("type", inferred)
+                    put("buildingType", inferred)
                     put("json_url", jsonUrl)
                 }.toString()
                 try {
@@ -430,6 +433,22 @@ class POICustomPageActivity : AppCompatActivity() {
             return conn.inputStream.bufferedReader().readText()
         } catch (_: Exception) {
             return null
+        }
+    }
+
+    /** Deriva il buildingType Unity (es. "SUPERMARKET"/"RESTAURANT") da poiType/buildingType OSM
+     *  così IndoorManager → StoreBuilder costruisce il layout corretto nella scena Indoor. */
+    private fun inferBuildingType(raw: String): String {
+        val t = raw.lowercase(Locale.getDefault())
+        return when {
+            t.isEmpty() -> "SUPERMARKET"                 // default: supermercato Kenney
+            t.contains("ristorante") || t.contains("restaurant") || t.contains("pizzeria") -> "RESTAURANT"
+            t.contains("palestra") || t.contains("gym") || t.contains("fitness") || t.contains("yoga") -> "GYM"
+            t.contains("hospital") || t.contains("ospedale") || t.contains("clinica") || t.contains("medico") -> "HOSPITAL"
+            t.contains("bar") || t.contains("caffè") || t.contains("caffe") || t.contains("coffee") ||
+                t.contains("café") || t.contains("pasticceria") || t.contains("gelateria") || t.contains("enoteca") -> "BAR"
+            t.contains("libreria") || t.contains("library") || t.contains("biblioteca") -> "LIBRARY"
+            else -> "SUPERMARKET"
         }
     }
 }

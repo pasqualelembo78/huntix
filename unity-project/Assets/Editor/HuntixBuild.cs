@@ -72,7 +72,11 @@ namespace Huntix.EditorTools
             string[] scenes = {
                 "Assets/Scenes/Menu.unity",
                 "Assets/Scenes/Outdoor.unity",
-                "Assets/Scenes/Indoor.unity"
+                "Assets/Scenes/Indoor.unity",
+                "Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity",
+                "Assets/ThirdParty/ARDice/Scenes/MainScene.unity",
+                "Assets/ThirdParty/SupermarketPrototype/Scenes/MainGame.unity",
+                "Assets/Scenes/Room.unity"
             };
             EditorBuildSettings.scenes = Array.ConvertAll(scenes, s => new EditorBuildSettingsScene(s, true));
 
@@ -102,6 +106,24 @@ namespace Huntix.EditorTools
 
             string[] scenes = Array.ConvertAll(EditorBuildSettings.scenes, s => s.path);
 
+            // ── Catalogo supermercato: collega prodotti/licenze alla scena ──
+            // (così il caricamento runtime non dipende da Resources.LoadAll).
+            SupermarketCatalogSetup.PopulateCatalog();
+
+            // ── Decorazioni Cute: collega i prefab Cute all'IndoorManager ──
+            // (caricamento runtime senza Resources.Load).
+            CuteAssetsSetup.Populate();
+
+            // ── Registry asset Kenney: collega i modelli FBX al GameManager ──
+            // (caricamento runtime senza Resources.Load).
+            KenneyAssetsSetup.Populate();
+
+            // ── Addressables (Laugh Little Lamb) ──────────────────────────────
+            // Builda il contenuto addressable (scene di menu/livello e i 6 prefab
+            // dei livelli) PRIMA del BuildPlayer, così i bundle finiscono dentro
+            // StreamingAssets del gradle project esportato (cartella Data/StreamingAssets).
+            BuildAddressablesContent();
+
             BuildPlayerOptions options = new BuildPlayerOptions
             {
                 scenes = scenes,
@@ -119,6 +141,32 @@ namespace Huntix.EditorTools
              EnsureUnityLibraryStrings(exportDir);
 
              Debug.Log("[HuntixBuild] Gradle project esportato in: " + exportDir);
+        }
+
+        // ── Addressables (Laugh Little Lamb) ──────────────────────────────
+        // Se il pacchetto Addressables è installato (e quindi il progetto importato
+        // ha contenuti addressable), ne costruisce il contenuto prima del BuildPlayer.
+        // Il check è a runtime sull'assembly (niente define custom necessaria).
+        private static void BuildAddressablesContent()
+        {
+            if (System.Reflection.Assembly.Load("Unity.Addressables.Editor") == null)
+            {
+                Debug.Log("[HuntixBuild] Addressables non installato, salto content build.");
+                return;
+            }
+            var settings = UnityEditor.AddressableAssets.AddressableAssetSettingsDefaultObject.Settings;
+            if (settings == null)
+            {
+                Debug.LogWarning("[HuntixBuild] AddressableAssetSettings non trovato, salto content build.");
+                return;
+            }
+            Debug.Log("[HuntixBuild] Avvio Addressables content build...");
+            UnityEditor.AddressableAssets.Settings.AddressableAssetSettings.BuildPlayerContent(out var result);
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                throw new InvalidOperationException("Addressables content build fallita: " + result.Error);
+            }
+            Debug.Log("[HuntixBuild] Addressables content build completata.");
         }
 
         // Unity 2022.3 non genera strings.xml in unityLibrary quando l'evento

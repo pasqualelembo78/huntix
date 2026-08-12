@@ -59,8 +59,10 @@ class IndoorActivity : UnityPlayerActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Imposta unity_mode PRIMA di super.onCreate() così GameManager.Start()
         // (che gira durante l'inizializzazione di Unity) lo legge e carica Indoor.
+        com.intelligame.huntix.AppLog.i("Indoor", "openUnity start mode=indoor")
         intent.putExtra("unity_mode", "indoor")
         super.onCreate(savedInstanceState)
+        com.intelligame.huntix.AppLog.i("Indoor", "openUnity end")
         instance = this
         poiJson = intent.getStringExtra(EXTRA_POI_DATA) ?: "{}"
         addOverlay()

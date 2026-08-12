@@ -93,6 +93,10 @@ object MiniGameManager {
     const val GAME_AR_BOMB      = "ar_color_bomb"
     const val GAME_AR_RADAR     = "ar_egg_radar"
     const val GAME_SLINGSHOT    = "ar_slingshot"
+
+    // ─── Nuovi minigiochi Unity (v8) ─────────────────────────────
+    const val GAME_UNITY_SHEEP   = "unity_sheep"
+    const val GAME_UNITY_AR_DICE = "unity_ar_dice"
     const val GAME_TETRIS      = "tetris"
     const val GAME_PACMAN      = "pacman"
     const val GAME_FLOOD       = "flood"
@@ -120,7 +124,8 @@ object MiniGameManager {
         GAME_FROGGER,
         GAME_BRISCOLA, GAME_SCOPA, GAME_SOLITAIRE,
         GAME_PONG, GAME_MOTO_X3M,
-        GAME_SUDOKU
+        GAME_SUDOKU,
+        GAME_UNITY_SHEEP, GAME_UNITY_AR_DICE
     )
 
     val AR_NATIVE_GAME_IDS = listOf(

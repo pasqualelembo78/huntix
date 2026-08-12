@@ -1,0 +1,165 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: Default Local Group
+  m_EditorClassIdentifier: 
+  m_GroupName: Default Local Group
+  m_Data:
+    m_SerializedData: []
+  m_GUID: 29afa70c6b7a7464ab5a8bba6d44f510
+  m_SerializeEntries:
+  - m_GUID: 51137e3347aa2e644ba0179e283d07eb
+    m_Address: Assets/Scenes/LevelScene.unity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9beda823be3a82f4f937d1bfdf261a0e
+    m_Address: Assets/Scenes/MainMenu.unity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 547424efd52129740beba6166cdfb169
+    m_Address: Assets/Prefabs/Levels/Level01.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 60398f0c4b8e3ad40b9cff662eaa48c8
+    m_Address: Assets/Prefabs/Levels/Level02.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: f5b887ad0387eae4a9b3a1f1f0b8289f
+    m_Address: Assets/Prefabs/Levels/Level03.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 961fcdea00657f8498c515edc4dafaed
+    m_Address: Assets/Prefabs/Levels/Level04.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9ad983babe9eee946aa7bb52c783f63d
+    m_Address: Assets/Prefabs/Levels/Level07.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 4d7c70a20ce16b44792e09fb1d7c95af
+    m_Address: Assets/Prefabs/Levels/Level05.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 207fa98b92e6fab46ac3179a5a7b00d1
+    m_Address: Assets/Prefabs/Levels/Level06.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 77f198fc9e4c9ca42ab179208cc87011
+    m_Address: Assets/TilemapPalette/tile_wall.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b56af6e6bfc0dc740b0dee1668608f83
+    m_Address: Assets/Sprites/tile_tree.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 85a1d4c9365f1dd468150f0988786c68
+    m_Address: Assets/Sprites/tile_doorOpen.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: bc8c0ea918056b94b80f1beb499e2b16
+    m_Address: Assets/Sprites/tile_playerRight.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5d0ee1382fe213c41980a7e3a97bcd4a
+    m_Address: Assets/TilemapPalette/tile_playerRight.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: d71c35272baf6cc419792e4edfeecbd1
+    m_Address: Assets/TilemapPalette/tile_enemy.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 8200ea603b4dd10419ae01a0342a3f42
+    m_Address: Assets/Sprites/tile_enemy.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 409fc373c571c904cacbb8f53a545652
+    m_Address: Assets/TilemapPalette/tile_doorOpen.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a97c105638bdf8b4a8650670310a4cd3
+    m_Address: Packages/com.unity.render-pipelines.universal/Runtime/Materials/Sprite-Lit-Default.mat
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e260cfa7296ee7642b167f1eb5be5023
+    m_Address: Packages/com.unity.render-pipelines.universal/Shaders/2D/Sprite-Lit-Default.shader
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c8b30f0f98732ad4fbdb660977083edc
+    m_Address: Assets/TilemapPalette/tile_floorGrass.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a06970b8ec01f354f99d2055dc6f952a
+    m_Address: Assets/Sprites/tile_floorGrass.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6e041898e4bf3864cbb10a058da9a8f7
+    m_Address: Assets/TilemapPalette/tile_playerLeft.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 77eeba86bf2b4f04782421c271a57965
+    m_Address: Assets/Sprites/tile_playerLeft.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5b96d9b9c5f93d04bbfd2c5ee2b2e3ce
+    m_Address: Assets/TilemapPalette/tile_playerDown.asset
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: ce301d257d68c8a44a85959dc68b532b
+    m_Address: Assets/Sprites/tile_playerFront.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 83cda2042afe21f4686f2a220dc51385
+    m_Address: Assets/Prefabs/Levels/Level08.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 27f0c7c2249bda44793ca645a22029e0
+    m_Address: Assets/Prefabs/Levels/Level09.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 82a0e40c6f0e00549b4e73126cd451b0
+    m_Address: Assets/Prefabs/Levels/Level10.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: 0c08e384817cb1f428f4645c3e9f7d31, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: d84b0d4ed97b46140aa269c1ed8c9cf6, type: 2}
+    - {fileID: 11400000, guid: 4045365ac01407f47ab10bbdff587290, type: 2}

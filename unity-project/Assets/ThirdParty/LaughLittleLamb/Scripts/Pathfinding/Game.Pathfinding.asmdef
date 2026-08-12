@@ -1,0 +1,17 @@
+{
+    "name": "Game.Pathfinding",
+    "rootNamespace": "",
+    "references": [
+        "GUID:9df57a9df7b765b4da2a47e28d0da382",
+        "GUID:240794c47bc67694bae52737d87dce0b"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

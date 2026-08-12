@@ -41,6 +41,8 @@ object PoiJsonFactory {
         })
         return JSONObject().apply {
             put("store", store)
+            put("type", poiType)
+            put("buildingType", buildingType)
             put("banner", JSONObject().apply {
                 put("icon", emoji)
                 put("title", name)

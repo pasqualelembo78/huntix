@@ -1,17 +1,20 @@
 using UnityEngine;
 using System.Collections.Generic;
+using Huntix.Core;
 
 namespace Huntix.Indoor
 {
-    /// <summary>
-    /// Costruisce dinamicamente l'interno del negozio usando gli asset Kenney Mini Market (CC0).
-    /// Layout diversi in base al tipo di POI: ristorante, palestra, ospedale, bar, supermercato.
-    /// Carica i prefabs da Resources/KenneyMiniMarket/ a runtime.
-    /// </summary>
-    public class StoreBuilder : MonoBehaviour
-    {
-        [Header("Layout")]
-        public float storeWidth = 10f;
+     /// <summary>
+     /// Costruisce dinamicamente l'interno del negozio usando gli asset Kenney Mini Market (CC0).
+     /// Layout diversi in base al tipo di POI: ristorante, palestra, ospedale, bar, supermercato.
+     /// Carica i prefabs da Resources/KenneyMiniMarket/ a runtime.
+     /// Se useCuteStore=true carica invece i prefab da Resources/CuteStore/ (asset non-Kenney)
+     /// e usa la colormap CuteStore; il layout e le posizioni restano gli stessi.
+     /// </summary>
+     public class StoreBuilder : MonoBehaviour
+     {
+         [Header("Layout")]
+         public float storeWidth = 10f;
         public float storeDepth = 8f;
         public float wallHeight = 3f;
 
@@ -36,36 +39,123 @@ namespace Huntix.Indoor
         private GameObject _characterPrefab;
         private bool _loaded = false;
 
-        private void LoadPrefabs()
+        // Prefab "Cute Supermarket Lite" passati da IndoorManager (riferimenti di
+        // scena, non Resources.Load) usati come decorazioni nel supermercato.
+        public GameObject[] cuteDecorPrefabs;
+
+        // Registry Kenney (risoluzione asset senza Resources.Load). Se non impostato
+        // direttamente, viene preso dal GameManager globale.
+        public KenneyAssetRegistry kenneyRegistry;
+        private KenneyAssetRegistry KenneyReg
         {
-            if (_loaded) return;
-            const string path = "KenneyMiniMarket/";
-            _floorPrefab = Resources.Load<GameObject>(path + "floor");
-            _wallPrefab = Resources.Load<GameObject>(path + "wall");
-            _wallDoorPrefab = Resources.Load<GameObject>(path + "wall-door-rotate");
-            _wallWindowPrefab = Resources.Load<GameObject>(path + "wall-window");
-            _wallCornerPrefab = Resources.Load<GameObject>(path + "wall-corner");
-            _cashRegisterPrefab = Resources.Load<GameObject>(path + "cash-register");
-            _shelfBagsPrefab = Resources.Load<GameObject>(path + "shelf-bags");
-            _shelfBoxesPrefab = Resources.Load<GameObject>(path + "shelf-boxes");
-            _shelfEndPrefab = Resources.Load<GameObject>(path + "shelf-end");
-            _freezerPrefab = Resources.Load<GameObject>(path + "freezer");
-            _freezersStandingPrefab = Resources.Load<GameObject>(path + "freezers-standing");
-            _displayBreadPrefab = Resources.Load<GameObject>(path + "display-bread");
-            _displayFruitPrefab = Resources.Load<GameObject>(path + "display-fruit");
-            _shoppingCartPrefab = Resources.Load<GameObject>(path + "shopping-cart");
-            _columnPrefab = Resources.Load<GameObject>(path + "column");
-            _characterPrefab = Resources.Load<GameObject>(path + "character-employee");
-            _loaded = true;
-            Debug.Log("[StoreBuilder] Prefabs loaded from Resources/KenneyMiniMarket/");
+            get
+            {
+                if (kenneyRegistry == null && GameManager.Instance != null)
+                    kenneyRegistry = GameManager.Instance.kenneyRegistry;
+                return kenneyRegistry;
+            }
         }
 
-        // ── Main entry point ──────────────────────────────────────────
+     [Header("Asset set")]
+     [SerializeField] private bool useCuteStore = true;
 
-        public void BuildStore(string poiType = "")
+        // Riparazione runtime per URP: i modelli Kenney (materiali FbxSurfaceLambert)
+        // vengono importati senza shader validi sotto URP → invisibili. A runtime si
+        // assegna URP/Lit e si ricollega la texture colormap per farli comparire.
+        private Shader _urplit;
+        private Texture2D _colormap;
+
+     private void LoadPrefabs()
+         {
+             if (_loaded) return;
+
+             // Se si usa il set CuteStore (non-Kenney), usa i prefab da Resources/CuteStore/ se
+             // presenti; altrimenti genera a runtime forme low-poly colorate (palette diversa da
+             // Kenney) in modo da garantire comunque un aspetto non-Kenney senza installare Editor.
+             _floorPrefab = LoadCuteOrRuntime("floor", new Color(0.92f, 0.78f, 0.52f), new Vector3(1, 0.1f, 1));
+             _wallPrefab = LoadCuteOrRuntime("wall", new Color(0.95f, 0.90f, 0.72f), new Vector3(1, 1, 0.1f));
+             _wallDoorPrefab = LoadCuteOrRuntime("wall-door-rotate", new Color(0.95f, 0.90f, 0.72f), new Vector3(1, 1, 0.1f));
+             _wallWindowPrefab = LoadCuteOrRuntime("wall-window", new Color(0.95f, 0.90f, 0.72f), new Vector3(1, 1, 0.1f));
+             _wallCornerPrefab = LoadCuteOrRuntime("wall-corner", new Color(0.70f, 0.70f, 0.80f), Vector3.one);
+             _cashRegisterPrefab = LoadCuteOrRuntime("cash-register", new Color(0.25f, 0.25f, 0.30f), new Vector3(0.6f, 0.8f, 0.4f));
+             _shelfBagsPrefab = LoadCuteOrRuntime("shelf-bags", new Color(0.86f, 0.52f, 0.52f), new Vector3(1, 1.2f, 0.4f));
+             _shelfBoxesPrefab = LoadCuteOrRuntime("shelf-boxes", new Color(0.50f, 0.60f, 0.95f), new Vector3(1, 1.2f, 0.4f));
+             _shelfEndPrefab = LoadCuteOrRuntime("shelf-end", new Color(0.96f, 0.82f, 0.34f), new Vector3(0.4f, 1.2f, 0.4f));
+             _freezerPrefab = LoadCuteOrRuntime("freezer", new Color(0.62f, 0.86f, 0.95f), new Vector3(0.8f, 1.4f, 0.6f));
+             _freezersStandingPrefab = LoadCuteOrRuntime("freezers-standing", new Color(0.62f, 0.86f, 0.95f), new Vector3(0.7f, 1.6f, 0.7f));
+             _displayBreadPrefab = LoadCuteOrRuntime("display-bread", new Color(0.95f, 0.40f, 0.40f), new Vector3(1, 0.7f, 0.7f));
+             _displayFruitPrefab = LoadCuteOrRuntime("display-fruit", new Color(0.96f, 0.70f, 0.34f), new Vector3(1, 0.7f, 0.7f));
+             _shoppingCartPrefab = LoadCuteOrRuntime("shopping-cart", new Color(0.80f, 0.80f, 0.95f), new Vector3(0.8f, 0.6f, 0.8f));
+             _columnPrefab = LoadCuteOrRuntime("column", new Color(0.70f, 0.70f, 0.80f), new Vector3(0.3f, 1.5f, 0.3f));
+             _characterPrefab = LoadCuteOrRuntime("character-employee", new Color(0.94f, 0.68f, 0.80f), new Vector3(0.4f, 1.6f, 0.4f));
+
+              _urplit = Shader.Find("Universal Render Pipeline/Lit");
+              _colormap = useCuteStore
+                  ? null
+                  : (KenneyReg != null ? KenneyReg.colormap : null);
+             _loaded = true;
+             Debug.Log($"[StoreBuilder] Prefabs loaded via {(useCuteStore ? "CuteStore (non-Kenney" : "KenneyMiniMarket")} ({(_floorPrefab != null ? "ok" : "NULL")}, urpLit={_urplit != null}, colormap={_colormap != null})");
+         }
+
+         private void FixMaterials(GameObject go)
         {
-            ClearStore();
-            LoadPrefabs();
+            if (go == null) return;
+
+            // Shader di fallback: URP/Lit se URP è attivo, altrimenti Standard (Built-in),
+            // altrimenti si lascia invariato (legacy compat). Senza fallback (URP non
+            // assegnato in Graphics Settings) i modelli Kenney Legacy resterebbero grigi.
+            Shader targetShader = _urplit;
+            bool isURP = targetShader != null &&
+                (targetShader.name.Contains("Universal") || targetShader.name.Contains("URP"));
+            if (targetShader == null)
+            {
+                targetShader = Shader.Find("Standard");
+                isURP = false;
+            }
+            string baseMapProp = isURP ? "_BaseMap" : "_MainTex";
+
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var m = mats[i];
+                    if (m == null) continue;
+                    if (targetShader != null &&
+                        (m.shader == null || string.IsNullOrEmpty(m.shader.name) ||
+                         m.shader.name.Contains("Standard") || m.shader.name.Contains("Diffuse") ||
+                         (!m.shader.name.Contains("URP") && !m.shader.name.Contains("Universal"))))
+                    {
+                        m.shader = targetShader;
+                    }
+                    // Colormap Kenney → texture principale (URP= _BaseMap, Standard= _MainTex)
+                    if (m.HasProperty(baseMapProp) && m.GetTexture(baseMapProp) == null && _colormap != null)
+                        m.SetTexture(baseMapProp, _colormap);
+                }
+            }
+        }
+
+         // ── Main entry point ──────────────────────────────────────────
+
+         /// <summary>Forza il set di asset (true = non-Kenney CuteStore).</summary>
+         public void SetAssetSet(bool useCute)
+         {
+             if (useCuteStore == useCute) return;
+             useCuteStore = useCute;
+             _loaded = false;
+         }
+
+         public void BuildStore(string poiType = "")
+         {
+             BuildStore(poiType, useCuteStore);
+         }
+
+         public void BuildStore(string poiType, bool useCuteAssets)
+         {
+             useCuteStore = useCuteAssets;
+             _loaded = false;
+             ClearStore();
+             LoadPrefabs();
 
             var root = new GameObject("StoreInterior");
 
@@ -158,6 +248,57 @@ namespace Huntix.Indoor
             // NPC: cashier
             SpawnNPC(root.transform, new Vector3(3.5f, 0, -1.5f), "cashier", "Cassiere",
                 "employee", "🧑‍💼", new[] { "Benvenuto al supermercato!", "Hai trovato tutto quello che cercavi?", "Questo pane è appena sfornato!" });
+
+            // Decorazioni: modelli "Cute Supermarket Lite" sugli scaffali/espositori.
+            SpawnCuteDecor(root);
+        }
+
+        /// <summary>
+        /// Piazza i modelli del pack "Cute Supermarket Lite" (cibo/prodotti carini)
+        /// sopra scaffali ed espositori del supermercato, così la skin Cute è
+        /// visibile oltre allo shell non-Kenney. I prefab stanno in
+        /// Resources/CuteStore/Prefabs/ (importati dal unitypackage).
+        /// </summary>
+        private void SpawnCuteDecor(GameObject root)
+        {
+            var foods = cuteDecorPrefabs;
+            if (foods == null || foods.Length == 0)
+            {
+                Debug.Log("[StoreBuilder] Nessun prefab Cute decorativo (cuteDecorPrefabs vuoto)");
+                return;
+            }
+
+            // Posizioni "sopra" scaffali ed espositori già spawnati.
+            var slots = new[]
+            {
+                new Vector3(-3f, 1.15f, 3f),
+                new Vector3(0f, 1.15f, 3f),
+                new Vector3(3f, 1.15f, 3f),
+                new Vector3(-2f, 1.35f, 0.5f),
+                new Vector3(2f, 1.35f, 0.5f),
+                new Vector3(-1.5f, 0.95f, -1f),
+                new Vector3(1.5f, 0.95f, -1f),
+                new Vector3(4f, 1.25f, 1f),
+                new Vector3(4f, 1.25f, -1f),
+                new Vector3(-3.5f, 0.95f, -2f),
+                new Vector3(3.5f, 0.95f, 1f),
+            };
+
+            int i = 0;
+            foreach (var food in foods)
+            {
+                if (food == null) continue;
+                var pos = slots[i % slots.Length];
+                var obj = Instantiate(food, root.transform);
+                obj.transform.localPosition = pos;
+                obj.transform.localRotation = Quaternion.identity;
+                obj.transform.localScale = Vector3.one * 0.5f;
+                FixMaterials(obj);
+                _spawned.Add(obj);
+                i++;
+            }
+
+            Debug.Log($"[StoreBuilder] Decorazioni Cute Supermarket Lite: {i} oggetti su {slots.Length} slot");
         }
 
         // ── RESTAURANT ────────────────────────────────────────────────
@@ -369,7 +510,66 @@ namespace Huntix.Indoor
             obj.transform.localPosition = pos;
             obj.transform.localRotation = Quaternion.Euler(rot);
             obj.transform.localScale = scale;
+            FixMaterials(obj);
             _spawned.Add(obj);
+        }
+
+        // ── Asset-set non-Kenney (CuteStore) ──────────────────────────────
+
+        /// <summary>
+        /// Se useCuteStore carica il prefab da Resources/CuteStore/{name} se disponibile,
+        /// altrimenti genera a runtime una primitiva low-poly colorata (palette non-Kenney).
+        /// Se !useCuteStore carica da Resources/KenneyMiniMarket/{name}.
+        /// </summary>
+        private GameObject LoadCuteOrRuntime(string name, Color color, Vector3 scale)
+        {
+            if (!useCuteStore)
+            {
+                var kenney = KenneyReg != null ? KenneyReg.Get(name) : null;
+                if (kenney != null) return kenney;
+                return RuntimePrimitive(name, color, scale);
+            }
+
+            var cached = Resources.Load<GameObject>("CuteStore/" + name);
+            if (cached != null) return cached;
+
+            return RuntimePrimitive(name, color, scale);
+        }
+
+        private GameObject RuntimePrimitive(string name, Color color, Vector3 scale)
+        {
+            PrimitiveType prim = PrimitiveType.Cube;
+            if (name == "column") prim = PrimitiveType.Cylinder;
+            else if (name == "character-employee") prim = PrimitiveType.Capsule;
+
+            var go = GameObject.CreatePrimitive(prim);
+            var col = go.GetComponent<Collider>();
+            if (col != null)
+            {
+#if UNITY_EDITOR
+                Object.DestroyImmediate(col);
+#else
+                Object.Destroy(col);
+#endif
+            }
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localScale = scale;
+            go.name = name;
+
+            var rend = go.GetComponent<MeshRenderer>();
+            var shader = Shader.Find("Universal Render Pipeline/Lit")
+                         ?? Shader.Find("Standard")
+                         ?? Shader.Find("Diffuse");
+            var mat = new Material(shader);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
+            if (_colormap != null && mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", _colormap);
+            if (_colormap != null && mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", _colormap);
+            rend.material = mat;
+
+            Debug.Log($"[StoreBuilder] CuteStore runtime primitive: {name}");
+            return go;
         }
 
         /// <summary>
@@ -384,6 +584,7 @@ namespace Huntix.Indoor
             obj.transform.localPosition = pos;
             obj.transform.localRotation = Quaternion.Euler(rot);
             obj.transform.localScale = scale;
+            FixMaterials(obj);
             _spawned.Add(obj);
 
             var ic = obj.AddComponent<InteractionComponent>();
@@ -414,6 +615,7 @@ namespace Huntix.Indoor
             obj.transform.localPosition = pos;
             obj.transform.localRotation = Quaternion.identity;
             obj.transform.localScale = Vector3.one;
+            FixMaterials(obj);
             obj.name = $"NPC_{id}";
             _spawned.Add(obj);
 
