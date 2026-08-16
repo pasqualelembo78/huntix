@@ -4,6 +4,7 @@
 package com.intelligame.huntix
 
 import android.app.Application
+import android.os.Build
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
@@ -20,6 +21,7 @@ class EggHuntApplication : Application() {
         // AppLog — must be first so all other init logs are captured
         AppLog.init(this)
         AppLog.installCrashHandler()
+        logPreviousExitReason()
 
         // Firebase
         try {
@@ -118,6 +120,40 @@ class EggHuntApplication : Application() {
             EggNutrimentManager.giveStarterKit(this)
         } catch (e: Exception) {
             Log.e("HuntixApp", "Starter kit failed: ${e.message}")
+        }
+    }
+
+    /** Diagnostico crash nativo: Android (API 30+) conserva il motivo di uscita
+     *  dell'istanza precedente del processo. Un crash nativo (es. SIGSEGV
+     *  nell'engine Unity) NON passa dall'handler Java di AppLog, quindi questa è
+     *  l'unica via per vederlo nel log esportato (AppExit: reason=CRASH_NATIVO). */
+    private fun logPreviousExitReason() {
+        if (Build.VERSION.SDK_INT < 30) return
+        try {
+            val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val info = am.getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull() ?: return
+            val reasonName = when (info.reason) {
+                android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVO"
+                android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
+                android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
+                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+                android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+                android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+                else -> "other(${info.reason})"
+            }
+            val signal = if (info.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
+                    || info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) info.status else null
+            AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal pid=${info.pid} t=${info.timestamp} desc=${info.description}")
+            try {
+                info.traceInputStream?.use { input ->
+                    val head = input.readBytes().decodeToString().take(1500)
+                    if (head.isNotBlank()) AppLog.i("AppExit", "trace: $head")
+                }
+            } catch (t: Throwable) {
+                Log.w("HuntixApp", "exit trace dump failed: ${t.message}")
+            }
+        } catch (e: Exception) {
+            Log.w("HuntixApp", "exit reason log failed: ${e.message}")
         }
     }
 }

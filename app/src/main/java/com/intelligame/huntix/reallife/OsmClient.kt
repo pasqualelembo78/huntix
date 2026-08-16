@@ -190,9 +190,16 @@ object OsmClient {
                         }
                         AppLog.w(TAG, "downloadWithMirrors: empty body from $mirror")
                     } else {
+                        val retryAfterMs = if (response.code == 429) {
+                            (response.header("Retry-After")?.toLongOrNull()?.coerceIn(1L, 60L) ?: 5L) * 1000L
+                        } else 0L
                         val errorSnippet = response.body?.string()?.take(200)
                         response.close()
                         AppLog.w(TAG, "downloadWithMirrors: HTTP ${response.code} from $mirror: $errorSnippet")
+                        if (retryAfterMs > 0L) {
+                            AppLog.d(TAG, "downloadWithMirrors: rate limit (429), attendo ${retryAfterMs}ms prima di riprovare")
+                            Thread.sleep(retryAfterMs)
+                        }
                     }
                 } catch (e: java.net.ConnectException) {
                     AppLog.w(TAG, "downloadWithMirrors: connect failed $mirror: ${e.message}")
@@ -533,7 +540,7 @@ out skel qt;
      * Carica il mini-chunk pre-inserito nell'APK da assets/osm_mini_chunk.json.
      * Restituisce OsmData con ~500m attorno al centro per avvio immediato.
      */
-    fun loadMiniChunk(): OsmData? {
+    fun loadMiniChunk(centerLat: Double = 0.0, centerLon: Double = 0.0): OsmData? {
         val ctx = appContext ?: return null
         try {
             AppLog.d(TAG, "loadMiniChunk: reading from assets/osm_mini_chunk.json")
@@ -541,6 +548,18 @@ out skel qt;
             AppLog.d(TAG, "loadMiniChunk: json size=${json.length} chars")
             val root = JsonParser.parseString(json).asJsonObject
             val bounds = root.getAsJsonObject("bounds") ?: return null
+
+            if (centerLat != 0.0 || centerLon != 0.0) {
+                val mcLat = (bounds.get("south").asDouble + bounds.get("north").asDouble) / 2.0
+                val mcLon = (bounds.get("west").asDouble + bounds.get("east").asDouble) / 2.0
+                val dLat = kotlin.math.abs(mcLat - centerLat)
+                val dLon = kotlin.math.abs(mcLon - centerLon)
+                if (dLat > 0.01 || dLon > 0.01) {
+                    AppLog.d(TAG, "loadMiniChunk: mini-chunk non copre la zona richiesta, ignorato")
+                    return null
+                }
+            }
+
             val south = bounds.get("south").asDouble
             val north = bounds.get("north").asDouble
             val west = bounds.get("west").asDouble

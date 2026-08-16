@@ -413,6 +413,14 @@ class HomeActivity : BaseNavActivity() {
             )
         })
         supermarketRow.addView(spacerH(dp(4)))
+        supermarketRow.addView(quickChip("\uD83C\uDFD9\uFE0F", "Miacitta", "#7E57C2") {
+            Bridge.openUnityActivity(
+                this@HomeActivity,
+                BridgeActivity.MODE_MIACITTA,
+                "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
+            )
+        })
+        supermarketRow.addView(spacerH(dp(4)))
         root.addView(supermarketRow)
 
         // ═══ 5b2. SUPERMERCATI LAB (progetti GitHub/itch.io testabili) ═══

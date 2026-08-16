@@ -28,6 +28,7 @@ namespace EmptyRoom.Editor
             player.AddComponent<PlayerController>();
             player.AddComponent<InteractionManager>();
             player.transform.position = new Vector3(0f, 1.6f, 4f);
+            player.AddComponent<ResourcesRuntimeTest>();
 
             var cam = new GameObject("Camera");
             cam.transform.SetParent(player.transform);

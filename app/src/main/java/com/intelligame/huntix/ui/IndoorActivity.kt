@@ -282,6 +282,7 @@ class IndoorActivity : UnityPlayerActivity() {
     }
 
     override fun onDestroy() {
+        com.intelligame.huntix.bridge.UnityExitKillGuard.disableSelfKill(mUnityPlayer)
         super.onDestroy()
         handler.removeCallbacks(joystickTick)
         if (instance === this) instance = null

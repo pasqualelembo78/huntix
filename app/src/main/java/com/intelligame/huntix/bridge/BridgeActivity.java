@@ -14,6 +14,7 @@ public class BridgeActivity extends UnityPlayerActivity {
     public static final String MODE_INDOOR = "indoor";
     public static final String MODE_SUPERMARKET_PROTO = "supermarket_proto";
     public static final String MODE_ROOM = "room";
+    public static final String MODE_MIACITTA = "miacitta";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,6 +32,36 @@ public class BridgeActivity extends UnityPlayerActivity {
         super.onResume();
     }
 
+    /**
+     * Chiude la Activity in modo sicuro: mette in pausa il renderer Unity e
+     * attende ~350ms lo svuotamento della coda buffer prima di distruggere la
+     * surface con finish(). Senza la pausa il teardown puo colpire la surface
+     * con transazioni in volo (BLASTBufferQueue dtor) e il processo viene
+     * ucciso (SIG 9) su emulatore ARM-translated.
+     */
+    public void pauseUnityThenFinish() {
+        android.util.Log.d("HuntixBridge", "pauseUnityThenFinish: pausa renderer Unity");
+        if (mUnityPlayer != null) {
+            try {
+                mUnityPlayer.pause();
+                android.util.Log.d("HuntixBridge", "pauseUnityThenFinish: pausa ok, finish tra 250ms");
+            } catch (Throwable t) {
+                android.util.Log.w("HuntixBridge", "pauseUnityThenFinish: pause fallita", t);
+            }
+        }
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                android.util.Log.d("HuntixBridge", "pauseUnityThenFinish: finish()");
+                try {
+                    BridgeActivity.this.finish();
+                } catch (Throwable t) {
+                    android.util.Log.w("HuntixBridge", "pauseUnityThenFinish: finish fallita", t);
+                }
+            }
+        }, 250);
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
@@ -38,6 +69,7 @@ public class BridgeActivity extends UnityPlayerActivity {
 
     @Override
     protected void onDestroy() {
+        UnityExitKillGuard.disableSelfKill(mUnityPlayer);
         super.onDestroy();
     }
 }

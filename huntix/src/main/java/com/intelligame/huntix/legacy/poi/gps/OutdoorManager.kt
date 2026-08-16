@@ -43,6 +43,13 @@ class OutdoorManager private constructor(context: Context) {
 
     @SuppressLint("MissingPermission")
     fun start(realGps: Boolean = true) {
+        // Seed con l'ultima posizione nota del sistema (LocationManager): così
+        // MiAcitma parte subito dalla posizione reale anche prima del primo fix
+        // di FusedLocationProvider, senza aspettare secondi con il default Roma.
+        if (_location.value == null) {
+            val last = currentBest()
+            if (last != null) _location.value = last
+        }
         if (realGps && !mockMode) {
             val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000L).build()
             val callback = object : com.google.android.gms.location.LocationCallback() {

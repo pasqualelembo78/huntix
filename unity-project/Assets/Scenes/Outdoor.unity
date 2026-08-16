@@ -437,6 +437,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   kenneyRegistry: {fileID: 11400000, guid: 5b8694d4775f41be4934e60b00d5cc96, type: 2}
+  cityKitRegistry: {fileID: 11400000, guid: bb60841e6c06155c9b2f5d6a306183b0, type: 2}
 --- !u!1 &140
 GameObject:
   m_ObjectHideFlags: 0

@@ -122,6 +122,87 @@ namespace Huntix.Bridge
             return "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}";
         }
 
+        // ── MiAcitma: città OSM reale (scena City) ──────────────────
+
+        // Scrive un log nel sistema AppLog dell'app (logcat + storico app),
+        // così il comportamento della sezione MiAcitma è visibile nel viewer
+        // dei log dell'app anche se lato Android nulla arriva.
+        public static void LogToAndroid(string tag, string message)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("logFromUnity", tag, message);
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] LogToAndroid: " + e.Message);
+            }
+            #endif
+        }
+
+        // Avvia il tracking GPS (legacy OutdoorManager) così la città OSM
+        // può seguire il giocatore reale via streaming.
+        public static void StartLocationTracking()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("startLocationTracking");
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] StartLocationTracking: " + e.Message);
+            }
+            #endif
+        }
+
+        // Esce dalla scena City (La Mia Città) e torna alla Home nativa:
+        // chiude l'Activity Unity (BridgeActivity) che sta sopra HomeActivity
+        // nel back stack (stesso meccanismo di exitIndoor per il negozio).
+        public static void ExitCityToHome()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("exitMiacitta");
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] ExitCityToHome: " + e.Message);
+            }
+            #endif
+        }
+
+        // Richiede l'envelope OSM completo (strade/edifici/alberi/parchi) per
+        // (lat,lng) entro [radiusMeters]. La risposta arriva da Android via
+        // UnitySendMessage("GameManager", "OnOsmCityReceived", json).
+        public static void RequestOsmCity(double lat, double lng, int radiusMeters)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("requestOsmCity", lat, lng, radiusMeters);
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] RequestOsmCity: " + e.Message);
+            }
+            #endif
+        }
+
         // Attiva/disattiva la simulazione di camminata (levetta "cammina senza muoversi").
         public static void SetMockWalk(bool enable)
         {

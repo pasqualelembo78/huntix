@@ -12,6 +12,10 @@ public class PopUps : MonoBehaviour
 
     public Transform parent;
 
+    public GameObject terminalPrefab;
+    public GameObject moneyChangerPrefab;
+    public GameObject sellPopupPrefab;
+
     ISubscriber subscriber = new Subscriber();
 
     private void Awake()
@@ -67,16 +71,21 @@ public class PopUps : MonoBehaviour
         if (sellPopup != null) sellPopup.Sell(OnConfirm);
     }
 
-    private async static UniTask<T> LoadAssetAsync<T>(string resourcePath, Transform parent = null) where T : UnityEngine.Object
+    private async UniTask<T> LoadAssetAsync<T>(string resourcePath, Transform parent = null) where T : UnityEngine.Object
     {
-        var request = Resources.LoadAsync<GameObject>(resourcePath);
-
-        await request;
-
-        var prefab = request.asset as GameObject;
+        var prefab = InstancePrefabFor(resourcePath);
         if (prefab == null)
         {
-            Debug.LogWarning("[PopUps] Prefab non trovato in Resources/" + resourcePath);
+            var request = Resources.LoadAsync<GameObject>(resourcePath);
+
+            await request;
+
+            prefab = request.asset as GameObject;
+        }
+
+        if (prefab == null)
+        {
+            Debug.LogWarning("[PopUps] Prefab non trovato (risorsa non disponibile nel build Android): " + resourcePath);
             return null;
         }
 
@@ -89,6 +98,14 @@ public class PopUps : MonoBehaviour
         }
 
         return go.GetComponent<T>();
+    }
+
+    private GameObject InstancePrefabFor(string resourcePath)
+    {
+        if (resourcePath == "Popups/Terminal") return terminalPrefab;
+        if (resourcePath == "Popups/MoneyChanger") return moneyChangerPrefab;
+        if (resourcePath == "Popups/Sell Popup") return sellPopupPrefab;
+        return null;
     }
 
 #if UNITY_EDITOR

@@ -11,6 +11,26 @@ namespace Huntix.Outdoor
     /// </summary>
     public class ExploreInputHandler : MonoBehaviour
     {
+        public static ExploreInputHandler Instance { get; private set; }
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+
+        public static ExploreInputHandler EnsureInstance()
+        {
+            if (Instance != null) return Instance;
+            var go = new GameObject("ExploreInputHandler");
+            return go.AddComponent<ExploreInputHandler>();
+        }
+
         private void Update()
         {
             if (!Input.GetMouseButtonDown(0)) return;

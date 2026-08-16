@@ -15,6 +15,9 @@ namespace Huntix.Core
         // Risolve gli asset via riferimento diretto invece di Resources.Load.
         public KenneyAssetRegistry kenneyRegistry;
 
+        // Registry asset Kenney City Kit (strade/edifici/arredo urbano, CC0).
+        public CityKitAssetRegistry cityKitRegistry;
+
         public string CurrentMode { get; private set; }
         public bool IsInUnity { get; private set; }
 
@@ -33,7 +36,6 @@ namespace Huntix.Core
         private void Start()
         {
             UnityBridge.Init();
-            BootstrapExplore();
 
             // Se l'Activity Unity è stata lanciata con una modalità (es. Esplora),
             // carica subito la scena giusta (Esplora → Outdoor con personaggio + POI).
@@ -41,6 +43,12 @@ namespace Huntix.Core
             if (!string.IsNullOrEmpty(mode))
             {
                 LoadSceneForMode(mode);
+            }
+            else
+            {
+                // Nessun modo specifico: scena di menu, mostra l'UI di esplorazione.
+                BootstrapExplore();
+                NeedsHUD.EnsureInstance();
             }
         }
 
@@ -56,15 +64,32 @@ namespace Huntix.Core
                 "argame" or "ardice" => "MainScene",
                 "supermarket_proto" => "MainGame",
                 "room" => "Room",
+                "miacitta" => "City",
                 _ => null
             };
             if (scene != null && SceneManager.GetActiveScene().name != scene)
             {
                 SceneManager.LoadScene(scene);
                 if (scene == "Outdoor")
+                {
                     NeedsHUD.EnsureInstance();
+                    BootstrapExplore();
+                }
                 else
+                {
                     NeedsHUD.DestroyInstance();
+                    // Rimuove l'UI e i manager Esplora (POI) non pertineni in altre scene
+                    if (ExploreManager.Instance != null) Destroy(ExploreManager.Instance.gameObject);
+                    if (ExploreUIController.Instance != null) Destroy(ExploreUIController.Instance.gameObject);
+                    if (ExplorePopup.Instance != null) Destroy(ExplorePopup.Instance.gameObject);
+                    if (ExploreInputHandler.Instance != null) Destroy(ExploreInputHandler.Instance.gameObject);
+                }
+            }
+
+            // MiAcitma: sostituisce il quartiere finto con la città OSM reale (streaming GPS).
+            if (scene == "City")
+            {
+                City.OSM.CityOSMWorld.EnsureInstance();
             }
         }
 
@@ -100,16 +125,37 @@ namespace Huntix.Core
             SceneManager.LoadScene(sceneName);
         }
 
-        public void OnEvent(string eventName, string jsonData)
+        // UnitySendMessage passa sempre un unico parametro stringa.
+        // Supporta due formati:
+        //   1) JSON: {"action":"setMode","mode":"..."} (inviato da BridgeActivity)
+        //   2) "eventName|data" (inviato da PoiUnityBridge.Messenger)
+        public void OnEvent(string message)
         {
-            Debug.Log($"[GameManager] Event received: {eventName} - {jsonData}");
+            if (string.IsNullOrEmpty(message)) return;
 
-            // BridgeActivity invia {"action":"setMode","mode":"..."} come eventName.
-            if (!string.IsNullOrEmpty(eventName) && eventName.Contains("\"setMode\"", StringComparison.Ordinal))
+            // Formato JSON (BridgeActivity)
+            if (message.Contains("\"action\"", StringComparison.Ordinal) ||
+                message.Contains("\"setMode\"", StringComparison.Ordinal))
             {
-                HandleSetMode(eventName);
+                HandleSetMode(message);
                 return;
             }
+
+            // Formato pipe (PoiUnityBridge)
+            string eventName, jsonData;
+            int pipeIndex = message.IndexOf('|');
+            if (pipeIndex >= 0)
+            {
+                eventName = message.Substring(0, pipeIndex);
+                jsonData = message.Substring(pipeIndex + 1);
+            }
+            else
+            {
+                eventName = message;
+                jsonData = "";
+            }
+
+            Debug.Log($"[GameManager] Event received: {eventName} - {jsonData}");
 
             switch (eventName)
             {
@@ -175,6 +221,38 @@ namespace Huntix.Core
         {
             Debug.Log($"[GameManager] RequestPois({lat},{lng},{radiusMeters}m)");
             UnityBridge.RequestPoisNearby(lat, lng, radiusMeters);
+        }
+
+        // ── MiAcitma: città OSM reale (scena City) ──────────────────
+
+        public void RequestOsmCity(double lat, double lng, int radiusMeters)
+        {
+            Debug.Log($"[GameManager] RequestOsmCity({lat},{lng},{radiusMeters}m)");
+            UnityBridge.LogToAndroid("GameManager", $"RequestOsmCity({lat},{lng},{radiusMeters}m)");
+            UnityBridge.RequestOsmCity(lat, lng, radiusMeters);
+        }
+
+        public void OnOsmCityReceived(string json)
+        {
+            Debug.Log($"[GameManager] OsmCityReceived ({json?.Length ?? 0} chars)");
+            UnityBridge.LogToAndroid("GameManager", $"OsmCityReceived ({json?.Length ?? 0} chars)");
+            if (City.OSM.CityOSMWorld.Instance != null)
+                City.OSM.CityOSMWorld.Instance.OnOsmCityReceived(json);
+        }
+
+        public void OnOsmCityFetchStarted(string data)
+        {
+            Debug.Log($"[GameManager] OsmCityFetchStarted ({data})");
+            if (City.OSM.CityOSMWorld.Instance != null)
+                City.OSM.CityOSMWorld.Instance.OnOsmCityFetchStarted(data);
+        }
+
+        public void OnOsmCityFailed(string message)
+        {
+            Debug.LogWarning($"[GameManager] OsmCity fetch failed: {message}");
+            UnityBridge.LogToAndroid("GameManager", $"OsmCity fetch failed: {message}");
+            if (City.OSM.CityOSMWorld.Instance != null)
+                City.OSM.CityOSMWorld.Instance.OnOsmCityFailed(message);
         }
     }
 }

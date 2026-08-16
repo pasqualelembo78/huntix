@@ -1,0 +1,1 @@
+Dummy asset per testare la generazione di resources.assets in build Android.

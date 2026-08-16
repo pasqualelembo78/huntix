@@ -76,7 +76,8 @@ namespace Huntix.EditorTools
                 "Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity",
                 "Assets/ThirdParty/ARDice/Scenes/MainScene.unity",
                 "Assets/ThirdParty/SupermarketPrototype/Scenes/MainGame.unity",
-                "Assets/Scenes/Room.unity"
+                "Assets/Scenes/Room.unity",
+                "Assets/City/Scenes/City.unity"
             };
             EditorBuildSettings.scenes = Array.ConvertAll(scenes, s => new EditorBuildSettingsScene(s, true));
 
@@ -117,6 +118,9 @@ namespace Huntix.EditorTools
             // ── Registry asset Kenney: collega i modelli FBX al GameManager ──
             // (caricamento runtime senza Resources.Load).
             KenneyAssetsSetup.Populate();
+
+            // ── Registry asset Kenney City Kit: strade/edifici/arredo urbano ──
+            CityKitAssetsSetup.Populate();
 
             // ── Addressables (Laugh Little Lamb) ──────────────────────────────
             // Builda il contenuto addressable (scene di menu/livello e i 6 prefab

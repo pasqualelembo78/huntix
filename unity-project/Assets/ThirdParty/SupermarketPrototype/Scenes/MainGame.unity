@@ -18889,6 +18889,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   parent: {fileID: 872028043}
+  terminalPrefab: {fileID: 100100000, guid: 55b133fecd69f574889bc635dfb88718, type: 3}
+  moneyChangerPrefab: {fileID: 100100000, guid: 8ed032d1d1c58c44fb331eae406a8fa2, type: 3}
+  sellPopupPrefab: {fileID: 100100000, guid: 87c2f44704ef06547930dd0474ef096f, type: 3}
 --- !u!1 &1687456163
 GameObject:
   m_ObjectHideFlags: 0

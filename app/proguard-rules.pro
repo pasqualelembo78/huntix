@@ -35,6 +35,14 @@
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 
+# ── Unity bridge — invocato da C# (IL2CPP) via AndroidJavaClass/riflessione.
+#    R8 non può vedere quei riferimenti (sono stringhe nel codice Unity), quindi
+#    senza queste regole li rimuoverebbe e il bridge andrebbe in
+#    ClassNotFoundException. ──────────────────────────────────────────────────────
+-keep class com.intelligame.huntix.bridge.Bridge { *; }
+-keep class com.intelligame.huntix.bridge.StoreUnityBridge { *; }
+-keep class com.intelligame.huntix.bridge.BridgeActivity { *; }
+
 # ── Real Life models (Gson serializzati con @SerializedName) ────────────────────
 -keep class com.intelligame.huntix.reallife.** { <fields>; <init>(...); }
 

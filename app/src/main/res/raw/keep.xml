@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Keep di risorse referenziate SOLO dinamicamente (getIdentifier), che R8
+  rimuoverebbe col resource shrinker (shrinkResources true in release).
+
+  game_view_content_description: richiesta da UnityPlayer.<init> via
+  getIdentifier + getString. Se manca nell'APK si crasha all'avvio di
+  qualunque Activity Unity con "Resources$NotFoundException: String
+  resource ID #0x0" (IndoorActivity, BridgeActivity/Miacitta, ...).
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/game_view_content_description" />

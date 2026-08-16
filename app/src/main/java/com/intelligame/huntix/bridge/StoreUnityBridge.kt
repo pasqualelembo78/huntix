@@ -7,6 +7,7 @@ import com.intelligame.huntix.ui.IndoorActivity
 import com.intelligame.huntix.ui.POICustomPageActivity
 import com.intelligame.huntix.managers.CustomPageRegistry
 import com.intelligame.huntix.managers.PoiSearchManager
+import com.intelligame.huntix.reallife.OsmCityJsonFactory
 import com.intelligame.huntix.reallife.OsmClient
 import com.intelligame.huntix.reallife.OsmPoiRepository
 import com.intelligame.huntix.reallife.PoiJsonFactory
@@ -31,6 +32,15 @@ object StoreUnityBridge {
     private const val MAX_POIS = 1200
 
     /**
+     * Shutdown dell'engine Unity in corso (uscita dalla scena). I thread di fetch
+     * (requestOsmCity/requestPoisNearby) verificano questo flag PRIMA di chiamare
+     * UnitySendMessage: durante il teardown dell'activity il runtime Unity è in
+     * smontaggio e un messaggio in volo può causare un crash nativo del processo.
+     */
+    @Volatile
+    private var shuttingDown = false
+
+    /**
      * Fasi progressive del caricamento Esplora: prima i negozi più vicini
      * (query Overpass veloce) e poi si espande la zona. Ogni fase arriva a
      * Unity come aggiornamento parziale (envelope con `done=false`); l'ultima
@@ -46,6 +56,14 @@ object StoreUnityBridge {
     private var poiCacheTime = 0L
     private var poiCacheEnvelope: String? = null
 
+    /** Scrive un log nel sistema AppLog dell'app, richiesto dal codice Unity
+     *  (MiAcitma): il viewer log dell'app così mostra anche il comportamento
+     *  della sezione MiAcitma che vive interamente in Unity. */
+    @JvmStatic
+    fun logFromUnity(tag: String, message: String) {
+        AppLog.d(tag, message)
+    }
+
     /** Chiamato da Unity quando la scena del negozio è pronta. */
     @JvmStatic
     fun onIndoorSceneReady(poiId: String) {
@@ -55,8 +73,36 @@ object StoreUnityBridge {
     /** Chiamato da Unity per uscire dal negozio. */
     @JvmStatic
     fun exitIndoor() {
-        IndoorActivity.instance?.runOnUiThread {
-            IndoorActivity.instance?.finish()
+        shuttingDown = true
+        finishUnityActivity(IndoorActivity.instance)
+    }
+
+    /** Chiamato da Unity (scena City, "La Mia Città") per tornare alla Home:
+     *  chiude l'Activity Unity (BridgeActivity, che sta sopra HomeActivity nel
+     *  back stack) come fa exitIndoor per il negozio. */
+    @JvmStatic
+    fun exitMiacitta() {
+        val activity = UnityPlayer.currentActivity ?: return
+        shuttingDown = true
+        AppLog.d(TAG, "exitMiacitta: ritorno alla Home (shutdown fetch)")
+        finishUnityActivity(activity)
+    }
+
+    /** Chiude una Activity Unity in modo sicuro: se la Activity e una
+     *  BridgeActivity mette in pausa il renderer e attende lo svuotamento della
+     *  coda buffer prima di distruggere la surface (evita BLASTBufferQueue dtor
+     *  / SIG 9). Per le altre Activity chiude direttamente, comunque fuori dal
+     *  callback JNI (sempre asincrono per non rientrare nel teardown engine). */
+    private fun finishUnityActivity(activity: android.app.Activity?) {
+        if (activity == null) return
+        AppLog.d(TAG, "finishUnityActivity: chiusura asincrona (activity=" + activity.javaClass.simpleName + ")")
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        handler.post {
+            if (activity is BridgeActivity) {
+                activity.pauseUnityThenFinish()
+            } else {
+                activity.finish()
+            }
         }
     }
 
@@ -151,6 +197,65 @@ object StoreUnityBridge {
     fun getCurrentLocation(): String =
         com.intelligame.huntix.bridge.Bridge.getCurrentLocation()
 
+    /**
+     * Avvia il tracking GPS (legacy OutdoorManager, FusedLocationProviderClient)
+     * così la città OSM di MiAcitma può seguire il giocatore reale.
+     * Nessun effetto se il permesso location è negato (si resta sul default Roma).
+     */
+    @JvmStatic
+    fun startLocationTracking() {
+        // Nuova sessione City: il flag di shutdown della scorsa uscita non deve
+        // bloccare gli invii a Unity di questa sessione.
+        shuttingDown = false
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        AppLog.d(TAG, "startLocationTracking: avvio tracking GPS MiAcitma")
+        try {
+            com.intelligame.huntix.legacy.poi.gps.OutdoorManager.get(ctx).start(true)
+            AppLog.d(TAG, "startLocationTracking: OutdoorManager.start ok")
+        } catch (e: Exception) {
+            // Permesso location negato / sensore non disponibile: si resta sul
+            // default Roma. Non propagare MAI verso Unity: ucciderebbe il
+            // bootstrap della città OSM (StartCoroutine non partirebbe).
+            AppLog.w(TAG, "startLocationTracking failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Richiede i dati OSM completi (strade + edifici + alberi + parchi) per
+     * l'area circolare di [radiusMeters] attorno a (lat,lng). Usata da MiAcitma
+     * (scena Unity "City") per costruire la città reale al posto del quartiere finto.
+     *
+     * Il risultato arriva in Unity via UnitySendMessage("GameManager","OnOsmCityReceived",json).
+     * In caso di errore arriva "OnOsmCityFailed" (Unity mantiene la città corrente).
+     * Riusa la cache disco coordinate-aware di [OsmClient] (24h), quindi la
+     * stessa zona è istantanea e lo streaming non stressa Overpass.
+     */
+    @JvmStatic
+    fun requestOsmCity(lat: Double, lng: Double, radiusMeters: Int) {
+        val activity = UnityPlayer.currentActivity ?: return
+        val ctx = activity.applicationContext
+        if (shuttingDown) return
+        AppLog.d(TAG, "requestOsmCity: richiesta (${lat},${lng}) r=${radiusMeters}m")
+        // ACK immediato: informa Unity che la richiesta è stata ricevuta e che il
+        // fetch (cache/Overpass) è in corso, così il watchdog Unity non la rispedisce
+        // mentre Overpass è lento (evita doppie fetch e HTTP 429).
+        sendToUnity("OnOsmCityFetchStarted", "$lat|$lng")
+        Thread {
+            if (shuttingDown) return@Thread
+            try {
+                OsmClient.init(ctx)
+                val data = OsmClient.fetchAreaCached(lat, lng, radiusMeters)
+                AppLog.d(TAG, "requestOsmCity: fetch ok roads=${data.roads.size}, buildings=${data.buildings.size}, trees=${data.trees.size}, parks=${data.parks.size}")
+                val json = OsmCityJsonFactory.build(data, lat, lng, radiusMeters)
+                AppLog.d(TAG, "requestOsmCity: json=${json.length} chars, invio a Unity")
+                sendToUnity("OnOsmCityReceived", json)
+            } catch (e: Exception) {
+                AppLog.w(TAG, "requestOsmCity failed: ${e.message}")
+                sendToUnity("OnOsmCityFailed", e.message ?: "error")
+            }
+        }.start()
+    }
+
     /** Bisogni locali (LocalNeeds) come JSON: {"hunger":..,"sleep":..,"hygiene":..,"fun":..,"thirst":..}.
      *  Usato dall'HUD bisogni di Esplora per mostrare le barre. */
     @JvmStatic
@@ -186,6 +291,7 @@ object StoreUnityBridge {
     fun requestPoisNearby(lat: Double, lng: Double, radiusMeters: Int) {
         val activity = UnityPlayer.currentActivity ?: return
         val ctx = activity.applicationContext
+        if (shuttingDown) return
 
         // Cache in-memory: stessa zona recente → risposta immediata (niente Overpass)
         val cached = poiCacheEnvelope
@@ -193,7 +299,7 @@ object StoreUnityBridge {
             System.currentTimeMillis() - poiCacheTime < POI_CACHE_MAX_AGE_MS &&
             distanceMeters(lat, lng, poiCacheCenterLat, poiCacheCenterLng) <= POI_CACHE_MAX_DIST_M) {
             AppLog.d(TAG, "requestPoisNearby: memory cache HIT (${poiCacheCenterLat},${poiCacheCenterLng})")
-            UnityPlayer.UnitySendMessage("GameManager", "OnPoisReceived", cached)
+            sendToUnity("OnPoisReceived", cached)
             return
         }
 
@@ -208,34 +314,39 @@ object StoreUnityBridge {
                 // Area completa già in cache disco → un solo fetch (quasi istantaneo)
                 if (OsmClient.hasPoisCache(lat, lng, fullRadius)) {
                     AppLog.d(TAG, "requestPoisNearby: disk cache HIT per raggio $fullRadius m")
+                    if (shuttingDown) return@Thread
                     val pois = OsmPoiRepository.loadNearby(lat, lng, fullRadius)
                         .sortedBy { distanceMeters(lat, lng, it.lat, it.lng) }
                         .take(MAX_POIS)
+                    if (shuttingDown) return@Thread
                     val wrapper = buildEnvelope(pois, lat, lng, fullRadius,
                         POI_STAGES_M.size, POI_STAGES_M.size, done = true)
                     poiCacheCenterLat = lat
                     poiCacheCenterLng = lng
                     poiCacheTime = System.currentTimeMillis()
                     poiCacheEnvelope = wrapper
-                    UnityPlayer.UnitySendMessage("GameManager", "OnPoisReceived", wrapper)
+                    sendToUnity("OnPoisReceived", wrapper)
                     return@Thread
                 }
 
                 // Caricamento progressivo: prima i vicini, poi si espande
                 for (i in POI_STAGES_M.indices) {
+                    if (shuttingDown) return@Thread
                     val radius = POI_STAGES_M[i]
                     val stage = i + 1
                     AppLog.d(TAG, "requestPoisNearby: stage $stage/${POI_STAGES_M.size} raggio=${radius}m")
                     sendProgress(stage, POI_STAGES_M.size, radius)
 
+                    if (shuttingDown) return@Thread
                     val pois = OsmPoiRepository.loadNearby(lat, lng, radius)
                         .sortedBy { distanceMeters(lat, lng, it.lat, it.lng) }
                         .take(MAX_POIS)
+                    if (shuttingDown) return@Thread
                     lastPois = pois
 
                     val done = stage == POI_STAGES_M.size
                     lastEnvelope = buildEnvelope(pois, lat, lng, radius, stage, POI_STAGES_M.size, done)
-                    UnityPlayer.UnitySendMessage("GameManager", "OnPoisReceived", lastEnvelope)
+                    sendToUnity("OnPoisReceived", lastEnvelope)
 
                     if (done) break
                     // Pausa breve tra le fasi per non stressare i mirror Overpass.
@@ -252,17 +363,25 @@ object StoreUnityBridge {
                     // Le fasi già consegnate bastano: chiudi segnalando done=true
                     val doneEnv = buildEnvelope(lastPois, lat, lng,
                         POI_STAGES_M.last(), POI_STAGES_M.size, POI_STAGES_M.size, done = true)
-                    UnityPlayer.UnitySendMessage("GameManager", "OnPoisReceived", doneEnv)
+                    sendToUnity("OnPoisReceived", doneEnv)
                 } else {
-                    val mini = miniChunkEnvelope()
+                    val mini = miniChunkEnvelope(lat, lng)
                     if (mini != null) {
-                        UnityPlayer.UnitySendMessage("GameManager", "OnPoisReceived", mini)
+                        sendToUnity("OnPoisReceived", mini)
                     } else {
-                        UnityPlayer.UnitySendMessage("GameManager", "OnPoisFailed", e.message ?: "error")
+                        sendToUnity("OnPoisFailed", e.message ?: "error")
                     }
                 }
             }
         }.start()
+    }
+
+    /** Invia un messaggio a Unity solo se il teardown non è in corso: durante lo
+     *  shutdown (uscita dalla scena) UnitySendMessage su un runtime in smontaggio
+     *  può essere un crash nativo, quindi i messaggi in volo vengono scartati. */
+    private fun sendToUnity(method: String, arg: String) {
+        if (shuttingDown) return
+        UnityPlayer.UnitySendMessage("GameManager", method, arg)
     }
 
     /** Invia l'aggiornamento di avanzamento a Unity (barra di caricamento Esplora). */
@@ -271,7 +390,7 @@ object StoreUnityBridge {
         jo.put("stage", stage)
         jo.put("stages", stages)
         jo.put("radiusMeters", radiusMeters)
-        UnityPlayer.UnitySendMessage("GameManager", "OnPoisProgress", jo.toString())
+        sendToUnity("OnPoisProgress", jo.toString())
     }
 
     /** Costruisce l'envelope JSON {"pois":[...],"count":N,"centerLat":..,"centerLng":..,"done":bool}. */
@@ -319,11 +438,11 @@ object StoreUnityBridge {
     }
 
     /** Fallback offline: mini-chunk pre-inserito nell'APK (se Overpass fallisce). */
-    private fun miniChunkEnvelope(): String? {
+    private fun miniChunkEnvelope(lat: Double, lng: Double): String? {
         val ctx = UnityPlayer.currentActivity?.applicationContext ?: return null
         try {
             OsmClient.init(ctx)
-            val data = OsmClient.loadMiniChunk() ?: return null
+            val data = OsmClient.loadMiniChunk(lat, lng) ?: return null
             val pois = OsmPoiRepository.classify(data)
             if (pois.isEmpty()) return null
             val cLat = (data.south + data.north) / 2

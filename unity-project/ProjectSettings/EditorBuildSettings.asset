@@ -26,6 +26,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Room.unity
     guid: f0d8aa424628cf7de9fd28b117f980d2
+  - enabled: 1
+    path: Assets/City/Scenes/City.unity
+    guid: 22f5446cab4ce623d9621c3ed0f7719a
   m_configObjects:
     com.unity.addressableassets: {fileID: 11400000, guid: ec6166c48296079449978afbd0c886c1, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 25c3be061cf5888d9aae82a3948ea9fb, type: 2}
