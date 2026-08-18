@@ -450,15 +450,8 @@ if [ "${SKIP_UNITY_AAR:-0}" = "1" ]; then
     BUILD_UNITY_AAR="0"
     echo ">> SKIP_UNITY_AAR=1 — passo oltre senza creare AAR."
 elif [ "${FORCE_UNITY_AAR:-0}" = "1" ] || [ "$AAR_UP_TO_DATE" != "1" ]; then
-    while [ -z "$BUILD_UNITY_AAR" ]; do
-        def="N"; [ "$AAR_PRESENT" = "0" ] && def="Y"
-        read -rp "Vuoi creare/ricreare l'AAR Unity prima dell'APK? [y/N] (default $def): " choice
-        case "$choice" in
-            y|Y|s|S|si|yes) BUILD_UNITY_AAR="1" ;;
-            n|N|no|"")       BUILD_UNITY_AAR="0" ;;
-            *) echo "Rispondi 'y' o 'n'." ;;
-        esac
-    done
+    BUILD_UNITY_AAR="1"
+    echo ">> Fonti Unity modificate: ricreo AAR automaticamente."
 else
     echo ">> AAR Unity già aggiornato (fonti invariate): nessuna ricreazione."
     BUILD_UNITY_AAR="0"

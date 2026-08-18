@@ -1,0 +1,33 @@
+TERMINI E CONDIZIONI DI HUNTIX
+
+Ultimo aggiornamento: Agosto 2026
+
+1. DEFINIZIONI
+Huntix e un'opera videoludica indipendente sviluppata da Intelligame. Il termine "Gioco" si riferisce all'applicazione mobile Huntix, inclusi tutti i contenuti virtuali, meccaniche di gioco e funzionalita.
+
+2. NATURA DEL GIOCO
+Huntix e un gioco di realta aumentata che utilizza dati geografici pubblicamente disponibili, provenienti da OpenStreetMap, per posizionare elementi di gameplay nella posizione reale dell'utente. Il Gioco non e una riproduzione ufficiale del mondo reale.
+
+3. ACCOUNT E REGISTRAZIONE
+L'utente puo giocare senza account. Se in futuro vengono introdotti account, i relativi termini saranno comunicati in anticipo.
+
+4. CONTENUTI VIRTUALI
+Tutti gli elementi di gameplay - inclusi ma non limitati a: livelli, missioni, ricompense, monete virtuali, oggetti, caratteristiche degli edifici, funzioni dei negozi, proprietari virtuali, NPC - sono elementi fittizi del gioco e non hanno valore nel mondo reale.
+
+5. MONETE E ACQUISTI IN-APP
+Le monete virtuali (EUR, uova, oggetti) sono utilizzabili esclusivamente all'interno del Gioco. Gli acquisti in-app, se presenti, sono gestiti dalla piattaforma (Google Play / Apple App Store) e sono soggetti ai rispettivi termini.
+
+6. REGOLE DEL GIOCO
+L'utente si impegna a non utilizzare strumenti di truffa, bot, exploit o qualsiasi mezzo che alteri l'esperienza di gioco o dia vantaggi non previsti.
+
+7. RESPONSABILITA
+Il Gioco viene fornito "cosi com'e". Intelligame non garantisce che i dati cartografici siano aggiornati, completi o accurati. L'utente e responsabile della propria sicurezza fisica durante l'utilizzo del Gioco all'aperto.
+
+8. CONTENUTI GENERATI DAGLI UTENTI
+Se in futuro vengono introdotte funzionalita di contenuto generato dagli utenti, specifiche aggiuntive saranno fornite.
+
+9. MODIFICHE
+Intelligame si riserva il diritto di modificare questi termini in qualsiasi momento. Le modifiche saranno comunicate tramite l'applicazione.
+
+10. LEGGE APPLICABILE
+Questi termini sono regolati dalla legge italiana.

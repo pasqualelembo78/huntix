@@ -88,6 +88,7 @@ object OsmCityJsonFactory {
             jo.put("shop", w.shop)
             jo.put("amenity", w.amenity)
             jo.put("height", (w.height * 10).roundToLong() / 10.0)
+            jo.put("levels", w.levels)
             jo.put("points", pointsOf(w.nodes))
             arr.put(jo)
         }

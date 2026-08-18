@@ -1,0 +1,49 @@
+INFORMATIVA SULLA PRIVACY - HUNTIX
+
+Ultimo aggiornamento: Agosto 2026
+
+1. TITOLARE DEL TRATTAMENTO
+Intelligame (sviluppatore di Huntix)
+
+2. POSIZIONE GPS
+Huntix utilizza la posizione GPS del dispositivo per posizionare il giocatore nella mappa del gioco. La posizione viene elaborata localmente sul dispositivo e non viene inviata a server esterni, salvo che esplicitamente indicato in futuro.
+
+La posizione GPS e utilizzata esclusivamente per:
+- Posizionare il giocatore nella citta virtuale
+- Attivare il gameplay basato sulla posizione
+- Il raggio di caricamento dei dati OSM attorno alla posizione
+
+La posizione non viene memorizzata in modo permanente e non viene condivisa con terzi.
+
+3. DATI RACCOLTI
+Huntix puo raccogliere:
+- Posizione GPS (in tempo reale, non archiviata)
+- Identificativo dispositivo (per pubblicita e analytics)
+- Dati di utilizzo dell'app (crash report, funzionalita utilizzate)
+
+4. PUBBLICITA
+Huntix utilizza Google AdMob per mostrare pubblicita. AdMob puo raccogliere dati sul dispositivo per personalizzare gli annunci. L'utente puo disattivare la personalizzazione nelle impostazioni del dispositivo.
+
+5. SERVER E TRASMISSIONE
+I dati vengono elaborati e memorizzati su server situati nell'Unione Europea o in paesi con livello adeguato di protezione dei dati.
+
+6. ANALYTICS
+Huntix puo utilizzare strumenti di analytics per migliorare l'esperienza di gioco. I dati raccolti sono anonimi e aggregati.
+
+7. DATI DEI MINORI
+Huntix non e intenzionalmente rivolto a minori di 13 anni. Se un minore fornisce dati personali, i genitori possono contattarci per la rimozione.
+
+8. DIRITTI DELL'UTENTE
+L'utente ha diritto di:
+- Accedere ai propri dati personali
+- Richiedere la cancellazione dei dati
+- Opporsi al trattamento
+- Ricevere i propri dati in formato strutturato
+
+Per esercitare questi diritti: privacy@intelligame.com
+
+9. COOKIE E TRACCIAMENTO
+Huntix puo utilizzare cookie e tecnologie simili per le funzionalita pubblicitarie.
+
+10. MODIFICHE
+Questa informativa puo essere aggiornata. Le modifiche saranno comunicate tramite l'applicazione.

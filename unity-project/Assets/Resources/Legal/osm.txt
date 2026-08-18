@@ -1,0 +1,49 @@
+INFORMATIVA SUI DATI CARTOGRAFICI
+
+Ultimo aggiornamento: Agosto 2026
+
+1. FONTE DEI DATI
+Huntix utilizza dati cartografici e geografici provenienti da OpenStreetMap (OSM), un progetto di mappatura del mondo open source e collaborativo.
+
+2. LICENZA
+I dati OpenStreetMap sono distribuiti sotto licenza Open Database License (ODbL).
+
+Testo completo della licenza: https://opendatacommons.org/licenses/odbl/1-0/
+
+3. ATTRIBUTION
+I dati cartografici di OpenStreetMap sono forniti dai contribuenti di OpenStreetMap.
+
+Attribuzione richiesta:
+Dati cartografici: © OpenStreetMap contributors.
+Disponibile sotto licenza Open Database License (ODbL).
+https://www.openstreetmap.org/copyright
+
+4. COSA PROVIENE DA OPENSTREETMAP
+Huntix utilizza i seguenti dati da OpenStreetMap:
+- Strade e vie di comunicazione
+- Edifici e loro posizione
+- Coordinate geografiche
+- Categorie di attivita (negozi, ristoranti, servizi)
+- Nomi di vie e luoghi pubblici
+- Punti di interesse (POI)
+- Parchi e aree verdi
+
+5. COSA E CREATO DA HUNTIX
+I seguenti elementi sono creati esclusivamente da Huntix e non provengono da OpenStreetMap:
+- Livelli e punti esperienza (XP)
+- Missioni e obiettivi di gioco
+- Monete virtuali e oggetti virtuali
+- Caratteristiche degli edifici nel gioco (livello, valore, proprietario virtuale)
+- Funzioni dei negozi (prezzi, articoli, offerte)
+- NPC (personaggi non giocanti) e le loro conversazioni
+- Elementi di gameplay e meccaniche di gioco
+
+6. LIMITAZIONE DI RESPONSABILITA
+I dati cartografici di OpenStreetMap sono forniti "cosi come sono" e possono contenere errori, omissioni o dati non aggiornati. Intelligame non garantisce l'accuratezza dei dati cartografici utilizzati in Huntix.
+
+7. CONTRIBUTORI
+Per l'elenco completo dei contributori di OpenStreetMap, visitare:
+https://www.openstreetmap.org/copyright
+
+8. UTILIZZO COMMERCIALE
+L'utilizzo dei dati OpenStreetMap in Huntix e conforme ai termini della licenza ODbL, che consente l'utilizzo commerciale con le appropriate attribuzioni.

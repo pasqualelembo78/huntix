@@ -6,7 +6,7 @@ namespace City.World
     public static class Wallet
     {
         public const string Key = "city_money";
-        public const int StartMoney = 100;
+        public const int StartMoney = 300;
 
         public static event Action<int> OnChanged;
 

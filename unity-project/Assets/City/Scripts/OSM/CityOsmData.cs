@@ -32,6 +32,7 @@ namespace City.OSM
         public string shop;
         public string amenity;
         public double height;
+        public int levels;
         public GeoPoint[] points;
     }
 

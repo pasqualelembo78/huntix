@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
+using TMPro;
 using City.World;
 using City.Player;
 using Huntix.Bridge;
@@ -538,7 +539,60 @@ namespace City.OSM
                     if (++steps % 60 == 0) yield return null;
                 }
                 if (steps % 180 == 0) yield return null;
+                // Etichetta nome via: una volta per strada
+                if (!string.IsNullOrEmpty(r.name) && r.points.Length >= 2)
+                {
+                    int mid = r.points.Length / 2;
+                    Vector3 lp = Local(r.points[mid]);
+                    int next = Mathf.Min(mid + 1, r.points.Length - 1);
+                    Vector3 pn = Local(r.points[next]);
+                    float la = Mathf.Atan2(pn.z - lp.z, pn.x - lp.x);
+                    bool isMajor = r.highway == "primary" || r.highway == "secondary"
+                        || r.highway == "tertiary" || r.highway == "residential"
+                        || r.highway == "unclassified";
+                    if (isMajor) SpawnStreetLabel(parent, r.name, lp, la);
+                }
             }
+        }
+
+        private static readonly Color PoleColor = new Color(0.35f, 0.35f, 0.38f);
+        private static readonly Color SignBg = new Color(0.15f, 0.40f, 0.70f);
+
+        private void SpawnStreetLabel(Transform parent, string name, Vector3 pos, float angle)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            var root = new GameObject("Via_" + name);
+            root.transform.SetParent(parent, false);
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+
+            // Palo (1.8m alto, 0.08m largo)
+            CreateBox(root.transform, "Palo", new Vector3(0f, 0.9f, 0f),
+                new Vector3(0.08f, 1.8f, 0.08f), GetMaterial(PoleColor), 0f, false);
+
+            // Targa (0.9m x 0.28m, blu, a 1.7m da terra, sul lato della strada)
+            CreateBox(root.transform, "Targa", new Vector3(0f, 1.72f, 0.35f),
+                new Vector3(0.9f, 0.28f, 0.06f), GetMaterial(SignBg), 0f, false);
+
+            // Testo sulla targa (TextMeshPro 3D, davanti alla targa)
+            var textGo = new GameObject("NomeVia");
+            textGo.transform.SetParent(root.transform, false);
+            textGo.transform.localPosition = new Vector3(0f, 1.72f, 0.39f);
+            textGo.transform.localRotation = Quaternion.identity;
+
+            var tmp = textGo.AddComponent<TextMeshPro>();
+            tmp.text = name.ToUpperInvariant();
+            tmp.fontSize = 1.4f;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = Color.white;
+            tmp.enableAutoSizing = false;
+            tmp.overflowMode = TextOverflowModes.Overflow;
+            tmp.raycastTarget = false;
+            tmp.characterSpacing = 1;
+            tmp.fontSizeMin = 0.8f;
+            tmp.fontSizeMax = 1.6f;
+
+            // Limita a una strada su 3 per non ingombrare (solo strade principali)
         }
 
         // ── edifici ──────────────────────────────────────────────────
@@ -606,8 +660,7 @@ namespace City.OSM
 
                 float w = Mathf.Clamp(fp.Width, 3f, 40f);
                 float d = Mathf.Clamp(fp.Depth, 3f, 40f);
-                float h = Mathf.Clamp((float)b.height, 3f, 40f);
-                if (h <= 0.5f) h = 8f;
+                float h = InferHeight(b, w * d);
 
                 // Case e negozi del gioco (Kenney City Kit) posizionati dove OSM
                 // registra gli edifici reali, scalati sull'impronta e con l'altezza
@@ -626,7 +679,24 @@ namespace City.OSM
                 bgo.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
                 bgo.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
 
-                CreateBox(bgo.transform, "Corpo", new Vector3(0f, h * 0.49f, 0f), new Vector3(w * 0.98f, h * 0.98f, d * 0.98f), GetMaterial(style.Body), 0f, true);
+                CreateBox(bgo.transform, "Corpo", new Vector3(0f, h * 0.49f, 0f), new Vector3(w * 0.98f, h * 0.98f, d * 0.98f), GetMaterial(style.Body), 0f, false);
+
+                float nwT = 0.3f;
+                var ncL = bgo.AddComponent<BoxCollider>();
+                ncL.size = new Vector3(nwT, h, d);
+                ncL.center = new Vector3(-w * 0.5f, h * 0.5f, 0f);
+
+                var ncR = bgo.AddComponent<BoxCollider>();
+                ncR.size = new Vector3(nwT, h, d);
+                ncR.center = new Vector3(w * 0.5f, h * 0.5f, 0f);
+
+                var ncB = bgo.AddComponent<BoxCollider>();
+                ncB.size = new Vector3(w, h, nwT);
+                ncB.center = new Vector3(0f, h * 0.5f, -d * 0.5f);
+
+                var ncT = bgo.AddComponent<BoxCollider>();
+                ncT.size = new Vector3(w, nwT, d);
+                ncT.center = new Vector3(0f, h, 0f);
 
                 if (pitched)
                 {
@@ -659,6 +729,40 @@ namespace City.OSM
             }
         }
 
+        private void AddBuildingEntrance(GameObject inst, OsmBuilding b, float w, float d, float h)
+        {
+            var entrance = new GameObject("Entrance");
+            entrance.transform.SetParent(inst.transform, false);
+
+            // Il trigger deve stare FUORI dal collider solido dell edificio,
+            // abbastanza grande da attivarsi quando il player cammina vicino.
+            // Divide per localScale: il collider del trigger (figlio) verrebbe
+            // altrimenti dilatato dalla scala del parent, rendendo il trigger
+            // enorme e posizionato lontanissimo dall'edificio in world space.
+            Vector3 ls = inst.transform.localScale;
+            var tc = entrance.AddComponent<BoxCollider>();
+            tc.isTrigger = true;
+            tc.size = new Vector3(Mathf.Min(w, 8f) / ls.x, 3f / ls.y, 4f / ls.z);
+            tc.center = new Vector3(0f, 1.5f / ls.y, (d * 0.5f + 3.5f) / ls.z);
+
+            var be = entrance.AddComponent<City.Interior.BuildingEntrance>();
+            be.buildingName = DisplayName(b);
+            be.buildingType = InferBuildingType(b);
+            be.buildingWidth = w;
+            be.buildingDepth = d;
+            be.buildingHeight = h;
+            be.floorCount = Mathf.Max(1, Mathf.RoundToInt(h / 3f));
+        }
+
+        private static string InferBuildingType(OsmBuilding b)
+        {
+            if (IsCommercial(b)) return "shop";
+            string kind = (b.kind ?? "").ToLowerInvariant();
+            if (kind.Contains("apartment") || (kind.Contains("residential") && (b.levels > 4 || b.height > 12)))
+                return "apartment";
+            return "house";
+        }
+
         private void AddShop(Transform building, string name, float depth, OsmBuilding data)
         {
             var shop = building.gameObject.AddComponent<Shop>();
@@ -667,7 +771,7 @@ namespace City.OSM
 
             var trigger = new GameObject("Parla");
             trigger.transform.SetParent(building, false);
-            trigger.transform.localPosition = new Vector3(0f, 1.4f, depth * 0.5f + 1.2f);
+            trigger.transform.localPosition = new Vector3(0f, 1.4f, depth * 0.5f + 3.0f);
             var col = trigger.AddComponent<BoxCollider>();
             col.isTrigger = true;
             col.size = new Vector3(4f, 3f, 3f);
@@ -700,6 +804,42 @@ namespace City.OSM
             "building-skyscraper-a", "building-skyscraper-b", "building-skyscraper-c",
             "building-skyscraper-d", "building-skyscraper-e"
         };
+
+        // ── altezze realistiche ──────────────────────────────
+
+        private static float InferHeight(OsmBuilding b, float footprintArea)
+        {
+            // 1) altezza esplicita OSM
+            if (b.height > 0.5) return Mathf.Clamp((float)b.height, 3f, 40f);
+
+            // 2) stima dai piani (levels * 3m)
+            if (b.levels > 0) return Mathf.Clamp(b.levels * 3f, 3f, 40f);
+
+            // 3) stima dal tipo di edificio
+            string kind = (b.kind ?? "").ToLowerInvariant();
+            string amenity = (b.amenity ?? "").ToLowerInvariant();
+            bool commercial = IsCommercial(b);
+
+            if (kind.Contains("apartment") || kind.Contains("residential") && footprintArea > 100f)
+                return 15f + Mathf.Clamp(footprintArea * 0.03f, 0f, 10f);
+
+            if (kind.Contains("detached") || kind.Contains("house") || kind.Contains("bungalow"))
+                return 6f;
+
+            if (kind.Contains("garage") || kind.Contains("shed") || kind.Contains("carport"))
+                return 3f;
+
+            if (commercial)
+                return 5f + Mathf.Clamp(footprintArea * 0.02f, 0f, 5f);
+
+            if (kind.Contains("industrial") || kind.Contains("warehouse"))
+                return 8f + Mathf.Clamp(footprintArea * 0.02f, 0f, 6f);
+
+            // 4) default: dimensione del footprint
+            if (footprintArea > 400f) return 12f;
+            if (footprintArea > 150f) return 8f;
+            return 6f;
+        }
 
         private static bool IsCommercial(OsmBuilding b)
         {
@@ -743,25 +883,68 @@ namespace City.OSM
             inst.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
             inst.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
 
+            // Disabilita subito tutti i collider originali del prefab Kenney
+            // (pareti, tetto, pavimento delle mesh). Usiamo enabled = false
+            // invece di Destroy perche' Destroy e' deferred a fine frame:
+            // il player e' gia' attivo durante il build e potrebbe camminare
+            // vicino a un edificio i cui collider "vecchi" (inclusa la
+            // facciata anteriore) non sono ancora stati rimossi dal solver.
+            foreach (var origCol in inst.GetComponentsInChildren<Collider>(true))
+            {
+                origCol.enabled = false;
+                Destroy(origCol);
+            }
+
             // Scala il prefab sull'impronta reale (width x depth) e sull'altezza OSM.
             Bounds baseB = UnionBounds(inst);
             float sx = w / Mathf.Max(baseB.size.x, 0.1f);
             float sz = d / Mathf.Max(baseB.size.z, 0.1f);
             float s = Mathf.Max(sx, sz);
-            float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.1f), s * 0.6f, s * 1.5f);
+            float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
             inst.transform.localScale = new Vector3(sx, sy, sz);
 
             // Appoggia la base a terra e centra l'impronta sul footprint.
             Bounds wb = UnionBounds(inst);
             inst.transform.position += new Vector3(fp.CenterX - wb.center.x, -wb.min.y, fp.CenterZ - wb.center.z);
 
-            // Collider solido sulla sagoma: il player non deve attraversare l'edificio.
+            // 4 collider su FIGLI di inst (layer 0 = Default), non su inst
+            // (layer 8): il CharacterController IncludeLayers=0 collidde solo
+            // con layer 0, quindi i collider su inst sarebbero ignorati.
+            // La facciata anteriore (Z+) resta libera: il trigger dell'entrata
+            // si attiva quando il player si avvicina alla porta.
             Vector3 ls = inst.transform.localScale;
-            var col = inst.AddComponent<BoxCollider>();
-            col.size = new Vector3(w / ls.x, h / ls.y, d / ls.z);
-            col.center = new Vector3(0f, (h / ls.y) * 0.5f, 0f);
+            float wallT = 0.3f;
+
+            // Muro laterale sinistro
+            var wallL = new GameObject("MuroL");
+            wallL.transform.SetParent(inst.transform, false);
+            var colL = wallL.AddComponent<BoxCollider>();
+            colL.size = new Vector3(wallT / ls.x, h / ls.y, d / ls.z);
+            colL.center = new Vector3(-w * 0.5f / ls.x, h * 0.5f / ls.y, 0f);
+
+            // Muro laterale destro
+            var wallR = new GameObject("MuroR");
+            wallR.transform.SetParent(inst.transform, false);
+            var colR = wallR.AddComponent<BoxCollider>();
+            colR.size = new Vector3(wallT / ls.x, h / ls.y, d / ls.z);
+            colR.center = new Vector3(w * 0.5f / ls.x, h * 0.5f / ls.y, 0f);
+
+            // Muro posteriore
+            var wallB = new GameObject("MuroB");
+            wallB.transform.SetParent(inst.transform, false);
+            var colB = wallB.AddComponent<BoxCollider>();
+            colB.size = new Vector3(w / ls.x, h / ls.y, wallT / ls.z);
+            colB.center = new Vector3(0f, h * 0.5f / ls.y, -d * 0.5f / ls.z);
+
+            // Soffitto
+            var wallT_ = new GameObject("Soffitto");
+            wallT_.transform.SetParent(inst.transform, false);
+            var colT = wallT_.AddComponent<BoxCollider>();
+            colT.size = new Vector3(w / ls.x, wallT / ls.y, d / ls.z);
+            colT.center = new Vector3(0f, h / ls.y, 0f);
 
             if (IsCommercial(b)) AddShop(inst.transform, DisplayName(b), d, b);
+            AddBuildingEntrance(inst, b, w, d, h);
             return true;
         }
 
@@ -858,8 +1041,8 @@ namespace City.OSM
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
             go.transform.SetParent(parent, false);
-            go.transform.position = center;
-            if (yawRad != 0f) go.transform.rotation = Quaternion.Euler(0f, -yawRad * Mathf.Rad2Deg, 0f);
+            go.transform.localPosition = center;
+            if (yawRad != 0f) go.transform.localRotation = Quaternion.Euler(0f, -yawRad * Mathf.Rad2Deg, 0f);
             go.transform.localScale = scale;
             go.GetComponent<Renderer>().sharedMaterial = mat;
             if (!collider)

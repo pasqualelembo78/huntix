@@ -1,0 +1,334 @@
+using System.Collections.Generic;
+using UnityEngine;
+using City.OSM;
+
+namespace City.Vehicle
+{
+    public class VehicleSpawnManager : MonoBehaviour
+    {
+        public static VehicleSpawnManager Instance;
+
+        private const int MAX_VEHICLES_PER_ROAD = 3;
+        private const float MIN_ROAD_LENGTH = 15f;
+        private const float SIDE_OFFSET = 2.5f;
+        private const float SPACING = 10f;
+        private const float KENNEY_SCALE = 1f;
+
+        private readonly List<GameObject> spawned = new List<GameObject>();
+        private int nextVehicleId = 1;
+
+        // Prefab Kenney caricati da Resources/Vehicles/
+        private GameObject prefabSedan;
+        private GameObject prefabSUV;
+        private GameObject prefabVan;
+        private GameObject prefabTaxi;
+        private GameObject prefabTruck;
+        private GameObject prefabDelivery;
+        private GameObject prefabRace;
+        private GameObject prefabHatchback;
+        private GameObject prefabPolice;
+        private GameObject prefabAmbulance;
+        private GameObject prefabFiretruck;
+        private GameObject prefabGarbage;
+
+        // Catalogo veicoli: nome, prezzo, vel max, accel, turn, prefab key
+        private static readonly VehicleDef[] Catalogue = new VehicleDef[]
+        {
+            new VehicleDef("Fiat 500",      50,  12f, 8f,  110f, "sedan",      1.8f, 3.8f),
+            new VehicleDef("SUV",           80,  14f, 6f,  90f,  "suv",        2.1f, 4.6f),
+            new VehicleDef("Van",           70,  12f, 5f,  80f,  "van",        2.2f, 5.5f),
+            new VehicleDef("Taxi",          60,  13f, 7f,  100f, "taxi",       1.8f, 4.0f),
+            new VehicleDef("Truck",         100, 10f, 4f,  70f,  "truck",      2.5f, 6.5f),
+            new VehicleDef("Furgone",       65,  11f, 5f,  75f,  "delivery",   2.0f, 5.0f),
+            new VehicleDef("Sports",        120, 20f, 10f, 130f, "race",       1.9f, 4.2f),
+            new VehicleDef("Hatchback",     55,  13f, 8f,  105f, "hatchback",  1.7f, 3.8f),
+            new VehicleDef("Polizia",       90,  16f, 9f,  120f, "police",     1.9f, 4.2f),
+            new VehicleDef("Ambulanza",     95,  14f, 6f,  85f,  "ambulance",  2.2f, 5.5f),
+            new VehicleDef("Vigili",        110, 12f, 5f,  75f,  "firetruck",  2.5f, 7.0f),
+            new VehicleDef("Spazzaneve",    85,  8f,  4f,  60f,  "garbage",    2.5f, 6.0f),
+            new VehicleDef("Moto",          25,  18f, 12f, 150f, null,         0.8f, 2.0f),
+            new VehicleDef("Scooter",       20,  10f, 10f, 130f, null,         0.7f, 1.7f),
+            new VehicleDef("Bici Elettrica",15,  8f,  10f, 140f, null,         0.5f, 1.6f),
+        };
+
+        private struct VehicleDef
+        {
+            public string name;
+            public int price;
+            public float maxSpeed, accel, turn;
+            public string prefabKey;
+            public float w, l;
+            public VehicleDef(string n, int p, float s, float a, float t, string pk, float w, float l)
+            {
+                name = n; price = p; maxSpeed = s; accel = a; turn = t; prefabKey = pk; this.w = w; this.l = l;
+            }
+        }
+
+        private void Awake()
+        {
+            Instance = this;
+            LoadPrefabs();
+        }
+
+        private void LoadPrefabs()
+        {
+            prefabSedan     = Resources.Load<GameObject>("Vehicles/sedan");
+            prefabSUV       = Resources.Load<GameObject>("Vehicles/suv");
+            prefabVan       = Resources.Load<GameObject>("Vehicles/van");
+            prefabTaxi      = Resources.Load<GameObject>("Vehicles/taxi");
+            prefabTruck     = Resources.Load<GameObject>("Vehicles/truck");
+            prefabDelivery  = Resources.Load<GameObject>("Vehicles/delivery");
+            prefabRace      = Resources.Load<GameObject>("Vehicles/race");
+            prefabHatchback = Resources.Load<GameObject>("Vehicles/hatchback-sports");
+            prefabPolice    = Resources.Load<GameObject>("Vehicles/police");
+            prefabAmbulance = Resources.Load<GameObject>("Vehicles/ambulance");
+            prefabFiretruck = Resources.Load<GameObject>("Vehicles/firetruck");
+            prefabGarbage   = Resources.Load<GameObject>("Vehicles/garbage-truck");
+
+            int loaded = 0;
+            if (prefabSedan != null) loaded++;
+            if (prefabSUV != null) loaded++;
+            if (prefabVan != null) loaded++;
+            if (prefabTaxi != null) loaded++;
+            if (prefabTruck != null) loaded++;
+            if (prefabDelivery != null) loaded++;
+            if (prefabRace != null) loaded++;
+            if (prefabHatchback != null) loaded++;
+            if (prefabPolice != null) loaded++;
+            if (prefabAmbulance != null) loaded++;
+            if (prefabFiretruck != null) loaded++;
+            Debug.Log("[VehicleSpawnManager] Prefab Kenney caricati: " + loaded + "/11");
+        }
+
+        private GameObject GetPrefab(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            switch (key)
+            {
+                case "sedan":      return prefabSedan;
+                case "suv":        return prefabSUV;
+                case "van":        return prefabVan;
+                case "taxi":       return prefabTaxi;
+                case "truck":      return prefabTruck;
+                case "delivery":   return prefabDelivery;
+                case "race":       return prefabRace;
+                case "hatchback":  return prefabHatchback;
+                case "police":     return prefabPolice;
+                case "ambulance":  return prefabAmbulance;
+                case "firetruck":  return prefabFiretruck;
+                case "garbage":    return prefabGarbage;
+                default:           return null;
+            }
+        }
+
+        public void SpawnParkedVehicles(Transform root, OsmCityEnvelope env)
+        {
+            if (env.roads == null) return;
+            var rng = new System.Random(42);
+
+            foreach (var road in env.roads)
+            {
+                if (road.points == null || road.points.Length < 2) continue;
+                string hw = road.highway ?? "";
+                if (hw == "footway" || hw == "path" || hw == "cycleway" || hw == "steps") continue;
+
+                float roadLen = CalcRoadLength(road);
+                if (roadLen < MIN_ROAD_LENGTH) continue;
+
+                for (int s = 0; s < road.points.Length - 1 && spawned.Count < 150; s++)
+                {
+                    Vector3 a = Local(road.points[s]);
+                    Vector3 b = Local(road.points[s + 1]);
+                    float segLen = (b - a).magnitude;
+                    if (segLen < 2f) continue;
+
+                    Vector3 dir = (b - a).normalized;
+                    Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
+
+                    int segCount = Mathf.Max(1, Mathf.FloorToInt(segLen / SPACING));
+                    for (int k = 0; k < segCount && spawned.Count < 150; k++)
+                    {
+                        if (rng.NextDouble() > 0.4) continue;
+
+                        float t = (k + 0.5f) / segCount;
+                        Vector3 pos = a + (b - a) * t;
+                        float side = (rng.Next(2) == 0) ? 1f : -1f;
+                        pos += right * SIDE_OFFSET * side;
+
+                        float angle = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
+                        if (side < 0) angle += 180f;
+
+                        int idx = rng.Next(Catalogue.Length);
+                        var def = Catalogue[idx];
+                        SpawnOne(root, def, pos, angle, road.name, rng);
+                    }
+                }
+            }
+
+            Debug.Log("[VehicleSpawnManager] Veicoli parcheggiati: " + spawned.Count);
+        }
+
+        private void SpawnOne(Transform root, VehicleDef def, Vector3 pos, float angle, string streetName, System.Random rng)
+        {
+            GameObject go;
+            GameObject prefab = GetPrefab(def.prefabKey);
+            int vehicleId = nextVehicleId++;
+
+            if (prefab != null)
+            {
+                // Kenney prefab importato da FBX
+                go = Instantiate(prefab, root);
+                go.name = "V" + vehicleId + "_" + def.name;
+                go.transform.position = pos;
+                go.transform.rotation = Quaternion.Euler(0f, angle, 0f);
+                go.transform.localScale = Vector3.one * KENNEY_SCALE;
+
+                // Disabilita tutti i collider figli (il prefab puo' averne)
+                foreach (var col in go.GetComponentsInChildren<Collider>())
+                    col.enabled = false;
+
+                // Mesh collider figli: disabilita
+                foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
+                {
+                    // Niente mesh collider, solo box nostro
+                }
+            }
+            else
+            {
+                // Fallback procedurale per moto/scooter/bici
+                go = BuildProcedural(def, rng);
+                go.transform.SetParent(root, false);
+                go.transform.position = pos;
+                go.transform.rotation = Quaternion.Euler(0f, angle, 0f);
+            }
+
+            // Collider solido per il veicolo
+            float w = def.w;
+            float l = def.l;
+            var boxCol = go.AddComponent<BoxCollider>();
+            boxCol.size = new Vector3(w, 1.2f, l);
+            boxCol.center = new Vector3(0f, 0.6f, 0f);
+
+            // Controller
+            var vc = go.AddComponent<VehicleController>();
+            vc.data = CreateVehicleData(def);
+
+            // Trigger interazione (avvolge il veicolo)
+            var triggerGo = new GameObject("Trigger");
+            triggerGo.transform.SetParent(go.transform, false);
+            triggerGo.transform.localPosition = new Vector3(0f, 0.8f, 0f);
+            var triggerCol = triggerGo.AddComponent<BoxCollider>();
+            triggerCol.isTrigger = true;
+            triggerCol.size = new Vector3(w + 2f, 2.5f, l + 2f);
+            var vi = triggerGo.AddComponent<VehicleInteract>();
+            vi.controller = vc;
+            vi.data = vc.data;
+            vi.vehicleCode = "V" + vehicleId;
+
+            spawned.Add(go);
+        }
+
+        // ── Fallback procedurale per veicoli senza prefab Kenney ──
+
+        private GameObject BuildProcedural(VehicleDef def, System.Random rng)
+        {
+            var go = new GameObject("Parked_" + def.name);
+
+            Color[] colors = new Color[]
+            {
+                new Color(0.8f, 0.15f, 0.15f), new Color(0.15f, 0.15f, 0.15f),
+                new Color(0.9f, 0.9f, 0.9f), new Color(0.2f, 0.2f, 0.7f),
+                new Color(0.1f, 0.6f, 0.2f), new Color(0.9f, 0.6f, 0.1f),
+            };
+            Color c = colors[rng.Next(colors.Length)];
+
+            // Corpo
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            body.transform.SetParent(go.transform, false);
+            body.transform.localPosition = new Vector3(0f, def.w * 0.4f + 0.15f, 0f);
+            body.transform.localScale = new Vector3(def.w, def.w * 0.6f, def.l);
+            body.GetComponent<Renderer>().sharedMaterial = MakeMat(c);
+
+            // Ruote
+            Color wc = new Color(0.12f, 0.12f, 0.12f);
+            float wr = 0.15f;
+            PlaceWheel(go.transform, new Vector3(-def.w * 0.5f - 0.05f, wr + 0.02f, def.l * 0.25f), wr, wc);
+            PlaceWheel(go.transform, new Vector3(def.w * 0.5f + 0.05f, wr + 0.02f, def.l * 0.25f), wr, wc);
+            PlaceWheel(go.transform, new Vector3(-def.w * 0.5f - 0.05f, wr + 0.02f, -def.l * 0.25f), wr, wc);
+            PlaceWheel(go.transform, new Vector3(def.w * 0.5f + 0.05f, wr + 0.02f, -def.l * 0.25f), wr, wc);
+
+            return go;
+        }
+
+        private static void PlaceWheel(Transform parent, Vector3 pos, float r, Color c)
+        {
+            var w = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            w.name = "Wheel";
+            w.transform.SetParent(parent, false);
+            w.transform.localPosition = pos;
+            w.transform.localScale = new Vector3(r * 2f, 0.06f, r * 2f);
+            w.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            w.GetComponent<Renderer>().sharedMaterial = MakeMat(c);
+            var cld = w.GetComponent<Collider>();
+            if (cld != null) cld.enabled = false;
+        }
+
+        // ── Helpers ────────────────────────────────────────────────
+
+        private static VehicleData CreateVehicleData(VehicleDef def)
+        {
+            var vd = ScriptableObject.CreateInstance<VehicleData>();
+            vd.vehicleName = def.name;
+            vd.price = def.price;
+            vd.maxSpeed = def.maxSpeed;
+            vd.acceleration = def.accel;
+            vd.turnSpeed = def.turn;
+            vd.brakeForce = def.accel * 2f;
+            vd.drag = 0.8f;
+            vd.bodyWidth = def.w;
+            vd.bodyLength = def.l;
+            vd.category = def.l < 2.5f ? VehicleCategory.Motorcycle : VehicleCategory.Car;
+            return vd;
+        }
+
+        private static readonly Dictionary<Color, Material> matCache = new Dictionary<Color, Material>();
+        private static Material MakeMat(Color c)
+        {
+            if (matCache.TryGetValue(c, out var m)) return m;
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            m = new Material(shader);
+            if (shader.name.StartsWith("Universal Render Pipeline/Lit"))
+                m.SetColor("_BaseColor", c);
+            else
+                m.SetColor("_Color", c);
+            matCache[c] = m;
+            return m;
+        }
+
+        private static Vector3 Local(GeoPoint p)
+        {
+            return new Vector3(CoordinateConverter.LonToX(p.lng), 0f, CoordinateConverter.LatToZ(p.lat));
+        }
+
+        private static float CalcRoadLength(OsmRoad road)
+        {
+            float len = 0f;
+            for (int i = 0; i < road.points.Length - 1; i++)
+            {
+                Vector3 a = Local(road.points[i]);
+                Vector3 b = Local(road.points[i + 1]);
+                len += (b - a).magnitude;
+            }
+            return len;
+        }
+
+        public void DespawnAll()
+        {
+            foreach (var go in spawned)
+                if (go != null) Destroy(go);
+            spawned.Clear();
+        }
+    }
+}

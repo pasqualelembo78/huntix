@@ -1,0 +1,44 @@
+DISCLAIMER - LUOGHI REALI E ATTIVITA COMMERCIALI
+
+Ultimo aggiornamento: Agosto 2026
+
+1. SEPARAZIONE DATI REALI E CONTENUTI HUNTIX
+Huntix utilizza dati geografici reali da OpenStreetMap per posizionare elementi di gameplay nella posizione reale. E importante distinguere tra:
+
+DATI GEOGRAFICI REALI (da OpenStreetMap):
+- Strade, edifici, coordinate, categorie e altri dati geografici
+- Nomi di vie e luoghi pubblici
+
+INFORMAZIONI RELATIVE A LUOGHI REALI:
+- Nome di un'attivita commerciale o punto di interesse
+- Categoria dell'attivita (ristorante, negozio, servizio)
+
+CONTENUTI CREATI DA HUNTIX:
+- Livelli, missioni, ricompense, monete, prezzi virtuali
+- NPC, proprietari virtuali, caratteristiche degli edifici
+- Funzioni dei negozi e qualsiasi altro elemento di gameplay
+
+2. NOMI E MARCHI COMMERCIALI
+I nomi, marchi e denominazioni commerciali eventualmente visualizzati nel gioco appartengono ai rispettivi titolari. La loro eventuale rappresentazione e utilizzata esclusivamente per identificare il luogo o l'attivita reale e non implica alcun rapporto di sponsorizzazione, endorsement, affiliazione o autorizzazione, salvo ove espressamente indicato.
+
+3. ASSENZA DI AFFILIAZIONE
+Huntix e un'opera videoludica indipendente. La presenza di attivita commerciali, edifici, luoghi o altri punti di interesse all'interno del gioco non implica alcuna affiliazione, sponsorizzazione, approvazione o collaborazione con i soggetti rappresentati.
+
+4. DATI NON GARANTITI AGGIORNATI
+I dati cartografici provenienti da OpenStreetMap possono non essere aggiornati o completi. Le informazioni su attivita commerciali, servizi e punti di interesse possono essere vecchie, incomplete o inaccurate. Huntix non fornisce alcuna garanzia sull'accuratezza dei dati visualizzati.
+
+5. ABITAZIONI PRIVATE
+Huntix non associa automaticamente le abitazioni private a persone fisiche reali. Le abitazioni vengono rappresentate come semplici edifici virtuali identificati tramite un ID interno o altra rappresentazione non personale. Non vengono visualizzati nomi o informazioni personali dei residenti.
+
+6. LUGHI REALI - CARATTERISTICHE VIRTUALI
+Le caratteristiche, i livelli, i prezzi, le ricompense, le missioni, le attivita economiche e gli altri elementi associati ai luoghi reali sono elementi fittizi e appartengono esclusivamente alla simulazione videoludica Huntix.
+
+7. SICUREZZA FISICA
+Huntix e un gioco di realta aumentata che richiede l'uso del dispositivo mobile all'aperto. L'utente e responsabile della propria sicurezza fisica durante l'utilizzo del Gioco. Intelligame non e responsabile per incidenti, lesioni o danni derivanti dall'utilizzo del Gioco.
+
+8. ATTIVITA COMMERCIALI RAPPRESENTATE
+La rappresentazione di un'attivita commerciale nel gioco non implica che tale attivita:
+- Sia affiliata a Huntix
+- Abbia autorizzato l'uso del proprio nome o marchio
+- Sponsori o approvi Huntix
+- Fornisca servizi o prodotti virtuali reali

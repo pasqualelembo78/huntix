@@ -1,0 +1,54 @@
+COPYRIGHT E PROPRIETA INTELLETTUALE
+
+Ultimo aggiornamento: Agosto 2026
+
+1. HUNTIX
+Huntix e un'opera protetta da copyright. Tutti i diritti riservati.
+
+Copyright © 2026 Intelligame
+
+2. CONTENUTI ORIGINALE
+Sono protetti da copyright e non possono essere utilizzati senza autorizzazione:
+- Codice sorgente del gioco
+- Logo e brand Huntix
+- Personaggi originali del gioco
+- Trama e dialoghi originali
+- Meccaniche di gioco originali
+- Design dell'interfaccia utente
+- Musica e effetti sonori originali
+
+3. ASSET GRAFICI 3D
+I modelli 3D utilizzati nel gioco provengono da:
+- Kenney (kenney.nl) - Licenza CC0 (Creative Commons Zero)
+  https://creativecommons.org/publicdomain/zero/1.0/
+  Utilizzati liberamente senza attribuzione obbligatoria, ma ringraziamento previsto.
+
+4. FONT
+I font utilizzati nel gioco sono:
+- Liberation Sans (sostituto metrico di Arial)
+- Font TMP (TextMeshPro) - inclusi in Unity
+
+5. LIBRERIE E FRAMEWORK
+- Unity 2022.3 LTS
+- TextMeshPro
+- Google AdMob (per pubblicita)
+- SupermarketPrototype (ThirdParty)
+- ARDice (ThirdParty)
+
+6. DATI CARTOGRAFICI
+I dati cartografici sono forniti da OpenStreetMap sotto licenza ODbL.
+Vedi: Informativa sui dati cartografici (OSM)
+
+7. UTILIZZO PERMESSO
+L'utente puo:
+- Utilizzare Huntix per uso personale e non commerciale
+- Condividere screenshot e video del gioco per uso non commerciale
+
+L'utente NON puo:
+- Copiare, modificare o distribuire il codice sorgente
+- Creare opere derivate basate su Huntix
+- Utilizzare contenuti di Huntix per scopi commerciali
+- Rimuovere o modificare le note di copyright
+
+8. CONTATTO
+Per richieste di licenza o autorizzazioni: copyright@intelligame.com
