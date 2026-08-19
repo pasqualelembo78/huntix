@@ -13,17 +13,33 @@ keystore.properties
 app/google-services.json
 google-services.json
 
-# Mapbox Download Token (è in keystore.properties, ma doppia protezione)
-# Non esporre mai sk.* tokens
-
-# ── Build outputs ─────────────────────────────────────────────
+# ── Build outputs (tutto rigenerabile) ────────────────────────
 /build
 /app/build
 /huntix/build
+/unityLibrary/build
 *.apk
 *.aab
 *.dex
 *.class
+
+# ── Unity Library cache (3.8GB, rigenerato ad ogni apertura) ──
+unity-project/Library/
+unity-project/Temp/
+unity-project/Logs/
+unity-project/obj/
+unity-project/UserSettings/
+
+# ── Unity export gradle (4.5GB, rigenerato da build_release.sh) ─
+unity-export.gradle/
+unity-export/
+
+# ── Unity backup files ───────────────────────────────────────
+*.bak
+*.bak2
+unity-project/Assets/**/*.bak
+unity-project/Assets/**/*.bak2
+!unity-project/Assets/**
 
 # ── Android Studio / IDE ──────────────────────────────────────
 /.idea
@@ -54,19 +70,14 @@ backend/.hf_token
 backend/.gen_status.json
 backend/static/
 
-# ── Licenza Unity: dipendenze di automazione e log (mai su Git) ──
+# ── Licenza Unity: dipendenze di automazione e log ─────────────
 unitylic/tools/node_modules/
 unitylic/unity-license-check.log
 unitylic/unity-export.log
 
-# ── Export gradle project da Unity (rigenerabile via build_release.sh) ──
-unity-export.gradle/
-unity-export/
-
-# ── AR/Unity AAR (backup binario del player Unity, mantenuto su Git) ──
+# ── Unity AAR: rigenerata dalla build ──────────────────────────
 *.aar
-!app/libs/*.aar
 
-# ── unityLibrary (module Android degli stub Unity): solo sorgenti ──
-unityLibrary/build/
-
+# ── ZIP kit (sorgenti, ma sono grandi) ─────────────────────────
+# car.zip
+# kit/*.zip
