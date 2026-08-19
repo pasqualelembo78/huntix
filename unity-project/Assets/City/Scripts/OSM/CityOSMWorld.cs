@@ -605,6 +605,23 @@ namespace City.OSM
             return x * 100007 + z;
         }
 
+        private const float JUNCTION_ANGLE_THRESHOLD = 30f;
+
+        private static bool IsRealJunction(List<float> angles)
+        {
+            if (angles == null || angles.Count < 2) return false;
+            for (int i = 0; i < angles.Count; i++)
+            {
+                for (int j = i + 1; j < angles.Count; j++)
+                {
+                    float diff = Mathf.Abs(Mathf.DeltaAngle(angles[i], angles[j]));
+                    if (diff > JUNCTION_ANGLE_THRESHOLD && diff < (180f - JUNCTION_ANGLE_THRESHOLD))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         private const float KENNEY_ROAD_SCALE = 8f;
         private const float KENNEY_TILE_LEN = 8f;
 
@@ -678,15 +695,27 @@ namespace City.OSM
             });
 
             var junctionCount = new Dictionary<int, int>();
+            var junctionAngles = new Dictionary<int, List<float>>();
             if (env.roads != null)
             {
                 foreach (var r in env.roads)
                 {
                     if (r.points == null || r.points.Length < 2) continue;
-                    foreach (var p in r.points)
+                    for (int i = 0; i < r.points.Length - 1; i++)
                     {
-                        int k = SnapKey(Local(p));
-                        junctionCount[k] = junctionCount.GetValueOrDefault(k) + 1;
+                        Vector3 a = Local(r.points[i]);
+                        Vector3 b = Local(r.points[i + 1]);
+                        float len = (b - a).magnitude;
+                        if (len < 0.5f) continue;
+                        float ang = Mathf.Atan2(b.z - a.z, b.x - a.x) * Mathf.Rad2Deg;
+                        int kA = SnapKey(a);
+                        int kB = SnapKey(b);
+                        junctionCount[kA] = junctionCount.GetValueOrDefault(kA) + 1;
+                        junctionCount[kB] = junctionCount.GetValueOrDefault(kB) + 1;
+                        if (!junctionAngles.ContainsKey(kA)) junctionAngles[kA] = new List<float>();
+                        if (!junctionAngles.ContainsKey(kB)) junctionAngles[kB] = new List<float>();
+                        junctionAngles[kA].Add(ang);
+                        junctionAngles[kB].Add(ang);
                     }
                 }
             }
@@ -748,7 +777,9 @@ namespace City.OSM
                     }
 
                     int vKey = SnapKey(b);
-                    if (!placedJunctions.Contains(vKey) && junctionCount.GetValueOrDefault(vKey) >= 2)
+                    if (!placedJunctions.Contains(vKey)
+                        && junctionCount.GetValueOrDefault(vKey) >= 2
+                        && IsRealJunction(junctionAngles.GetValueOrDefault(vKey)))
                     {
                         int cnt = junctionCount[vKey];
                         GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
@@ -760,7 +791,9 @@ namespace City.OSM
                     if (i == 0)
                     {
                         int aKey = SnapKey(a);
-                        if (!placedJunctions.Contains(aKey) && junctionCount.GetValueOrDefault(aKey) >= 2)
+                        if (!placedJunctions.Contains(aKey)
+                            && junctionCount.GetValueOrDefault(aKey) >= 2
+                            && IsRealJunction(junctionAngles.GetValueOrDefault(aKey)))
                         {
                             int cnt = junctionCount[aKey];
                             GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
