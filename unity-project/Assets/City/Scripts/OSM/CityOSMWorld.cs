@@ -596,6 +596,7 @@ namespace City.OSM
         }
 
         private GameObject _roadStraight, _roadBend, _roadCrossroad, _roadIntersection, _roadEnd;
+        private GameObject _roadCurve, _roadRoundabout;
         private float _straightLen, _straightWid;
 
         private static int SnapKey(Vector3 p)
@@ -605,19 +606,27 @@ namespace City.OSM
             return x * 100007 + z;
         }
 
-        private const float JUNCTION_ANGLE_THRESHOLD = 30f;
-
-        private static bool IsRealJunction(List<float> angles)
+        private static void AddBearing(Dictionary<int, List<float>> map, int key, float bearing)
         {
-            if (angles == null || angles.Count < 2) return false;
-            for (int i = 0; i < angles.Count; i++)
+            if (!map.TryGetValue(key, out var list)) { list = new List<float>(); map[key] = list; }
+            list.Add(bearing);
+        }
+
+        /// <summary>
+        /// Un nodo e' un vero incrocio solo se le direzioni dei segmenti che vi
+        /// convergono divergono davvero (es. angolo > tolleranza). Se sono tutte
+        /// allineate (mod 180) e' solo un punto dove OSM ha spezzato la stessa via
+        /// in piu' "way" consecutivi: non deve generare una tile crossroad/intersection.
+        /// </summary>
+        private static bool IsRealJunction(List<float> bearings, float toleranceDeg = 20f)
+        {
+            if (bearings == null || bearings.Count < 2) return false;
+            float refB = bearings[0];
+            foreach (var b in bearings)
             {
-                for (int j = i + 1; j < angles.Count; j++)
-                {
-                    float diff = Mathf.Abs(Mathf.DeltaAngle(angles[i], angles[j]));
-                    if (diff > JUNCTION_ANGLE_THRESHOLD && diff < (180f - JUNCTION_ANGLE_THRESHOLD))
-                        return true;
-                }
+                float diff = Mathf.Abs(Mathf.DeltaAngle(refB, b));
+                diff = Mathf.Min(diff, 180f - diff); // bearings sono mod 180
+                if (diff > toleranceDeg) return true;
             }
             return false;
         }
@@ -633,6 +642,8 @@ namespace City.OSM
             _roadCrossroad = Resources.Load<GameObject>("Roads/road-crossroad");
             _roadIntersection = Resources.Load<GameObject>("Roads/road-intersection");
             _roadEnd = Resources.Load<GameObject>("Roads/road-end");
+            _roadCurve = Resources.Load<GameObject>("Roads/road-curve");
+            _roadRoundabout = Resources.Load<GameObject>("Roads/road-roundabout");
 
             if (_roadStraight != null)
             {
@@ -653,8 +664,8 @@ namespace City.OSM
             }
 
             int loaded = (_roadStraight ? 1 : 0) + (_roadBend ? 1 : 0) + (_roadCrossroad ? 1 : 0)
-                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0);
-            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/5 tileWid=" + _straightWid + " tileLen=" + _straightLen);
+                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0) + (_roadCurve ? 1 : 0) + (_roadRoundabout ? 1 : 0);
+            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/7 tileWid=" + _straightWid + " tileLen=" + _straightLen);
         }
 
         private GameObject InstantiateRoadTile(Transform parent, GameObject prefab, Vector3 pos, float angle, float width)
@@ -694,28 +705,84 @@ namespace City.OSM
                 return RoadWidth(b.highway).CompareTo(RoadWidth(a.highway));
             });
 
+            // Snap nearby OSM nodes together so consecutive ways connect.
+            // Two points within SNAP_TOLERANCE (3m) collapse to the same representative.
+            const float SNAP_TOLERANCE = 3f;
+            const float SNAP_GRID_SIZE = 5f; // must be > SNAP_TOLERANCE
+            var snapRepresentative = new Dictionary<long, Vector3>();
+            var gridCells = new Dictionary<Vector2Int, List<Vector3>>();
+            Vector2Int GridCell(Vector3 wp)
+            {
+                return new Vector2Int(
+                    Mathf.FloorToInt(wp.x / SNAP_GRID_SIZE),
+                    Mathf.FloorToInt(wp.z / SNAP_GRID_SIZE));
+            }
+            foreach (var r in sorted)
+            {
+                if (r.points == null) continue;
+                foreach (var pt in r.points)
+                {
+                    Vector3 wp = Local(pt);
+                    long gKey = ((long)Mathf.RoundToInt(pt.lng * 1000000) << 32) | (long)(Mathf.RoundToInt(pt.lat * 1000000) & 0xFFFFFFFF);
+                    if (snapRepresentative.ContainsKey(gKey)) continue;
+
+                    Vector2Int gc = GridCell(wp);
+                    Vector3 rep = wp;
+                    // Check this cell and neighbors for an existing representative within tolerance
+                    for (int dx = -1; dx <= 1; dx++)
+                    for (int dz = -1; dz <= 1; dz++)
+                    {
+                        Vector2Int ngc = new Vector2Int(gc.x + dx, gc.y + dz);
+                        if (gridCells.TryGetValue(ngc, out var cellReps))
+                        {
+                            foreach (var existingRep in cellReps)
+                            {
+                                if ((wp - existingRep).sqrMagnitude < SNAP_TOLERANCE * SNAP_TOLERANCE)
+                                {
+                                    rep = existingRep;
+                                    goto found_rep;
+                                }
+                            }
+                        }
+                    }
+                    found_rep:
+                    snapRepresentative[gKey] = rep;
+                    if (!gridCells.ContainsKey(gc)) gridCells[gc] = new List<Vector3>();
+                    if (!gridCells[gc].Contains(rep)) gridCells[gc].Add(rep);
+                }
+                yield return null;
+            }
+            // SnappedLocal: returns world-space position, snapped to nearest representative
+            Vector3 SnappedLocal(GeoPoint p)
+            {
+                long gKey = ((long)Mathf.RoundToInt(p.lng * 1000000) << 32) | (long)(Mathf.RoundToInt(p.lat * 1000000) & 0xFFFFFFFF);
+                if (snapRepresentative.TryGetValue(gKey, out var rep)) return rep;
+                return Local(p);
+            }
+
             var junctionCount = new Dictionary<int, int>();
-            var junctionAngles = new Dictionary<int, List<float>>();
+            var nodeBearings = new Dictionary<int, List<float>>();
             if (env.roads != null)
             {
                 foreach (var r in env.roads)
                 {
                     if (r.points == null || r.points.Length < 2) continue;
+                    foreach (var p in r.points)
+                    {
+                        int k = SnapKey(SnappedLocal(p));
+                        junctionCount[k] = junctionCount.GetValueOrDefault(k) + 1;
+                    }
+                    // Bearing (mod 180°, la direzione e il suo opposto sono la stessa retta)
+                    // di ogni segmento, registrato sui due nodi che tocca.
                     for (int i = 0; i < r.points.Length - 1; i++)
                     {
-                        Vector3 a = Local(r.points[i]);
-                        Vector3 b = Local(r.points[i + 1]);
-                        float len = (b - a).magnitude;
-                        if (len < 0.5f) continue;
-                        float ang = Mathf.Atan2(b.z - a.z, b.x - a.x) * Mathf.Rad2Deg;
-                        int kA = SnapKey(a);
-                        int kB = SnapKey(b);
-                        junctionCount[kA] = junctionCount.GetValueOrDefault(kA) + 1;
-                        junctionCount[kB] = junctionCount.GetValueOrDefault(kB) + 1;
-                        if (!junctionAngles.ContainsKey(kA)) junctionAngles[kA] = new List<float>();
-                        if (!junctionAngles.ContainsKey(kB)) junctionAngles[kB] = new List<float>();
-                        junctionAngles[kA].Add(ang);
-                        junctionAngles[kB].Add(ang);
+                        Vector3 a = SnappedLocal(r.points[i]);
+                        Vector3 b = SnappedLocal(r.points[i + 1]);
+                        if ((b - a).sqrMagnitude < 0.01f) continue;
+                        float bearing = Mathf.Repeat(
+                            Mathf.Atan2(b.z - a.z, b.x - a.x) * Mathf.Rad2Deg, 180f);
+                        AddBearing(nodeBearings, SnapKey(a), bearing);
+                        AddBearing(nodeBearings, SnapKey(b), bearing);
                     }
                 }
             }
@@ -730,10 +797,10 @@ namespace City.OSM
 
                 for (int i = 0; i < r.points.Length - 1; i++)
                 {
-                    Vector3 a = Local(r.points[i]);
-                    Vector3 b = Local(r.points[i + 1]);
+                    Vector3 a = SnappedLocal(r.points[i]);
+                    Vector3 b = SnappedLocal(r.points[i + 1]);
                     float length = (b - a).magnitude;
-                    if (length < 0.5f) continue;
+                    if (length < 0.1f) continue;
 
                     Vector3 mid = (a + b) * 0.5f;
                     float angle = Mathf.Atan2(b.z - a.z, b.x - a.x);
@@ -777,44 +844,52 @@ namespace City.OSM
                     }
 
                     int vKey = SnapKey(b);
-                    if (!placedJunctions.Contains(vKey)
-                        && junctionCount.GetValueOrDefault(vKey) >= 2
-                        && IsRealJunction(junctionAngles.GetValueOrDefault(vKey)))
+                    if (!placedJunctions.Contains(vKey) && junctionCount.GetValueOrDefault(vKey) >= 2
+                        && IsRealJunction(nodeBearings.GetValueOrDefault(vKey)))
                     {
                         int cnt = junctionCount[vKey];
-                        GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                        GameObject jPrefab = cnt >= 5 ? _roadRoundabout
+                                            : cnt >= 3 ? _roadCrossroad : _roadIntersection;
                         InstantiateRoadTile(parent, jPrefab, b, angle, width);
-                        UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
+                        UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
                         placedJunctions.Add(vKey);
                     }
 
                     if (i == 0)
                     {
                         int aKey = SnapKey(a);
-                        if (!placedJunctions.Contains(aKey)
-                            && junctionCount.GetValueOrDefault(aKey) >= 2
-                            && IsRealJunction(junctionAngles.GetValueOrDefault(aKey)))
+                        if (!placedJunctions.Contains(aKey) && junctionCount.GetValueOrDefault(aKey) >= 2
+                            && IsRealJunction(nodeBearings.GetValueOrDefault(aKey)))
                         {
                             int cnt = junctionCount[aKey];
-                            GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                            GameObject jPrefab = cnt >= 5 ? _roadRoundabout
+                                                : cnt >= 3 ? _roadCrossroad : _roadIntersection;
                             InstantiateRoadTile(parent, jPrefab, a, angle, width);
-                            UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
+                            UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
                             placedJunctions.Add(aKey);
                         }
                     }
 
                     if (i > 0 && i < r.points.Length - 1)
                     {
-                        Vector3 prev = Local(r.points[i - 1]);
+                        Vector3 prev = SnappedLocal(r.points[i - 1]);
                         float inAngle = Mathf.Atan2(a.z - prev.z, a.x - prev.x);
                         float angleDiff = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg, inAngle * Mathf.Rad2Deg));
-                        if (Mathf.Abs(angleDiff - 90f) < 25f)
+                        int bvKey = SnapKey(a);
+                        if (!placedJunctions.Contains(bvKey))
                         {
-                            int bvKey = SnapKey(a);
-                            if (!placedJunctions.Contains(bvKey))
+                            GameObject curvePrefab = null;
+                            if (Mathf.Abs(angleDiff - 90f) < 25f)
+                                curvePrefab = _roadBend;
+                            else if (angleDiff > 15f && angleDiff < 65f)
+                                curvePrefab = _roadCurve;
+                            else if (angleDiff > 115f && angleDiff < 165f)
+                                curvePrefab = _roadCurve;
+
+                            if (curvePrefab != null)
                             {
-                                InstantiateRoadTile(parent, _roadBend, a, inAngle, width);
-                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: bend at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0}");
+                                InstantiateRoadTile(parent, curvePrefab, a, inAngle, width);
+                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadBend ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0}");
                             }
                         }
                     }
@@ -822,20 +897,20 @@ namespace City.OSM
                     if (++steps % 60 == 0) yield return null;
                 }
 
-                int startKey = SnapKey(Local(r.points[0]));
-                int endKey = SnapKey(Local(r.points[r.points.Length - 1]));
+                int startKey = SnapKey(SnappedLocal(r.points[0]));
+                int endKey = SnapKey(SnappedLocal(r.points[r.points.Length - 1]));
                 if (junctionCount.GetValueOrDefault(startKey) <= 1)
                 {
-                    Vector3 sp = Local(r.points[0]);
-                    Vector3 sp2 = Local(r.points[1]);
+                    Vector3 sp = SnappedLocal(r.points[0]);
+                    Vector3 sp2 = SnappedLocal(r.points[1]);
                     float sAngle = Mathf.Atan2(sp2.z - sp.z, sp2.x - sp.x) + Mathf.PI;
                     InstantiateRoadTile(parent, _roadEnd, sp, sAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (start)");
                 }
                 if (junctionCount.GetValueOrDefault(endKey) <= 1)
                 {
-                    Vector3 ep = Local(r.points[r.points.Length - 1]);
-                    Vector3 ep2 = Local(r.points[r.points.Length - 2]);
+                    Vector3 ep = SnappedLocal(r.points[r.points.Length - 1]);
+                    Vector3 ep2 = SnappedLocal(r.points[r.points.Length - 2]);
                     float eAngle = Mathf.Atan2(ep.z - ep2.z, ep.x - ep2.x);
                     InstantiateRoadTile(parent, _roadEnd, ep, eAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (end)");
@@ -845,9 +920,9 @@ namespace City.OSM
                 if (!string.IsNullOrEmpty(r.name) && r.points.Length >= 2)
                 {
                     int mid = r.points.Length / 2;
-                    Vector3 lp = Local(r.points[mid]);
+                    Vector3 lp = SnappedLocal(r.points[mid]);
                     int next = Mathf.Min(mid + 1, r.points.Length - 1);
-                    Vector3 pn = Local(r.points[next]);
+                    Vector3 pn = SnappedLocal(r.points[next]);
                     float la = Mathf.Atan2(pn.z - lp.z, pn.x - lp.x);
                     bool isMajor = r.highway == "primary" || r.highway == "secondary"
                         || r.highway == "tertiary" || r.highway == "residential"
@@ -863,10 +938,19 @@ namespace City.OSM
         private void SpawnStreetLabel(Transform parent, string name, Vector3 pos, float angle)
         {
             if (string.IsNullOrEmpty(name)) return;
+
+            // Normalizza l'orientamento nel range (-90, 90] gradi: la faccia
+            // frontale del testo resta sempre nello stesso emisfero, cosi'
+            // il cartello non si presenta mai "di spalle" (testo specchiato,
+            // visibile perche' i materiali hanno Cull Off).
+            float deg = -angle * Mathf.Rad2Deg;
+            deg = Mathf.Repeat(deg + 180f, 360f) - 180f;
+            if (deg < -90f || deg > 90f) deg += 180f;
+
             var root = new GameObject("Via_" + name);
             root.transform.SetParent(parent, false);
             root.transform.position = pos;
-            root.transform.rotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+            root.transform.rotation = Quaternion.Euler(0f, deg, 0f);
 
             // Palo (1.8m alto, 0.08m largo)
             CreateBox(root.transform, "Palo", new Vector3(0f, 0.9f, 0f),
