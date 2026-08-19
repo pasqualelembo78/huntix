@@ -90,6 +90,12 @@ namespace Huntix.Core
             if (scene == "City")
             {
                 City.OSM.CityOSMWorld.EnsureInstance();
+                if (City.Interior.InteriorManager.Instance == null)
+                {
+                    var im = new GameObject("InteriorManager");
+                    UnityEngine.Object.DontDestroyOnLoad(im);
+                    im.AddComponent<City.Interior.InteriorManager>();
+                }
             }
         }
 

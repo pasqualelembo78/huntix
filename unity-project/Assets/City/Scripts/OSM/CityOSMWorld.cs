@@ -757,6 +757,19 @@ namespace City.OSM
                         placedJunctions.Add(vKey);
                     }
 
+                    if (i == 0)
+                    {
+                        int aKey = SnapKey(a);
+                        if (!placedJunctions.Contains(aKey) && junctionCount.GetValueOrDefault(aKey) >= 2)
+                        {
+                            int cnt = junctionCount[aKey];
+                            GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                            InstantiateRoadTile(parent, jPrefab, a, angle, width);
+                            UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
+                            placedJunctions.Add(aKey);
+                        }
+                    }
+
                     if (i > 0 && i < r.points.Length - 1)
                     {
                         Vector3 prev = Local(r.points[i - 1]);
@@ -1529,6 +1542,10 @@ namespace City.OSM
                     if (m.HasProperty("_MainTex")) lit.SetTexture("_BaseMap", m.GetTexture("_MainTex"));
                     if (m.HasProperty("_Color")) lit.SetColor("_BaseColor", m.GetColor("_Color"));
                     else lit.SetColor("_BaseColor", Color.white);
+                    lit.EnableKeyword("_ALPHATEST_ON");
+                    lit.SetFloat("_AlphaClip", 1f);
+                    lit.SetFloat("_Cutoff", 0.5f);
+                    lit.renderQueue = (int)UnityEngine.Rendering.RenderQueue.AlphaTest;
                     mats[i] = lit;
                 }
                 r.sharedMaterials = mats;

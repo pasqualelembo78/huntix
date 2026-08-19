@@ -106,7 +106,11 @@ namespace City.Interior
 
         private void Enter()
         {
-            if (InteriorManager.Instance == null) return;
+            if (InteriorManager.Instance == null)
+            {
+                LogEntrance("Enter FAILED: InteriorManager.Instance is null — cannot enter " + buildingName);
+                return;
+            }
             InteriorManager.Instance.EnterInterior(
                 buildingType,
                 buildingName,
