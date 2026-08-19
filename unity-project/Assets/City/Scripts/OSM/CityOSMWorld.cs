@@ -723,14 +723,15 @@ namespace City.OSM
                 foreach (var pt in r.points)
                 {
                     Vector3 wp = Local(pt);
-                    long gKey = ((long)Mathf.RoundToInt(pt.lng * 1000000) << 32) | (long)(Mathf.RoundToInt(pt.lat * 1000000) & 0xFFFFFFFF);
+                    long gKey = ((long)Mathf.RoundToInt((float)pt.lng * 1000000) << 32) | (uint)Mathf.RoundToInt((float)pt.lat * 1000000);
                     if (snapRepresentative.ContainsKey(gKey)) continue;
 
                     Vector2Int gc = GridCell(wp);
                     Vector3 rep = wp;
+                    bool found = false;
                     // Check this cell and neighbors for an existing representative within tolerance
-                    for (int dx = -1; dx <= 1; dx++)
-                    for (int dz = -1; dz <= 1; dz++)
+                    for (int dx = -1; dx <= 1 && !found; dx++)
+                    for (int dz = -1; dz <= 1 && !found; dz++)
                     {
                         Vector2Int ngc = new Vector2Int(gc.x + dx, gc.y + dz);
                         if (gridCells.TryGetValue(ngc, out var cellReps))
@@ -740,12 +741,12 @@ namespace City.OSM
                                 if ((wp - existingRep).sqrMagnitude < SNAP_TOLERANCE * SNAP_TOLERANCE)
                                 {
                                     rep = existingRep;
-                                    goto found_rep;
+                                    found = true;
+                                    break;
                                 }
                             }
                         }
                     }
-                    found_rep:
                     snapRepresentative[gKey] = rep;
                     if (!gridCells.ContainsKey(gc)) gridCells[gc] = new List<Vector3>();
                     if (!gridCells[gc].Contains(rep)) gridCells[gc].Add(rep);
@@ -755,7 +756,7 @@ namespace City.OSM
             // SnappedLocal: returns world-space position, snapped to nearest representative
             Vector3 SnappedLocal(GeoPoint p)
             {
-                long gKey = ((long)Mathf.RoundToInt(p.lng * 1000000) << 32) | (long)(Mathf.RoundToInt(p.lat * 1000000) & 0xFFFFFFFF);
+                long gKey = ((long)Mathf.RoundToInt((float)p.lng * 1000000) << 32) | (uint)Mathf.RoundToInt((float)p.lat * 1000000);
                 if (snapRepresentative.TryGetValue(gKey, out var rep)) return rep;
                 return Local(p);
             }
