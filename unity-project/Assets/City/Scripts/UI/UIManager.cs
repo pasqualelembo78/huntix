@@ -405,7 +405,7 @@ namespace City.UI
             rwBtn.targetGraphic = rwBg;
             rwBtn.onClick.AddListener(OnRewardedAdPressed);
             MakeText(rewardRt, "GUARDA VIDEO +€25", 18f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            MakeText(root, "Tocca e trascina per muoverti · scorri a destra per ruotare la telecamera", 18f, new Color(1f, 1f, 1f, 0.45f), TextAlignmentOptions.Center, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -96f), new Vector2(0f, -128f));
+            MakeText(root, "per muoverti tocca e trascina · scorri a destra per ruotare la telecamera", 18f, new Color(1f, 1f, 1f, 0.45f), TextAlignmentOptions.Center, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -96f), new Vector2(0f, -128f));
 
             // --- stato GPS/OSM (riga piccola semi-trasparente con attribuzione permanente)
             gpsText = MakeText(root, "© OpenStreetMap contributors · ODbL", 15f, new Color(1f, 1f, 1f, 0.38f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -136f), new Vector2(-24f, -160f));

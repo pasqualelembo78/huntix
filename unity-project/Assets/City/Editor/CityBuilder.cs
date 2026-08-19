@@ -303,6 +303,7 @@ namespace City.Editor
             cc.height = 1.8f;
             cc.radius = 0.4f;
             cc.center = new Vector3(0f, 0.9f, 0f);
+            cc.includeLayers = (1 << 0) | (1 << 8);
 
             PlayerController pc = playerGo.AddComponent<PlayerController>();
 

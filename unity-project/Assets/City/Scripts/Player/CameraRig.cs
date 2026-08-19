@@ -21,8 +21,11 @@ namespace City.Player
         private float yaw = 0f;
         private Vector3 velocity;
 
-        private const float MinCameraDistance = 2.8f;
+        private const float MinCameraDistance = 4.5f;
+        private const float MaxCameraDistance = 30f;
         private const float RayOriginHeight = 5f;
+
+        private float pinchStartDistance;
 
         private void Awake()
         {
@@ -54,6 +57,40 @@ namespace City.Player
             drivingMode = driving;
         }
 
+        public void ApplyZoom(float delta)
+        {
+            distance = Mathf.Clamp(distance + delta, MinCameraDistance, MaxCameraDistance);
+        }
+
+        private void Update()
+        {
+            if (drivingMode) return;
+            HandlePinchZoom();
+        }
+
+        private void HandlePinchZoom()
+        {
+            if (Input.touchCount == 2)
+            {
+                Touch t0 = Input.GetTouch(0);
+                Touch t1 = Input.GetTouch(1);
+                float currDist = Vector2.Distance(t0.position, t1.position);
+
+                if (t0.phase == TouchPhase.Began || t1.phase == TouchPhase.Began)
+                {
+                    pinchStartDistance = currDist;
+                    return;
+                }
+
+                float diff = pinchStartDistance - currDist;
+                if (Mathf.Abs(diff) > 10f)
+                {
+                    ApplyZoom(diff * 0.02f);
+                    pinchStartDistance = currDist;
+                }
+            }
+        }
+
         private void LateUpdate()
         {
             if (target == null) return;
@@ -72,9 +109,6 @@ namespace City.Player
             Vector3 desired = target.position + offset;
             float dist = offset.magnitude;
 
-            // Il ray parte da 5m sopra il player: abbastanza alto da passare
-            // SOPRA la maggior parte degli edifici bassi e non colpire le facce.
-            // Layer mask: esclude layer 8 (Buildings) se impostato.
             RaycastHit hit;
             Vector3 start = target.position + Vector3.up * RayOriginHeight;
             float rayMaxDist = dist + RayOriginHeight;
@@ -86,8 +120,6 @@ namespace City.Player
                     desired = hit.point - offset.normalized * 0.5f;
             }
 
-            // Distanza minima garantita: la camera non viene mai schiacciata
-            // troppo vicino al player (no zoom improvviso in 1a persona).
             Vector3 toDesired = desired - target.position;
             if (toDesired.magnitude < MinCameraDistance)
             {

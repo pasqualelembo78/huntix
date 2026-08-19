@@ -59,6 +59,7 @@ namespace City.OSM
         private float _pollTimer;
         private float _pendingTimer;
         private bool _paused;
+        private readonly List<Bounds> _buildingBounds = new List<Bounds>();
 
         private readonly Dictionary<Color, Material> _materials = new Dictionary<Color, Material>();
 
@@ -287,19 +288,28 @@ namespace City.OSM
             CenterLat = env.centerLat;
             CenterLng = env.centerLng;
             RadiusMeters = Mathf.Max(env.radiusMeters, StreamRadiusM);
+            _buildingBounds.Clear();
+
+            ApplyKenneySkybox();
 
             var newRoot = new GameObject(OsmRootName);
             BuildGround(newRoot.transform, env);
             yield return null;
 
-            // Posiziona il player sul terreno OSM SUBITO (prima di strade/edifici):
-            // appena la pianta esiste il player e' a piedi-sul-suolo, e strade ed
-            // edifici compaiono attorno. Mai piu' un frame con il player sopra il
-            // vuoto dopo la distruzione della seed city.
             PlacePlayerOnGround();
             yield return BuildRoadsCoroutine(newRoot.transform, env);
             yield return BuildBuildingsCoroutine(newRoot.transform, env);
             yield return BuildVegetationCoroutine(newRoot.transform, env);
+
+            EnsurePlayerOutsideBuildings();
+
+            var game = City.Game.Instance;
+            if (game != null && game.player != null)
+            {
+                var cc = game.player.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = true;
+                game.player.Stop();
+            }
 
             DestroySeedCity();
             DestroyExistingOsmRoot(newRoot.transform);
@@ -339,22 +349,113 @@ namespace City.OSM
                 return;
             }
 
-            // Posiziona il player a terra (y = 0) e assicura che il terreno OSM
-            // sia registrato nel solver fisico prima del raycast di SnapToGround.
             Physics.SyncTransforms();
             Vector3 pos = new Vector3(0f, -0.06f + 0.05f, 0f);
             var cc = game.player.GetComponent<CharacterController>();
             if (cc != null)
             {
-                // cc.center è metà altezza circa: pivot del CC = piedi + (altezza - center.y)
+                cc.includeLayers = (1 << 0) | (1 << 8);
                 float feetFromPivot = cc.height * 0.5f - cc.center.y;
                 pos.y = -0.06f + feetFromPivot + 0.05f;
+                cc.enabled = false;
             }
 
-            Debug.Log($"[CityOSMWorld] Teleport player a {pos}");
-            UnityBridge.LogToAndroid("CityOSMWorld", "Teleport player a " + pos);
-            game.TeleportPlayer(pos, Quaternion.LookRotation(Vector3.forward));
-            StartCoroutine(SnapToGround(game.player, cc, pos));
+            game.player.transform.position = pos;
+            game.player.transform.rotation = Quaternion.LookRotation(Vector3.forward);
+            game.player.Stop();
+            if (game.rig != null) game.rig.SetYaw(Quaternion.LookRotation(Vector3.forward));
+
+            Debug.Log($"[CityOSMWorld] Player posizionato a terra a {pos} (CC disabilitato durante build)");
+            UnityBridge.LogToAndroid("CityOSMWorld", "Player posizionato a " + pos + " (CC disabilitato durante build)");
+        }
+
+        // Dopo aver piazzato tutti gli edifici, verifica che il player non sia
+        // finito dentro un edificio (GPS centrato su un building footprint).
+        // Se lo e', sposta il player fuori dal bounding box piu' vicino.
+        private void EnsurePlayerOutsideBuildings()
+        {
+            if (_buildingBounds.Count == 0) return;
+            var game = City.Game.Instance;
+            if (game == null || game.player == null) return;
+
+            Vector3 p = game.player.transform.position;
+            bool inside = false;
+            for (int i = 0; i < _buildingBounds.Count; i++)
+            {
+                if (IsInsideBuildingXZ(p, _buildingBounds[i]))
+                {
+                    inside = true;
+                    break;
+                }
+            }
+            if (!inside) return;
+
+            Vector3 best = p;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < _buildingBounds.Count; i++)
+            {
+                Bounds b = _buildingBounds[i];
+                Vector3 center = b.center;
+                Vector3 ext = b.extents;
+
+                Vector3 toP = p - center;
+
+                float sx = Mathf.Sign(toP.x);
+                float sz = Mathf.Sign(toP.z);
+                if (sx == 0f) sx = 1f;
+                if (sz == 0f) sz = 1f;
+
+                Vector3 exitX = new Vector3(sx * (ext.x + 3f), 0f, toP.z);
+                Vector3 exitZ = new Vector3(toP.x, 0f, sz * (ext.z + 3f));
+
+                Vector3 ex = center + exitX;
+                Vector3 ez = center + exitZ;
+
+                float dx = Vector3.Distance(p, ex);
+                float dz = Vector3.Distance(p, ez);
+
+                Vector3 candidate = dx < dz ? ex : ez;
+                float dist = dx < dz ? dx : dz;
+
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = candidate;
+                }
+            }
+            best.y = p.y;
+
+            int safety = 0;
+            while (safety < 10)
+            {
+                bool stillInside = false;
+                for (int i = 0; i < _buildingBounds.Count; i++)
+                {
+                    if (IsInsideBuildingXZ(best, _buildingBounds[i]))
+                    {
+                        stillInside = true;
+                        break;
+                    }
+                }
+                if (!stillInside) break;
+                best = best + (best - p).normalized * 5f;
+                best.y = p.y;
+                safety++;
+            }
+
+            var cc = game.player.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            game.player.transform.position = best;
+            if (cc != null) cc.enabled = true;
+            game.player.Stop();
+
+            UnityBridge.LogToAndroid("CityOSM", $"Player era dentro un edificio → spostato a ({best.x:F1},{best.y:F1},{best.z:F1}) safety={safety}");
+        }
+
+        private static bool IsInsideBuildingXZ(Vector3 p, Bounds b)
+        {
+            return Mathf.Abs(p.x - b.center.x) < b.extents.x
+                && Mathf.Abs(p.z - b.center.z) < b.extents.z;
         }
 
         // Il mondo OSM è piatto (strade top y=0, terreno y=-0.06) e il teleport di
@@ -494,9 +595,78 @@ namespace City.OSM
             }
         }
 
+        private GameObject _roadStraight, _roadBend, _roadCrossroad, _roadIntersection, _roadEnd;
+        private float _straightLen, _straightWid;
+
+        private static int SnapKey(Vector3 p)
+        {
+            int x = Mathf.RoundToInt(p.x * 2f);
+            int z = Mathf.RoundToInt(p.z * 2f);
+            return x * 100007 + z;
+        }
+
+        private const float KENNEY_ROAD_SCALE = 8f;
+        private const float KENNEY_TILE_LEN = 8f;
+
+        private void LoadRoadPrefabs()
+        {
+            if (_roadStraight != null) return;
+            _roadStraight = Resources.Load<GameObject>("Roads/road-straight");
+            _roadBend = Resources.Load<GameObject>("Roads/road-bend");
+            _roadCrossroad = Resources.Load<GameObject>("Roads/road-crossroad");
+            _roadIntersection = Resources.Load<GameObject>("Roads/road-intersection");
+            _roadEnd = Resources.Load<GameObject>("Roads/road-end");
+
+            if (_roadStraight != null)
+            {
+                var probe = Instantiate(_roadStraight);
+                probe.transform.localScale = Vector3.one * KENNEY_ROAD_SCALE;
+                Bounds pb = new Bounds();
+                bool any = false;
+                foreach (Renderer r in probe.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (r == null) continue;
+                    if (!any) { pb = r.bounds; any = true; }
+                    else pb.Encapsulate(r.bounds);
+                }
+                _straightLen = pb.size.z;
+                _straightWid = pb.size.x;
+                UnityBridge.LogToAndroid("CityOSM", "Road probe (8x): size=(" + pb.size.x + "," + pb.size.y + "," + pb.size.z + ") straightLen=" + _straightLen + " straightWid=" + _straightWid);
+                DestroyImmediate(probe);
+            }
+
+            int loaded = (_roadStraight ? 1 : 0) + (_roadBend ? 1 : 0) + (_roadCrossroad ? 1 : 0)
+                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0);
+            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/5 tileWid=" + _straightWid + " tileLen=" + _straightLen);
+        }
+
+        private GameObject InstantiateRoadTile(Transform parent, GameObject prefab, Vector3 pos, float angle, float width)
+        {
+            if (prefab == null) return null;
+            var go = Instantiate(prefab, parent);
+            go.name = prefab.name;
+            go.transform.localPosition = pos + Vector3.up * -0.03f;
+            go.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+            if (_straightWid > 0f)
+            {
+                float s = (width / _straightWid) * KENNEY_ROAD_SCALE;
+                go.transform.localScale = new Vector3(s, 1f, s);
+            }
+            foreach (MeshFilter mf in go.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf == null || mf.sharedMesh == null) continue;
+                if (mf.GetComponent<Collider>() != null) continue;
+                MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
+                mc.sharedMesh = mf.sharedMesh;
+            }
+            return go;
+        }
+
         private IEnumerator BuildRoadsCoroutine(Transform parent, OsmCityEnvelope env)
         {
             if (env.roads == null) yield break;
+
+            LoadRoadPrefabs();
 
             var sorted = new List<OsmRoad>(env.roads);
             sorted.Sort((a, b) =>
@@ -507,6 +677,21 @@ namespace City.OSM
                 return RoadWidth(b.highway).CompareTo(RoadWidth(a.highway));
             });
 
+            var junctionCount = new Dictionary<int, int>();
+            if (env.roads != null)
+            {
+                foreach (var r in env.roads)
+                {
+                    if (r.points == null || r.points.Length < 2) continue;
+                    foreach (var p in r.points)
+                    {
+                        int k = SnapKey(Local(p));
+                        junctionCount[k] = junctionCount.GetValueOrDefault(k) + 1;
+                    }
+                }
+            }
+
+            var placedJunctions = new HashSet<int>();
             int steps = 0;
             foreach (var r in sorted)
             {
@@ -524,22 +709,93 @@ namespace City.OSM
                     Vector3 mid = (a + b) * 0.5f;
                     float angle = Mathf.Atan2(b.z - a.z, b.x - a.x);
 
-                    // Strade COLLIDIBILI: senza collider il player le attraversava e,
-                    // se il terreno fallisce, non c'era nulla sotto i piedi. La strada
-                    // è appoggiata sul terreno OSM (bottom = -0.06 = top del piano):
-                    // top strada = 0.0, base edifici = 0.0, tutto a filo.
-                    CreateBox(parent, "Strada", mid + Vector3.up * -0.03f, new Vector3(length, 0.06f, width), GetMaterial(RoadColor), angle, true);
+                    if (_roadStraight != null && _straightLen > 0f && _straightWid > 0f)
+                    {
+                        float sx = (width / _straightWid) * KENNEY_ROAD_SCALE;
+                        int tileCount = Mathf.Max(1, Mathf.RoundToInt(length / KENNEY_TILE_LEN));
+                        float tileStep = length / tileCount;
+                        float sz = (tileStep / _straightLen) * KENNEY_ROAD_SCALE;
+                        Vector3 dir = (b - a).normalized;
+
+                        for (int t = 0; t < tileCount; t++)
+                        {
+                            Vector3 tileCenter = a + dir * ((t + 0.5f) * tileStep);
+                            var go = Instantiate(_roadStraight, parent);
+                            go.name = "Strada";
+                            go.transform.localPosition = tileCenter + Vector3.up * -0.03f;
+                            go.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                            go.transform.localScale = new Vector3(sx, 1f, sz);
+
+                            foreach (MeshFilter mf in go.GetComponentsInChildren<MeshFilter>())
+                            {
+                                if (mf == null || mf.sharedMesh == null) continue;
+                                if (mf.GetComponent<Collider>() != null) continue;
+                                MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
+                                mc.sharedMesh = mf.sharedMesh;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        CreateBox(parent, "Strada", mid + Vector3.up * -0.03f,
+                            new Vector3(length, 0.06f, width), GetMaterial(RoadColor), angle, true);
+                    }
+
                     if (centerLine && length > 5f)
                     {
-                        // Striscia centrale: decal non collidibile, affiora 5mm sopra
-                        // la strada per evitare z-fighting con il piano della strada.
-                        CreateBox(parent, "Corsia", mid + Vector3.up * -0.005f, new Vector3(length, 0.02f, 0.12f), GetMaterial(CenterLineColor), angle, false);
+                        CreateBox(parent, "Corsia", mid + Vector3.up * -0.005f,
+                            new Vector3(length, 0.02f, 0.12f), GetMaterial(CenterLineColor), angle, false);
+                    }
+
+                    int vKey = SnapKey(b);
+                    if (!placedJunctions.Contains(vKey) && junctionCount.GetValueOrDefault(vKey) >= 2)
+                    {
+                        int cnt = junctionCount[vKey];
+                        GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                        InstantiateRoadTile(parent, jPrefab, b, angle, width);
+                        UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
+                        placedJunctions.Add(vKey);
+                    }
+
+                    if (i > 0 && i < r.points.Length - 1)
+                    {
+                        Vector3 prev = Local(r.points[i - 1]);
+                        float inAngle = Mathf.Atan2(a.z - prev.z, a.x - prev.x);
+                        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg, inAngle * Mathf.Rad2Deg));
+                        if (Mathf.Abs(angleDiff - 90f) < 25f)
+                        {
+                            int bvKey = SnapKey(a);
+                            if (!placedJunctions.Contains(bvKey))
+                            {
+                                InstantiateRoadTile(parent, _roadBend, a, inAngle, width);
+                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: bend at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0}");
+                            }
+                        }
                     }
 
                     if (++steps % 60 == 0) yield return null;
                 }
+
+                int startKey = SnapKey(Local(r.points[0]));
+                int endKey = SnapKey(Local(r.points[r.points.Length - 1]));
+                if (junctionCount.GetValueOrDefault(startKey) <= 1)
+                {
+                    Vector3 sp = Local(r.points[0]);
+                    Vector3 sp2 = Local(r.points[1]);
+                    float sAngle = Mathf.Atan2(sp2.z - sp.z, sp2.x - sp.x) + Mathf.PI;
+                    InstantiateRoadTile(parent, _roadEnd, sp, sAngle, width);
+                    UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (start)");
+                }
+                if (junctionCount.GetValueOrDefault(endKey) <= 1)
+                {
+                    Vector3 ep = Local(r.points[r.points.Length - 1]);
+                    Vector3 ep2 = Local(r.points[r.points.Length - 2]);
+                    float eAngle = Mathf.Atan2(ep.z - ep2.z, ep.x - ep2.x);
+                    InstantiateRoadTile(parent, _roadEnd, ep, eAngle, width);
+                    UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (end)");
+                }
+
                 if (steps % 180 == 0) yield return null;
-                // Etichetta nome via: una volta per strada
                 if (!string.IsNullOrEmpty(r.name) && r.points.Length >= 2)
                 {
                     int mid = r.points.Length / 2;
@@ -675,6 +931,7 @@ namespace City.OSM
                 bool pitched = h < 7f;
 
                 var bgo = new GameObject("Edificio " + b.id);
+                bgo.layer = 8;
                 bgo.transform.SetParent(parent, false);
                 bgo.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
                 bgo.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
@@ -724,6 +981,9 @@ namespace City.OSM
                         new Vector3(Mathf.Min(w * 0.7f, 6f), 0.4f, 0.12f), GetMaterial(style.Sign), 0f, false);
                     AddShop(bgo.transform, display, d, b);
                 }
+
+                AddBuildingEntrance(bgo, b, w, d, h);
+                _buildingBounds.Add(new Bounds(new Vector3(fp.CenterX, 0f, fp.CenterZ), new Vector3(w, h, d)));
 
                 if (++count % 15 == 0) yield return null;
             }
@@ -799,6 +1059,14 @@ namespace City.OSM
             "building-k", "building-l", "building-m", "building-n"
         };
 
+        private static readonly string[] IndustrialBuildings =
+        {
+            "building-a", "building-b", "building-c", "building-d", "building-e",
+            "building-f", "building-g", "building-h", "building-i", "building-j",
+            "building-k", "building-l", "building-m", "building-n", "building-o",
+            "building-p", "building-q", "building-r", "building-s", "building-t"
+        };
+
         private static readonly string[] Skyscrapers =
         {
             "building-skyscraper-a", "building-skyscraper-b", "building-skyscraper-c",
@@ -859,9 +1127,21 @@ namespace City.OSM
             }
         }
 
+        private static bool IsIndustrial(OsmBuilding b)
+        {
+            string kind = (b.kind ?? "").ToLowerInvariant();
+            if (kind.Contains("industrial") || kind.Contains("warehouse") || kind.Contains("factory"))
+                return true;
+            string amenity = (b.amenity ?? "").ToLowerInvariant();
+            if (amenity == "fuel" || amenity == "car_repair" || amenity == "workshop")
+                return true;
+            return false;
+        }
+
         private static string PickPrefabName(OsmBuilding b, float h)
         {
             bool commercial = IsCommercial(b);
+            bool industrial = IsIndustrial(b);
             string kind = b.kind ?? "";
             bool tall = h >= 12f ||
                         kind.IndexOf("apartment", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -869,19 +1149,35 @@ namespace City.OSM
             int idx = Math.Abs((int)(b.id % SuburbanHouses.Length));
             if (commercial && tall) return Skyscrapers[idx % Skyscrapers.Length];
             if (commercial) return CommercialBuildings[idx % CommercialBuildings.Length];
+            if (industrial) return IndustrialBuildings[idx % IndustrialBuildings.Length];
             return SuburbanHouses[idx % SuburbanHouses.Length];
         }
 
         private bool TryPlaceKenneyBuilding(Transform parent, OsmBuilding b, Footprint fp, float w, float d, float h)
         {
-            if (_registry == null) return false;
-            var prefab = _registry.Get(PickPrefabName(b, h));
+            string prefabName = PickPrefabName(b, h);
+            GameObject prefab = null;
+            string source = "registry";
+            if (_registry != null) prefab = _registry.Get(prefabName);
+            if (prefab == null)
+            {
+                bool commercial = IsCommercial(b);
+                bool industrial = IsIndustrial(b);
+                source = industrial ? "Resources/Industrial" : commercial ? "Resources/Commercial" : "Resources/Suburban";
+                if (industrial)
+                    prefab = Resources.Load<GameObject>("Buildings/Industrial/" + prefabName);
+                else if (commercial)
+                    prefab = Resources.Load<GameObject>("Buildings/Commercial/" + prefabName);
+                else
+                    prefab = Resources.Load<GameObject>("Buildings/Suburban/" + prefabName);
+            }
             if (prefab == null) return false;
 
             var inst = Instantiate(prefab, parent);
             inst.name = "Edificio " + b.id;
             inst.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
             inst.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
+            UnityBridge.LogToAndroid("CityOSM", $"Building placed: {prefabName} ({source}) id={b.id}");
 
             // Disabilita subito tutti i collider originali del prefab Kenney
             // (pareti, tetto, pavimento delle mesh). Usiamo enabled = false
@@ -907,16 +1203,19 @@ namespace City.OSM
             Bounds wb = UnionBounds(inst);
             inst.transform.position += new Vector3(fp.CenterX - wb.center.x, -wb.min.y, fp.CenterZ - wb.center.z);
 
-            // 4 collider su FIGLI di inst (layer 0 = Default), non su inst
-            // (layer 8): il CharacterController IncludeLayers=0 collidde solo
-            // con layer 0, quindi i collider su inst sarebbero ignorati.
+            // 4 collider su FIGLI di inst, tutti su layer 8 (Buildings):
+            // il CharacterController IncludeLayers include sia layer 0 (Default)
+            // che layer 8, cosi' collide con i muri. La camera raycast esclude
+            // layer 8, cosi' i muri non schiacciano la camera verso il player.
             // La facciata anteriore (Z+) resta libera: il trigger dell'entrata
             // si attiva quando il player si avvicina alla porta.
             Vector3 ls = inst.transform.localScale;
             float wallT = 0.3f;
+            int wallLayer = 8; // Buildings
 
             // Muro laterale sinistro
             var wallL = new GameObject("MuroL");
+            wallL.layer = wallLayer;
             wallL.transform.SetParent(inst.transform, false);
             var colL = wallL.AddComponent<BoxCollider>();
             colL.size = new Vector3(wallT / ls.x, h / ls.y, d / ls.z);
@@ -924,6 +1223,7 @@ namespace City.OSM
 
             // Muro laterale destro
             var wallR = new GameObject("MuroR");
+            wallR.layer = wallLayer;
             wallR.transform.SetParent(inst.transform, false);
             var colR = wallR.AddComponent<BoxCollider>();
             colR.size = new Vector3(wallT / ls.x, h / ls.y, d / ls.z);
@@ -931,6 +1231,7 @@ namespace City.OSM
 
             // Muro posteriore
             var wallB = new GameObject("MuroB");
+            wallB.layer = wallLayer;
             wallB.transform.SetParent(inst.transform, false);
             var colB = wallB.AddComponent<BoxCollider>();
             colB.size = new Vector3(w / ls.x, h / ls.y, wallT / ls.z);
@@ -938,6 +1239,7 @@ namespace City.OSM
 
             // Soffitto
             var wallT_ = new GameObject("Soffitto");
+            wallT_.layer = wallLayer;
             wallT_.transform.SetParent(inst.transform, false);
             var colT = wallT_.AddComponent<BoxCollider>();
             colT.size = new Vector3(w / ls.x, wallT / ls.y, d / ls.z);
@@ -945,6 +1247,11 @@ namespace City.OSM
 
             if (IsCommercial(b)) AddShop(inst.transform, DisplayName(b), d, b);
             AddBuildingEntrance(inst, b, w, d, h);
+
+            _buildingBounds.Add(new Bounds(
+                new Vector3(fp.CenterX, 0f, fp.CenterZ),
+                new Vector3(w, h, d)));
+
             return true;
         }
 
@@ -968,17 +1275,89 @@ namespace City.OSM
             return char.ToUpper(value[0]) + value.Substring(1);
         }
 
+        // ── skybox ────────────────────────────────────────────────────
+
+        private void ApplyKenneySkybox()
+        {
+            try
+            {
+                var dayTex = Resources.Load<Texture2D>("Skyboxes/skybox-day");
+                if (dayTex == null) return;
+                var shader = Shader.Find("Skybox/Panoramic");
+                if (shader == null) shader = Shader.Find("Skybox/Cubemap");
+                if (shader == null) return;
+                var mat = new Material(shader);
+                mat.SetTexture("_MainTex", dayTex);
+                RenderSettings.skybox = mat;
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
+                RenderSettings.ambientIntensity = 1f;
+                UnityBridge.LogToAndroid("CityOSM", "Kenney skybox applied");
+            }
+            catch (Exception e)
+            {
+                UnityBridge.LogToAndroid("CityOSM", "Skybox error: " + e.Message);
+            }
+        }
+
         // ── vegetazione ──────────────────────────────────────────────
+
+        private GameObject[] _treePrefabs;
+        private GameObject[] _flowerPrefabs;
+        private GameObject[] _grassPrefabs;
+
+        private void LoadNaturePrefabs()
+        {
+            if (_treePrefabs != null) return;
+            var trees = new List<GameObject>();
+            string[] treeNames = { "tree_default", "tree_default_dark", "tree_default_fall",
+                                   "tree_cone", "tree_cone_dark", "tree_cone_fall",
+                                   "tree_oak", "tree_oak_dark", "tree_oak_fall",
+                                   "tree_fat", "tree_detailed", "tree_blocks",
+                                   "tree_palm" };
+            foreach (var n in treeNames)
+            {
+                var p = Resources.Load<GameObject>("Nature/" + n);
+                if (p != null) trees.Add(p);
+            }
+            if (trees.Count == 0)
+            {
+                var all = Resources.LoadAll<GameObject>("Nature/");
+                foreach (var p in all)
+                    if (p.name.StartsWith("tree_")) trees.Add(p);
+            }
+            _treePrefabs = trees.ToArray();
+
+            var flowers = new List<GameObject>();
+            string[] flowerNames = { "flower_redA", "flower_redB", "flower_purpleA", "flower_purpleB", "flower_yellowA", "flower_yellowB" };
+            foreach (var n in flowerNames)
+            {
+                var p = Resources.Load<GameObject>("Nature/" + n);
+                if (p != null) flowers.Add(p);
+            }
+            _flowerPrefabs = flowers.ToArray();
+
+            var grass = new List<GameObject>();
+            string[] grassNames = { "grass", "grass_large", "grass_leafs" };
+            foreach (var n in grassNames)
+            {
+                var p = Resources.Load<GameObject>("Nature/" + n);
+                if (p != null) grass.Add(p);
+            }
+            _grassPrefabs = grass.ToArray();
+
+            UnityBridge.LogToAndroid("CityOSM", "Nature prefabs: trees=" + _treePrefabs.Length + " flowers=" + _flowerPrefabs.Length + " grass=" + _grassPrefabs.Length);
+        }
 
         private IEnumerator BuildVegetationCoroutine(Transform parent, OsmCityEnvelope env)
         {
+            LoadNaturePrefabs();
             int built = 0;
 
             if (env.trees != null)
             {
                 foreach (var t in env.trees)
                 {
-                    SpawnTree(parent, new Vector2(CoordinateConverter.LonToX(t.lng), CoordinateConverter.LatToZ(t.lat)), Math.Abs((int)t.lat * 31 + (int)t.lng));
+                    SpawnKenneyTree(parent, new Vector2(CoordinateConverter.LonToX(t.lng), CoordinateConverter.LatToZ(t.lat)), Math.Abs((int)t.lat * 31 + (int)t.lng));
                     if (++built % 20 == 0) yield return null;
                 }
             }
@@ -997,13 +1376,74 @@ namespace City.OSM
                         int seed = parkIndex * 7 + k * 41;
                         float tx = fp.CenterX + (Frac(seed) - 0.5f) * fp.Width * 0.8f;
                         float tz = fp.CenterZ + (Frac(seed / 10) - 0.5f) * fp.Depth * 0.8f;
-                        SpawnTree(parent, new Vector2(tx, tz), seed);
+                        SpawnKenneyTree(parent, new Vector2(tx, tz), seed);
                         built++;
+                    }
+                    for (int g = 0; g < treeCount * 3; g++)
+                    {
+                        int seed = parkIndex * 13 + g * 37;
+                        float gx = fp.CenterX + (Frac(seed) - 0.5f) * fp.Width * 0.9f;
+                        float gz = fp.CenterZ + (Frac(seed / 10) - 0.5f) * fp.Depth * 0.9f;
+                        SpawnKenneyFlower(parent, new Vector2(gx, gz), seed);
+                    }
+                    for (int gr = 0; gr < treeCount * 5; gr++)
+                    {
+                        int seed = parkIndex * 17 + gr * 29;
+                        float gx = fp.CenterX + (Frac(seed) - 0.5f) * fp.Width * 0.9f;
+                        float gz = fp.CenterZ + (Frac(seed / 10) - 0.5f) * fp.Depth * 0.9f;
+                        SpawnKenneyGrass(parent, new Vector2(gx, gz), seed);
                     }
                     parkIndex++;
                     if (built % 20 == 0) yield return null;
                 }
             }
+        }
+
+        private void SpawnKenneyTree(Transform parent, Vector2 pos, int seed)
+        {
+            if (_treePrefabs == null || _treePrefabs.Length == 0)
+            {
+                SpawnTree(parent, pos, seed);
+                return;
+            }
+            var prefab = _treePrefabs[seed % _treePrefabs.Length];
+            var go = Instantiate(prefab, parent);
+            go.name = "Albero";
+            go.transform.localPosition = new Vector3(pos.x, 0f, pos.y);
+            float s = 0.8f + (seed % 4) * 0.1f;
+            go.transform.localScale = Vector3.one * s;
+            go.transform.localRotation = Quaternion.Euler(0f, (seed * 37) % 360, 0f);
+            FixKenneyMaterials(go);
+            foreach (var c in go.GetComponentsInChildren<Collider>())
+                if (c != null) c.enabled = false;
+        }
+
+        private void SpawnKenneyFlower(Transform parent, Vector2 pos, int seed)
+        {
+            if (_flowerPrefabs == null || _flowerPrefabs.Length == 0) return;
+            var prefab = _flowerPrefabs[seed % _flowerPrefabs.Length];
+            var go = Instantiate(prefab, parent);
+            go.name = "Fiore";
+            go.transform.localPosition = new Vector3(pos.x, 0f, pos.y);
+            float s = 0.6f + (seed % 3) * 0.15f;
+            go.transform.localScale = Vector3.one * s;
+            FixKenneyMaterials(go);
+            foreach (var c in go.GetComponentsInChildren<Collider>())
+                if (c != null) c.enabled = false;
+        }
+
+        private void SpawnKenneyGrass(Transform parent, Vector2 pos, int seed)
+        {
+            if (_grassPrefabs == null || _grassPrefabs.Length == 0) return;
+            var prefab = _grassPrefabs[seed % _grassPrefabs.Length];
+            var go = Instantiate(prefab, parent);
+            go.name = "Erba";
+            go.transform.localPosition = new Vector3(pos.x, 0f, pos.y);
+            float s = 0.5f + (seed % 3) * 0.2f;
+            go.transform.localScale = Vector3.one * s;
+            FixKenneyMaterials(go);
+            foreach (var c in go.GetComponentsInChildren<Collider>())
+                if (c != null) c.enabled = false;
         }
 
         private void SpawnTree(Transform parent, Vector2 pos, int seed)
@@ -1068,6 +1508,31 @@ namespace City.OSM
                 if (c != null) c.enabled = false;
             }
             return go;
+        }
+
+        private void FixKenneyMaterials(GameObject go)
+        {
+            var urp = Shader.Find("Universal Render Pipeline/Lit");
+            if (urp == null) urp = Shader.Find("Standard");
+            foreach (Renderer r in go.GetComponentsInChildren<Renderer>())
+            {
+                if (r == null) continue;
+                Material[] mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Material m = mats[i];
+                    if (m == null) { mats[i] = new Material(urp); continue; }
+                    if (m.shader == null) { mats[i] = new Material(urp); continue; }
+                    string sn = m.shader.name;
+                    if (sn.StartsWith("Universal Render Pipeline") || sn.StartsWith("Hidden/Universal")) continue;
+                    var lit = new Material(urp);
+                    if (m.HasProperty("_MainTex")) lit.SetTexture("_BaseMap", m.GetTexture("_MainTex"));
+                    if (m.HasProperty("_Color")) lit.SetColor("_BaseColor", m.GetColor("_Color"));
+                    else lit.SetColor("_BaseColor", Color.white);
+                    mats[i] = lit;
+                }
+                r.sharedMaterials = mats;
+            }
         }
 
         private Material GetMaterial(Color color)

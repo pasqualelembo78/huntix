@@ -3,16 +3,17 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Scripting;
+using Huntix.Bridge;
 
 namespace Huntix.Core
 {
-    // Mostra a schermo errori/eccezioni Unity e li salva in persistentDataPath/huntix-log.txt.
-    // Utile su device senza adb: si legge l'errore direttamente dal telefono.
     [Preserve]
     public class ErrorSurface : MonoBehaviour
     {
         static readonly List<string> Log = new List<string>();
         static readonly List<string> Errors = new List<string>();
+        [System.ThreadStatic] static bool _inLogHandler;
+        static volatile bool _quitting;
 
         [Preserve]
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -26,6 +27,7 @@ namespace Huntix.Core
         void Awake()
         {
             Application.logMessageReceived += OnLogMessage;
+            Application.quitting += () => _quitting = true;
             string header = $"[ErrorSurface] avviato. persistentDataPath={Application.persistentDataPath}";
             Log.Add(header);
             Debug.Log(header);
@@ -33,30 +35,49 @@ namespace Huntix.Core
 
         void OnDestroy()
         {
+            _quitting = true;
             Application.logMessageReceived -= OnLogMessage;
         }
 
         void OnLogMessage(string condition, string stackTrace, LogType type)
         {
-            bool isProblem = type == LogType.Error || type == LogType.Exception || type == LogType.Assert;
-            string line = "[" + type + "] " + condition + "\n" + stackTrace;
-
-            Log.Add(line);
-            if (Log.Count > 200) Log.RemoveRange(0, Log.Count - 200);
-            if (isProblem)
-            {
-                Errors.Add(condition);
-                if (Errors.Count > 20) Errors.RemoveAt(0);
-            }
-
+            if (_inLogHandler || _quitting) return;
+            _inLogHandler = true;
             try
             {
-                File.AppendAllText(Path.Combine(Application.persistentDataPath, "huntix-log.txt"),
-                    System.DateTime.Now.ToString("HH:mm:ss") + " " + line + "\n");
+                bool isProblem = type == LogType.Error || type == LogType.Exception || type == LogType.Assert;
+                string line = "[" + type + "] " + condition + "\n" + stackTrace;
+
+                Log.Add(line);
+                if (Log.Count > 200) Log.RemoveRange(0, Log.Count - 200);
+                if (isProblem)
+                {
+                    Errors.Add(condition);
+                    if (Errors.Count > 20) Errors.RemoveAt(0);
+                }
+
+                string tag = "Unity";
+                if (condition.Length > 0 && condition[0] == '[')
+                {
+                    int close = condition.IndexOf(']');
+                    if (close > 1) tag = condition.Substring(1, close - 1);
+                }
+                UnityBridge.LogToAndroid(tag, "[" + type + "] " + (condition.Length > 300 ? condition.Substring(0, 300) + "..." : condition));
+                if (isProblem && stackTrace.Length > 0)
+                    UnityBridge.LogToAndroid(tag, "STACK: " + (stackTrace.Length > 500 ? stackTrace.Substring(0, 500) + "..." : stackTrace));
+
+                try
+                {
+                    File.AppendAllText(Path.Combine(Application.persistentDataPath, "huntix-log.txt"),
+                        System.DateTime.Now.ToString("HH:mm:ss") + " " + line + "\n");
+                }
+                catch (System.Exception)
+                {
+                }
             }
-            catch (System.Exception)
+            finally
             {
-                // il file di log non deve far crashare l'app
+                _inLogHandler = false;
             }
         }
 

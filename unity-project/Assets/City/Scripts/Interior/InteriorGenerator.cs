@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using City.World;
 using TMPro;
+using Huntix.Bridge;
 
 namespace City.Interior
 {
@@ -72,10 +74,18 @@ namespace City.Interior
 
         private Material Lit(Color c)
         {
-            var m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (m.shader == null) m = new Material(Shader.Find("Standard"));
-            m.SetColor("_BaseColor", c);
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            if (shader == null) { LogW("No shader found, using magenta"); shader = Shader.Find("Hidden/InternalErrorShader") ?? Shader.Find("Standard"); }
+            var m = new Material(shader);
+            if (shader.name.Contains("Universal") || shader.name.Contains("URP"))
+                m.SetColor("_BaseColor", c);
+            else
+                m.SetColor("_Color", c);
             m.SetFloat("_Smoothness", 0.3f);
+            m.SetInt("_Cull", (int)CullMode.Off);
+            if (_wallMat == null)
+                Log("Lit: shader=" + shader.name + " cull=Off(" + (int)CullMode.Off + ")");
             return m;
         }
 
@@ -86,6 +96,7 @@ namespace City.Interior
         public void BuildInterior(Transform parent, string type,
             float extW, float extD, float extH, int floors, Shop shop)
         {
+            Log("BuildInterior: type=" + type + " size=" + extW + "x" + extD + "x" + extH + " floors=" + floors);
             EnsureMaterials();
 
             float w = Mathf.Clamp(extW, 4f, 14f);
@@ -104,6 +115,7 @@ namespace City.Interior
                     BuildHouse(parent, w, d, floorH, floors, shop);
                     break;
             }
+            Log("BuildInterior DONE");
         }
 
         // ── Stair position (used by InteriorManager for floor transitions) ──
@@ -116,10 +128,13 @@ namespace City.Interior
             Transform stair = floorObj.Find("Scala");
             if (stair != null)
             {
-                return new Vector3(stair.position.x, 500f + 0.1f + floor * 3f, stair.position.z);
+                // Usa world position (gia' scalata dal root) per X e Z,
+                // e calcola Y in base all'altezza reale del piano
+                return new Vector3(stair.position.x, stair.position.y + 0.1f, stair.position.z);
             }
 
-            return new Vector3(1f, 500f + 0.1f + floor * 3f, -1f);
+            // Fallback: usa la posizione del Floor object (gia' scalata dal root)
+            return new Vector3(1f, floorObj.position.y + 0.1f, -1f);
         }
 
         // ── HOUSE ──────────────────────────────────────────────────
@@ -724,9 +739,22 @@ namespace City.Interior
             }
             else
             {
+                LogW("FBX not found for '" + name + "' (key='" + fbxKey + "'), using fallback box");
                 Material fallback = _woodMat != null ? _woodMat : Lit(new Color(0.55f, 0.35f, 0.18f));
                 Box(parent, name, center, scale, fallback);
             }
+        }
+
+        private void Log(string msg)
+        {
+            Debug.Log("[InteriorGenerator] " + msg);
+            UnityBridge.LogToAndroid("InteriorGenerator", msg);
+        }
+
+        private void LogW(string msg)
+        {
+            Debug.LogWarning("[InteriorGenerator] " + msg);
+            UnityBridge.LogToAndroid("InteriorGenerator", "WARN: " + msg);
         }
 
         private void EnsureFurniture()
@@ -735,19 +763,32 @@ namespace City.Interior
             _furnitureLoaded = true;
             _furnitureMap = new Dictionary<string, GameObject>();
 
-            // Collect unique FBX keys from the mapping
             var keys = new HashSet<string>();
             foreach (var kv in FBX_NAME)
                 keys.Add(kv.Value);
 
+            Log("EnsureFurniture: loading " + keys.Count + " FBX from Resources/Furniture/...");
+
+            int found = 0, missing = 0;
+            string missingNames = "";
             foreach (var key in keys)
             {
                 var go = Resources.Load<GameObject>("Furniture/" + key);
                 if (go != null)
+                {
                     _furnitureMap[key] = go;
+                    found++;
+                }
+                else
+                {
+                    missing++;
+                    if (missing <= 10) missingNames += key + " ";
+                }
             }
 
-            Debug.Log("[InteriorGenerator] Loaded " + _furnitureMap.Count + " furniture models from Resources");
+            Log("loaded: " + found + "/" + keys.Count);
+            if (missing > 0)
+                LogW("missing (" + missing + "): " + missingNames.Trim());
         }
 
         private void AddLabel(Transform parent, string text, Vector3 pos, Vector3 scale)

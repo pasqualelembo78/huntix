@@ -6,6 +6,7 @@ using City.World;
 using City.Vehicle;
 using City.Economy;
 using City.Interior;
+using City.OSM;
 
 namespace City
 {
@@ -42,6 +43,12 @@ namespace City
             if (rig == null) rig = FindObjectOfType<CameraRig>();
             if (ui == null) ui = GetComponentInChildren<UIManager>();
             if (fader == null && ui != null) fader = ui.fader;
+
+            if (TouchInputHandler.Instance == null)
+            {
+                var go = new GameObject("TouchInputHandler");
+                go.AddComponent<TouchInputHandler>();
+            }
         }
 
         private void Update()
@@ -82,7 +89,9 @@ namespace City
             if (entrance != null && entrance.IsFocused)
             {
                 currentEntrance = entrance;
-                if (currentVehicleFocus == null && currentMissionNPC == null)
+                bool blocked = currentVehicleFocus != null || currentMissionNPC != null;
+                Debug.Log("[Game] OnEntranceFocusChanged: " + entrance.buildingName + " (" + entrance.buildingType + ") blocked=" + blocked);
+                if (!blocked)
                 {
                     entrance.StartAutoEntry();
                 }

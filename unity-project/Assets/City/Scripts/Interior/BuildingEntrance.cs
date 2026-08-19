@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using City.UI;
 using City.World;
+using Huntix.Bridge;
 
 namespace City.Interior
 {
@@ -23,11 +24,31 @@ namespace City.Interior
 
         private bool autoEntryStarted;
 
+        private static void LogEntrance(string msg)
+        {
+            Debug.Log("[BuildingEntrance] " + msg);
+            UnityBridge.LogToAndroid("BuildingEntrance", msg);
+        }
+
+        private void Awake()
+        {
+            var rb = gameObject.GetComponent<Rigidbody>();
+            if (rb == null)
+            {
+                rb = gameObject.AddComponent<Rigidbody>();
+                rb.isKinematic = true;
+                rb.useGravity = false;
+                LogEntrance("Added kinematic Rigidbody to " + gameObject.name);
+            }
+        }
+
         private void OnTriggerEnter(Collider other)
         {
+            LogEntrance("OnTriggerEnter: " + buildingName + " (" + buildingType + ") tag=" + other.tag + " obj=" + other.gameObject.name);
             if (!other.CompareTag("Player")) return;
             if (autoEntryStarted) return;
             focused = true;
+            LogEntrance("focused=" + buildingName + " → calling OnEntranceFocusChanged");
             if (Game.Instance != null)
                 Game.Instance.OnEntranceFocusChanged(this);
         }

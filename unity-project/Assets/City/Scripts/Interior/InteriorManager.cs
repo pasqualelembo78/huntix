@@ -4,6 +4,7 @@ using UnityEngine;
 using City.Player;
 using City.UI;
 using City.World;
+using Huntix.Bridge;
 
 namespace City.Interior
 {
@@ -16,6 +17,7 @@ namespace City.Interior
         public static InteriorManager Instance;
 
         private const float INTERIOR_Y = 500f;
+        private const float INTERIOR_SCALE = 4f;
 
         private GameObject interiorRoot;
         private InteriorPlayer interiorPlayer;
@@ -35,11 +37,18 @@ namespace City.Interior
             generator = gameObject.AddComponent<InteriorGenerator>();
         }
 
+        private void Log(string msg)
+        {
+            Debug.Log("[InteriorManager] " + msg);
+            UnityBridge.LogToAndroid("InteriorManager", msg);
+        }
+
         public void EnterInterior(string buildingType, string buildingName,
             float width, float depth, float height, int floors,
             Vector3 worldPos, Quaternion worldRot, Shop shop)
         {
-            if (IsInside) return;
+            if (IsInside) { Log("EnterInterior: already inside, skip"); return; }
+            Log("EnterInterior: " + buildingName + " (" + buildingType + ")");
 
             exitWorldPos = worldPos;
             exitWorldRot = worldRot;
@@ -86,20 +95,38 @@ namespace City.Interior
             generator.BuildInterior(interiorRoot.transform, buildingType,
                 width, depth, height, totalFloors, shop);
 
+            // Scala l'intero interno: esterno piccolo, interno grande (TARDIS effect)
+            interiorRoot.transform.localScale = Vector3.one * INTERIOR_SCALE;
+
             // Crea il player interno
             CreateInteriorPlayer();
 
-            // Posiziona il player all'ingresso del piano terra
-            float spawnX = 0f;
-            float spawnZ = -depth * 0.25f;
+            // Scala il player per matchare l'interno ingrandito
             if (interiorPlayer != null)
             {
-                interiorPlayer.transform.position = new Vector3(spawnX, INTERIOR_Y + 0.1f, spawnZ);
+                interiorPlayer.transform.localScale = Vector3.one * INTERIOR_SCALE;
+                interiorPlayer.moveSpeed *= INTERIOR_SCALE;
+
+                // Regola la camera: con player scalato, la posizione locale va divisa
+                // per mantenere la testa alla giusta altezza relativa
+                if (interiorPlayer.camera != null)
+                {
+                    interiorPlayer.camera.transform.localPosition =
+                        new Vector3(0f, 1.6f / INTERIOR_SCALE, 0f);
+                    interiorPlayer.camera.farClipPlane *= INTERIOR_SCALE;
+                }
+            }
+
+            // Posiziona il player all'ingresso del piano terra
+            float spawnX = 0f;
+            float spawnZ = -depth * 0.25f * INTERIOR_SCALE;
+            if (interiorPlayer != null)
+            {
+                interiorPlayer.transform.position = new Vector3(spawnX, INTERIOR_Y + 0.1f * INTERIOR_SCALE, spawnZ);
                 interiorPlayer.transform.rotation = Quaternion.identity;
             }
 
-            Debug.Log("[InteriorManager] Entrato in: " + buildingName
-                + " (" + buildingType + ", " + totalFloors + " piani)");
+            Log("Entrato in: " + buildingName + " (" + buildingType + ", " + totalFloors + " piani, scale=" + INTERIOR_SCALE + "x)");
         }
 
         public void ExitInterior()
@@ -163,7 +190,7 @@ namespace City.Interior
                 Game.Instance.rig.SetYaw(exitWorldRot);
             }
 
-            Debug.Log("[InteriorManager] Uscito dall'interno");
+            Log("Uscito dall'interno");
         }
 
         // ── Cambio piano ────────────────────────────────────────────
@@ -209,7 +236,7 @@ namespace City.Interior
                 interiorPlayer.transform.position = stairPos;
             }
 
-            Debug.Log("[InteriorManager] Piano: " + currentFloor);
+            Log("Piano: " + currentFloor);
         }
 
         public int GetCurrentFloor() { return currentFloor; }
