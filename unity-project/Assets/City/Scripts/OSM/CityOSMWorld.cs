@@ -1189,15 +1189,9 @@ namespace City.OSM
             var inst = Instantiate(prefab, parent);
             inst.name = "Edificio " + b.id;
             inst.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
-            inst.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
             UnityBridge.LogToAndroid("CityOSM", $"Building placed: {prefabName} ({source}) id={b.id}");
 
             // Disabilita subito tutti i collider originali del prefab Kenney
-            // (pareti, tetto, pavimento delle mesh). Usiamo enabled = false
-            // invece di Destroy perche' Destroy e' deferred a fine frame:
-            // il player e' gia' attivo durante il build e potrebbe camminare
-            // vicino a un edificio i cui collider "vecchi" (inclusa la
-            // facciata anteriore) non sono ancora stati rimossi dal solver.
             foreach (var origCol in inst.GetComponentsInChildren<Collider>(true))
             {
                 origCol.enabled = false;
@@ -1205,12 +1199,15 @@ namespace City.OSM
             }
 
             // Scala il prefab sull'impronta reale (width x depth) e sull'altezza OSM.
+            // Misura PRIMA della rotazione: Renderer.bounds è axis-aligned,
+            // un bounding box di un oggetto ruotato è gonfiato → scala errata.
             Bounds baseB = UnionBounds(inst);
             float sx = w / Mathf.Max(baseB.size.x, 0.1f);
             float sz = d / Mathf.Max(baseB.size.z, 0.1f);
             float s = Mathf.Max(sx, sz);
             float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
             inst.transform.localScale = new Vector3(sx, sy, sz);
+            inst.transform.rotation = Quaternion.Euler(0f, -fp.RotationRad * Mathf.Rad2Deg, 0f);
 
             // Appoggia la base a terra e centra l'impronta sul footprint.
             Bounds wb = UnionBounds(inst);
