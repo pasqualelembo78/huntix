@@ -147,10 +147,12 @@ namespace City.OSM
 
         private IEnumerator LoadInitial()
         {
-            // La seed city resta visibile con lo skybox finché non arrivano i
-            // dati OSM, così l'utente non vede solo grigio durante l'attesa GPS.
-            // Verrà nascosta in RebuildWorld quando inizia il build OSM.
+            // Congela il player (niente gravita) ma lascia la seed city visibile
+            // con lo skybox finché non arrivano i dati OSM, così l'utente non
+            // vede solo nero durante l'attesa GPS.
+            // La seed city viene nascosta in RebuildWorld quando inizia il build OSM.
             yield return null;
+            FreezePlayer();
             var loc = ReadBridgeLocation();
             if (loc == null || IsZero(loc))
             {
@@ -522,16 +524,22 @@ namespace City.OSM
             if (seed != null) Destroy(seed);
         }
 
-        private void HideSeedCityAndFreezePlayer()
+        private void FreezePlayer()
         {
-            var seed = GameObject.Find(SeedCityRoot);
-            if (seed != null) seed.SetActive(false);
             if (City.Game.Instance != null && City.Game.Instance.player != null)
             {
                 var cc = City.Game.Instance.player.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = false;
                 City.Game.Instance.player.Stop();
             }
+            UnityBridge.LogToAndroid("CityOSMWorld", "Player congelato (in attesa OSM)");
+        }
+
+        private void HideSeedCityAndFreezePlayer()
+        {
+            var seed = GameObject.Find(SeedCityRoot);
+            if (seed != null) seed.SetActive(false);
+            FreezePlayer();
             UnityBridge.LogToAndroid("CityOSMWorld", "Mappa seed nascosta, player congelato (in attesa OSM)");
         }
 
