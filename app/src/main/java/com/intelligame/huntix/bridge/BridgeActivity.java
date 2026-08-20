@@ -11,10 +11,7 @@ public class BridgeActivity extends UnityPlayerActivity {
     public static final String EXTRA_POI_DATA = "POI_DATA";
     public static final String MODE_OUTDOOR = "outdoor";
     public static final String MODE_REALLIFE = "reallife";
-    public static final String MODE_INDOOR = "indoor";
-    public static final String MODE_SUPERMARKET_PROTO = "supermarket_proto";
-    public static final String MODE_ROOM = "room";
-    public static final String MODE_MIACITTA = "miacitta";
+    public static final String MODE_OPENWORLD = "openworld";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {

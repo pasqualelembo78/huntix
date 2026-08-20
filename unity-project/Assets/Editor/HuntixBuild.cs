@@ -3,9 +3,7 @@ using System.IO;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
-using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.AI;
 
 namespace Huntix.EditorTools
 {
@@ -15,45 +13,8 @@ namespace Huntix.EditorTools
 
         public static void ConfigureAndExport()
         {
-            BakeIndoorNavMesh();
             ConfigurePlayerSettings();
             ExportAndroidGradleProject();
-        }
-
-        /// <summary>
-        /// Bake NavMesh nella scena Indoor.unity (Editor-only).
-        /// Segna il Floor come Navigation Static e bakes il NavMesh
-        /// così gli NPC indoor possono pattugliare. A runtime IndoorManager.BuildRuntimeNavMesh()
-        /// ricostruisce il NavMesh includendo le pareti create dinamicamente da StoreBuilder.
-        /// </summary>
-        private static void BakeIndoorNavMesh()
-        {
-            const string scenePath = "Assets/Scenes/Indoor.unity";
-            var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
-            if (!scene.isLoaded)
-            {
-                Debug.LogWarning("[HuntixBuild] Impossibile aprire Indoor.unity per NavMesh bake");
-                return;
-            }
-
-            bool bakedAny = false;
-
-            var floor = GameObject.Find("Floor");
-            if (floor != null)
-            {
-                var flags = GameObjectUtility.GetStaticEditorFlags(floor);
-                flags |= StaticEditorFlags.NavigationStatic;
-                flags |= StaticEditorFlags.LightmapStatic;
-                GameObjectUtility.SetStaticEditorFlags(floor, flags);
-                bakedAny = true;
-            }
-
-            if (bakedAny)
-            {
-                UnityEditor.AI.NavMeshBuilder.BuildNavMesh();
-                EditorSceneManager.SaveScene(scene, scenePath);
-                Debug.Log("[HuntixBuild] NavMesh baked in Indoor.unity");
-            }
         }
 
         public static void ConfigurePlayerSettings()
@@ -72,11 +33,8 @@ namespace Huntix.EditorTools
             string[] scenes = {
                 "Assets/Scenes/Menu.unity",
                 "Assets/Scenes/Outdoor.unity",
-                "Assets/Scenes/Indoor.unity",
                 "Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity",
                 "Assets/ThirdParty/ARDice/Scenes/MainScene.unity",
-                "Assets/ThirdParty/SupermarketPrototype/Scenes/MainGame.unity",
-                "Assets/Scenes/Room.unity",
                 "Assets/City/Scenes/City.unity"
             };
             EditorBuildSettings.scenes = Array.ConvertAll(scenes, s => new EditorBuildSettingsScene(s, true));
@@ -106,14 +64,6 @@ namespace Huntix.EditorTools
             }
 
             string[] scenes = Array.ConvertAll(EditorBuildSettings.scenes, s => s.path);
-
-            // ── Catalogo supermercato: collega prodotti/licenze alla scena ──
-            // (così il caricamento runtime non dipende da Resources.LoadAll).
-            SupermarketCatalogSetup.PopulateCatalog();
-
-            // ── Decorazioni Cute: collega i prefab Cute all'IndoorManager ──
-            // (caricamento runtime senza Resources.Load).
-            CuteAssetsSetup.Populate();
 
             // ── Registry asset Kenney: collega i modelli FBX al GameManager ──
             // (caricamento runtime senza Resources.Load).

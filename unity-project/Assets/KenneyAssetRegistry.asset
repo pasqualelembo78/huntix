@@ -12,25 +12,5 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0e00c2d4c3ae69229b4bf5a2b1f9e3aa, type: 3}
   m_Name: KenneyAssetRegistry
   m_EditorClassIdentifier: 
-  prefabs:
-  - {fileID: 919132149155446097, guid: bcd7084a62319e6c6aacf0c55e592ab3, type: 3}
-  - {fileID: 919132149155446097, guid: f79db6c97f9959219bf39e03c398bcf1, type: 3}
-  - {fileID: 919132149155446097, guid: b9b09add8fb6d436f92862a1e0a67e95, type: 3}
-  - {fileID: 919132149155446097, guid: ce93a1e79b9b1955f8769429696690a9, type: 3}
-  - {fileID: 919132149155446097, guid: 269f3753402d7fdeaa5ab5431e847b5e, type: 3}
-  - {fileID: 919132149155446097, guid: cd505af4ed9919c139d1a05f393b5aaa, type: 3}
-  - {fileID: 919132149155446097, guid: ef8c94dc0e7e68d568f85c8f6e28b7f7, type: 3}
-  - {fileID: 919132149155446097, guid: fcbb6fcf65af5269ba8ee42467e3181e, type: 3}
-  - {fileID: 919132149155446097, guid: a49c0e8aa416ea114aed6942ec62c0cc, type: 3}
-  - {fileID: 919132149155446097, guid: c9c080266a59ec005a80f329a3678af3, type: 3}
-  - {fileID: 919132149155446097, guid: fb1f6ed100431f96bb163e30b1ed68f7, type: 3}
-  - {fileID: 919132149155446097, guid: d53b7c551dcd675bdbf928da09afdb4e, type: 3}
-  - {fileID: 919132149155446097, guid: 100e88c85153b1f8cb829d63d8d3bbd3, type: 3}
-  - {fileID: 919132149155446097, guid: 3da58f6f48a6d10a3ba2e7f54c32dcbb, type: 3}
-  - {fileID: 919132149155446097, guid: ca8d7df889ac5d4c389425a6ec49358b, type: 3}
-  - {fileID: 919132149155446097, guid: 0d920798c63bb93ed86eb7b1844faaf3, type: 3}
-  - {fileID: 919132149155446097, guid: 4c46c973881b2a90fb57d2dc660dd45a, type: 3}
-  - {fileID: 919132149155446097, guid: f4a3321721be11d628fe33bc2e8d6300, type: 3}
-  - {fileID: 919132149155446097, guid: 9eb6fa86594540a88a1fb1ed1c3dc586, type: 3}
-  - {fileID: 919132149155446097, guid: 00d0fbb7e1e57b3d1b76422dfa4686c5, type: 3}
-  colormap: {fileID: 2800000, guid: a77478cc9b7ed94cf83b58aeb0300588, type: 3}
+  prefabs: []
+  colormap: {fileID: 0}
