@@ -102,10 +102,6 @@ namespace City.OSM
             // soluzione robusta (è anche il default di Unity).
             Physics.autoSyncTransforms = true;
 
-            // Applica lo skybox subito all'avvio per evitare lo schermo grigio
-            // mentre si attendono GPS e dati OSM.
-            ApplyKenneySkybox();
-
             // Il tracking GPS parte PRIMA del bootstrap della mappa: lato Android
             // il seed con l'ultima posizione nota è sincrono, quindi LoadInitial
             // può leggere subito la posizione reale invece del default Roma.
@@ -147,10 +143,13 @@ namespace City.OSM
 
         private IEnumerator LoadInitial()
         {
-            // La seed city resta visibile con lo skybox finché non arrivano i
-            // dati OSM, così l'utente non vede solo grigio durante l'attesa GPS.
-            // Verrà nascosta in RebuildWorld quando inizia il build OSM.
+            // Niente mappa finta all'avvio: la seed city viene nascosta subito e il
+            // player congelato (CharacterController disattivato = niente gravita),
+            // cosi tra il bootstrap e la ricezione dei dati OSM non c'e' niente da
+            // vedere ne' una caduta nel vuoto. Il player verra' posato sul terreno
+            // OSM da PlacePlayerOnGround quando il build parte.
             yield return null;
+            HideSeedCityAndFreezePlayer();
             var loc = ReadBridgeLocation();
             if (loc == null || IsZero(loc))
             {
@@ -285,12 +284,13 @@ namespace City.OSM
 
         private IEnumerator RebuildWorld(OsmCityEnvelope env)
         {
-            HideSeedCityAndFreezePlayer();
             CoordinateConverter.Init(env.centerLat, env.centerLng);
             CenterLat = env.centerLat;
             CenterLng = env.centerLng;
             RadiusMeters = Mathf.Max(env.radiusMeters, StreamRadiusM);
             _buildingBounds.Clear();
+
+            ApplyKenneySkybox();
 
             var newRoot = new GameObject(OsmRootName);
             BuildGround(newRoot.transform, env);
@@ -596,6 +596,7 @@ namespace City.OSM
         }
 
         private GameObject _roadStraight, _roadBend, _roadCrossroad, _roadIntersection, _roadEnd;
+        private GameObject _roadCurve, _roadRoundabout;
         private float _straightLen, _straightWid;
 
         private static int SnapKey(Vector3 p)
@@ -641,6 +642,8 @@ namespace City.OSM
             _roadCrossroad = Resources.Load<GameObject>("Roads/road-crossroad");
             _roadIntersection = Resources.Load<GameObject>("Roads/road-intersection");
             _roadEnd = Resources.Load<GameObject>("Roads/road-end");
+            _roadCurve = Resources.Load<GameObject>("Roads/road-curve");
+            _roadRoundabout = Resources.Load<GameObject>("Roads/road-roundabout");
 
             if (_roadStraight != null)
             {
@@ -661,8 +664,8 @@ namespace City.OSM
             }
 
             int loaded = (_roadStraight ? 1 : 0) + (_roadBend ? 1 : 0) + (_roadCrossroad ? 1 : 0)
-                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0);
-            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/5 tileWid=" + _straightWid + " tileLen=" + _straightLen);
+                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0) + (_roadCurve ? 1 : 0) + (_roadRoundabout ? 1 : 0);
+            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/7 tileWid=" + _straightWid + " tileLen=" + _straightLen);
         }
 
         private GameObject InstantiateRoadTile(Transform parent, GameObject prefab, Vector3 pos, float angle, float width)
@@ -702,6 +705,62 @@ namespace City.OSM
                 return RoadWidth(b.highway).CompareTo(RoadWidth(a.highway));
             });
 
+            // Snap nearby OSM nodes together so consecutive ways connect.
+            // Two points within SNAP_TOLERANCE (3m) collapse to the same representative.
+            const float SNAP_TOLERANCE = 3f;
+            const float SNAP_GRID_SIZE = 5f; // must be > SNAP_TOLERANCE
+            var snapRepresentative = new Dictionary<long, Vector3>();
+            var gridCells = new Dictionary<Vector2Int, List<Vector3>>();
+            Vector2Int GridCell(Vector3 wp)
+            {
+                return new Vector2Int(
+                    Mathf.FloorToInt(wp.x / SNAP_GRID_SIZE),
+                    Mathf.FloorToInt(wp.z / SNAP_GRID_SIZE));
+            }
+            foreach (var r in sorted)
+            {
+                if (r.points == null) continue;
+                foreach (var pt in r.points)
+                {
+                    Vector3 wp = Local(pt);
+                    long gKey = ((long)Mathf.RoundToInt((float)pt.lng * 1000000) << 32) | (uint)Mathf.RoundToInt((float)pt.lat * 1000000);
+                    if (snapRepresentative.ContainsKey(gKey)) continue;
+
+                    Vector2Int gc = GridCell(wp);
+                    Vector3 rep = wp;
+                    bool found = false;
+                    // Check this cell and neighbors for an existing representative within tolerance
+                    for (int dx = -1; dx <= 1 && !found; dx++)
+                    for (int dz = -1; dz <= 1 && !found; dz++)
+                    {
+                        Vector2Int ngc = new Vector2Int(gc.x + dx, gc.y + dz);
+                        if (gridCells.TryGetValue(ngc, out var cellReps))
+                        {
+                            foreach (var existingRep in cellReps)
+                            {
+                                if ((wp - existingRep).sqrMagnitude < SNAP_TOLERANCE * SNAP_TOLERANCE)
+                                {
+                                    rep = existingRep;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    snapRepresentative[gKey] = rep;
+                    if (!gridCells.ContainsKey(gc)) gridCells[gc] = new List<Vector3>();
+                    if (!gridCells[gc].Contains(rep)) gridCells[gc].Add(rep);
+                }
+                yield return null;
+            }
+            // SnappedLocal: returns world-space position, snapped to nearest representative
+            Vector3 SnappedLocal(GeoPoint p)
+            {
+                long gKey = ((long)Mathf.RoundToInt((float)p.lng * 1000000) << 32) | (uint)Mathf.RoundToInt((float)p.lat * 1000000);
+                if (snapRepresentative.TryGetValue(gKey, out var rep)) return rep;
+                return Local(p);
+            }
+
             var junctionCount = new Dictionary<int, int>();
             var nodeBearings = new Dictionary<int, List<float>>();
             if (env.roads != null)
@@ -711,15 +770,15 @@ namespace City.OSM
                     if (r.points == null || r.points.Length < 2) continue;
                     foreach (var p in r.points)
                     {
-                        int k = SnapKey(Local(p));
+                        int k = SnapKey(SnappedLocal(p));
                         junctionCount[k] = junctionCount.GetValueOrDefault(k) + 1;
                     }
                     // Bearing (mod 180°, la direzione e il suo opposto sono la stessa retta)
                     // di ogni segmento, registrato sui due nodi che tocca.
                     for (int i = 0; i < r.points.Length - 1; i++)
                     {
-                        Vector3 a = Local(r.points[i]);
-                        Vector3 b = Local(r.points[i + 1]);
+                        Vector3 a = SnappedLocal(r.points[i]);
+                        Vector3 b = SnappedLocal(r.points[i + 1]);
                         if ((b - a).sqrMagnitude < 0.01f) continue;
                         float bearing = Mathf.Repeat(
                             Mathf.Atan2(b.z - a.z, b.x - a.x) * Mathf.Rad2Deg, 180f);
@@ -739,40 +798,25 @@ namespace City.OSM
 
                 for (int i = 0; i < r.points.Length - 1; i++)
                 {
-                    Vector3 a = Local(r.points[i]);
-                    Vector3 b = Local(r.points[i + 1]);
-                    float fullLength = (b - a).magnitude;
-                    if (fullLength < 0.5f) continue;
+                    Vector3 a = SnappedLocal(r.points[i]);
+                    Vector3 b = SnappedLocal(r.points[i + 1]);
+                    float length = (b - a).magnitude;
+                    if (length < 0.1f) continue;
 
                     Vector3 mid = (a + b) * 0.5f;
                     float angle = Mathf.Atan2(b.z - a.z, b.x - a.x);
-                    Vector3 dirFull = (b - a) / fullLength;
 
-                    // Se un estremo e' un vero incrocio, riserviamo li' lo spazio
-                    // dell'impronta della tile crossroad/intersection, cosi' la
-                    // catena di tile dritte non ci si sovrappone sopra.
-                    bool aIsJunction = junctionCount.GetValueOrDefault(SnapKey(a)) >= 2
-                        && IsRealJunction(nodeBearings.GetValueOrDefault(SnapKey(a)));
-                    bool bIsJunction = junctionCount.GetValueOrDefault(SnapKey(b)) >= 2
-                        && IsRealJunction(nodeBearings.GetValueOrDefault(SnapKey(b)));
-                    float junctionHalfLen = (_straightWid > 0f)
-                        ? (_straightLen * (width / _straightWid) * 0.5f) : 0f;
-
-                    Vector3 aTiles = aIsJunction ? a + dirFull * Mathf.Min(junctionHalfLen, fullLength * 0.45f) : a;
-                    Vector3 bTiles = bIsJunction ? b - dirFull * Mathf.Min(junctionHalfLen, fullLength * 0.45f) : b;
-                    float length = (bTiles - aTiles).magnitude;
-
-                    if (_roadStraight != null && _straightLen > 0f && _straightWid > 0f && length >= 0.5f)
+                    if (_roadStraight != null && _straightLen > 0f && _straightWid > 0f)
                     {
                         float sx = (width / _straightWid) * KENNEY_ROAD_SCALE;
                         int tileCount = Mathf.Max(1, Mathf.RoundToInt(length / KENNEY_TILE_LEN));
                         float tileStep = length / tileCount;
                         float sz = (tileStep / _straightLen) * KENNEY_ROAD_SCALE;
-                        Vector3 dir = dirFull;
+                        Vector3 dir = (b - a).normalized;
 
                         for (int t = 0; t < tileCount; t++)
                         {
-                            Vector3 tileCenter = aTiles + dir * ((t + 0.5f) * tileStep);
+                            Vector3 tileCenter = a + dir * ((t + 0.5f) * tileStep);
                             var go = Instantiate(_roadStraight, parent);
                             go.name = "Strada";
                             go.transform.localPosition = tileCenter + Vector3.up * -0.03f;
@@ -788,9 +832,9 @@ namespace City.OSM
                             }
                         }
                     }
-                    else if (length >= 0.5f)
+                    else
                     {
-                        CreateBox(parent, "Strada", (aTiles + bTiles) * 0.5f + Vector3.up * -0.03f,
+                        CreateBox(parent, "Strada", mid + Vector3.up * -0.03f,
                             new Vector3(length, 0.06f, width), GetMaterial(RoadColor), angle, true);
                     }
 
@@ -805,9 +849,10 @@ namespace City.OSM
                         && IsRealJunction(nodeBearings.GetValueOrDefault(vKey)))
                     {
                         int cnt = junctionCount[vKey];
-                        GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                        GameObject jPrefab = cnt >= 5 ? _roadRoundabout
+                                            : cnt >= 3 ? _roadCrossroad : _roadIntersection;
                         InstantiateRoadTile(parent, jPrefab, b, angle, width);
-                        UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
+                        UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
                         placedJunctions.Add(vKey);
                     }
 
@@ -818,36 +863,55 @@ namespace City.OSM
                             && IsRealJunction(nodeBearings.GetValueOrDefault(aKey)))
                         {
                             int cnt = junctionCount[aKey];
-                            GameObject jPrefab = cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                            GameObject jPrefab = cnt >= 5 ? _roadRoundabout
+                                                : cnt >= 3 ? _roadCrossroad : _roadIntersection;
                             InstantiateRoadTile(parent, jPrefab, a, angle, width);
-                            UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
+                            UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
                             placedJunctions.Add(aKey);
                         }
                     }
 
-                    // NOTA: la tile "bend" dedicata e' stata rimossa perche' veniva
-                    // piazzata senza ritagliare spazio nella catena di tile dritte
-                    // gia' usata per approssimare le curve OSM (molti punti ravvicinati),
-                    // causando sovrapposizioni e bordi frastagliati. La catena di tile
-                    // dritte da sola approssima gia' bene le curve.
+                    if (i > 0 && i < r.points.Length - 1)
+                    {
+                        Vector3 prev = SnappedLocal(r.points[i - 1]);
+                        float inAngle = Mathf.Atan2(a.z - prev.z, a.x - prev.x);
+                        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg, inAngle * Mathf.Rad2Deg));
+                        int bvKey = SnapKey(a);
+                        if (!placedJunctions.Contains(bvKey))
+                        {
+                            GameObject curvePrefab = null;
+                            if (Mathf.Abs(angleDiff - 90f) < 25f)
+                                curvePrefab = _roadBend;
+                            else if (angleDiff > 15f && angleDiff < 65f)
+                                curvePrefab = _roadCurve;
+                            else if (angleDiff > 115f && angleDiff < 165f)
+                                curvePrefab = _roadCurve;
+
+                            if (curvePrefab != null)
+                            {
+                                InstantiateRoadTile(parent, curvePrefab, a, inAngle, width);
+                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadBend ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0}");
+                            }
+                        }
+                    }
 
                     if (++steps % 60 == 0) yield return null;
                 }
 
-                int startKey = SnapKey(Local(r.points[0]));
-                int endKey = SnapKey(Local(r.points[r.points.Length - 1]));
+                int startKey = SnapKey(SnappedLocal(r.points[0]));
+                int endKey = SnapKey(SnappedLocal(r.points[r.points.Length - 1]));
                 if (junctionCount.GetValueOrDefault(startKey) <= 1)
                 {
-                    Vector3 sp = Local(r.points[0]);
-                    Vector3 sp2 = Local(r.points[1]);
+                    Vector3 sp = SnappedLocal(r.points[0]);
+                    Vector3 sp2 = SnappedLocal(r.points[1]);
                     float sAngle = Mathf.Atan2(sp2.z - sp.z, sp2.x - sp.x) + Mathf.PI;
                     InstantiateRoadTile(parent, _roadEnd, sp, sAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (start)");
                 }
                 if (junctionCount.GetValueOrDefault(endKey) <= 1)
                 {
-                    Vector3 ep = Local(r.points[r.points.Length - 1]);
-                    Vector3 ep2 = Local(r.points[r.points.Length - 2]);
+                    Vector3 ep = SnappedLocal(r.points[r.points.Length - 1]);
+                    Vector3 ep2 = SnappedLocal(r.points[r.points.Length - 2]);
                     float eAngle = Mathf.Atan2(ep.z - ep2.z, ep.x - ep2.x);
                     InstantiateRoadTile(parent, _roadEnd, ep, eAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (end)");
@@ -857,9 +921,9 @@ namespace City.OSM
                 if (!string.IsNullOrEmpty(r.name) && r.points.Length >= 2)
                 {
                     int mid = r.points.Length / 2;
-                    Vector3 lp = Local(r.points[mid]);
+                    Vector3 lp = SnappedLocal(r.points[mid]);
                     int next = Mathf.Min(mid + 1, r.points.Length - 1);
-                    Vector3 pn = Local(r.points[next]);
+                    Vector3 pn = SnappedLocal(r.points[next]);
                     float la = Mathf.Atan2(pn.z - lp.z, pn.x - lp.x);
                     bool isMajor = r.highway == "primary" || r.highway == "secondary"
                         || r.highway == "tertiary" || r.highway == "residential"

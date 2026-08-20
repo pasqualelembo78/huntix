@@ -391,22 +391,106 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
 
-        // ═══ 5b. OPENWORLD (Mia Città — città OSM reale 3D) ═══
-        val openWorldRow = LinearLayout(this).apply {
+        // ═══ 5b. SUPERMERCATO UNITY ══════════════════════════════════
+        val supermarketRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
         }
-        openWorldRow.addView(spacerH(dp(4)))
-        openWorldRow.addView(quickChip("\uD83C\uDFD9\uFE0F", "OpenWorld", "#7E57C2") {
+        supermarketRow.addView(spacerH(dp(4)))
+        supermarketRow.addView(        quickChip("\uD83D\uDED2", "Supermercato", "#2196F3") {
             Bridge.openUnityActivity(
                 this@HomeActivity,
-                BridgeActivity.MODE_OPENWORLD,
-                "{\"id\":\"openworld\",\"name\":\"OpenWorld\"}"
+                BridgeActivity.MODE_INDOOR,
+                "{\"id\":\"supermarket_home\",\"name\":\"Supermercato\",\"type\":\"shop\",\"buildingType\":\"SUPERMARKET\",\"asset\":\"cute\"}"
             )
         })
-        root.addView(openWorldRow)
+        supermarketRow.addView(spacerH(dp(4)))
+        supermarketRow.addView(quickChip("\uD83C\uDFE8", "Stanza", "#00897B") {
+            Bridge.openUnityActivity(
+                this@HomeActivity,
+                BridgeActivity.MODE_ROOM,
+                "{\"id\":\"room\",\"name\":\"Stanza\"}"
+            )
+        })
+        supermarketRow.addView(spacerH(dp(4)))
+        supermarketRow.addView(quickChip("\uD83C\uDFD9\uFE0F", "Miacitta", "#7E57C2") {
+            Bridge.openUnityActivity(
+                this@HomeActivity,
+                BridgeActivity.MODE_MIACITTA,
+                "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
+            )
+        })
+        supermarketRow.addView(spacerH(dp(4)))
+        root.addView(supermarketRow)
 
-        // ═══ RICERCA LOCALI VICINI AL GPS (Overpass) ═══
+        // ═══ 5b2. SUPERMERCATI LAB (progetti GitHub/itch.io testabili) ═══
+        val labTitle = TextView(this).apply {
+            text = "🧪 Supermercati Lab"
+            textSize = 13f
+            setTextColor(Color.parseColor("#FFFFFF"))
+            setPadding(dp(4), dp(6), dp(4), dp(2))
+        }
+        root.addView(labTitle)
+
+        val labRow1 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(6) }
+        }
+        labRow1.addView(spacerH(dp(4)))
+        labRow1.addView(quickChip("🛒", "Simulator Proto", "#43A047") {
+            Bridge.openUnityActivity(
+                this@HomeActivity,
+                BridgeActivity.MODE_SUPERMARKET_PROTO,
+                "{\"id\":\"supermarket_proto\",\"name\":\"Supermarket Simulator\",\"type\":\"supermarket_lab\"}"
+            )
+        })
+        labRow1.addView(spacerH(dp(6)))
+        labRow1.addView(quickChip("🎨", "Cute Store (skin)", "#8E24AA") {
+            Toast.makeText(this@HomeActivity, "Skin del supermercato indoor in arrivo (Cute Supermarket Lite).", Toast.LENGTH_SHORT).show()
+        })
+        labRow1.addView(spacerH(dp(4)))
+        root.addView(labRow1)
+
+        val labRow2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
+        }
+        labRow2.addView(spacerH(dp(4)))
+        labRow2.addView(quickChip("🥽", "supervrket", "#757575") {
+            Toast.makeText(this@HomeActivity, "Non giocabile: richiede Unity 6 + Visore VR.", Toast.LENGTH_SHORT).show()
+        })
+        labRow2.addView(spacerH(dp(6)))
+        labRow2.addView(quickChip("🛍️", "Supermarket Spree", "#757575") {
+            Toast.makeText(this@HomeActivity, "Non giocabile: solo modalità VR.", Toast.LENGTH_SHORT).show()
+        })
+        labRow2.addView(spacerH(dp(6)))
+        labRow2.addView(quickChip("🕶️", "VR-SuperMarket", "#757575") {
+            Toast.makeText(this@HomeActivity, "Non giocabile: solo modalità VR.", Toast.LENGTH_SHORT).show()
+        })
+        labRow2.addView(spacerH(dp(6)))
+        labRow2.addView(quickChip("📦", "Supermarket-Sim", "#757575") {
+            Toast.makeText(this@HomeActivity, "Non giocabile: versione Unity 2017.2 troppo vecchia.", Toast.LENGTH_SHORT).show()
+        })
+        labRow2.addView(spacerH(dp(4)))
+        root.addView(labRow2)
+
+        // ═══ 5c. ALTRI TIPI DI NEGOTIO (stessi asset Kenney, layout diversi) ══
+        val otherRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
+        }
+        otherRow.addView(spacerH(dp(4)))
+        otherRow.addView(quickChip("\uD83C\uDF5D", "Ristorante", "#D84315") { openIndoorStore("RESTAURANT", "Ristorante") })
+        otherRow.addView(spacerH(dp(6)))
+        otherRow.addView(quickChip("\uD83D\uD8AA", "Palestra", "#00695C") { openIndoorStore("GYM", "Palestra") })
+        otherRow.addView(spacerH(dp(6)))
+        otherRow.addView(quickChip("\uD83C\uDFE5", "Ospedale", "#C62828") { openIndoorStore("HOSPITAL", "Ospedale") })
+        otherRow.addView(spacerH(dp(6)))
+        otherRow.addView(quickChip("\uD83D\uDCDA", "Libreria", "#6A1B9A") { openIndoorStore("LIBRARY", "Libreria") })
+        otherRow.addView(spacerH(dp(6)))
+        otherRow.addView(quickChip("\u2615", "Bar", "#8D6E63") { openIndoorStore("BAR", "Bar") })
+        otherRow.addView(spacerH(dp(4)))
+        root.addView(otherRow)
 
         // ═══ RICERCA LOCALI VICINI AL GPS (Overpass) ═══
         // Trova i locali intorno alla posizione corrente (negozi, bar, ristoranti,
@@ -514,6 +598,16 @@ class HomeActivity : BaseNavActivity() {
     }
     private fun spacerH(w: Int) = android.view.View(this).apply {
         layoutParams = LinearLayout.LayoutParams(w, 1)
+    }
+
+    // Lega un pulsante home a uno store Unity (BridgeActivity indoor) con buildingType
+    // derivato: IndoorManager → StoreBuilder.Build{Store|Restaurant|Gym|Hospital|Library|Bar}.
+    private fun openIndoorStore(buildingType: String, name: String) {
+        Bridge.openUnityActivity(
+            this,
+            BridgeActivity.MODE_INDOOR,
+            "{\"id\":\"${buildingType.lowercase()}@home\",\"name\":\"$name\",\"type\":\"$buildingType\",\"buildingType\":\"$buildingType\"}"
+        )
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

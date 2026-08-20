@@ -382,7 +382,7 @@ namespace City.Editor
             sunGo.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
             RenderSettings.sun = sun;
 
-            RenderSettings.skybox = Resources.GetBuiltinResource<Material>("Skybox/Procedural");
+            RenderSettings.skybox = Resources.GetBuiltinResource<Material>("Skybox/Procedural.fbx");
             RenderSettings.ambientMode = AmbientMode.Skybox;
             RenderSettings.ambientIntensity = 1f;
 

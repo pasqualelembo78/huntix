@@ -59,9 +59,12 @@ namespace Huntix.Core
             string scene = mode switch
             {
                 "outdoor" or "esplora" or "reallife" => "Outdoor",
+                "indoor" => "Indoor",
                 "game" or "sheep" => "Preload",
                 "argame" or "ardice" => "MainScene",
-                "openworld" => "City",
+                "supermarket_proto" => "MainGame",
+                "room" => "Room",
+                "miacitta" => "City",
                 _ => null
             };
             if (scene != null && SceneManager.GetActiveScene().name != scene)
@@ -83,7 +86,7 @@ namespace Huntix.Core
                 }
             }
 
-            // OpenWorld: sostituisce il quartiere finto con la città OSM reale (streaming GPS).
+            // MiAcitma: sostituisce il quartiere finto con la città OSM reale (streaming GPS).
             if (scene == "City")
             {
                 City.OSM.CityOSMWorld.EnsureInstance();
@@ -226,7 +229,7 @@ namespace Huntix.Core
             UnityBridge.RequestPoisNearby(lat, lng, radiusMeters);
         }
 
-        // ── OpenWorld: città OSM reale (scena City) ──────────────────
+        // ── MiAcitma: città OSM reale (scena City) ──────────────────
 
         public void RequestOsmCity(double lat, double lng, int radiusMeters)
         {
