@@ -113,6 +113,15 @@ data class OsmWay(
     /** Limite velocità */
     val maxspeed: String get() = tags["maxspeed"] ?: ""
 
+    /** È un tunnel? */
+    val isTunnel: Boolean get() = tags["tunnel"] in setOf("yes", "true", "1")
+
+    /** È un ponte? */
+    val isBridge: Boolean get() = tags["bridge"] in setOf("yes", "true", "1")
+
+    /** Layer (piano verticale: -1=sotto terra, 0=piano strada, 1=sopra) */
+    val layer: Int get() = tags["layer"]?.toIntOrNull() ?: 0
+
     /** Tipo di leisure (park, garden, etc.) */
     val leisure: String get() = tags["leisure"] ?: ""
 
@@ -208,6 +217,10 @@ data class OsmData(
     /** POI (amenity o shop) */
     val pois: List<OsmNode>
         get() = nodes.values.filter { it.amenity.isNotEmpty() || it.shop.isNotEmpty() }
+
+    /** Semafori (traffic signals) */
+    val trafficSignals: List<OsmNode>
+        get() = nodes.values.filter { it.tags["highway"] == "traffic_signals" }
 
     /** Statistiche */
     fun stats(): String {

@@ -149,6 +149,40 @@ async def lifespan(application):
     threading.Thread(target=_cleanup_expired_tokens, daemon=True).start()
     threading.Thread(target=_free_port_background, args=(int(os.environ.get("PORT", 5000)),), daemon=True).start()
     threading.Thread(target=_model_chain_refresh_loop, daemon=True).start()
+
+    # ── Traffic simulation ──────────────────────────────────────
+    application._traffic_sim = None
+    application._traffic_db = None
+    application._traffic_firestore = None
+    try:
+        from traffic import TrafficSimulation, TrafficDB
+        from traffic.road_graph import RoadGraph
+        from traffic.firestore_backup import TrafficFirestore
+
+        _t_db = TrafficDB()
+        await _t_db.init()
+        application._traffic_db = _t_db
+
+        _t_fs = TrafficFirestore()
+        await _t_fs.init()
+        application._traffic_firestore = _t_fs
+
+        _t_sim = TrafficSimulation(RoadGraph())
+        application._traffic_sim = _t_sim
+
+        from traffic.handlers import register_traffic_handlers, tick_loop
+        _traffic_sessions = register_traffic_handlers(sio, _t_sim, _t_db)
+        application._traffic_sessions = _traffic_sessions
+
+        import asyncio as _aio
+        async def _run_tick():
+            await tick_loop(_t_sim, _t_db, sio, _traffic_sessions, firestore_backup=_t_fs)
+        _aio.get_running_loop().create_task(_run_tick())
+
+        logger.info("Traffic simulation initialized")
+    except Exception as e:
+        logger.error(f"Traffic init failed (continuing without): {e}")
+
     logger.info("Huntix FastAPI started")
     yield
     logger.info("Huntix FastAPI shutting down")
@@ -195,6 +229,13 @@ app.include_router(group_chat_router)
 app.include_router(chat_router)
 app.include_router(users_router)
 app.include_router(reallife_router)
+
+try:
+    from traffic.api import router as traffic_router
+    app.include_router(traffic_router)
+    logger.info("Traffic API router registered")
+except Exception as e:
+    logger.warning(f"Traffic API router not loaded: {e}")
 
 # ─── Socket.IO ───────────────────────────────────────────────────
 from app_socket import register_socket_handlers

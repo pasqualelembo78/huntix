@@ -24,7 +24,8 @@ namespace City.Vehicle
         public void SpawnTraffic(Transform root, OsmCityEnvelope env)
         {
             if (env.roads == null) return;
-            player = City.Game.Instance != null ? City.Game.Instance.player.transform : null;
+            var game = City.Game.Instance;
+            player = game != null && game.player != null ? game.player.transform : null;
 
             var rng = new System.Random(999);
             int spawned = 0;

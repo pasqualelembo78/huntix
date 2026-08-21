@@ -42,6 +42,7 @@ object OsmCityJsonFactory {
         root.put("buildings", buildBuildings(data))
         root.put("trees", buildTrees(data))
         root.put("parks", buildParks(data))
+        root.put("traffic_signals", buildTrafficSignals(data))
 
         val roads = root.getJSONArray("roads").length()
         val buildings = root.getJSONArray("buildings").length()
@@ -65,6 +66,10 @@ object OsmCityJsonFactory {
             jo.put("highway", r.highway)
             jo.put("name", r.streetName)
             jo.put("points", pointsOf(r.nodes))
+            if (r.isTunnel) jo.put("tunnel", true)
+            if (r.isBridge) jo.put("bridge", true)
+            if (r.layer != 0) jo.put("layer", r.layer)
+            if (r.maxspeed.isNotEmpty()) jo.put("maxspeed", r.maxspeed)
             arr.put(jo)
         }
         return arr
@@ -131,6 +136,18 @@ object OsmCityJsonFactory {
             p.put("lat", round6(n.lat))
             p.put("lng", round6(n.lon))
             arr.put(p)
+        }
+        return arr
+    }
+
+    private fun buildTrafficSignals(data: OsmData): JSONArray {
+        val arr = JSONArray()
+        for (n in data.trafficSignals) {
+            val jo = JSONObject()
+            jo.put("id", n.id)
+            jo.put("lat", round6(n.lat))
+            jo.put("lng", round6(n.lon))
+            arr.put(jo)
         }
         return arr
     }

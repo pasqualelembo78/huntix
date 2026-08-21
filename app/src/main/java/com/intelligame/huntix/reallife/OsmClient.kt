@@ -400,6 +400,7 @@ object OsmClient {
   node["craft"]($south,$west,$north,$east);
   node["office"]($south,$west,$north,$east);
   node["healthcare"]($south,$west,$north,$east);
+  node["highway"="traffic_signals"]($south,$west,$north,$east);
 );
 out body;
 >;

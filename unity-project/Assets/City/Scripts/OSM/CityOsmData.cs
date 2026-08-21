@@ -21,6 +21,10 @@ namespace City.OSM
         public string highway;
         public string name;
         public GeoPoint[] points;
+        public bool tunnel;
+        public bool bridge;
+        public int layer;
+        public string maxspeed;
     }
 
     [Serializable]
@@ -43,6 +47,14 @@ namespace City.OSM
     }
 
     [Serializable]
+    public class OsmTrafficSignal
+    {
+        public long id;
+        public double lat;
+        public double lng;
+    }
+
+    [Serializable]
     public class OsmCityEnvelope
     {
         public double centerLat;
@@ -53,6 +65,7 @@ namespace City.OSM
         public OsmBuilding[] buildings;
         public GeoPoint[] trees;
         public OsmPark[] parks;
+        public OsmTrafficSignal[] traffic_signals;
     }
 
     [Serializable]

@@ -6,6 +6,8 @@ using UnityEngine;
 using TMPro;
 using City.World;
 using City.Player;
+using City.Vehicle;
+using City.Vehicle.Traffic;
 using Huntix.Bridge;
 
 namespace City.OSM
@@ -301,6 +303,8 @@ namespace City.OSM
             yield return BuildBuildingsCoroutine(newRoot.transform, env);
             yield return BuildVegetationCoroutine(newRoot.transform, env);
 
+            SpawnVehicles(newRoot.transform, env);
+
             EnsurePlayerOutsideBuildings();
 
             var game = City.Game.Instance;
@@ -330,6 +334,114 @@ namespace City.OSM
                       " buildings=" + (env.buildings != null ? env.buildings.Length : 0) +
                       " trees=" + (env.trees != null ? env.trees.Length : 0) +
                       " parks=" + (env.parks != null ? env.parks.Length : 0));
+        }
+
+        // ── veicoli ─────────────────────────────────────────────────
+
+        private Texture2D _vehicleColormap;
+
+        private RoadGraph _roadGraph;
+
+        private const string TRAFFIC_SERVER_URL = "http://82.165.218.56:5100";
+        private const string TRAFFIC_GAME_ID = "huntix_main";
+
+        private void SpawnVehicles(Transform root, OsmCityEnvelope env)
+        {
+            _vehicleColormap = Resources.Load<Texture2D>("Vehicles/Textures/colormap");
+
+            if (VehicleSpawnManager.Instance != null)
+            {
+                VehicleSpawnManager.Instance.DespawnAll();
+                Destroy(VehicleSpawnManager.Instance.gameObject);
+            }
+            if (TrafficManager.Instance != null)
+            {
+                TrafficManager.Instance.DespawnAll();
+                Destroy(TrafficManager.Instance.gameObject);
+            }
+            if (TrafficSystemManager.Instance != null)
+            {
+                TrafficSystemManager.Instance.DespawnAll();
+                Destroy(TrafficSystemManager.Instance.gameObject);
+            }
+
+            var vsmObj = new GameObject("VehicleSpawnManager");
+            vsmObj.transform.SetParent(root, false);
+            var vsm = vsmObj.AddComponent<VehicleSpawnManager>();
+            vsm.SpawnParkedVehicles(root, env);
+
+            _roadGraph = RoadGraphBuilder.Build(env);
+
+            var buildingBoundsArray = _buildingBounds.ToArray();
+
+            var tsObj = new GameObject("TrafficSystem");
+            tsObj.transform.SetParent(root, false);
+            var ts = tsObj.AddComponent<TrafficSystemManager>();
+
+            var tcObj = new GameObject("TrafficClient");
+            tcObj.transform.SetParent(root, false);
+            var tc = tcObj.AddComponent<TrafficClient>();
+
+            var tlObj = new GameObject("TrafficLights");
+            tlObj.transform.SetParent(root, false);
+            var tlRenderer = tlObj.AddComponent<TrafficLightRenderer>();
+            tlRenderer.SetRoot(root);
+
+            tc.OnCarsUpdated += (cars) => ts.UpdateServerCars(cars);
+            tc.OnTrafficLightsUpdated += (lights) => tlRenderer.UpdateLights(lights);
+            tc.OnServerUnreachable += () =>
+            {
+                Debug.Log("[CityOSMWorld] Server unreachable → local traffic simulation");
+                ts.InitLocal(_roadGraph, root, buildingBoundsArray);
+                Destroy(tc.gameObject);
+            };
+
+            ts.InitServer(root);
+            tc.SetBuildingBounds(buildingBoundsArray);
+            tc.SetRoadGraph(_roadGraph);
+            tc.Connect(TRAFFIC_SERVER_URL, TRAFFIC_GAME_ID);
+
+            FixVehicleMaterials(root.gameObject);
+
+            UnityBridge.LogToAndroid("CityOSMWorld",
+                $"Veicoli: server mode ({_roadGraph.nodes.Count} nodes, {_roadGraph.arcs.Count} arcs)");
+        }
+
+        private void DespawnVehicles()
+        {
+            if (VehicleSpawnManager.Instance != null)
+                VehicleSpawnManager.Instance.DespawnAll();
+            if (TrafficManager.Instance != null)
+                TrafficManager.Instance.DespawnAll();
+            if (TrafficSystemManager.Instance != null)
+                TrafficSystemManager.Instance.DespawnAll();
+            if (TrafficClient.Instance != null)
+                Destroy(TrafficClient.Instance.gameObject);
+        }
+
+        private void FixVehicleMaterials(GameObject root)
+        {
+            var urp = Shader.Find("Universal Render Pipeline/Lit");
+            if (urp == null) urp = Shader.Find("Standard");
+            foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
+            {
+                if (r == null) continue;
+                Material[] mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Material m = mats[i];
+                    if (m == null) { mats[i] = new Material(urp); m = mats[i]; }
+                    else if (m.shader == null || (!m.shader.name.Contains("Universal") && !m.shader.name.Contains("URP")))
+                    {
+                        m.shader = urp;
+                    }
+                    if (m.HasProperty("_BaseMap") && m.GetTexture("_BaseMap") == null && _vehicleColormap != null)
+                        m.SetTexture("_BaseMap", _vehicleColormap);
+                    else if (m.HasProperty("_MainTex") && m.GetTexture("_MainTex") == null && _vehicleColormap != null)
+                        m.SetTexture("_MainTex", _vehicleColormap);
+                }
+                r.sharedMaterials = mats;
+            }
         }
 
         // Posiziona il player IN PIEDI sul terreno OSM: il CharacterController
@@ -598,6 +710,7 @@ namespace City.OSM
         private GameObject _roadStraight, _roadBend, _roadCrossroad, _roadIntersection, _roadEnd;
         private GameObject _roadCurve, _roadRoundabout;
         private float _straightLen, _straightWid;
+        private Texture2D _roadColormap;
 
         private static int SnapKey(Vector3 p)
         {
@@ -632,7 +745,6 @@ namespace City.OSM
         }
 
         private const float KENNEY_ROAD_SCALE = 8f;
-        private const float KENNEY_TILE_LEN = 8f;
 
         private void LoadRoadPrefabs()
         {
@@ -660,12 +772,14 @@ namespace City.OSM
                 _straightLen = pb.size.z;
                 _straightWid = pb.size.x;
                 UnityBridge.LogToAndroid("CityOSM", "Road probe (8x): size=(" + pb.size.x + "," + pb.size.y + "," + pb.size.z + ") straightLen=" + _straightLen + " straightWid=" + _straightWid);
-                DestroyImmediate(probe);
+                Destroy(probe);
             }
+
+            _roadColormap = Resources.Load<Texture2D>("Roads/Textures/colormap");
 
             int loaded = (_roadStraight ? 1 : 0) + (_roadBend ? 1 : 0) + (_roadCrossroad ? 1 : 0)
                          + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0) + (_roadCurve ? 1 : 0) + (_roadRoundabout ? 1 : 0);
-            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/7 tileWid=" + _straightWid + " tileLen=" + _straightLen);
+            UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/7 tileWid=" + _straightWid + " tileLen=" + _straightLen + " colormap=" + (_roadColormap != null));
         }
 
         private GameObject InstantiateRoadTile(Transform parent, GameObject prefab, Vector3 pos, float angle, float width)
@@ -687,7 +801,34 @@ namespace City.OSM
                 MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
                 mc.sharedMesh = mf.sharedMesh;
             }
+            ApplyRoadMaterial(go);
             return go;
+        }
+
+        private void ApplyRoadMaterial(GameObject go)
+        {
+            if (go == null) return;
+            var urp = Shader.Find("Universal Render Pipeline/Lit");
+            if (urp == null) urp = Shader.Find("Standard");
+            foreach (Renderer r in go.GetComponentsInChildren<Renderer>())
+            {
+                if (r == null) continue;
+                Material[] mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Material m = mats[i];
+                    if (m == null) { mats[i] = new Material(urp); m = mats[i]; }
+                    else if (m.shader == null || (!m.shader.name.Contains("Universal") && !m.shader.name.Contains("URP")))
+                    {
+                        m.shader = urp;
+                    }
+                    if (m.HasProperty("_BaseMap") && m.GetTexture("_BaseMap") == null && _roadColormap != null)
+                        m.SetTexture("_BaseMap", _roadColormap);
+                    else if (m.HasProperty("_MainTex") && m.GetTexture("_MainTex") == null && _roadColormap != null)
+                        m.SetTexture("_MainTex", _roadColormap);
+                }
+                r.sharedMaterials = mats;
+            }
         }
 
         private IEnumerator BuildRoadsCoroutine(Transform parent, OsmCityEnvelope env)
@@ -808,10 +949,10 @@ namespace City.OSM
 
                     if (_roadStraight != null && _straightLen > 0f && _straightWid > 0f)
                     {
-                        float sx = (width / _straightWid) * KENNEY_ROAD_SCALE;
-                        int tileCount = Mathf.Max(1, Mathf.RoundToInt(length / KENNEY_TILE_LEN));
+                        float s = (width / _straightWid) * KENNEY_ROAD_SCALE;
+                        float tileLenWorld = _straightLen * s / KENNEY_ROAD_SCALE;
+                        int tileCount = Mathf.Max(1, Mathf.CeilToInt(length / tileLenWorld));
                         float tileStep = length / tileCount;
-                        float sz = (tileStep / _straightLen) * KENNEY_ROAD_SCALE;
                         Vector3 dir = (b - a).normalized;
 
                         for (int t = 0; t < tileCount; t++)
@@ -820,8 +961,8 @@ namespace City.OSM
                             var go = Instantiate(_roadStraight, parent);
                             go.name = "Strada";
                             go.transform.localPosition = tileCenter + Vector3.up * -0.03f;
-                            go.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
-                            go.transform.localScale = new Vector3(sx, 1f, sz);
+            go.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
+                            go.transform.localScale = new Vector3(s, 1f, s);
 
                             foreach (MeshFilter mf in go.GetComponentsInChildren<MeshFilter>())
                             {
@@ -830,6 +971,7 @@ namespace City.OSM
                                 MeshCollider mc = mf.gameObject.AddComponent<MeshCollider>();
                                 mc.sharedMesh = mf.sharedMesh;
                             }
+                            ApplyRoadMaterial(go);
                         }
                     }
                     else
@@ -875,7 +1017,9 @@ namespace City.OSM
                     {
                         Vector3 prev = SnappedLocal(r.points[i - 1]);
                         float inAngle = Mathf.Atan2(a.z - prev.z, a.x - prev.x);
-                        float angleDiff = Mathf.Abs(Mathf.DeltaAngle(angle * Mathf.Rad2Deg, inAngle * Mathf.Rad2Deg));
+                        float outAngle = angle;
+                        float signedDiff = Mathf.DeltaAngle(inAngle * Mathf.Rad2Deg, outAngle * Mathf.Rad2Deg);
+                        float angleDiff = Mathf.Abs(signedDiff);
                         int bvKey = SnapKey(a);
                         if (!placedJunctions.Contains(bvKey))
                         {
@@ -889,8 +1033,9 @@ namespace City.OSM
 
                             if (curvePrefab != null)
                             {
-                                InstantiateRoadTile(parent, curvePrefab, a, inAngle, width);
-                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadBend ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0}");
+                                float midAngle = inAngle + signedDiff * 0.5f * Mathf.Deg2Rad;
+                                InstantiateRoadTile(parent, curvePrefab, a, midAngle, width);
+                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadBend ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0} signed={signedDiff:F0}");
                             }
                         }
                     }
