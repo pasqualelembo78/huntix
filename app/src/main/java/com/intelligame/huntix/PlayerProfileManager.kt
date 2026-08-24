@@ -267,6 +267,30 @@ object PlayerProfileManager {
     }
 
     /**
+     * Fase 6: salva il personaggio scelto per la città (skin Kenney).
+     * Firestore field "cityCharacterId" + cache locale per il bridge Unity.
+     */
+    fun updateCityCharacter(skinId: String, ctx: Context, onComplete: () -> Unit, onError: (String) -> Unit) {
+        val profile = _myProfile ?: run { onError("Profilo non caricato"); return }
+        profile.cityCharacterId = skinId
+        // Local first: la City (BridgeActivity) legge questa preferenza,
+        // quindi la scelta vale subito anche se il sync remoto fallisse.
+        _myProfile = profile
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putString("city_skin", skinId).apply()
+        // Sync Firestore best-effort: se le security rules non consentono
+        // ancora il campo, non blocchiamo l'utente con un errore.
+        db.collection(COL_PLAYERS).document(profile.playerId)
+            .update("cityCharacterId", skinId)
+            .addOnSuccessListener { onComplete() }
+            .addOnFailureListener { e ->
+                android.util.Log.w("PlayerProfileMgr",
+                    "sync cityCharacterId su Firestore fallita (resta locale): " + e.message)
+                onComplete()
+            }
+    }
+
+    /**
      * Ricarica il profilo dal cache locale o da Firestore.
      * Utile per aggiornare l'UI dopo partite o mini giochi.
      */
@@ -275,6 +299,14 @@ object PlayerProfileManager {
             ?: ctx.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE).getString(KEY_ID, null)
             ?: run { onComplete?.invoke(null); return }
         loadProfile(id, onSuccess = { profile ->
+            // Personaggio City local-first: la preferenza salvata vince
+            // su Firestore (campo non ancora whitelisted nelle rules).
+            val savedSkin = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+                .getString("city_skin", null)
+            if (!savedSkin.isNullOrBlank()) {
+                profile.cityCharacterId = savedSkin
+                _myProfile = profile
+            }
             onComplete?.invoke(profile)
         }, onNotFound = {
             onComplete?.invoke(_myProfile)

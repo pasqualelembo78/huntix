@@ -140,10 +140,18 @@ namespace City.Economy
             bg.transform.localPosition = new Vector3(0f, 0f, 0.01f);
             bg.transform.localScale = new Vector3(0.5f, 0.5f, 0.05f);
             var bgR = bg.GetComponent<Renderer>();
-            var bgMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            if (bgMat.shader == null) bgMat = new Material(Shader.Find("Unlit/Color"));
-            bgMat.color = new Color(0.15f, 0.15f, 0.15f, 0.85f);
-            bgR.sharedMaterial = bgMat;
+            Shader sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Sprites/Default");
+            if (sh == null) sh = Shader.Find("Legacy Shaders/Diffuse");
+            if (sh != null)
+            {
+                var bgMat = new Material(sh);
+                if (bgMat.HasProperty("_BaseColor"))
+                    bgMat.SetColor("_BaseColor", new Color(0.15f, 0.15f, 0.15f, 0.85f));
+                if (bgMat.HasProperty("_Color"))
+                    bgMat.SetColor("_Color", new Color(0.15f, 0.15f, 0.15f, 0.85f));
+                bgR.sharedMaterial = bgMat;
+            }
             bgR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             Destroy(bg.GetComponent<Collider>());
         }
@@ -186,7 +194,18 @@ namespace City.Economy
         private void CompleteMission()
         {
             state = MissionState.Completed;
-            Wallet.Earn(reward);
+
+            // roleplay: punti amicizia con il personaggio e prezzo amico (+10%)
+            int paid = reward;
+            string cid = npc != null ? npc.CharacterId : null;
+            if (!string.IsNullOrEmpty(cid))
+            {
+                City.NPC.RelationshipManager.AddMissionComplete(cid);
+                if (City.NPC.RelationshipManager.LevelIndex(cid) >=
+                    City.NPC.RelationshipManager.FriendLevelForPerk)
+                    paid = Mathf.RoundToInt(reward * 1.1f);
+            }
+            Wallet.Earn(paid);
 
             if (markerObj != null)
             {
@@ -199,7 +218,8 @@ namespace City.Economy
             }
 
             MissionManager.Instance?.CompleteMission(this);
-            ShowToast("Missione completata! +€" + reward);
+            ShowToast("Missione completata! +€" + paid +
+                (paid != reward ? " (prezzo amico)" : ""));
 
             // Respawn marker after delay for new mission
             StartCoroutine(RespawnMarkerDelayed());
@@ -208,14 +228,19 @@ namespace City.Economy
         private System.Collections.IEnumerator RespawnMarkerDelayed()
         {
             yield return new WaitForSeconds(30f);
-            if (npc != null && npc.gameObject.activeInHierarchy)
+            if (npc == null || !npc.gameObject.activeInHierarchy) yield break;
+
+            // Nuova missione SULLO STESSO componente: creare un GameObject
+            // mission separato e distruggere questo rompeva npc.mission
+            // (riferimento a componente distrutto): il pedone non offriva piu'
+            // missioni per tutta la sessione.
+            if (markerObj != null)
             {
-                // Generate new mission
-                var newMission = GenerateMission(GetInstanceID() + UnityEngine.Random.Range(0, 10000));
-                newMission.AttachToNPC(npc);
                 Destroy(markerObj);
-                Destroy(this);
+                markerObj = null;
             }
+            ApplyData(GenerateMissionData(UnityEngine.Random.Range(0, int.MaxValue)));
+            CreateMarker();
         }
 
         private void ShowProgress()

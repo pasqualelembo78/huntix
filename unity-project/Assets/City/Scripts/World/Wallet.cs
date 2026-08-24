@@ -26,6 +26,13 @@ namespace City.World
             return Money >= price;
         }
 
+        public static bool TrySpend(int amount)
+        {
+            if (!CanAfford(amount)) return false;
+            Money -= amount;
+            return true;
+        }
+
         public static void Spend(int amount)
         {
             Money -= amount;

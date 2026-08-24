@@ -392,7 +392,9 @@ namespace City.OSM
             tc.OnServerUnreachable += () =>
             {
                 Debug.Log("[CityOSMWorld] Server unreachable → local traffic simulation");
-                ts.InitLocal(_roadGraph, root, buildingBoundsArray);
+                // il renderer dei semafori serve anche al traffico locale:
+                // TrafficSystemManager ci spinta le luci generate localmente
+                ts.InitLocal(_roadGraph, root, buildingBoundsArray, tlRenderer);
                 Destroy(tc.gameObject);
             };
 

@@ -64,6 +64,73 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
         addView(rowText("🗺️ Tema mappa",    p?.equippedMapThemeId ?: "default",    "#A855F7", "#E1BEE7"))
     })
 
+    // ── Fase 6: personaggio della città (kit Kenney) ─────────────
+    val cityChars = listOf(
+        Triple("humanMaleA",     "🧍‍♂️ Uomo",      "Il personaggio standard di Huntix City"),
+        Triple("humanFemaleA",   "🧍‍♀️ Donna",    "Il personaggio standard di Huntix City"),
+        Triple("zombieMaleA",    "🧟‍♂️ Zombie M", "Versione zombie del personaggio"),
+        Triple("zombieFemaleA",  "🧟‍♀️ Zombie F", "Versione zombie del personaggio")
+    )
+    val currentCityChar = p?.cityCharacterId?.takeIf { it.isNotBlank() } ?: "humanMaleA"
+
+    root.addView(sectionCard("#001520", "#00BCD4") {
+        addView(tv("🧍 Personaggio Città", 15f, Color.parseColor("#4DD0E1"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(4)) })
+        addView(tv("Scegli il tuo personaggio per Mia Città: verrà usato in tutta la città.",
+            12f, Color.parseColor("#B2EBF2"), Gravity.START)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+
+        for ((id, label, desc) in cityChars) {
+            val selected = id == currentCityChar
+            addView(LinearLayout(this@buildProfileTab).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE; cornerRadius = dp(10).toFloat()
+                    setColor(Color.parseColor(if (selected) "#0A3D4A" else "#101826"))
+                    setStroke(dp(1), Color.parseColor(if (selected) "#00E5FF" else "#26323F"))
+                }
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(6) }
+
+                addView(tv(label, 14f, Color.WHITE, Gravity.START, true).also {
+                    it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                addView(tv(desc, 10f, Color.parseColor("#78909C"), Gravity.END))
+
+                if (selected) {
+                    addView(tv("✓ In uso", 12f, Color.parseColor("#00E5FF"), Gravity.END, true)
+                        .also { it.setPadding(dp(8), 0, 0, 0) })
+                } else {
+                    val c = this@buildProfileTab
+                    addView(Button(c).apply {
+                        text = "Usa"; textSize = 12f; setTextColor(Color.WHITE)
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE; cornerRadius = dp(20).toFloat()
+                            setColor(Color.parseColor("#00838F"))
+                        }
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34))
+                            .also { it.marginStart = dp(8) }
+                        setOnClickListener {
+                            PlayerProfileManager.updateCityCharacter(id, c,
+                                onComplete = {
+                                    android.widget.Toast.makeText(c,
+                                        "✅ Personaggio aggiornato: $label",
+                                        android.widget.Toast.LENGTH_SHORT).show()
+                                    c.recreate()
+                                },
+                                onError = { err ->
+                                    android.widget.Toast.makeText(c, "⚠️ $err",
+                                        android.widget.Toast.LENGTH_SHORT).show()
+                                })
+                        }
+                    })
+                }
+            })
+        }
+    })
+
     // Team
     if (p?.teamId?.isNotEmpty() == true) {
         root.addView(sectionCard("#001A10", "#00FF88") {

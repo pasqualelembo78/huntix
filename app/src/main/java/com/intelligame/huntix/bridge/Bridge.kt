@@ -93,6 +93,21 @@ object Bridge {
             "OutdoorNPCFar" -> StoreUnityBridge.onOutdoorNPCFar(jsonData)
             "OutdoorNPCDialogue" -> StoreUnityBridge.onOutdoorNPCDialogue(jsonData)
             "OutdoorNPCInfo" -> StoreUnityBridge.onOutdoorNPCInfo(jsonData)
+            // ── MiAcitma: tap su un pedone → chat IA (RealLifeChatActivity) ──
+            "NpcChatRequest" -> {
+                // roleplay: preferisci il personaggio RealLife mappato
+                val id = extractJsonField(jsonData, "characterId")
+                    ?: extractJsonField(jsonData, "npcId") ?: ""
+                val name = extractJsonField(jsonData, "name") ?: "Cittadino"
+                val ctx = UnityPlayer.currentActivity ?: return
+                val intent = Intent(ctx, com.intelligame.huntix.ui.RealLifeChatActivity::class.java).apply {
+                    putExtra("CHAR_ID", id)
+                    putExtra("CHAR_NAME", name)
+                    putExtra("CHAR_AVATAR", "\uD83D\uDE42")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            }
         }
     }
 

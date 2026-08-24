@@ -22,7 +22,10 @@ namespace City
         private InteractDoor currentDoor;
         private VehicleInteract currentVehicleFocus;
         private NPCMission currentMissionNPC;
-        private bool currentVehicleShopOpen;
+        private VehiclePoiZone currentPoiZone;
+
+        /// <summary>Zona POI veicoli sotto i piedi (concessionaria/officina/garage).</summary>
+        public VehiclePoiZone CurrentPoiZone { get { return currentPoiZone; } }
 
         // ── Modalita' veicolo ─────────────────────────────────────
         public bool IsDriving { get; private set; }
@@ -49,15 +52,26 @@ namespace City
                 var go = new GameObject("TouchInputHandler");
                 go.AddComponent<TouchInputHandler>();
             }
+
+            // Il gestore degli interni non e' in scena: si auto-costruisce qui.
+            // Non DontDestroyOnLoad: riferisce player/rig di QUESTA scena.
+            if (InteriorManager.Instance == null)
+            {
+                var imGo = new GameObject("InteriorManager");
+                imGo.AddComponent<InteriorManager>();
+            }
         }
 
         private void Update()
         {
-            // Modalita' guida: reindirizza input al veicolo
-            if (IsDriving && CurrentVehicle != null && ui != null)
+            // Guida con gli stessi controlli della camminata: joystick
+            // sinistro (su/giu = gas/retro, dx/sx = sterzo); la camera si
+            // ruota trascinando la meta' destra dello schermo
+            if (IsDriving && CurrentVehicle != null && ui != null &&
+                ui.joystick != null)
             {
-                Vector2 input = ui.joystick != null ? ui.joystick.Value : Vector2.zero;
-                CurrentVehicle.SetInput(input.y, input.x, false);
+                Vector2 v = ui.joystick.Value;
+                CurrentVehicle.SetInput(v.y, v.x, false);
             }
 
             // Modalita' interno: reindirizza input al player interno
@@ -103,6 +117,22 @@ namespace City
             }
         }
 
+        // ── Zone POI veicoli (concessionaria / officina / garage) ──
+
+        public void OnPoiZoneFocusChanged(VehiclePoiZone zone)
+        {
+            if (zone != null && zone.IsFocused)
+            {
+                currentPoiZone = zone;
+                if (ui != null) ui.ShowInteract(zone.PromptLabel());
+            }
+            else if (currentPoiZone == zone)
+            {
+                currentPoiZone = null;
+                RefreshInteractLabel();
+            }
+        }
+
         // ── Porte / interazione edifici ───────────────────────────
 
         public void OnDoorFocusChanged(InteractDoor door)
@@ -133,27 +163,29 @@ namespace City
                 ExitVehicle();
                 return;
             }
-            if (currentVehicleShopOpen)
-            {
-                if (VehicleShopUI.Instance != null) VehicleShopUI.Instance.HideDialog();
-                currentVehicleShopOpen = false;
-                return;
-            }
-            // Priorità: veicolo > porta > missione > ingresso edificio
+            // Priorità: veicolo > zona POI > porta > missione > ingresso edificio
             if (currentVehicleFocus != null)
             {
+                if (currentVehicleFocus.data == null)
+                {
+                    if (ui != null) ui.ShowToast("Veicolo non disponibile al momento");
+                    return;
+                }
                 if (currentVehicleFocus.IsOwned())
                 {
                     EnterVehicle(currentVehicleFocus.controller);
                 }
                 else
                 {
+                    // niente acquisti per strada: solo in concessionaria
                     if (ui != null)
-                    {
-                        ui.ShowVehicleShop(currentVehicleFocus);
-                        currentVehicleShopOpen = true;
-                    }
+                        ui.ShowToast("Puoi comprare le auto solo in concessionaria");
                 }
+                return;
+            }
+            if (currentPoiZone != null)
+            {
+                currentPoiZone.Interact();
                 return;
             }
             if (currentDoor != null)
@@ -211,10 +243,19 @@ namespace City
             if (ui == null) return;
             if (currentVehicleFocus != null)
             {
-                string code = !string.IsNullOrEmpty(currentVehicleFocus.vehicleCode) ? " [" + currentVehicleFocus.vehicleCode + "]" : "";
-                string label = currentVehicleFocus.IsOwned() ? "ENTRA " + currentVehicleFocus.data.vehicleName + code
-                    : "COMPRA " + currentVehicleFocus.data.vehicleName + " - \u20ac" + currentVehicleFocus.data.price;
-                ui.ShowInteract(label);
+                if (currentVehicleFocus.data == null)
+                {
+                    // spawn degradato: prompt generico invece di
+                    // NullReferenceException che rompe la catena di input
+                    ui.ShowInteract("VEICOLO");
+                }
+                else
+                {
+                    string code = !string.IsNullOrEmpty(currentVehicleFocus.vehicleCode) ? " [" + currentVehicleFocus.vehicleCode + "]" : "";
+                    string label = currentVehicleFocus.IsOwned() ? "ENTRA " + currentVehicleFocus.data.vehicleName + code
+                        : currentVehicleFocus.data.vehicleName + " - in vendita in concessionaria";
+                    ui.ShowInteract(label);
+                }
             }
             else if (currentDoor != null)
             {
@@ -230,6 +271,10 @@ namespace City
                 else
                     label = "COMPLETATA";
                 ui.ShowInteract(label);
+            }
+            else if (currentPoiZone != null)
+            {
+                ui.ShowInteract(currentPoiZone.PromptLabel());
             }
             else if (currentEntrance != null)
             {
@@ -287,19 +332,13 @@ namespace City
             if (vi != null && vi.IsFocused)
             {
                 currentVehicleFocus = vi;
-                string code = !string.IsNullOrEmpty(vi.vehicleCode) ? " [" + vi.vehicleCode + "]" : "";
-                string label = vi.IsOwned() ? "ENTRA " + vi.data.vehicleName + code
-                    : "COMPRA " + vi.data.vehicleName + " - \u20ac" + vi.data.price;
-                if (ui != null) ui.ShowInteract(label);
+                // l'etichetta la calcola VehicleInteract (gestisce anche
+                // "venduta ad altro giocatore" e vendita)
+                if (ui != null) ui.ShowInteract(vi.label);
             }
             else if (currentVehicleFocus == vi)
             {
                 currentVehicleFocus = null;
-                if (currentVehicleShopOpen)
-                {
-                    currentVehicleShopOpen = false;
-                    if (VehicleShopUI.Instance != null) VehicleShopUI.Instance.HideDialog();
-                }
                 RefreshInteractLabel();
             }
         }
@@ -311,6 +350,19 @@ namespace City
             if (vc == null || IsDriving) return;
             if (player == null) return;
 
+            // panne: senza condizione (o con gomma a terra) non parte
+            if (!vc.CanStart())
+            {
+                if (ui != null)
+                {
+                    if (vc.FlatTire)
+                        ui.ShowToast("Gomma a terra! Riparla in officina o lascia perdere questa corsa.");
+                    else
+                        ui.ShowToast("Motore in panne! Ripara l'auto in officina.");
+                }
+                return;
+            }
+
             CurrentVehicle = vc;
             IsDriving = true;
 
@@ -320,10 +372,27 @@ namespace City
 
             player.transform.SetParent(vc.transform, false);
             player.transform.localPosition = new Vector3(0f, 1.2f, 0f);
+            // azzera lo yaw residuo della camminata: prima la camera di
+            // guida inseguiva questo angolo e se eri entrato di lato la
+            // vista restava perpendicolare all'auto
+            player.transform.localRotation = Quaternion.identity;
 
             vc.StartDriving();
 
-            if (rig != null) rig.SetDrivingMode(true);
+            // se l'auto era stata ritrovata abbandonata, rientrare chiude
+            // la pratica di recupero sul server
+            var enteredVi = vc.GetComponentInChildren<VehicleInteract>();
+            if (enteredVi != null && VehicleOwnershipApi.Instance != null)
+                VehicleOwnershipApi.Instance.ClearAbandonedIfFound(
+                    enteredVi.vehicleCode);
+
+            if (rig != null)
+            {
+                rig.SetDrivingMode(true);
+                // riallinea subito la camera dietro al veicolo,
+                // guardando nel suo stesso verso
+                rig.SetYaw(vc.transform.rotation);
+            }
 
             if (ui != null)
             {
@@ -362,9 +431,23 @@ namespace City
                 ui.HideInteract();
             }
 
+            // se il veicolo e' del giocatore, registra il parcheggio sul
+            // server: resta dove lo ha lasciato (visibile anche agli altri)
+            var exitedVi = CurrentVehicle.GetComponentInChildren<VehicleInteract>();
+            string vcode = exitedVi != null ? exitedVi.vehicleCode : null;
+            Vector3 vpos = CurrentVehicle.transform.position;
+            float vheading = CurrentVehicle.transform.eulerAngles.y;
+
             IsDriving = false;
             CurrentVehicle = null;
-            currentVehicleShopOpen = false;
+
+            if (!string.IsNullOrEmpty(vcode) &&
+                (Inventory.Has("vehicle_" + vcode) || VehicleOwnershipApi.IsOwnedSafe(vcode)))
+            {
+                GeoCoord g = WorldOrigin.ToGeo(vpos);
+                VehicleOwnershipApi.Ensure().Park(vcode, g.lat, g.lng, vheading, null);
+            }
+
             Debug.Log("[Game] Uscito dal veicolo");
         }
 

@@ -33,6 +33,7 @@ class OutdoorManager private constructor(context: Context) {
     @Volatile private var mockMode = false
     @Volatile private var mockOrigin: Location? = null
     @Volatile private var heading = 0.0
+    @Volatile private var locationCallback: com.google.android.gms.location.LocationCallback? = null
 
     companion object {
         @Volatile private var INSTANCE: OutdoorManager? = null
@@ -52,13 +53,25 @@ class OutdoorManager private constructor(context: Context) {
         }
         if (realGps && !mockMode) {
             val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2_000L).build()
-            val callback = object : com.google.android.gms.location.LocationCallback() {
+            val cb = object : com.google.android.gms.location.LocationCallback() {
                 override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
                     result.lastLocation?.let { _location.value = it }
                 }
             }
-            fused.requestLocationUpdates(request, callback, android.os.Looper.getMainLooper())
+            locationCallback = cb
+            fused.requestLocationUpdates(request, cb, android.os.Looper.getMainLooper())
         }
+    }
+
+    /** Ferma il tracking GPS (chiamato all'uscita da MiAcitma): senza stop il
+     *  FusedLocationProvider continuerebbe a consegnare fix ogni 2 s per sempre
+     *  anche con l'app in Home (batteria, e rischi per chi ascolta a valle). */
+    fun stop() {
+        val cb = locationCallback ?: return
+        try { fused.removeLocationUpdates(cb) } catch (_: Exception) {}
+        locationCallback = null
+        mockWalker?.cancel()
+        mockWalker = null
     }
 
     fun isMockMode(): Boolean = mockMode

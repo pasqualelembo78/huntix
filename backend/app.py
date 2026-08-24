@@ -220,6 +220,14 @@ from app_routes.reallife import router as reallife_router
 
 app.include_router(public_router)
 app.include_router(auth_router)
+try:
+    from traffic.vehicles import router as vehicles_router
+    app.include_router(vehicles_router)
+    from traffic.vehicle_services import router as vehicle_services_router
+    app.include_router(vehicle_services_router)
+    logger.info("Vehicle ownership registry + services initialized")
+except Exception as _ve:
+    logger.error(f"Vehicle registry init failed (continuing without): {_ve}")
 app.include_router(characters_router)
 app.include_router(memory_router)
 app.include_router(conversations_router)
@@ -236,6 +244,13 @@ try:
     logger.info("Traffic API router registered")
 except Exception as e:
     logger.warning(f"Traffic API router not loaded: {e}")
+
+try:
+    from traffic.tile_server import router as tiles_router
+    app.include_router(tiles_router)
+    logger.info("Tiles API router registered")
+except Exception as e:
+    logger.warning(f"Tiles API router not loaded: {e}")
 
 # ─── Socket.IO ───────────────────────────────────────────────────
 from app_socket import register_socket_handlers

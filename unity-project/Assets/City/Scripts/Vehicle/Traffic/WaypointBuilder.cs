@@ -3,6 +3,18 @@ using UnityEngine;
 
 namespace City.Vehicle.Traffic
 {
+    /// <summary>
+    /// Gate d'incrocio allineato ai waypoint: all'indice wpIndex l'auto si
+    /// trova all'ingresso del nodo nodeId e deve chiedere il permesso a
+    /// JunctionControl (semaforo o precedenza) prima di attraversare.
+    /// </summary>
+    public struct TrafficGate
+    {
+        public int wpIndex;
+        public int nodeId;
+        public Vector3 approachDir;
+    }
+
     public static class WaypointBuilder
     {
         private const float LANE_OFFSET_FACTOR = 0.15f;
@@ -12,12 +24,20 @@ namespace City.Vehicle.Traffic
         private const int JUNCTION_SMOOTH_PASSES = 2;
 
         public static Vector3[] Build(RoadGraph graph, List<int> nodePath,
-            float vehicleLength, Bounds[] buildingBounds = null)
+            float vehicleLength, Bounds[] buildingBounds,
+            out float[] speedLimits, out TrafficGate[] gates)
         {
+            speedLimits = null;
+            gates = null;
             if (nodePath == null || nodePath.Count < 2)
                 return new Vector3[0];
 
             var result = new List<Vector3>();
+            // blocchi (start,end,classe) per i limiti di velocita': entrambe le
+            // passe successive sostituiscono i waypoint in place senza cambiarne
+            // il numero, quindi gli indici restano allineati.
+            var limitBlocks = new List<int[]>();   // [start,endExclusive]
+            var limitClass = new List<string>();
 
             for (int i = 0; i < nodePath.Count - 1; i++)
             {
@@ -40,8 +60,14 @@ namespace City.Vehicle.Traffic
                 int startIdx = (i == 0) ? 0 : 1;
                 int endIdx = (i == nodePath.Count - 2) ? offsetWp.Length : offsetWp.Length - 1;
 
+                int blockStart = result.Count;
                 for (int w = startIdx; w < endIdx; w++)
                     result.Add(offsetWp[w]);
+                if (result.Count > blockStart)
+                {
+                    limitBlocks.Add(new[] { blockStart, result.Count });
+                    limitClass.Add(arc.highway);
+                }
             }
 
             if (result.Count >= 2)
@@ -50,7 +76,96 @@ namespace City.Vehicle.Traffic
             if (result.Count >= 2 && buildingBounds != null && buildingBounds.Length > 0)
                 result = AvoidBuildings(result, buildingBounds);
 
+            // ── limiti di velocita' per segmento (km/h -> m/s) ──
+            var limits = new float[result.Count];
+            for (int b = 0; b < limitBlocks.Count; b++)
+            {
+                float v = SpeedLimitFor(limitClass[b]);
+                for (int k = limitBlocks[b][0]; k < limitBlocks[b][1] && k < limits.Length; k++)
+                    limits[k] = v;
+            }
+            speedLimits = limits;
+
+            gates = DeriveGates(graph, result);
             return result.ToArray();
+        }
+
+        // Limiti urbani italiani per classe OSM.
+        public static float SpeedLimitFor(string highway)
+        {
+            switch (highway ?? "")
+            {
+                case "motorway": return 90f / 3.6f;
+                case "trunk": return 70f / 3.6f;
+                case "primary": return 50f / 3.6f;
+                case "secondary": return 50f / 3.6f;
+                case "tertiary": return 40f / 3.6f;
+                case "service": return 20f / 3.6f;
+                case "pedestrian": return 10f / 3.6f;
+                case "living_street": return 30f / 3.6f;
+                case "residential":
+                case "unclassified":
+                default: return 30f / 3.6f;
+            }
+        }
+
+        private const float GateSnapDist = 8f;
+
+        /// <summary>
+        /// Individua i gate: waypoint che cadono su un nodo reale dell'incrocio
+        /// (>= 3 rami). La direzione di approccio arriva dal waypoint precedente.
+        /// </summary>
+        private static TrafficGate[] DeriveGates(RoadGraph graph, List<Vector3> wps)
+        {
+            if (graph == null || wps.Count < 3 || graph.nodes.Count == 0)
+                return new TrafficGate[0];
+
+            // candidati: soltanto i nodi nel bbox del percorso (espanso)
+            float minX = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxZ = float.MinValue;
+            foreach (var p in wps)
+            {
+                if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+                if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+            }
+            var candidates = new List<RoadNode>();
+            foreach (var n in graph.nodes)
+            {
+                if (n.arcIds == null || n.arcIds.Count < 3) continue; // solo incroci reali
+                if (n.position.x < minX - 20f || n.position.x > maxX + 20f) continue;
+                if (n.position.z < minZ - 20f || n.position.z > maxZ + 20f) continue;
+                candidates.Add(n);
+            }
+            if (candidates.Count == 0) return new TrafficGate[0];
+
+            var gates = new List<TrafficGate>();
+            int lastNode = -1;
+            float snapSq = GateSnapDist * GateSnapDist;
+            for (int i = 1; i < wps.Count - 1; i++)   // niente gate agli estremi
+            {
+                RoadNode best = null;
+                float bestD = snapSq;
+                foreach (var n in candidates)
+                {
+                    float dx = n.position.x - wps[i].x;
+                    float dz = n.position.z - wps[i].z;
+                    float d = dx * dx + dz * dz;
+                    if (d < bestD) { bestD = d; best = n; }
+                }
+                if (best == null || best.id == lastNode) continue;
+
+                Vector3 dir = wps[i] - wps[i - 1];
+                dir.y = 0f;
+                if (dir.sqrMagnitude < 0.0001f) continue;
+                gates.Add(new TrafficGate
+                {
+                    wpIndex = i,
+                    nodeId = best.id,
+                    approachDir = dir.normalized,
+                });
+                lastNode = best.id;
+            }
+            return gates.ToArray();
         }
 
         private static Vector3[] ApplyLaneOffset(Vector3[] waypoints, float offset,

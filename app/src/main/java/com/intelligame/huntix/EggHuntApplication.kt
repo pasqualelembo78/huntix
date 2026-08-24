@@ -22,6 +22,7 @@ class EggHuntApplication : Application() {
         AppLog.init(this)
         AppLog.installCrashHandler()
         logPreviousExitReason()
+        AppLog.risorse(this, "avvio")
 
         // Firebase
         try {
@@ -70,21 +71,24 @@ class EggHuntApplication : Application() {
             Log.e("HuntixApp", "Persistence init failed: ${e.message}")
         }
 
-        // Registra il sender Unity (compatibile con GameManager.OnEvent)
+        // Registra il sender Unity (compatibile con GameManager.OnEvent).
+        // Gli invii passano dalla guardia di shutdown: con l'engine Unity in
+        // smontaggio (uscita da MiAcitma/Indoor) un UnitySendMessage e' crash
+        // nativo del processo.
         try {
             com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.registerMessenger(
                 object : com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.Messenger {
                     override fun sendEvent(event: String, data: String) {
-                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", "$event|$data")
+                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnEvent", "$event|$data")
                     }
                     override fun openStoreJson(storeId: String, json: String) {
-                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnStoreOpened", json)
+                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnStoreOpened", json)
                     }
                     override fun openStoreUrl(storeId: String, url: String) {
-                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OpenStoreUrl", url)
+                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OpenStoreUrl", url)
                     }
                     override fun onPoiSelected(storeId: String, lat: Double, lng: Double) {
-                        com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnPoiSelected", "{\"id\":\"$storeId\",\"lat\":$lat,\"lng\":$lng}")
+                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnPoiSelected", "{\"id\":\"$storeId\",\"lat\":$lat,\"lng\":$lng}")
                     }
                 }
             )
@@ -146,7 +150,7 @@ class EggHuntApplication : Application() {
             AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal pid=${info.pid} t=${info.timestamp} desc=${info.description}")
             try {
                 info.traceInputStream?.use { input ->
-                    val head = input.readBytes().decodeToString().take(1500)
+                    val head = input.readBytes().decodeToString().take(24000)
                     if (head.isNotBlank()) AppLog.i("AppExit", "trace: $head")
                 }
             } catch (t: Throwable) {

@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.bridge.StoreUnityBridge
 import com.unity3d.player.UnityPlayer
 import com.unity3d.player.UnityPlayerActivity
 import org.json.JSONObject
@@ -48,7 +49,7 @@ class IndoorActivity : UnityPlayerActivity() {
             val j = joystick
             if (j != null && (j.dx != 0f || j.dy != 0f)) {
                 try {
-                    UnityPlayer.UnitySendMessage("IndoorManager", "MovePlayer",
+                    StoreUnityBridge.sendToUnityIfAlive("IndoorManager", "MovePlayer",
                         "${j.dx},${j.dy}")
                 } catch (_: Exception) { }
             }
@@ -70,7 +71,7 @@ class IndoorActivity : UnityPlayerActivity() {
         // Invia il POI al loader Unity una volta inizializzato.
         window?.decorView?.postDelayed({
             try {
-                UnityPlayer.UnitySendMessage("IndoorManager", "LoadStoreFromPOI", poiJson)
+                StoreUnityBridge.sendToUnityIfAlive("IndoorManager", "LoadStoreFromPOI", poiJson)
             } catch (_: Exception) { }
         }, 800L)
 
@@ -106,7 +107,7 @@ class IndoorActivity : UnityPlayerActivity() {
             visibility = View.GONE
             setOnClickListener {
                 try {
-                    UnityPlayer.UnitySendMessage("InteractionManager", "TriggerInteraction", "")
+                    StoreUnityBridge.sendToUnityIfAlive("InteractionManager", "TriggerInteraction", "")
                 } catch (_: Exception) { }
             }
             layoutParams = FrameLayout.LayoutParams(
@@ -227,7 +228,7 @@ class IndoorActivity : UnityPlayerActivity() {
                 btnInteract?.setBackgroundColor(0xFF1565C0.toInt())
                 btnInteract?.setOnClickListener {
                     try {
-                        UnityPlayer.UnitySendMessage("NPC", "Talk", obj.optString("id", ""))
+                        StoreUnityBridge.sendToUnityIfAlive("NPC", "Talk", obj.optString("id", ""))
                     } catch (_: Exception) { }
                 }
                 tvInteractHint?.visibility = View.VISIBLE
@@ -253,7 +254,7 @@ class IndoorActivity : UnityPlayerActivity() {
                     btnInteract?.setBackgroundColor(0xFFE65100.toInt())
                     btnInteract?.setOnClickListener {
                         try {
-                            UnityPlayer.UnitySendMessage("NPC", "AcceptQuest", obj.optString("id", ""))
+                            StoreUnityBridge.sendToUnityIfAlive("NPC", "AcceptQuest", obj.optString("id", ""))
                         } catch (_: Exception) { }
                     }
                 } else {

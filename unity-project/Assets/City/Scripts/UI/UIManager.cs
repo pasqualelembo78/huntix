@@ -172,16 +172,9 @@ namespace City.UI
         {
             if (drivingPanel == null) BuildDrivingUI();
 
-            if (show)
-            {
-                drivingPanel.SetActive(true);
-                if (joystick != null) joystick.gameObject.SetActive(false);
-            }
-            else
-            {
-                drivingPanel.SetActive(false);
-                if (joystick != null) joystick.gameObject.SetActive(true);
-            }
+            // Il joystick resta SEMPRE attivo: in guida fa da gas/sterzo,
+            // stesso schema della camminata (sinistra=muovi, destra=camera)
+            drivingPanel.SetActive(show);
         }
 
         private void BuildDrivingUI()
@@ -214,6 +207,9 @@ namespace City.UI
                 TextAlignmentOptions.Center,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
                 new Vector2(-100f, 90f), new Vector2(100f, 125f));
+
+            // Niente piu' pedali: gas/sterzo dal joystick sinistro (come
+            // la camminata), camera ruotabile dalla zona destra
 
             drivingPanel.SetActive(false);
         }
@@ -515,6 +511,7 @@ namespace City.UI
 
         private void OnInteractPressed()
         {
+            if (Game.Instance == null) return;
             Game.Instance.OnInteractPressed();
         }
 

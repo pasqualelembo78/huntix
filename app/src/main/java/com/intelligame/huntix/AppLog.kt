@@ -3,6 +3,7 @@ package com.intelligame.huntix
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
+import androidx.core.content.pm.PackageInfoCompat
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
@@ -58,6 +59,30 @@ object AppLog {
             Level.I, "AppLog",
             "=== NEW SESSION === ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})"
         )
+        try {
+            val pm = context.packageManager
+            val pi = pm.getPackageInfo(context.packageName, 0)
+            val updTxt = sdf.format(Date(pi.lastUpdateTime))
+            log(
+                Level.I, "AppLog",
+                "APP VERSION ${pi.versionName} (${PackageInfoCompat.getLongVersionCode(pi)}) installata: $updTxt"
+            )
+        } catch (_: Throwable) {}
+    }
+
+    fun risorse(context: Context, tag: String) {
+        try {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val mi = android.app.ActivityManager.MemoryInfo()
+            am.getMemoryInfo(mi)
+            val internalMb = android.os.StatFs(context.filesDir.absolutePath).availableBytes / 1048576L
+            val extDir = context.getExternalFilesDir(null)
+            val externalMb = if (extDir != null) android.os.StatFs(extDir.absolutePath).availableBytes / 1048576L else -1L
+            log(
+                Level.I, "Risorse",
+                "$tag memAvail=${mi.availMem / 1048576L}MB lowMem=${mi.lowMemory} interno=${internalMb}MB esterno=${externalMb}MB"
+            )
+        } catch (_: Throwable) {}
     }
 
     fun installCrashHandler() {

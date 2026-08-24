@@ -18,40 +18,44 @@ namespace City.Vehicle
         private int nextVehicleId = 1;
 
         // Prefab Kenney caricati da Resources/Vehicles/
-        private GameObject prefabSedan;
-        private GameObject prefabSUV;
-        private GameObject prefabVan;
-        private GameObject prefabTaxi;
-        private GameObject prefabTruck;
-        private GameObject prefabDelivery;
-        private GameObject prefabRace;
-        private GameObject prefabHatchback;
-        private GameObject prefabPolice;
-        private GameObject prefabAmbulance;
-        private GameObject prefabFiretruck;
-        private GameObject prefabGarbage;
+        private static GameObject prefabSedan;
+        private static GameObject prefabSUV;
+        private static GameObject prefabVan;
+        private static GameObject prefabTaxi;
+        private static GameObject prefabTruck;
+        private static GameObject prefabDelivery;
+        private static GameObject prefabRace;
+        private static GameObject prefabHatchback;
+        private static GameObject prefabPolice;
+        private static GameObject prefabAmbulance;
+        private static GameObject prefabFiretruck;
+        private static GameObject prefabGarbage;
 
-        // Catalogo veicoli: nome, prezzo, vel max, accel, turn, prefab key
-        private static readonly VehicleDef[] Catalogue = new VehicleDef[]
+        // Catalogo veicoli: nome, prezzo, vel max (m/s), accel, turn, prefab key.
+        // Riferimento personaggio: camminata 4 m/s, corsa 7.5 m/s. Alcuni
+        // veicoli devono restare PIU' LENTI della persona (bici, spazzaneve),
+        // altri molto piu' veloci (sports, moto). NB: la velocita' NON entra
+        // nel codice veicolo, cambiarla non invalida i codici gia' venduti.
+        public static readonly VehicleDef[] Catalogue = new VehicleDef[]
         {
             new VehicleDef("Fiat 500",      50,  12f, 8f,  110f, "sedan",      1.8f, 3.8f),
             new VehicleDef("SUV",           80,  14f, 6f,  90f,  "suv",        2.1f, 4.6f),
-            new VehicleDef("Van",           70,  12f, 5f,  80f,  "van",        2.2f, 5.5f),
+            new VehicleDef("Van",           70,  11f, 5f,  80f,  "van",        2.2f, 5.5f),
             new VehicleDef("Taxi",          60,  13f, 7f,  100f, "taxi",       1.8f, 4.0f),
-            new VehicleDef("Truck",         100, 10f, 4f,  70f,  "truck",      2.5f, 6.5f),
-            new VehicleDef("Furgone",       65,  11f, 5f,  75f,  "delivery",   2.0f, 5.0f),
-            new VehicleDef("Sports",        120, 20f, 10f, 130f, "race",       1.9f, 4.2f),
-            new VehicleDef("Hatchback",     55,  13f, 8f,  105f, "hatchback",  1.7f, 3.8f),
+            new VehicleDef("Truck",         100, 9f,  4f,  70f,  "truck",      2.5f, 6.5f),
+            new VehicleDef("Furgone",       65,  10f, 5f,  75f,  "delivery",   2.0f, 5.0f),
+            new VehicleDef("Sports",        120, 22f, 10f, 130f, "race",       1.9f, 4.2f),
+            new VehicleDef("Hatchback",     55,  12f, 8f,  105f, "hatchback",  1.7f, 3.8f),
             new VehicleDef("Polizia",       90,  16f, 9f,  120f, "police",     1.9f, 4.2f),
-            new VehicleDef("Ambulanza",     95,  14f, 6f,  85f,  "ambulance",  2.2f, 5.5f),
-            new VehicleDef("Vigili",        110, 12f, 5f,  75f,  "firetruck",  2.5f, 7.0f),
-            new VehicleDef("Spazzaneve",    85,  8f,  4f,  60f,  "garbage",    2.5f, 6.0f),
-            new VehicleDef("Moto",          25,  18f, 12f, 150f, null,         0.8f, 2.0f),
-            new VehicleDef("Scooter",       20,  10f, 10f, 130f, null,         0.7f, 1.7f),
-            new VehicleDef("Bici Elettrica",15,  8f,  10f, 140f, null,         0.5f, 1.6f),
+            new VehicleDef("Ambulanza",     95,  13f, 6f,  85f,  "ambulance",  2.2f, 5.5f),
+            new VehicleDef("Vigili",        110, 10f, 5f,  75f,  "firetruck",  2.5f, 7.0f),
+            new VehicleDef("Spazzaneve",    85,  6f,  4f,  60f,  "garbage",    2.5f, 6.0f),
+            new VehicleDef("Moto",          25,  20f, 12f, 150f, null,         0.8f, 2.0f),
+            new VehicleDef("Scooter",       20,  7f,  10f, 130f, null,         0.7f, 1.7f),
+            new VehicleDef("Bici Elettrica",15,  3.5f, 10f, 140f, null,        0.5f, 1.6f),
         };
 
-        private struct VehicleDef
+        public struct VehicleDef
         {
             public string name;
             public int price;
@@ -100,7 +104,7 @@ namespace City.Vehicle
             Debug.Log("[VehicleSpawnManager] Prefab Kenney caricati: " + loaded + "/11");
         }
 
-        private GameObject GetPrefab(string key)
+        private static GameObject GetPrefab(string key)
         {
             if (string.IsNullOrEmpty(key)) return null;
             switch (key)
@@ -119,6 +123,19 @@ namespace City.Vehicle
                 case "garbage":    return prefabGarbage;
                 default:           return null;
             }
+        }
+
+        /// <summary>Cerca una definizione nel catalogo per nome esatto
+        /// (usato da GarageUI per rispawnare l'auto uscita dal garage).</summary>
+        public static bool TryGetDef(string name, out VehicleDef def)
+        {
+            def = default(VehicleDef);
+            if (string.IsNullOrEmpty(name)) return false;
+            foreach (var d in Catalogue)
+            {
+                if (d.name == name) { def = d; return true; }
+            }
+            return false;
         }
 
         public void SpawnParkedVehicles(Transform root, OsmCityEnvelope env)
@@ -170,37 +187,48 @@ namespace City.Vehicle
 
         private void SpawnOne(Transform root, VehicleDef def, Vector3 pos, float angle, string streetName, System.Random rng)
         {
+            int vehicleId = nextVehicleId++;
+            var go = BuildVehicle(root, def, pos, angle, "V" + vehicleId);
+            spawned.Add(go);
+        }
+
+        /// <summary>
+        /// Crea un veicolo completo: modello Kenney (o fallback procedurale),
+        /// BoxCollider solido, VehicleController e trigger di interazione per
+        /// compra/entra. Usato dal legacy E dal popolatore a chunk: il codice
+        /// veicolo passato qui deve essere DETERMINISTICO per avere la stessa
+        /// identita' del veicolo su tutti i client.
+        /// </summary>
+        public static GameObject BuildVehicle(Transform parent, VehicleDef def,
+            Vector3 pos, float angle, string code)
+        {
             GameObject go;
             GameObject prefab = GetPrefab(def.prefabKey);
-            int vehicleId = nextVehicleId++;
 
             if (prefab != null)
             {
                 // Kenney prefab importato da FBX
-                go = Instantiate(prefab, root);
-                go.name = "V" + vehicleId + "_" + def.name;
-                go.transform.position = pos;
-                go.transform.rotation = Quaternion.Euler(0f, angle, 0f);
+                go = Instantiate(prefab, parent);
+                go.name = code + "_" + def.name;
+                go.transform.localPosition = pos;
+                go.transform.localRotation = Quaternion.Euler(0f, angle, 0f);
                 go.transform.localScale = Vector3.one * KENNEY_SCALE;
 
-                // Disabilita tutti i collider figli (il prefab puo' averne)
+                // Disabilita tutti i collider figli (il prefab puo' averne):
+                // il collider solido e' solo il nostro box, uniforme
                 foreach (var col in go.GetComponentsInChildren<Collider>())
                     col.enabled = false;
-
-                // Mesh collider figli: disabilita
-                foreach (var mf in go.GetComponentsInChildren<MeshFilter>())
-                {
-                    // Niente mesh collider, solo box nostro
-                }
             }
             else
             {
                 // Fallback procedurale per moto/scooter/bici
-                go = BuildProcedural(def, rng);
-                go.transform.SetParent(root, false);
-                go.transform.position = pos;
-                go.transform.rotation = Quaternion.Euler(0f, angle, 0f);
+                go = BuildProcedural(def, 0);
+                go.transform.SetParent(parent, false);
+                go.transform.localPosition = pos;
+                go.transform.localRotation = Quaternion.Euler(0f, angle, 0f);
             }
+
+            go.SetActive(true);
 
             // Collider solido per il veicolo
             float w = def.w;
@@ -223,14 +251,14 @@ namespace City.Vehicle
             var vi = triggerGo.AddComponent<VehicleInteract>();
             vi.controller = vc;
             vi.data = vc.data;
-            vi.vehicleCode = "V" + vehicleId;
+            vi.vehicleCode = code;
 
-            spawned.Add(go);
+            return go;
         }
 
         // ── Fallback procedurale per veicoli senza prefab Kenney ──
 
-        private GameObject BuildProcedural(VehicleDef def, System.Random rng)
+        private static GameObject BuildProcedural(VehicleDef def, int colorSeed)
         {
             var go = new GameObject("Parked_" + def.name);
 
@@ -240,7 +268,7 @@ namespace City.Vehicle
                 new Color(0.9f, 0.9f, 0.9f), new Color(0.2f, 0.2f, 0.7f),
                 new Color(0.1f, 0.6f, 0.2f), new Color(0.9f, 0.6f, 0.1f),
             };
-            Color c = colors[rng.Next(colors.Length)];
+            Color c = colors[colorSeed % colors.Length];
 
             // Corpo
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);

@@ -25,18 +25,49 @@ namespace City.Vehicle.Traffic
 
         private bool _serverMode;
         private bool _initialized;
+        private TrafficLightRenderer _lights;
+        private float _lightPushTimer;
+
+        // classi stradali "maggiori": incroci importanti -> semaforo
+        private static readonly HashSet<string> MajorRoads = new HashSet<string>
+        { "motorway", "trunk", "primary", "secondary" };
 
         private void Awake()
         {
             Instance = this;
         }
 
-        public void InitLocal(RoadGraph graph, Transform root, Bounds[] buildingBounds)
+        public void InitLocal(RoadGraph graph, Transform root, Bounds[] buildingBounds,
+            TrafficLightRenderer lights = null)
         {
             _graph = graph;
             _rng = new System.Random(12345);
             _buildingBounds = buildingBounds;
             _serverMode = false;
+            _lights = lights;
+
+            // ── registro incroci regolati: semafori dove servono ──
+            // 4+ rami sempre; 3 rami se toccano strade maggiori.
+            JunctionControl.Clear();
+            foreach (var n in graph.nodes)
+            {
+                int arcs = n.arcIds.Count;
+                if (arcs < 3) continue;
+                bool hasLight = arcs >= 4;
+                if (!hasLight)
+                {
+                    foreach (int arcId in n.arcIds)
+                    {
+                        var a = graph.arcMap[arcId];
+                        if (a != null && MajorRoads.Contains(a.highway ?? ""))
+                        {
+                            hasLight = true;
+                            break;
+                        }
+                    }
+                }
+                JunctionControl.RegisterJunction(n.id, n.position, hasLight);
+            }
 
             var game = City.Game.Instance;
             _player = game != null && game.player != null ? game.player.transform : null;
@@ -85,7 +116,47 @@ namespace City.Vehicle.Traffic
                     EnforceDensityLocal();
                 }
                 AssignLeadersLocal();
+
+                // visualizzazione dei semafori generati localmente
+                _lightPushTimer += Time.deltaTime;
+                if (_lightPushTimer > 0.5f)
+                {
+                    _lightPushTimer = 0f;
+                    PushLocalLights();
+                }
             }
+        }
+
+        // Due teste per incrocio (id*2 = asse NS, id*2+1 = asse EW) riutilizzano
+        // il renderer pensato per il server: zero cambi lato visual.
+        private void PushLocalLights()
+        {
+            if (_lights == null) return;
+            Vector3 pp = _player != null ? _player.position : Vector3.zero;
+            var updates = new List<TrafficClient.TrafficLightUpdate>();
+            float now = Time.time;
+            foreach (var j in JunctionControl.AllJunctions())
+            {
+                if (!j.hasLight) continue;
+                if ((j.pos - pp).sqrMagnitude > 170f * 170f) continue;
+                var ns = new TrafficClient.TrafficLightUpdate
+                {
+                    id = j.nodeId * 2,
+                    x = j.pos.x - 2.6f,
+                    z = j.pos.z - 2.6f,
+                    state = JunctionControl.StateName(JunctionControl.StateFor(j.nodeId, 0, now)),
+                };
+                var ew = new TrafficClient.TrafficLightUpdate
+                {
+                    id = j.nodeId * 2 + 1,
+                    x = j.pos.x + 2.6f,
+                    z = j.pos.z + 2.6f,
+                    state = JunctionControl.StateName(JunctionControl.StateFor(j.nodeId, 1, now)),
+                };
+                updates.Add(ns);
+                updates.Add(ew);
+            }
+            if (updates.Count > 0) _lights.UpdateLights(updates);
         }
 
         // ── Server mode: receive car positions ───────────────────
@@ -208,7 +279,8 @@ namespace City.Vehicle.Traffic
             var path = RoadPathfinder.FindPath(_graph, startId, endId);
             if (path == null || path.Count < 2) return;
 
-            var wp = WaypointBuilder.Build(_graph, path, 4f, _buildingBounds);
+            var wp = WaypointBuilder.Build(_graph, path, 4f, _buildingBounds,
+                out var segLimits, out var gates);
             if (wp.Length < 2) return;
 
             float speed = MIN_SPEED + (float)(_rng.NextDouble() * (MAX_SPEED - MIN_SPEED));
@@ -217,7 +289,7 @@ namespace City.Vehicle.Traffic
             go.transform.position = wp[0];
 
             var agent = go.AddComponent<CarAgent>();
-            agent.Init(wp, speed, _rng.Next(1000));
+            agent.Init(wp, speed, _rng.Next(1000), segLimits, gates);
             agent.looping = true;
             _localAgents.Add(agent);
         }
@@ -263,7 +335,8 @@ namespace City.Vehicle.Traffic
             var path = RoadPathfinder.FindPath(_graph, nodes[si].id, nodes[ei].id);
             if (path == null || path.Count < 2) return;
 
-            var wp = WaypointBuilder.Build(_graph, path, 4f, _buildingBounds);
+            var wp = WaypointBuilder.Build(_graph, path, 4f, _buildingBounds,
+                out var segLimits, out var gates);
             if (wp.Length < 2) return;
 
             float speed = MIN_SPEED + (float)(_rng.NextDouble() * (MAX_SPEED - MIN_SPEED));
@@ -272,7 +345,7 @@ namespace City.Vehicle.Traffic
             go.transform.position = wp[0];
 
             var agent = go.AddComponent<CarAgent>();
-            agent.Init(wp, speed, _rng.Next(1000));
+            agent.Init(wp, speed, _rng.Next(1000), segLimits, gates);
             agent.looping = true;
             _localAgents.Add(agent);
         }
@@ -311,7 +384,10 @@ namespace City.Vehicle.Traffic
                 {
                     if (i == j) continue;
                     var b = _localAgents[j];
-                    if (b == null || b.state != CarAgentState.Driving) continue;
+                    // anche le auto ferme (gomma a terra) sono ostacoli:
+                    // chi arriva dietro frena invece di attraversarle
+                    if (b == null || (b.state != CarAgentState.Driving &&
+                                      b.state != CarAgentState.Punctured)) continue;
                     float d = Vector3.Distance(a.transform.position, b.transform.position);
                     if (d > 20) continue;
                     Vector3 toB = (b.transform.position - a.transform.position).normalized;
@@ -336,6 +412,7 @@ namespace City.Vehicle.Traffic
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            JunctionControl.Clear();
         }
     }
 }

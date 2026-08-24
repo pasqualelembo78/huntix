@@ -41,8 +41,8 @@ android {
         applicationId "com.intelligame.huntix"
          minSdk 29
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 20
+        versionName "1.10"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Priorità: -P gradle prop > ENV > keystore.properties > default hardcoded

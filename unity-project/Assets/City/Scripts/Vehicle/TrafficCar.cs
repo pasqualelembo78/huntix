@@ -34,7 +34,8 @@ namespace City.Vehicle
 
             if (path.Length > 0)
             {
-                transform.position = path[0];
+                // path e' in coordinate LOCALI del chunk root
+                transform.localPosition = path[0];
                 if (path.Length > 1)
                 {
                     Vector3 dir = (path[1] - path[0]).normalized;
@@ -49,8 +50,9 @@ namespace City.Vehicle
         {
             if (path == null || path.Length < 2) return;
 
+            // movimento in spazio LOCALE del chunk root (il genitore)
             Vector3 target = path[currentIdx];
-            Vector3 dir = target - transform.position;
+            Vector3 dir = target - transform.localPosition;
             dir.y = 0f;
             float dist = dir.magnitude;
 
@@ -63,17 +65,21 @@ namespace City.Vehicle
             }
 
             Vector3 move = dir.normalized * speed * Time.deltaTime;
-            transform.position += move;
+            transform.localPosition += move;
 
             Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up);
-            transform.rotation = Quaternion.Slerp(transform.rotation, look, 5f * Time.deltaTime);
+            transform.localRotation =
+                Quaternion.Slerp(transform.localRotation, look, 5f * Time.deltaTime);
         }
 
         private void BuildCarModel(int seed)
         {
             EnsurePrefabs();
 
-            int idx = seed % loadedPrefabs.Length;
+            // modulo sicuro anche per seed negativi (difensivo: il caller
+            // normalizza gia' con & 0x7FFFFFFF)
+            int len = loadedPrefabs.Length;
+            int idx = ((seed % len) + len) % len;
             GameObject prefab = loadedPrefabs[idx];
 
             if (prefab != null)
@@ -108,7 +114,7 @@ namespace City.Vehicle
                 new Color(0.7f, 0.1f, 0.1f), new Color(0.1f, 0.3f, 0.7f),
                 new Color(0.9f, 0.8f, 0.1f), new Color(0.4f, 0.4f, 0.4f),
             };
-            Color c = colors[seed % colors.Length];
+            Color c = colors[((seed % colors.Length) + colors.Length) % colors.Length];
             float w = 1.6f, h = 1.0f, l = 3.5f;
 
             var body = GameObject.CreatePrimitive(PrimitiveType.Cube);

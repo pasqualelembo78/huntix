@@ -1,0 +1,248 @@
+================================================================================
+  HUNTIX — MAPPA COMPLETA ITALIA (e poi il Mondo)
+  Piano di implementazione — v2 (strategia dati on-demand)
+================================================================================
+
+## STATO FASI
+
+    [X] FASE 0 — Setup ambiente (osmium-tool, pyosmium, download PBF)
+    [X] FASE 1 — Pre-processing OSM Italia (estratti + grafi stradali pre-generati) — 3451 tile, 6.05M nodi, 7.06M archi, 410MB
+    [X] FASE 2 — Chunk System Unity — 14 script C#, compilazione verificata, formato wire {a,o} allineato
+    [X] FASE 3 — Server Tiling — /api/tiles/{key}/graph + /geo on-demand, cache LRU disco 3GB + RAM 512MB, testato end-to-end
+    [ ] FASE 4 — Moto
+    [ ] FASE 5 — Aerei
+    [X] FASE 6 — Garage & Negozio — POI OSM dealer/repair/garage su mappa, compravendita solo in concessionaria, furti+riscatto, officina antifurti, usura per km
+    [ ] FASE 7 — Elevazione (futuro)
+
+Flag: [ ] da fare   [~] in corso   [X] FATTO
+
+
+## OBIETTIVO
+
+Creare una mappa 3D completa di tutta l'Italia (e in futuro del mondo) dove il
+giocatore puo camminare, guidare auto/moto e volare aerei in un mondo persistente,
+multiplayer, con traffico realistico.
+
+Rendering visuale affidato ai prefab del KENNEY KIT (case, palazzi, strade,
+parchi, alberi, segnali). Il preprocessing NON salva geometrie dettagliate:
+salva DOVE e COME piazzare i prefab.
+
+
+## 1. PERCHE LA V2 (limiti della v1)
+
+La v1 prevedeva di pre-generare ~3000 tile complete per tutta Italia.
+Numeri reali:
+    - italy-latest.osm.pbf:      2.2 GB (non 1.3GB)
+    - edifici OSM Italia:        ~30-40 milioni -> tile complete = 4-10 GB
+    - disco libero su server82:  ~35 GB (server condiviso con la mail)
+
+SOLUZIONE (v2):
+    1. Il PBF originale si ELIMINA dopo il filtro (-2.2 GB)
+    2. Restano 3 estratti permanenti (~1.7 GB) per rigenerare qualsiasi tile
+    3. Si pre-generano SOLO i grafi stradali (~300-500 MB): il traffico deve
+       funzionare ovunque subito
+    4. Edifici/alberi/parchi: generati ON-DEMAND alla prima visita della tile,
+       cache disco LRU con tetto (default 3 GB), le tile fredde si ricaricano
+       dall'estratto
+    5. Edifici come PLACEMENT RECORD (centro, impronta LxW, rotazione, tipo),
+       non come poligoni: -70% dati e combacia coi prefab Kenney
+
+Tetto massimo garantito: ~5 GB. Stesso schema per ogni paese del mondo
+(estratto Geofabrik per-paese, nulla di globale pre-calcolato).
+
+
+## 2. ARCHITETTURA
+
+### 2.1 Pre-processing (offline, Python) — backend/preprocessing/
+
+    Input:  data/italy-latest.osm.pbf (2.2 GB, poi ELIMINATO)
+    Output step "filter" (estratti PERMANENTI, ~1.7 GB):
+        data/italy-roads.pbf     sole le strade veicolabili (~200 MB)
+        data/italy-areas.pbf     edifici/parchi/boschi/aeroporti (~1.5 GB)
+        data/italy-points.pbf    alberi + semafori (pochi MB)
+
+    Output step "graph" (PRE-GENERATI ad avvio server, ~300-500 MB):
+        tiles/IT_XXX_YYY.json.gz          road graph della tile (lat/lon)
+
+    Output step "gen-tile" (ON-DEMAND, alla prima visita):
+        tiles/IT_XXX_YYY_geo.json.gz      geometry placement per Kenney
+
+### 2.2 Griglia tile
+
+    Ancoraggio (34N, 5E), passo fisso:
+        latitudine  0.090 deg  (~10.0 km)
+        longitudine 0.121 deg  (~10 km alla lat media 42N)
+    Chiave: IT_<ilat:03d>_<ilon:03d>   es. IT_086_062
+    Coordinate SEMPRE lat/lon double; quantizzazione a 1e-5 deg (~1.1 m).
+
+### 2.3 Formato road graph (IT_XXX_YYY.json.gz) — compatibile col server attuale
+
+    {
+      "tile": "IT_086_062",
+      "bbox": [latmin, lonmin, latmax, lonmax],
+      "nodes": [{"id": osm_id, "lat":.., "lon":..,
+                 "junction": "DeadEnd|Simple|Real"}],
+      "arcs": [{"id":.., "from":.., "to":..,
+                "waypoints": [[lat,lon],...],
+                "road_name": "..", "highway": "..", "width": 6.0,
+                "length_m": 123.4, "tunnel": false, "bridge": false,
+                "maxspeed": 50, "oneway": false, "lanes": 1}]
+    }
+    Classificazione junction identica a backend/traffic/road_graph.py
+    (conteggio way per nodo + test bearing). Gli id nodo sono gli OSM id:
+    le tile confinanti condividono i nodi di bordo -> grafo continuo.
+
+### 2.4 Formato geometry (_geo.json.gz) — record di PLACEMENT per Kenney
+
+    {
+      "tile": "IT_086_062",
+      "bbox": [...],
+      "roads":  [{"nm":"Via Roma","hw":"primary","pts":[[lat,lon],...] }],
+      "buildings":[{"c":[lat,lon],"d":[w_m,l_m],"r":gradi,"t":"yes|commercial|...",
+                    "nm":"nome opzionale","id":osm_way_id}],
+      "parks":  [{"poly":[[lat,lon]... semplificata],"kd":"park|garden|wood|forest",
+                  "nm":"...","id":..}],
+      "trees":  [[lat,lon],...],
+      "signals":[[lat,lon],...],
+      "airports":[{"c":[lat,lon],"d":[w,l],"r":gradi,"nm":"...","id":..}]
+    }
+
+    buildings: NIENTE poligoni. Unity sceglie il prefab Kenney da "t"
+    (tabella di mapping client-side), lo scala a d=[w,l] e lo ruota di r.
+    Filtri: scartati edifici <30 m^2 (garage/shed = metà dei dati),
+    poligoni degeneri, building:part.
+    parks: poligone semplificato Douglas-Peucker ~4 m.
+
+### 2.5 Server (FastAPI + PostgreSQL)
+
+    - GET /api/tiles/{tile_key}/graph     -> dal disco (pre-generato)
+    - GET /api/tiles/{tile_key}/geo       -> cache/disco, altrimenti GENERA
+                                             on-demand dall'estratto (job breve,
+                                             unica slice di latitudine coinvolta)
+    - Cache LRU disco (cap configurabile, default 3 GB) con manifest.json
+    - Road graph per regione (shard): regioni con giocatori attivi in RAM
+    - A* con spatial index (k-d tree/grid) — sostituisce scan lineare attuale
+    - GC: regioni senza giocatori >5 min scaricate
+    - WS /traffic/stream invariato
+
+### 2.6 Unity Client
+
+#### Coordinate (double precision + floating origin) — invariante dalla v1
+
+    GeoCoord (double lat/lon) + WorldOrigin con Rebase() ogni ~5 km.
+
+#### ChunkManager — invariante dalla v1
+
+    Chunk 1 km, LOAD_RADIUS 3, UNLOAD_RADIUS 5, LOD a 3 livelli.
+    Un chunk 1km referenzia la tile 10km madre (scaricata via HTTP/cache).
+
+#### Piazzamento Kenney
+
+    - roads: mesh per-chunk dalla polyline (come ora) oppure pezzi modulari
+    - buildings: instanzia prefab da "t", scala d, ruota r, posiziona c
+    - parks/trees/signals: prefab + punti/poligoni
+    - Tabella mapping osm_type -> prefab_id in un ScriptableObject
+
+#### Terrain — invariante: piano piatto per chunk (DEM SRTM in FASE 7)
+
+
+## 3. FLUSSO DATI
+
+### Prima apertura a Roma (nessuna cache)
+    spawn (41.9, 12.5) -> tile IT_086_062
+    GET /graph  -> subito (pre-generata)  -> traffico parte
+    GET /geo    -> miss cache -> generazione on-demand (~secondi)
+                -> salvata in cache -> risposta
+    Unity costruisce chunk 3x3 intorno
+
+### Viaggio Roma -> Milano
+    floating origin rebase ogni 5km; chunk load/unload lungo il percorso;
+    nuove tile geo generate solo se mai visitate; grafi regione swappati.
+
+### Offline
+    cache locale SQLite/file delle tile gia viste; traffico locale;
+    sync al ritorno online.
+
+
+## 4. VEHICLES (invariato dalla v1)
+
+    Auto (esistente) / Moto (lean, lane splitting) / Aerei (roll,pitch,yaw,
+    aeroporti da airports nelle tile) / Garage & negozio.
+
+
+## 5. IMPLEMENTAZIONE FASE PER FASE
+
+### FASE 0 — Ambiente                                    [setup]
+    apt install osmium-tool; venv dedicato backend/preprocessing/venv con
+    pyosmium>=4; download italy-latest.osm.pbf (2.2 GB).
+
+### FASE 1 — Pre-processing                              [1 settimana]
+    Script standalone in backend/preprocessing/:
+      tile_builder.py            griglia, distanze, speed parsing, DP simplify
+      osm_italy_processor.py     comandi:
+         filter                  tags-filter -> 3 estratti (--clean elimina PBF)
+         graph                   pass strade -> tiles/*.json.gz (tutta Italia)
+         gen-tile <key>          genera SOLO la geo di una tile (on-demand)
+         merge/manifest          indici e statistiche
+      requirements.txt           osmium>=4.0
+    Verifica: test bbox Roma end-to-end prima del run completo.
+    Al termine run completo: rimozione PBF originale.
+
+### FASE 2 — Chunk System Unity                          [2-3 settimane]
+    Come v1: GeoCoord, WorldOrigin, ChunkManager, TerrainChunk, LOD.
+    Novita: BuildingPlacer legge placement records + tabella prefab Kenney.
+
+### FASE 3 — Server Tiling                               [1-2 settimane]
+    Endpoint graph/geo, generatore on-demand ( riusa tile_builder ),
+    cache LRU con cap, sharding regione, k-d tree, Redis opzionale.
+
+### FASE 4 — Moto                                        [1 settimana]
+### FASE 5 — Aerei                                       [2-3 settimane]
+### FASE 6 — Garage & Negozio                            [1 settimana]
+### FASE 7 — Elevazione DEM SRTM                         [futuro]
+
+
+## 6. FILE DA MODIFICARE E CREARE
+
+### FASE 1 (standalone, nessun file esistente toccato)
+    NUOVI: backend/preprocessing/tile_builder.py
+           backend/preprocessing/osm_italy_processor.py
+           backend/preprocessing/requirements.txt
+
+### FASE 2 (Unity)
+    MODIFICA: CoordinateConverter.cs, CityOSMWorld.cs, CityOsmData.cs
+    NUOVI:    GeoCoord.cs, WorldOrigin.cs, ChunkManager.cs, ChunkData.cs,
+              TerrainChunk.cs, RoadRenderer.cs, BuildingPlacer.cs, ChunkLOD.cs,
+              KenneyPrefabTable.cs (ScriptableObject)
+
+### FASE 3 (backend)
+    MODIFICA: traffic/road_graph.py (load da tile geo-coords), simulation.py
+              (sharding), handlers.py, api.py, persistence.py, app.py
+    NUOVI:    traffic/tile_server.py, traffic/region_manager.py
+
+
+## 7. TECNOLOGIE
+
+    Geofabrik extracts, osmium-tool 1.14 (tags-filter/extract), pyosmium 4.x,
+    gzip JSON, FastAPI, PostgreSQL (+Redis opzionale), WebSocket, Unity URP,
+    Kenney City Kit.
+
+
+## 8. RISCHI E MITIGAZIONI (v2)
+
+    Disco: estratti+cache sotto controllo con cap LRU e --clean del PBF.
+    RAM preprocessing: strade in un solo pass (indici compatti); aree a slice
+    di latitudine con regola deterministica del centroide (no dedup set).
+    Dati OSM mancanti: whitelist highway esplicita; default prudenti.
+    Floating origin bugs: test Roma->Milano con verifica ogni 10 km.
+    Prima visita lenta: generazione tile ~ secondi; precache dei dintorni
+    della posizione GPS all'avvio dell'app.
+
+
+## 9. ORDINE DI PARTENZA
+
+    1. FASE 0+1 (questo documento, script standalone)
+    2. FASE 3 parte 1: endpoint /graph servito dalle tile pre-generate
+    3. FASE 2 parte 1: floating origin
+    4. resto a seguire
+================================================================================

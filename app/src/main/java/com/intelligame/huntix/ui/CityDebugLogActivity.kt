@@ -159,11 +159,21 @@ class CityDebugLogActivity : AppCompatActivity() {
     private fun copyLogToClipboard() {
         val diskLog = AppLog.readDiskLog(this)
         val memLog = AppLog.getAllAsString()
+        // Solo disco: contiene gia' tutte le righe della sessione corrente
+        // (il buffer memoria le duplicherebbe) ed e' meta' piu' piccolo.
         val combined = if (diskLog.isNotEmpty() && diskLog != "(nessun log su disco)") {
-            "=== LOG DISCO ===\n$diskLog\n\n=== LOG SESSIONE ===\n$memLog"
+            diskLog
         } else memLog
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("City3D Debug Log", combined))
-        Toast.makeText(this, "Log copiato", Toast.LENGTH_SHORT).show()
+        val maxChars = 60_000
+        val trimmed = if (combined.length > maxChars)
+            "...[troncato]\n" + combined.substring(combined.length - maxChars)
+        else combined
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("City3D Debug Log", trimmed))
+            Toast.makeText(this, "Log copiato (${trimmed.length} caratteri)", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Copia non riuscita: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }

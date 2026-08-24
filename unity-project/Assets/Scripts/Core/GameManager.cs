@@ -52,18 +52,30 @@ namespace Huntix.Core
             }
         }
 
+        // Ultimo modo effettivamente applicato: setMode arriva spesso DUE volte
+        // (da Start via UnityBridge.GetMode e da BridgeActivity via
+        // UnitySendMessage) nello stesso frame: senza guardia LoadScene verrebbe
+        // accodato due volte e la scena ricaricata, distruggendo gli oggetti
+        // root creati dal primo caricamento (ChunkManager incluso).
+        private static string _appliedMode;
+
         private void LoadSceneForMode(string mode)
         {
+            if (mode == _appliedMode)
+            {
+                Debug.Log($"[GameManager] LoadSceneForMode ignorato (gia' attivo): {mode}");
+                return;
+            }
+            _appliedMode = mode;
             CurrentMode = mode;
             Debug.Log($"[GameManager] Mode set to: {mode}");
             string scene = mode switch
             {
                 "outdoor" or "esplora" or "reallife" => "Outdoor",
                 "indoor" => "Indoor",
+                "room" => "Room",
                 "game" or "sheep" => "Preload",
                 "argame" or "ardice" => "MainScene",
-                "supermarket_proto" => "MainGame",
-                "room" => "Room",
                 "miacitta" => "City",
                 _ => null
             };
@@ -89,7 +101,9 @@ namespace Huntix.Core
             // MiAcitma: sostituisce il quartiere finto con la città OSM reale (streaming GPS).
             if (scene == "City")
             {
-                City.OSM.CityOSMWorld.EnsureInstance();
+                // FASE 2+: citta' OSM streamata dal server (tile 10km / chunk 1km).
+                // Sostituisce il vecchio quartiere Overpass via Android.
+                City.OSM.CityChunkedWorld.EnsureInstance();
                 if (City.Interior.InteriorManager.Instance == null)
                 {
                     var im = new GameObject("InteriorManager");
@@ -184,11 +198,24 @@ namespace Huntix.Core
                 var match = System.Text.RegularExpressions.Regex.Match(json, "\"mode\"\\s*:\\s*\"([^\"]+)\"");
                 if (match.Success)
                     LoadSceneForMode(match.Groups[1].Value);
+
+                // Fase 6: skin personaggio scelta nel profilo Android
+                var skin = System.Text.RegularExpressions.Regex.Match(json, "\"skin\"\\s*:\\s*\"([^\"]+)\"");
+                if (skin.Success)
+                    ApplyCitySkin(skin.Groups[1].Value);
             }
             catch (System.Exception e)
             {
                 Debug.LogWarning($"[GameManager] HandleSetMode: {e.Message}");
             }
+        }
+
+        private void ApplyCitySkin(string skinName)
+        {
+            PlayerPrefs.SetString(City.Player.PlayerAppearance.PrefKey, skinName);
+            Debug.Log($"[GameManager] skin profilo: {skinName}");
+            var pc = City.Player.PlayerController.Instance;
+            if (pc != null) pc.ApplySkin(skinName);
         }
 
         private void HandleEggCaptured(string jsonData)
@@ -233,6 +260,11 @@ namespace Huntix.Core
 
         public void RequestOsmCity(double lat, double lng, int radiusMeters)
         {
+            if (City.OSM.CityChunkedWorld.Instance != null)
+            {
+                Debug.Log("[GameManager] mondo chunked attivo: Overpass legacy non richiesto");
+                return;
+            }
             Debug.Log($"[GameManager] RequestOsmCity({lat},{lng},{radiusMeters}m)");
             UnityBridge.LogToAndroid("GameManager", $"RequestOsmCity({lat},{lng},{radiusMeters}m)");
             UnityBridge.RequestOsmCity(lat, lng, radiusMeters);
@@ -240,6 +272,8 @@ namespace Huntix.Core
 
         public void OnOsmCityReceived(string json)
         {
+            if (City.OSM.CityChunkedWorld.Instance != null) return; // mondo chunked attivo
+
             Debug.Log($"[GameManager] OsmCityReceived ({json?.Length ?? 0} chars)");
             UnityBridge.LogToAndroid("GameManager", $"OsmCityReceived ({json?.Length ?? 0} chars)");
             if (City.OSM.CityOSMWorld.Instance != null)
@@ -248,6 +282,8 @@ namespace Huntix.Core
 
         public void OnOsmCityFetchStarted(string data)
         {
+            if (City.OSM.CityChunkedWorld.Instance != null) return; // mondo chunked attivo
+
             Debug.Log($"[GameManager] OsmCityFetchStarted ({data})");
             if (City.OSM.CityOSMWorld.Instance != null)
                 City.OSM.CityOSMWorld.Instance.OnOsmCityFetchStarted(data);
@@ -255,6 +291,8 @@ namespace Huntix.Core
 
         public void OnOsmCityFailed(string message)
         {
+            if (City.OSM.CityChunkedWorld.Instance != null) return; // mondo chunked attivo
+
             Debug.LogWarning($"[GameManager] OsmCity fetch failed: {message}");
             UnityBridge.LogToAndroid("GameManager", $"OsmCity fetch failed: {message}");
             if (City.OSM.CityOSMWorld.Instance != null)

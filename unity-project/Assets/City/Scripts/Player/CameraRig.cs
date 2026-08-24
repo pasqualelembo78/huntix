@@ -95,11 +95,8 @@ namespace City.Player
         {
             if (target == null) return;
 
-            if (drivingMode)
-            {
-                float targetYaw = target.eulerAngles.y;
-                yaw = Mathf.LerpAngle(yaw, targetYaw, 5f * Time.unscaledDeltaTime);
-            }
+            // In guida il yaw resta libero: si ruota trascinando la zona
+            // destra dello schermo, identico alla camminata
 
             float d = drivingMode ? driveDistance : distance;
             float h = drivingMode ? driveHeight : height;

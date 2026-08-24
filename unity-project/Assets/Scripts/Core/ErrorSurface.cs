@@ -12,6 +12,7 @@ namespace Huntix.Core
     {
         static readonly List<string> Log = new List<string>();
         static readonly List<string> Errors = new List<string>();
+        static int _repeatCount;
         [System.ThreadStatic] static bool _inLogHandler;
         static volatile bool _quitting;
 
@@ -52,7 +53,22 @@ namespace Huntix.Core
                 if (Log.Count > 200) Log.RemoveRange(0, Log.Count - 200);
                 if (isProblem)
                 {
-                    Errors.Add(condition);
+                    // mostra le prime righe di stack: la prima linea (condition)
+                    // da sola non basta a localizzare l'origine dell'errore
+                    string frames = "";
+                    if (!string.IsNullOrEmpty(stackTrace))
+                    {
+                        var lines = stackTrace.Split('\n');
+                        for (int li = 0; li < lines.Length && li < 4; li++)
+                            frames += lines[li].TrimEnd() + "\n";
+                    }
+                    string entry = condition + (frames.Length > 0 ? "\n" + frames : "");
+
+                    // dedupe: lo stesso errore per-frame non deve riempire lo schermo
+                    if (Errors.Count == 0 || Errors[Errors.Count - 1] != entry)
+                        Errors.Add(entry);
+                    else
+                        _repeatCount++;
                     if (Errors.Count > 20) Errors.RemoveAt(0);
                 }
 
@@ -93,12 +109,19 @@ namespace Huntix.Core
             };
             style.normal.textColor = Color.red;
 
-            int n = Mathf.Min(6, Errors.Count);
+            int n = Mathf.Min(4, Errors.Count);
             var sb = new StringBuilder();
             for (int i = Errors.Count - n; i < Errors.Count; i++)
             {
                 sb.AppendLine(Errors[i]);
+                if (_repeatCount > 0 && i == Errors.Count - 1)
+                    sb.AppendLine("(ripetuto x" + (_repeatCount + 1) + ")");
                 sb.AppendLine();
+            }
+            if (sb.Length > 4000)
+            {
+                sb.Length = 4000;
+                sb.AppendLine("...");
             }
 
             float w = Mathf.Min(Screen.width, 900);

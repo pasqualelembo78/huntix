@@ -41,7 +41,8 @@ namespace City.NPC
         {
             if (env.roads == null) return;
             LoadCharacterPrefab();
-            player = City.Game.Instance != null ? City.Game.Instance.player.transform : null;
+            player = City.Game.Instance != null && City.Game.Instance.player != null
+                ? City.Game.Instance.player.transform : null;
 
             var paths = BuildNPCPaths(env);
             if (paths.Count == 0) return;
@@ -108,7 +109,8 @@ namespace City.NPC
                 }
 
                 var npc = go.AddComponent<NPCController>();
-                npc.Init(path.ToArray(), rng);
+                npc.Init(path.ToArray(), rng,
+                    "npc_legacy_" + i);
 
                 npcs.Add(go);
             }

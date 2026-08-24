@@ -55,6 +55,9 @@ data class PlayerProfile(
     var characterChangesCount:  Int     = 0,            // Numero cambi personaggio effettuati
     var fidatoCreatureId:        String  = "",            // ID creatura fidato (dalla schiusura uova)
 
+    // ── Fase 6: personaggio della città (kit Kenney Characters) ──
+    var cityCharacterId:         String  = "humanMaleA",  // Skin Kenney: humanMaleA/humanFemaleA/zombieMaleA/zombieFemaleA
+
     // Social Profile
     var country: String = "", var city: String = "",
     var birthYear: Int = 0, var isMinor: Boolean = false, var profileCompleted: Boolean = false,
@@ -183,6 +186,7 @@ data class PlayerProfile(
         "playerCharacterId"      to playerCharacterId,
         "characterChangesCount"  to characterChangesCount,
         "fidatoCreatureId"        to fidatoCreatureId,
+        "cityCharacterId"         to cityCharacterId,
         "playerGender"           to playerGender,
         "genderChangesCount"     to genderChangesCount,
         "genderChosenAt"         to genderChosenAt,
@@ -237,6 +241,7 @@ data class PlayerProfile(
                 playerCharacterId      = map["playerCharacterId"] as? String ?: "",
                 characterChangesCount  = (map["characterChangesCount"] as? Long)?.toInt() ?: 0,
                 fidatoCreatureId        = map["fidatoCreatureId"] as? String ?: "",
+                cityCharacterId         = map["cityCharacterId"] as? String ?: "humanMaleA",
                 playerGender           = map["playerGender"] as? String ?: "",
                 genderChangesCount     = (map["genderChangesCount"] as? Number)?.toInt() ?: 0,
                 genderChosenAt         = (map["genderChosenAt"] as? Number)?.toLong() ?: 0L,

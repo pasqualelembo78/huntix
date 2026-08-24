@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 using City.World;
 
@@ -20,6 +21,7 @@ namespace City.Vehicle
         private static readonly Color RowBg = new Color(0.20f, 0.22f, 0.25f, 1f);
         private static readonly Color ButtonBg = new Color(0.28f, 0.30f, 0.34f, 1f);
         private static readonly Color BuyColor = new Color(0.15f, 0.65f, 0.45f, 1f);
+        private static readonly Color SellColor = new Color(0.85f, 0.45f, 0.15f, 1f);
         private static readonly Color OwnedColor = new Color(0.3f, 0.3f, 0.3f, 0.8f);
 
         private TMP_FontAsset font;
@@ -33,7 +35,12 @@ namespace City.Vehicle
 
         public void ShowPurchaseDialog(VehicleInteract vi)
         {
-            if (vi == null || vi.data == null) return;
+            if (vi == null) return;
+            if (vi.data == null)
+            {
+                Debug.LogWarning("[VehicleShopUI] dialogo acquisto richiesto per veicolo senza VehicleData");
+                return;
+            }
             currentInteract = vi;
             ShowPanel(vi.data, vi.IsOwned());
         }
@@ -65,6 +72,18 @@ namespace City.Vehicle
                     HideDialog();
                     if (vi != null) Game.Instance.EnterVehicle(vi.controller);
                 }, BuyColor);
+
+                int resale = data.price * 6 / 10;
+                MakeButton("VENDI - \u20ac" + resale, () =>
+                {
+                    var vi = currentInteract;
+                    if (vi == null) return;
+                    vi.TrySell(ok =>
+                    {
+                        if (ok) HideDialog();
+                        // se il server rifiuta il pannello resta aperto
+                    });
+                }, SellColor);
             }
             else
             {
@@ -72,11 +91,13 @@ namespace City.Vehicle
                 MakeButton(canBuy ? "COMPRA - \u20ac" + data.price : "SOLDI INSUFFICIENTI", () =>
                 {
                     var vi = currentInteract;
-                    if (vi != null && vi.TryBuy())
+                    if (vi == null) return;
+                    vi.TryBuy(ok =>
                     {
+                        if (!ok) return;
                         HideDialog();
                         Game.Instance.EnterVehicle(vi.controller);
-                    }
+                    });
                 }, canBuy ? BuyColor : OwnedColor);
             }
 
@@ -88,8 +109,37 @@ namespace City.Vehicle
 
         private void BuildPanel()
         {
-            var canvas = FindObjectOfType<Canvas>();
-            if (canvas == null) return;
+            // scegli una canvas cliccabile: overlay + GraphicRaycaster,
+            // preferendo il sorting order piu' alto (la UI principale).
+            // FindObjectOfType<Canvas> poteva restituire un HUD senza
+            // raycaster: il pannello si vedeva ma i tap non arrivavano.
+            Canvas canvas = null;
+            foreach (var c in FindObjectsOfType<Canvas>())
+            {
+                if (c.renderMode != RenderMode.ScreenSpaceOverlay) continue;
+                if (c.GetComponent<GraphicRaycaster>() == null) continue;
+                if (canvas == null || c.sortingOrder > canvas.sortingOrder)
+                    canvas = c;
+            }
+            if (canvas == null)
+            {
+                canvas = FindObjectOfType<Canvas>();
+                if (canvas != null)
+                    canvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+            if (canvas == null)
+            {
+                Debug.LogError("[VehicleShopUI] BuildPanel: nessuna Canvas nella scena");
+                return;
+            }
+            if (EventSystem.current == null)
+            {
+                var esGo = new GameObject("EventSystem");
+                esGo.AddComponent<EventSystem>();
+                esGo.AddComponent<StandaloneInputModule>();
+            }
+            Debug.Log("[VehicleShopUI] BuildPanel su canvas=" + canvas.name +
+                      " order=" + canvas.sortingOrder);
 
             panel = new GameObject("VehicleShopPanel");
             var prt = panel.AddComponent<RectTransform>();

@@ -39,5 +39,21 @@ namespace City.World
         {
             return Count(itemName) > 0;
         }
+
+        /// <summary>Rimuove un item (es. vendita veicolo). Ritorna false se assente.</summary>
+        public static bool Remove(string itemName, int count = 1)
+        {
+            if (!Items.TryGetValue(itemName, out int c) || c < count) return false;
+            c -= count;
+            if (c <= 0) Items.Remove(itemName);
+            else Items[itemName] = c;
+
+            if (itemName.StartsWith(VEHICLE_PREFIX))
+            {
+                PlayerPrefs.DeleteKey(itemName);
+                PlayerPrefs.Save();
+            }
+            return true;
+        }
     }
 }

@@ -73,7 +73,7 @@ object StoreUnityBridge {
     /** Chiamato da Unity per uscire dal negozio. */
     @JvmStatic
     fun exitIndoor() {
-        shuttingDown = true
+        endUnitySession()
         finishUnityActivity(IndoorActivity.instance)
     }
 
@@ -83,9 +83,60 @@ object StoreUnityBridge {
     @JvmStatic
     fun exitMiacitta() {
         val activity = UnityPlayer.currentActivity ?: return
-        shuttingDown = true
-        AppLog.d(TAG, "exitMiacitta: ritorno alla Home (shutdown fetch)")
+        endUnitySession()
+        AppLog.d(TAG, "exitMiacitta: ritorno alla Home (shutdown fetch + stop GPS)")
         finishUnityActivity(activity)
+    }
+
+    /** Contesto applicativo cachato all'avvio del tracking GPS: serve per
+     *  fermare il tracking quando l'Activity Unity e' gia' distrutta
+     *  (UnityPlayer.currentActivity == null). */
+    @Volatile
+    private var trackedAppContext: android.content.Context? = null
+
+    /** Inizio sessione Unity (BridgeActivity.onCreate): riabilita gli invii a
+     *  Unity dopo l'eventuale uscita precedente. */
+    @JvmStatic
+    fun beginUnitySession() {
+        shuttingDown = false
+    }
+
+    /** Fine sessione Unity (BridgeActivity.onDestroy / exitMiacitta): blocca
+     *  OGNI invio a Unity da qualunque thread e ferma il tracking GPS. Con
+     *  l'engine in smontaggio un UnitySendMessage in volo e' crash nativo. */
+    @JvmStatic
+    fun endUnitySession() {
+        shuttingDown = true
+        stopLocationTrackingInternal()
+    }
+
+    /** Ferma il tracking GPS avviato con startLocationTracking (idempotente). */
+    @JvmStatic
+    fun stopLocationTracking() = stopLocationTrackingInternal()
+
+    private fun stopLocationTrackingInternal() {
+        try {
+            val ctx = trackedAppContext ?: UnityPlayer.currentActivity?.applicationContext
+            if (ctx != null) {
+                com.intelligame.huntix.legacy.poi.gps.OutdoorManager.get(ctx).stop()
+                AppLog.d(TAG, "stopLocationTracking: tracking GPS fermato")
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "stopLocationTracking failed: ${e.message}")
+        }
+    }
+
+    /** Invio generico sorvegliato verso Unity: scarta i messaggi se la sessione
+     *  e' chiusa (engine in teardown o assente). Da usare per TUTTI gli invii
+     *  esterni a StoreUnityBridge (messenger POI, Indoor, eventi legacy). */
+    @JvmStatic
+    fun sendToUnityIfAlive(gameObject: String, method: String, arg: String) {
+        if (shuttingDown) return
+        try {
+            UnityPlayer.UnitySendMessage(gameObject, method, arg)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "sendToUnityIfAlive($method): ${e.message}")
+        }
     }
 
     /** Chiude una Activity Unity in modo sicuro: se la Activity e una
@@ -208,6 +259,7 @@ object StoreUnityBridge {
         // bloccare gli invii a Unity di questa sessione.
         shuttingDown = false
         val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        trackedAppContext = ctx   // serve a stopLocationTracking dopo la distruzione dell'Activity
         AppLog.d(TAG, "startLocationTracking: avvio tracking GPS MiAcitma")
         try {
             com.intelligame.huntix.legacy.poi.gps.OutdoorManager.get(ctx).start(true)

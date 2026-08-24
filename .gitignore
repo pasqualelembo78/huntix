@@ -81,3 +81,18 @@ unitylic/unity-export.log
 # ── ZIP kit (sorgenti, ma sono grandi) ─────────────────────────
 # car.zip
 # kit/*.zip
+
+# ── Preprocessing OSM: dati pesanti rigenerabili (3.6GB) ──────
+backend/preprocessing/data/
+backend/preprocessing/tiles/
+backend/preprocessing/venv/
+backend/preprocessing/work/
+__pycache__/
+*.pyc
+
+# ── Stati runtime dei servizi veicoli ─────────────────────────
+backend/traffic/vehicles_state.json
+backend/traffic/garages_state.json
+
+# ── Backup con suffisso (es. .bak_compra, .bak_rp) ────────────
+*.bak_*

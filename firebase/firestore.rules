@@ -16,7 +16,8 @@ service cloud.firestore {
       let incoming = request.resource.data;
       let allowed = incoming.keys().hasOnly([
         'displayName', 'avatarUrl', 'statusMessage',
-        'preferences', 'city', 'gender', 'birthYear'
+        'preferences', 'city', 'gender', 'birthYear',
+        'cityCharacterId'
       ]);
       let sizeOk = incoming.size() <= 25;
       return allowed && sizeOk;

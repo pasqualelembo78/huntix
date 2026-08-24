@@ -68,6 +68,7 @@ namespace Huntix.EditorTools
             PlayerSettings.bundleVersion = "1.0.0";
             PlayerSettings.Android.bundleVersionCode = 1;
             PlayerSettings.Android.renderOutsideSafeArea = true;
+            PlayerSettings.gcIncremental = false;
 
             string[] scenes = {
                 "Assets/Scenes/Menu.unity",
@@ -75,7 +76,6 @@ namespace Huntix.EditorTools
                 "Assets/Scenes/Indoor.unity",
                 "Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity",
                 "Assets/ThirdParty/ARDice/Scenes/MainScene.unity",
-                "Assets/ThirdParty/SupermarketPrototype/Scenes/MainGame.unity",
                 "Assets/Scenes/Room.unity",
                 "Assets/City/Scenes/City.unity"
             };
@@ -106,10 +106,6 @@ namespace Huntix.EditorTools
             }
 
             string[] scenes = Array.ConvertAll(EditorBuildSettings.scenes, s => s.path);
-
-            // ── Catalogo supermercato: collega prodotti/licenze alla scena ──
-            // (così il caricamento runtime non dipende da Resources.LoadAll).
-            SupermarketCatalogSetup.PopulateCatalog();
 
             // ── Decorazioni Cute: collega i prefab Cute all'IndoorManager ──
             // (caricamento runtime senza Resources.Load).

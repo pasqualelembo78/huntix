@@ -5,6 +5,9 @@ namespace City.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerController : MonoBehaviour
     {
+        /// <summary>Riferimento statico al player della scena (uno solo).</summary>
+        public static PlayerController Instance { get; private set; }
+
         public float walkSpeed = 4f;
         public float runSpeed = 7.5f;
         public float turnSpeed = 12f;
@@ -12,6 +15,7 @@ namespace City.Player
 
         private CharacterController controller;
         private Animator animator;
+        private CharacterWalker walker;
         private Vector2 moveInput;
         private Vector3 velocity;
         private float currentSpeed;
@@ -32,8 +36,19 @@ namespace City.Player
 
         private void Awake()
         {
+            Instance = this;
             controller = GetComponent<CharacterController>();
             animator = GetComponentInChildren<Animator>();
+            walker = CharacterWalker.AttachIfNeeded(gameObject);
+            if (GetComponent<PlayerAppearance>() == null)
+                gameObject.AddComponent<PlayerAppearance>();
+        }
+
+        /// <summary>Cambia skin del personaggio a runtime (dal profilo Android).</summary>
+        public void ApplySkin(string skinName)
+        {
+            var app = GetComponent<PlayerAppearance>();
+            if (app != null) app.Apply(skinName);
         }
 
         private void Update()
@@ -71,6 +86,7 @@ namespace City.Player
             controller.Move(velocity * Time.deltaTime);
 
             if (animator != null) animator.SetFloat("Speed", currentSpeed);
+            if (walker != null) walker.SetSpeed(currentSpeed);
         }
     }
 }

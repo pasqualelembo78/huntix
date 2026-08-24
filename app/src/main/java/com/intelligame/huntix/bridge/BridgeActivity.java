@@ -12,18 +12,27 @@ public class BridgeActivity extends UnityPlayerActivity {
     public static final String MODE_OUTDOOR = "outdoor";
     public static final String MODE_REALLIFE = "reallife";
     public static final String MODE_INDOOR = "indoor";
-    public static final String MODE_SUPERMARKET_PROTO = "supermarket_proto";
-    public static final String MODE_ROOM = "room";
     public static final String MODE_MIACITTA = "miacitta";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Nuova sessione Unity: riabilita gli invii (guardia shutdown dell'uscita
+        // precedente) PRIMA di qualunque UnitySendMessage.
+        StoreUnityBridge.beginUnitySession();
         String mode = getIntent().getStringExtra(EXTRA_MODE);
         String poi = getIntent().getStringExtra(EXTRA_POI_DATA);
         android.util.Log.d("HuntixBridge", "BridgeActivity.onCreate mode=" + mode + " poiData=" + poi);
         if (mode != null) {
-            com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", "{\"action\":\"setMode\",\"mode\":\"" + mode + "\"}");
+            String setModeJson = "{\"action\":\"setMode\",\"mode\":\"" + mode + "\"}";
+            // Fase 6: skin personaggio scelta nel profilo (cache locale)
+            String skin = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                    .getString("city_skin", null);
+            if (skin != null && !skin.isEmpty()) {
+                setModeJson = "{\"action\":\"setMode\",\"mode\":\"" + mode
+                        + "\",\"skin\":\"" + skin + "\"}";
+            }
+            com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", setModeJson);
         }
     }
 
@@ -69,6 +78,11 @@ public class BridgeActivity extends UnityPlayerActivity {
 
     @Override
     protected void onDestroy() {
+        // Fine sessione Unity su QUALUNQUE percorso di distruzione (uscita
+        // volontaria, swipe-away, sistema): blocca gli invii futuri a Unity e
+        // ferma il tracking GPS. Con l'engine smontato un messaggio in volo
+        // e' SIGSEGV del processo (che resta vivo per la Home).
+        StoreUnityBridge.endUnitySession();
         UnityExitKillGuard.disableSelfKill(mUnityPlayer);
         super.onDestroy();
     }

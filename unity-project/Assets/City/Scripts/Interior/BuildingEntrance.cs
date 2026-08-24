@@ -38,14 +38,14 @@ namespace City.Interior
                 rb = gameObject.AddComponent<Rigidbody>();
                 rb.isKinematic = true;
                 rb.useGravity = false;
-                LogEntrance("Added kinematic Rigidbody to " + gameObject.name);
+                // log rimosso: spammava per ogni ingresso di ogni chunk
             }
         }
 
         private void OnTriggerEnter(Collider other)
         {
-            LogEntrance("OnTriggerEnter: " + buildingName + " (" + buildingType + ") tag=" + other.tag + " obj=" + other.gameObject.name);
             if (!other.CompareTag("Player")) return;
+            LogEntrance("OnTriggerEnter: " + buildingName + " (" + buildingType + ")");
             if (autoEntryStarted) return;
             focused = true;
             LogEntrance("focused=" + buildingName + " → calling OnEntranceFocusChanged");

@@ -11,6 +11,7 @@ namespace City.UI
 
         private const float LongPressDuration = 2f;
         private const float MoveThreshold = 40f;
+        private const float TapMaxDuration = 0.35f;
 
         private float pressTimer;
         private Vector2 pressStartScreen;
@@ -61,6 +62,10 @@ namespace City.UI
 
                 case TouchPhase.Ended:
                 case TouchPhase.Canceled:
+                    // tap breve = parla con il pedone toccato (se c'e' un NPC)
+                    if (tracking && pressTimer < TapMaxDuration &&
+                        Vector2.Distance(t.position, pressStartScreen) <= MoveThreshold)
+                        TryInteract(t.position);
                     ResetTracking();
                     break;
             }
@@ -92,6 +97,51 @@ namespace City.UI
             {
                 UnityBridge.LogToAndroid("TouchInputHandler", "Teleport fallito: nessun terreno colpito");
             }
+        }
+
+        // Tap-to-talk: un tocco su un pedone apre la chat IA (RealLifeChatActivity
+        // lato Android, via Bridge.onUnityMessage("NpcChatRequest")).
+        private void TryInteract(Vector2 screenPos)
+        {
+            // seduto su una panchina? qualunque tap ti fa alzare
+            if (City.Environment.SitController.IsSitting)
+            {
+                City.Environment.SitController.StandUp();
+                return;
+            }
+            if (mainCam == null) mainCam = Camera.main;
+            if (mainCam == null) return;
+
+            Ray ray = mainCam.ScreenPointToRay(screenPos);
+            if (!Physics.Raycast(ray, out RaycastHit hit, 40f,
+                    ~0, QueryTriggerInteraction.Collide)) return;
+
+            // oggetti interattivi dell'ambiente prima dei pedoni
+            var prop = City.Environment.InteractableProp.FromHit(
+                hit.collider.gameObject);
+            if (prop != null)
+            {
+                UnityBridge.LogToAndroid("TouchInput",
+                    "Interagisce con " + prop.title);
+                prop.Interact();
+                return;
+            }
+
+            var npc = hit.collider.GetComponentInParent<City.NPC.NPCController>();
+            if (npc == null || string.IsNullOrEmpty(npc.NpcId)) return;
+
+            // roleplay: se il pedone e' mappato su un personaggio RealLife
+            // passiamo il suo id cosi' la chat usa la persona giusta
+            string chatId = !string.IsNullOrEmpty(npc.CharacterId)
+                ? npc.CharacterId : npc.NpcId;
+            string json = "{\"npcId\":\"" + npc.NpcId +
+                          "\",\"characterId\":\"" + chatId +
+                          "\",\"name\":\"" + npc.DisplayName + "\"}";
+            // roleplay: la chiacchierata consolida l'amicizia
+            City.NPC.RelationshipManager.AddChat(chatId);
+            UnityBridge.LogToAndroid("TouchInputHandler",
+                "Chat con " + npc.DisplayName + " (" + chatId + ")");
+            UnityBridge.SendMessageToAndroid("NpcChatRequest", json);
         }
     }
 }
