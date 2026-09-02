@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using City.Player;
+using City.NPC;
 
 namespace City.Vehicle.Traffic
 {
@@ -124,6 +126,7 @@ namespace City.Vehicle.Traffic
             FollowLeader();
             EvaluateGates();
             CheckCurb();
+            CheckObstacle();
             Drive();
         }
 
@@ -241,9 +244,56 @@ namespace City.Vehicle.Traffic
             }
         }
 
+        // Frena se il giocatore o un pedone e' davanti sulla traiettoria di
+        // marcia: l'auto rallenta fino a fermarsi per non investirli, poi
+        // riparte (FollowLeader) appena la via e' libera.
+        private void CheckObstacle()
+        {
+            if (state != CarAgentState.Driving || currentSpeed <= 0.01f) return;
+            Vector3 fwd = transform.forward;
+            fwd.y = 0f;
+            float probe = 10f;
+
+            Transform target = null;
+            if (PlayerController.Instance != null)
+                target = PlayerController.Instance.transform;
+
+            float best = probe;
+            var npcs = NPCController.Active;
+            for (int i = 0; i < npcs.Count; i++)
+            {
+                var n = npcs[i];
+                if (n == null) continue;
+                Vector3 toN = n.transform.position - transform.position;
+                toN.y = 0f;
+                float d = toN.magnitude;
+                if (d > best) continue;
+                if (Vector3.Dot(fwd, d > 0.001f ? toN.normalized : fwd) <= 0.3f)
+                    continue;
+                best = d;
+                target = n.transform;
+            }
+
+            if (target == null) return;
+
+            Vector3 toT = target.position - transform.position;
+            toT.y = 0f;
+            float dist = toT.magnitude;
+            if (Vector3.Dot(fwd, dist > 0.001f ? toT.normalized : fwd) <= 0.3f)
+                return;
+
+            float stopAt = 2.2f;
+            if (dist < probe)
+            {
+                float want = Mathf.Lerp(0f, currentSpeed,
+                    Mathf.Clamp01((dist - stopAt) / (probe - stopAt)));
+                currentSpeed = Mathf.MoveTowards(currentSpeed, want,
+                    deceleration * Time.deltaTime);
+            }
+        }
+
         private void AdvanceWaypoint()
         {
-            if (_waiting && _grantedNode < 0) return; // resto sulla linea
             if (_wpIndex >= _waypoints.Length) return;
             Vector3 target = _waypoints[_wpIndex];
             Vector3 toTarget = target - transform.position;

@@ -53,6 +53,12 @@ namespace City.Economy
         public bool PlayerNear { get { return playerNear; } }
         public bool Captured { get { return captured; } }
 
+        /// <summary>L'uovo e' una preda da cacciare (non ancora catturato e non
+        /// ancora raggiunto): il radar lo segnala per guidare la caccia. Quando
+        /// e' vicino (playerNear) diventa gia' visibile/evidenziato, quindi non
+        /// serve piu' il radar.</summary>
+        public bool PlayerNearCanRadar { get { return !captured && !playerNear; } }
+
         /// <summary>Il player e' entrato nella zona: l'uovo diventa catturabile
         /// (evidenziato) ma NON si raccoglie da solo: serve il mini-gioco.</summary>
         private void OnTriggerEnter(Collider other)

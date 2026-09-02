@@ -13,7 +13,7 @@ namespace City.NPC
     /// </summary>
     public static class NPCPopulator
     {
-        private const int MaxNpcPerChunk = 5;
+        private const int MaxNpcPerChunk = 50;
         private const float MinPathLen = 18f;
         private const float Y_SIDEWALK = 0.12f;   // = RoadRenderer.Y_SIDEWALK
         private const float GAP = 0.15f;          // = RoadRenderer gap asfalto/marciapiede
@@ -21,8 +21,27 @@ namespace City.NPC
 
         private static GameObject _charPrefab;
 
-        private static readonly string[] CitizenSkins =
-            { "humanMaleA", "humanFemaleA", "humanMaleA", "humanFemaleA" };
+        // Ogni cittadino usa una skin DIVERSa (nessun PNG uguale): 24 varianti
+        // maschili + 24 femminili = 48 look distincti per colore di pelle,
+        // camicia, pantaloni e capelli. La selezione e' deterministica sull'id
+        // (stesso chunk -> stessi pedoni) e varia anche l'altezza (scale) e
+        // la statura cosi' ogni PNG ha le sue particolarita' fisiche.
+        private static readonly string[] CitizenMaleSkins =
+        {
+            "citizenM01","citizenM02","citizenM03","citizenM04","citizenM05",
+            "citizenM06","citizenM07","citizenM08","citizenM09","citizenM10",
+            "citizenM11","citizenM12","citizenM13","citizenM14","citizenM15",
+            "citizenM16","citizenM17","citizenM18","citizenM19","citizenM20",
+            "citizenM21","citizenM22","citizenM23","citizenM24",
+        };
+        private static readonly string[] CitizenFemaleSkins =
+        {
+            "citizenF01","citizenF02","citizenF03","citizenF04","citizenF05",
+            "citizenF06","citizenF07","citizenF08","citizenF09","citizenF10",
+            "citizenF11","citizenF12","citizenF13","citizenF14","citizenF15",
+            "citizenF16","citizenF17","citizenF18","citizenF19","citizenF20",
+            "citizenF21","citizenF22","citizenF23","citizenF24",
+        };
 
         public static void Populate(ChunkData chunk,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds)
@@ -41,7 +60,9 @@ namespace City.NPC
             chunk.npcsGo = new GameObject("NPC");
             chunk.npcsGo.transform.SetParent(chunk.root.transform, false);
 
-            int count = Mathf.Min(MaxNpcPerChunk, paths.Count);
+            // piu' pedoni dello stesso chunk possono condividere un percorso:
+            // abbiamo sempre il budget pieno, cosi' le strade sono animate
+            int count = MaxNpcPerChunk;
             int placed = 0;
             for (int i = 0; i < count; i++)
             {
@@ -51,18 +72,23 @@ namespace City.NPC
                     GameObject go = Object.Instantiate(_charPrefab, chunk.npcsGo.transform);
                     go.name = "NPC_" + chunk.key + "_" + i;
                     go.tag = "Untagged";
-                    go.transform.localScale = Vector3.one * 0.455f;
+
+                    // statura/presenza fisica unica per ogni PNG (0.42..0.50)
+                    float h = 0.455f + (float)(StableHashScaled(i) - 0.5f) * 0.055f;
+                    go.transform.localScale = Vector3.one * h;
 
                     // i collider importati dal FBX restano spenti: il corpo
                     // solido lo aggiunge NPCController (capsula)
                     foreach (var c in go.GetComponentsInChildren<Collider>())
                         if (c != null) c.enabled = false;
 
-                    ApplySkin(go, CitizenSkins[placed % CitizenSkins.Length]);
-
                     string npcId = "npc_" + chunk.index.x + "_" + chunk.index.y + "_" + i;
+                    ApplySkin(go, PickCitizenSkin(npcId, i));
+
                     var npc = go.AddComponent<NPCController>();
-                    npc.Init(path.ToArray(), rng, npcId);
+                    // offset di partenza sul percorso condiviso: evita che i
+                    // pedoni impilati partano tutti dal primo waypoint
+                    npc.Init(path.ToArray(), rng, npcId, i);
                     placed++;
                 }
                 catch (System.Exception e)
@@ -175,6 +201,39 @@ namespace City.NPC
             for (int i = 0; i < p.Count; i++)
                 if (r.Contains(new Vector2(p[i].x, p[i].z))) return true;
             return false;
+        }
+
+        // Sceglie una skin deterministica per un pedone: alterna maschile/
+        // femminile e ruota dentro le 24 varianti di quel genere in base
+        // all'hash dell'id stabile -> lo stesso NPC conserva lo stesso look
+        // tra una sessione e l'altra. Variazione locale (offset) per evitare
+        // che i pedoni vicini nello stesso chunk condividano subito la skin.
+        private static string PickCitizenSkin(string npcId, int i)
+        {
+            string[] pool = StableHash(npcId + "|g") % 2 == 0
+                ? CitizenMaleSkins : CitizenFemaleSkins;
+            int baseIdx = StableHash(npcId) % pool.Length;
+            int idx = (baseIdx + i) % pool.Length;
+            return pool[idx];
+        }
+
+        // scala in [0,1] deterministica da un intero (per statura)
+        private static float StableHashScaled(int v)
+        {
+            uint h = 2166136261u;
+            unchecked { h ^= (uint)v; h *= 16777619u; }
+            return (h % 10000) / 10000f;
+        }
+
+        private static int StableHash(string s)
+        {
+            uint h = 2166136261u;
+            for (int i = 0; i < s.Length; i++)
+            {
+                h ^= s[i];
+                h *= 16777619u;
+            }
+            return (int)(h % int.MaxValue);
         }
 
         // Stessa tecnica dello storico NPCSpawnManager: sostituisce le

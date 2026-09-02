@@ -277,6 +277,38 @@ class IndoorActivity : UnityPlayerActivity() {
         }
     }
 
+    /** Called from UnityBridge when a quest is accepted by the player. */
+    fun onNPCQuestAccepted(json: String) {
+        runOnUiThread {
+            try {
+                val obj = JSONObject(json)
+                val questName = obj.optString("questName", "Missione")
+                android.widget.Toast.makeText(this, "📋 Missione accettata: $questName", android.widget.Toast.LENGTH_LONG).show()
+                btnInteract?.visibility = View.GONE
+                tvInteractHint?.visibility = View.GONE
+            } catch (_: Exception) { }
+        }
+    }
+
+    /** Called from UnityBridge when AR finds a plane. */
+    fun onARPlaneFound(json: String) {
+        com.intelligame.huntix.AppLog.d("Indoor", "AR plane found: $json")
+    }
+
+    /** Called from UnityBridge when needs are updated after an interaction. */
+    fun onNeedsUpdated(json: String) {
+        runOnUiThread {
+            try {
+                val obj = JSONObject(json)
+                val hunger = obj.optDouble("hunger", 60.0).toInt()
+                val thirst = obj.optDouble("thirst", 60.0).toInt()
+                val funLevel = obj.optDouble("fun", 60.0).toInt()
+                com.intelligame.huntix.AppLog.d("Indoor", "Needs updated: hunger=$hunger thirst=$thirst fun=$funLevel")
+                android.widget.Toast.makeText(this, "Bisogni aggiornati! Fame: $hunger, Sete: $thirst", android.widget.Toast.LENGTH_SHORT).show()
+            } catch (_: Exception) { }
+        }
+    }
+
     /** Callback da Unity quando la scena è pronta. */
     fun onIndoorSceneReady(poiId: String) {
         // Could refresh interactables list here

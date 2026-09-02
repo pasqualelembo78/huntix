@@ -68,7 +68,16 @@ namespace City.Vehicle
             string code = !string.IsNullOrEmpty(vehicleCode) ? " [" + vehicleCode + "]" : "";
             string name = data != null ? data.vehicleName : "";
             if (IsOwned())
-                label = "ENTRA " + name + code;
+            {
+                if (controller != null && controller.Damage == VehicleDamage.Fire)
+                    label = "VIGILI DEL FUOCO " + name + " - INCENDIO" + code;
+                else if (controller != null && controller.Damage == VehicleDamage.Wrecked)
+                    label = "CARRO ATTREZZI " + name + " - INCIDENTATA" + code;
+                else if (controller != null && controller.Damage == VehicleDamage.Flat)
+                    label = "CARRO ATTREZZI o ENTRA " + name + " - GOMMA A TERRA" + code;
+                else
+                    label = "ENTRA " + name + code;
+            }
             else if (OwnedByOther)
                 label = name + " - VENDUTA AD ALTRO GIOCATORE" + code;
             else
@@ -85,6 +94,9 @@ namespace City.Vehicle
 
         public bool IsOwned()
         {
+            // l auto da lavoro (es. taxi del Tassista) non e di proprieta
+            // ma si puo salire per il lavoro: trattala come guidabile
+            if (controller != null && controller.IsJobVehicle) return true;
             if (string.IsNullOrEmpty(vehicleCode)) return false;
             return Inventory.Count("vehicle_" + vehicleCode) > 0 ||
                 VehicleOwnershipApi.IsOwnedSafe(vehicleCode);

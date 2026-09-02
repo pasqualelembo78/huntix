@@ -19,6 +19,7 @@ namespace City.Interior
         private Vector2 moveInput;
         private float rotationX;
         private Vector3 velocity;
+        private float walkTelemetry;
 
         private void Awake()
         {
@@ -66,6 +67,21 @@ namespace City.Interior
 
             Vector3 motion = move + velocity * Time.deltaTime;
             cc.Move(motion * Time.deltaTime);
+
+            // Traccia la distanza camminata anche negli interni: il
+            // PlayerController esterno e' disattivato dentro i locali, quindi
+            // senza questo le missioni "Cammina X metri" si fermavano durante
+            // l'esplorazione.
+            if (move.sqrMagnitude > 0.02f)
+            {
+                float meters = move.magnitude * Time.deltaTime;
+                walkTelemetry += meters;
+                if (walkTelemetry >= 1f)
+                {
+                    City.Economy.MissionManager.Instance?.OnPlayerWalked(walkTelemetry);
+                    walkTelemetry = 0f;
+                }
+            }
         }
 
         public void Stop()

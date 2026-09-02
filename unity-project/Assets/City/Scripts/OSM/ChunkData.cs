@@ -21,6 +21,7 @@ namespace City.OSM
         public GameObject buildingsGo;
         public GameObject natureGo;
         public GameObject npcsGo;           // pedoni animati sui marciapiedi
+        public GameObject airportsGo;       // piste + velivoli degli aeroporti OSM
 
         public bool built;
         public int lod = -1;
@@ -55,6 +56,7 @@ namespace City.OSM
                 else
                     SetBuildingColliders(buildingsGo, false);
             }
+            if (airportsGo != null) airportsGo.SetActive(level <= 1);
         }
 
         private static void SetSidewalkCollider(GameObject sidewalksGo, bool on)

@@ -112,7 +112,66 @@ object Bridge {
             }
             // ── MiAcitma: uovo catturato nel mini-gioco → inventario uova Huntix
             "EggCapturedInCity" -> handleCityEggCaptured(jsonData)
+            // ── MiAcitma → profilo Huntix unificato (un solo player) ──
+            "CityXpEarned" -> handleCityXpEarned(jsonData)
+            "CityPowerEarned" -> handleCityPowerEarned(jsonData)
+            "CityGemsEarned" -> handleCityGemsEarned(jsonData)
+            "CityEnergyUpdate" -> handleCityEnergyUpdate(jsonData)
+            "PlayerReincarnated" -> handlePlayerReincarnated(jsonData)
         }
+    }
+
+    /**
+     * XP guadagnati in Miacitta (matrimonio/figli/missioni/reincarnazione):
+     * li accredita sul profilo Huntix così alimentano XP, livello e classifica.
+     */
+    private fun handleCityXpEarned(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val amount = j.optLong("xp", 0L)
+        if (amount <= 0) return
+        val newXp = StoreUnityBridge.addXpFromCity(amount)
+        val src = j.optString("source", "citta")
+        com.intelligame.huntix.AppLog.i("HuntixSync", "XP +$amount ($src) -> totale $newXp")
+    }
+
+    /** Potere guadagnato in Miacitta → profilo Huntix. */
+    private fun handleCityPowerEarned(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val amount = j.optLong("power", 0L)
+        if (amount <= 0) return
+        val newPower = StoreUnityBridge.addPowerFromCity(amount)
+        com.intelligame.huntix.AppLog.i("HuntixSync", "Power +$amount -> totale $newPower")
+    }
+
+    /** Gemme guadagnate in Miacitta → profilo Huntix. */
+    private fun handleCityGemsEarned(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val amount = j.optInt("gems", 0)
+        if (amount <= 0) return
+        val newGems = StoreUnityBridge.addGemsFromCity(amount)
+        com.intelligame.huntix.AppLog.i("HuntixSync", "Gemme +$amount -> $newGems")
+    }
+
+    /** Sincronizza l'energia del player dalla citta' al profilo Huntix. */
+    private fun handleCityEnergyUpdate(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val energy = j.optInt("energy", 100)
+        StoreUnityBridge.syncEnergyFromCity(energy)
+    }
+
+    /**
+     * Reincarnazione in Miacitta: il player nasce di nuovo e (opzionale) cambia
+     * nome. Aggiorna il profilo Huntix con il nuovo nome così la classifica e
+     * tutti i moduli vedono lo stesso player appena reincarnato.
+     */
+    private fun handlePlayerReincarnated(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val newName = j.optString("name", "")
+        if (newName.isNotBlank()) StoreUnityBridge.setPlayerNameFromCity(newName)
+        // Si puo' accreditare un bonus di reincarnazione per feedback positivo
+        val xpBonus = j.optLong("xp", 0L)
+        if (xpBonus > 0) StoreUnityBridge.addXpFromCity(xpBonus)
+        com.intelligame.huntix.AppLog.i("HuntixSync", "Reincarnazione: nuovo nome '$newName' +$xpBonus xp")
     }
 
     /**

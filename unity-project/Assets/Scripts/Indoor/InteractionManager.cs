@@ -119,16 +119,26 @@ namespace Huntix.Indoor
             // Send result to Android
             UnityBridge.SendMessageToAndroid("IndoorInteractionResult", _currentTarget.ToJson());
 
-            // Handle game effects
+            // Apply need effect via LocalNeeds (Unity → Android → LocalNeeds.applyAction)
             if (!string.IsNullOrEmpty(_currentTarget.need) && _currentTarget.gain > 0)
             {
-                Debug.Log($"[InteractionManager] Gain {_currentTarget.gain} {_currentTarget.need}");
+                Debug.Log($"[InteractionManager] Applying need: {_currentTarget.need} +{_currentTarget.gain}");
+                var updatedNeeds = UnityBridge.ApplyNeedAction(_currentTarget.need, _currentTarget.gain);
+                Debug.Log($"[InteractionManager] Needs updated: {updatedNeeds}");
+                UnityBridge.SendMessageToAndroid("IndoorNeedsUpdated", updatedNeeds);
             }
 
             // Visual feedback: disable highlight temporarily
             _currentTarget.SetHighlight(false);
-            Destroy(_currentTarget.gameObject, 0.3f);
-            _allInteractables.Remove(_currentTarget);
+
+            // Only destroy consumable actions (collect, buy); talk/heal stay active
+            bool consumable = _currentTarget.action == "collect" || _currentTarget.action == "buy";
+            if (consumable)
+            {
+                Destroy(_currentTarget.gameObject, 0.3f);
+                _allInteractables.Remove(_currentTarget);
+            }
+
             _currentTarget = null;
 
             UnityBridge.SendMessageToAndroid("IndoorInteractable", "{\"found\":false}");

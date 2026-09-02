@@ -19,6 +19,8 @@ namespace City.Vehicle
             public string name;
             public double lat;
             public double lng;
+            public string phone;     // telefono (se noto)
+            public string website;   // sito web (se noto)
         }
 
         private static readonly Dictionary<string, PoiInfo> pois =
@@ -39,18 +41,25 @@ namespace City.Vehicle
         }
 
         public static void Register(string kind, string id, string name,
-            double lat, double lng)
+            double lat, double lng, string phone = null, string website = null)
         {
             pois[kind + "_" + id] = new PoiInfo
             {
-                id = id, kind = kind, name = name, lat = lat, lng = lng
+                id = id, kind = kind, name = name, lat = lat, lng = lng,
+                phone = phone, website = website
             };
         }
 
         public static string KindString(VehiclePoiZone.PoiKind kind)
         {
             return kind == VehiclePoiZone.PoiKind.Dealer ? "dealer"
-                : kind == VehiclePoiZone.PoiKind.Repair ? "repair" : "garage";
+                : kind == VehiclePoiZone.PoiKind.Repair ? "repair"
+                : kind == VehiclePoiZone.PoiKind.Hospital ? "hospital"
+                : kind == VehiclePoiZone.PoiKind.Ramp ? "rampa"
+                : kind == VehiclePoiZone.PoiKind.School ? "school"
+                : kind == VehiclePoiZone.PoiKind.Bar ? "bar"
+                : kind == VehiclePoiZone.PoiKind.Bank ? "bank"
+                : "garage";
         }
 
         /// <summary>Officina piu' vicina a una posizione geografica.</summary>
@@ -72,6 +81,52 @@ namespace City.Vehicle
                 if (d2 < bestD2) { bestD2 = d2; best = p; }
             }
             return best;
+        }
+
+        /// <summary>
+        /// POI piu' vicino di un tipo, escludendo un id (per i cartelli che
+        /// non devono segnalare se stessi).
+        /// </summary>
+        public static PoiInfo NearestExcept(string kind, string excludeId,
+            double lat, double lng)
+        {
+            PoiInfo best = null;
+            double bestD2 = double.MaxValue;
+            foreach (var p in pois.Values)
+            {
+                if (p.kind != kind || p.id == excludeId) continue;
+                double dlat = p.lat - lat;
+                double dlng = (p.lng - lng) * 0.75;
+                double d2 = dlat * dlat + dlng * dlng;
+                if (d2 < bestD2) { bestD2 = d2; best = p; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// POI piu' vicino di QUALSIASI tipo entro maxMeters (per il tap
+        /// sulla mappa espansa). La metrica e' in gradi approssimata.
+        /// </summary>
+        public static PoiInfo NearestAny(double lat, double lng,
+            double meters)
+        {
+            PoiInfo best = null;
+            double bestD2 = double.MaxValue;
+            foreach (var p in pois.Values)
+            {
+                double dlat = p.lat - lat;
+                double dlng = (p.lng - lng) * 0.75;
+                double d2 = dlat * dlat + dlng * dlng;
+                if (d2 < bestD2) { bestD2 = d2; best = p; }
+            }
+            double tolDeg = meters / 111000.0;
+            return best != null && bestD2 <= tolDeg * tolDeg ? best : null;
+        }
+
+        /// <summary>Tutti i POI registrati (mappa espansa).</summary>
+        public static IEnumerable<PoiInfo> All()
+        {
+            return pois.Values;
         }
 
         /// <summary>Tutti i POI noti di un tipo (per fallback di spawn).</summary>

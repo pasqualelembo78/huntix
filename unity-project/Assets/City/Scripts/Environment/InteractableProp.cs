@@ -208,33 +208,90 @@ namespace City.Environment
             }
         }
 
+        // ── cambio MVC (Huntix Coins da fuori) ↔ soldi citta ──────────
+        // Tasso variabile: 1 MVC ≈ CurrentRate() €, fluttua nel tempo in modo
+        // deterministico (formula col tempo reale). Spread: vendere rende un
+        // po' meno, comprare costa un po' di piu', cosi non c'e' arbitraggio
+        // infinito fra le due direzioni.
+        private const double AtmBuySpread = 1.10; // comprare MVC costa +10%
+        private const int AtmExchangeLot = 10;    // lotti da 10 MVC
+
+        private static double AtmCurrentRate()
+        {
+            double t = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            const double baseRate = 20.0;
+            const double amplitude = 0.30;        // 20 € ± 30% → 14..26 €
+            const double periodSeconds = 300.0;   // ciclo completo in 5'
+            double f = Math.Sin((t % periodSeconds) / periodSeconds
+                * 2.0 * Math.PI);
+            return baseRate * (1.0 + amplitude * f);
+        }
+
         private void AtmPanel()
         {
             const string bankKey = "city_bank";
-            ChoicePanel.Show("🏧 ATM \u00b7 Banca",
+            double mvc = Huntix.Bridge.UnityBridge.GetMvcBalance();
+            double rate = AtmCurrentRate();
+            int sellCity = (int)(AtmExchangeLot * rate);
+            int buyCost = (int)Math.Ceiling(AtmExchangeLot * rate * AtmBuySpread);
+
+            ChoicePanel.Show("🏧 ATM · Banca",
                 new ChoicePanel.Option[]
                 {
-                    new ChoicePanel.Option("\u2b07\ufe0f Deposita tutto (" +
-                        Wallet.Money + "\u20ac)", () =>
+                    new ChoicePanel.Option("▼ Deposita tutto (" +
+                        Wallet.Money + "€)", () =>
                     {
                         PlayerPrefs.SetInt(bankKey,
                             PlayerPrefs.GetInt(bankKey, 0) + Wallet.Money);
                         Wallet.Spend(Wallet.Money);
                         Toast("Deposito effettuato. Saldo banca: " +
-                            PlayerPrefs.GetInt(bankKey, 0) + "\u20ac");
+                            PlayerPrefs.GetInt(bankKey, 0) + "€");
+                        AtmPanel();
                     }),
-                    new ChoicePanel.Option("\u2b06\ufe0f Preleva tutto (" +
-                        PlayerPrefs.GetInt(bankKey, 0) + "\u20ac)", () =>
+                    new ChoicePanel.Option("▲ Preleva tutto (" +
+                        PlayerPrefs.GetInt(bankKey, 0) + "€)", () =>
                     {
                         int b = PlayerPrefs.GetInt(bankKey, 0);
                         if (b <= 0) { Toast("Conto vuoto"); return; }
                         Wallet.Earn(b);
                         PlayerPrefs.SetInt(bankKey, 0);
-                        Toast("Prelevati " + b + "\u20ac");
+                        Toast("Prelevati " + b + "€");
+                        AtmPanel();
+                    }),
+                    new ChoicePanel.Option("💱 Cambia MVC → €  (vendi " +
+                        AtmExchangeLot + " MVC ≈ " + sellCity + "€)", () =>
+                    {
+                        if (Huntix.Bridge.UnityBridge.SpendMvc(AtmExchangeLot))
+                        {
+                            Wallet.Earn(sellCity);
+                            Toast("Venduti " + AtmExchangeLot +
+                                " MVC: +" + sellCity + "€");
+                        }
+                        else
+                        {
+                            Toast("MVC insufficienti: hai " +
+                                (long)Huntix.Bridge.UnityBridge.GetMvcBalance() +
+                                " MVC");
+                        }
+                        AtmPanel();
+                    }),
+                    new ChoicePanel.Option("💲 Cambia € → MVC  (compra " +
+                        AtmExchangeLot + " MVC ≈ " + buyCost + "€)", () =>
+                    {
+                        if (!Wallet.CanAfford(buyCost))
+                        {
+                            Toast("Soldi insufficienti: servono " + buyCost + "€");
+                            AtmPanel(); return;
+                        }
+                        Wallet.Spend(buyCost);
+                        Huntix.Bridge.UnityBridge.AddMvc(AtmExchangeLot);
+                        Toast("Comprati " + AtmExchangeLot + " MVC: -" + buyCost + "€");
+                        AtmPanel();
                     }),
                 },
-                "Wallet: " + Wallet.Money + "\u20ac \u00b7 Conto: " +
-                PlayerPrefs.GetInt(bankKey, 0) + "\u20ac");
+                "Tasso: 1 MVC = " + rate.ToString("0.00") + "€  ·  MVC: " +
+                (long)mvc + "  ·  Wallet: " + Wallet.Money + "€  ·  Conto: " +
+                PlayerPrefs.GetInt(bankKey, 0) + "€");
         }
 
         private void Toast(string msg)

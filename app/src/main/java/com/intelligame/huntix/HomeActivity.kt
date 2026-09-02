@@ -9,6 +9,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.ViewGroup
+import android.webkit.WebChromeClient
+import android.webkit.WebView
 import android.widget.*
 import android.widget.FrameLayout
 import androidx.cardview.widget.CardView
@@ -52,6 +55,7 @@ class HomeActivity : BaseNavActivity() {
 
     private val RC_LOCATION = 101
     private lateinit var homeSearchPanel: PoiSearchPanel
+    private var lastSyncMs = 0L
 
     override fun activeTab() = "Home"
     private val RC_RPM_AVATAR = 900
@@ -59,8 +63,12 @@ class HomeActivity : BaseNavActivity() {
     override fun onResume() {
         super.onResume()
         try {
-            SavedManager.accrueInstallRewards(this)
-            SavedManager.accrueMiningRewards(this)
+            val now = System.currentTimeMillis()
+            if (now - lastSyncMs >= RESUME_SYNC_INTERVAL_MS) {
+                lastSyncMs = now
+                SavedManager.accrueInstallRewards(this)
+                SavedManager.accrueMiningRewards(this)
+            }
             // Start distance tracking for termocullas
             if (!DistanceTracker.isListening(this)) {
                 DistanceTracker.startListening(this) { /* handled internally */ }
@@ -81,9 +89,7 @@ class HomeActivity : BaseNavActivity() {
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) {
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), RC_LOCATION
-            )
+            homeSearchPanel.showPermissionHint()
             return
         }
         homeSearchPanel.loadNearby()
@@ -172,10 +178,37 @@ class HomeActivity : BaseNavActivity() {
             isClickable = true; isFocusable = true
             setOnClickListener { startActivity(Intent(this@HomeActivity, PlayerProfileActivity::class.java)) }
         }
-        // Avatar emoji (fallback, RPM thumbnail if available)
-        avatarCard.addView(TextView(this).apply {
-            text = "\uD83E\uDDD1\u200D\uD83D\uDE80"; textSize = 56f; gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(LP_WW, LP_WW).apply { gravity = Gravity.CENTER }
+        // Avatar 3D Kenney character (model-viewer WebView, auto-rotate)
+        val skinId = profile?.cityCharacterId?.takeIf { it.isNotBlank() } ?: "humanMaleA"
+        val glbPath = "characters/kenney/kenney_${skinId}.glb"
+        avatarCard.addView(WebView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LP_MW, dp(220)).apply { gravity = Gravity.CENTER }
+            settings.apply {
+                javaScriptEnabled = true; domStorageEnabled = true
+                allowFileAccess = true; allowContentAccess = true
+            }
+            setBackgroundColor(Color.TRANSPARENT)
+            webChromeClient = WebChromeClient()
+            loadDataWithBaseURL(
+                "file:///android_asset/",
+                """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<style>*{margin:0;padding:0}body{background:transparent;overflow:hidden}model-viewer{width:100%;height:100%;background:transparent;--poster-color:transparent}model-viewer::part(default-progress-bar){display:none}</style>
+</head><body><model-viewer src="$glbPath" alt="Character" auto-rotate camera-orbit="0deg 75deg 2.5m" min-camera-orbit="auto auto 1.5m" max-camera-orbit="auto auto 5m" field-of-view="30deg" autoplay shadow-intensity="1" exposure="1.2" environment-image="neutral" style="width:100%;height:100%;"></model-viewer><script>
+try {
+  function showAvatarFallback(){ if (document.getElementById("fb")) return; document.body.innerHTML = "<div id=\"fb\" style=\"width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#A78BFA;font-family:sans-serif;\"><span style=\"font-size:40px;\">\u{1F464}</span><div style=\"margin-top:2px;font-size:13px;\">Avatar offline</div></div>"; }
+  var mv = document.querySelector("model-viewer");
+  if (mv) mv.addEventListener("error", showAvatarFallback);
+  if (window.customElements) {
+    var loadedFlag = false;
+    window.customElements.whenDefined("model-viewer").then(function(){ loadedFlag = true; }).catch(showAvatarFallback);
+    setTimeout(function(){ if (!loadedFlag) showAvatarFallback(); }, 2500);
+  } else showAvatarFallback();
+} catch (e) {}
+</script>
+</body></html>""".trimIndent(),
+                "text/html", "UTF-8", null
+            )
         })
         // Player name
         avatarCard.addView(TextView(this).apply {
@@ -211,10 +244,13 @@ class HomeActivity : BaseNavActivity() {
         root.addView(avatarCard)
 
         // ═══ 3. LIVE EVENT BANNER ═══
+        var bannersShown = 0
         try {
-            val activeEvents = LiveEventManager.getActiveEvents()
-            val evtText = if (activeEvents.isNotEmpty()) "\uD83D\uDD34  LIVE: ${activeEvents.first().title}" else "\uD83D\uDD34  LIVE: Uova Misteriose \u2014 Doppio XP!"
-            root.addView(TextView(this).apply {
+            if (bannersShown < 2) {
+                bannersShown++
+                val activeEvents = LiveEventManager.getActiveEvents()
+                val evtText = if (activeEvents.isNotEmpty()) "\uD83D\uDD34  LIVE: ${activeEvents.first().title}" else "\uD83D\uDD34  LIVE: Uova Misteriose \u2014 Doppio XP!"
+                root.addView(TextView(this).apply {
                 text = evtText; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
@@ -222,13 +258,15 @@ class HomeActivity : BaseNavActivity() {
                 ).apply { cornerRadius = dp(8).toFloat() }
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(12) }
-                if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
-            })
+                    if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
+                })
+            }
         } catch (e: Exception) { Sentry.captureException(e) }
 
         // ═══ 3b. SPECIAL EVENT BANNER ═══
         try {
-            if (SpecialEventManager.hasActiveEvent()) {
+            if (bannersShown < 2 && SpecialEventManager.hasActiveEvent()) {
+                bannersShown++
                 val activeEvent = SpecialEventManager.getActiveSpecialEvent()
                 if (activeEvent != null) {
                     val eventCard = LinearLayout(this).apply {
@@ -280,7 +318,8 @@ class HomeActivity : BaseNavActivity() {
 
         // ═══ 3c. DAILY EVENT BANNER ═══
         try {
-            if (DailyEventManager.shouldShowDailyEventBanner()) {
+            if (bannersShown < 2 && DailyEventManager.shouldShowDailyEventBanner()) {
+                bannersShown++
                 val dailyEvent = DailyEventRegistry.getTodayEvent()
                 if (dailyEvent != null) {
                     val isActive = DailyEventManager.isWithinEventWindow(dailyEvent)
@@ -351,7 +390,7 @@ class HomeActivity : BaseNavActivity() {
         }
         row1.addView(gameTile("\uD83C\uDFE0", "INDOOR", "Nascondi e cerca", "#3F51B5", "#1A237E") { startActivity(Intent(this, IndoorModeSelectionActivity::class.java)) })
         row1.addView(spacerH(dp(8)))
-        row1.addView(gameTile("\uD83C\uDFAE", "MINIGIOCHI", "9 + 13 AR", "#FF6F00", "#E65100") { startActivity(Intent(this, MiniGamesHubActivity::class.java)) })
+        row1.addView(gameTile("\uD83C\uDFAE", "MINIGIOCHI", "${MiniGamesHubActivity.NORMAL_COUNT} + ${MiniGamesHubActivity.AR_COUNT} AR", "#FF6F00", "#E65100") { startActivity(Intent(this, MiniGamesHubActivity::class.java)) })
         grid.addView(row1)
         // Row 2
         val row2 = LinearLayout(this).apply {
@@ -375,7 +414,6 @@ class HomeActivity : BaseNavActivity() {
         quickRow.addView(spacerH(dp(6)))
         quickRow.addView(quickChip("\uD83D\uDCCB", "Missioni", "#00E5FF") { startActivity(Intent(this, ResearchTaskActivity::class.java)) })
         quickRow.addView(spacerH(dp(6)))
-        quickRow.addView(quickChip("\uD83C\uDFDF\uFE0F", "Raid", "#FF3366") { startActivity(Intent(this, RaidBattleActivity::class.java)) })
         root.addView(quickRow)
 
         val quickRow2 = LinearLayout(this).apply {
@@ -388,16 +426,7 @@ class HomeActivity : BaseNavActivity() {
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\uD83C\uDFC6", "Classifica", "#FF3366") { startActivity(Intent(this, GamifiedLeaderboardActivity::class.java)) })
         quickRow2.addView(spacerH(dp(6)))
-        quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
-        root.addView(quickRow2)
-
-        // ═══ 5b. MIACITTA ═
-        val supermarketRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
-        }
-        supermarketRow.addView(spacerH(dp(4)))
-        supermarketRow.addView(quickChip("\uD83C\uDFD9\uFE0F", "Miacitta", "#7E57C2") {
+        quickRow2.addView(quickChip("\uD83C\uDFD9\uFE0F", "Miacitta", "#7E57C2") {
             AppLog.risorse(this@HomeActivity, "pre-miacitta")
             Bridge.openUnityActivity(
                 this@HomeActivity,
@@ -405,8 +434,9 @@ class HomeActivity : BaseNavActivity() {
                 "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
             )
         })
-        supermarketRow.addView(spacerH(dp(4)))
-        root.addView(supermarketRow)
+        quickRow2.addView(spacerH(dp(6)))
+        quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
+        root.addView(quickRow2)
 
         // ═══ RICERCA LOCALI VICINI AL GPS (Overpass) ═══
         // Trova i locali intorno alla posizione corrente (negozi, bar, ristoranti,
@@ -419,6 +449,12 @@ class HomeActivity : BaseNavActivity() {
                 OsmPoiRepository.loadNearby(lat, lng, r, applicationContext, cb)
             }
             locationSupplier = { OutdoorManager.get().currentLocation ?: OutdoorManager.lastKnownLocation(applicationContext) }
+            requirePermissionCheck = {
+                ContextCompat.checkSelfPermission(this@HomeActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            }
+            onPermissionDeniedTap = {
+                ActivityCompat.requestPermissions(this@HomeActivity, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), RC_LOCATION)
+            }
             onOpenPoi = { r -> openPoiPage(r) }
         }
         root.addView(homeSearchPanel)
@@ -465,7 +501,8 @@ class HomeActivity : BaseNavActivity() {
             layoutParams = LinearLayout.LayoutParams(LP_WW, LP_WW).also { it.topMargin = dp(4) }
         })
         inner.addView(TextView(this).apply {
-            text = subtitle; textSize = 9f; setTextColor(Color.argb(180, 255, 255, 255)); gravity = Gravity.CENTER
+            text = subtitle; textSize = 11f; setTextColor(Color.argb(180, 255, 255, 255)); gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(LP_WW, LP_WW).also { it.topMargin = dp(2) }
         })
         card.addView(inner); return card
     }
@@ -476,13 +513,13 @@ class HomeActivity : BaseNavActivity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(Color.parseColor(colorHex)) }
-            setPadding(dp(6), dp(8), dp(6), dp(8))
+            setPadding(dp(4), dp(10), dp(4), dp(10))
             layoutParams = LinearLayout.LayoutParams(0, LP_WW, 1f)
             isClickable = true; isFocusable = true
             setOnClickListener { onClick() }
-            addView(TextView(this@HomeActivity).apply { text = emoji; textSize = 16f; gravity = Gravity.CENTER })
+            addView(TextView(this@HomeActivity).apply { text = emoji; textSize = 18f; gravity = Gravity.CENTER })
             addView(TextView(this@HomeActivity).apply {
-                text = label; textSize = 9f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                text = label; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
                 typeface = Typeface.DEFAULT_BOLD
             })
         }
@@ -521,6 +558,7 @@ class HomeActivity : BaseNavActivity() {
     companion object {
         private const val LP_MW = LinearLayout.LayoutParams.MATCH_PARENT
         private const val LP_WW = LinearLayout.LayoutParams.WRAP_CONTENT
+        private const val RESUME_SYNC_INTERVAL_MS = 60_000L
     }
 
     // ── Ready Player Me Avatar ────────────────────────────────

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using City.OSM;
 
 namespace City.UI
 {
@@ -16,6 +17,15 @@ namespace City.UI
 
         public Vector2 Value { get; private set; }
 
+        /// <summary>
+        /// Con la mappa espansa aperta il pan/tocco dei POI non deve muovere
+        /// il personaggio sotto l'overlay trasparente ai raycast.
+        /// </summary>
+        private static bool MapOpen()
+        {
+            return MapSelectUI.Instance != null && MapSelectUI.Instance.IsOpen;
+        }
+
         public void Configure(RectTransform canvasRoot, RectTransform joystickBase, RectTransform joystickHandle)
         {
             this.canvasRoot = canvasRoot;
@@ -25,6 +35,7 @@ namespace City.UI
 
         public void OnPointerDown(PointerEventData eventData)
         {
+            if (MapOpen()) return;
             active = true;
             RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRoot, eventData.position, eventData.pressEventCamera, out origin);
             if (joystickBase != null)
@@ -39,6 +50,14 @@ namespace City.UI
         public void OnDrag(PointerEventData eventData)
         {
             if (!active) return;
+            if (MapOpen())
+            {
+                active = false;
+                Value = Vector2.zero;
+                if (joystickBase != null) joystickBase.gameObject.SetActive(false);
+                if (joystickHandle != null) joystickHandle.localPosition = Vector3.zero;
+                return;
+            }
             RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRoot, eventData.position, eventData.pressEventCamera, out Vector2 pos);
             Vector2 delta = pos - origin;
             if (delta.magnitude > radius) delta = delta.normalized * radius;

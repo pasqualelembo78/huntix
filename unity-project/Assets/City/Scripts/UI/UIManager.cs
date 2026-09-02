@@ -18,11 +18,21 @@ namespace City.UI
     {
         public static UIManager Instance;
 
+        /// <summary>Canvas root della HUD di gioco (unico attivo e visibile
+        /// sempre). I pannelli modali costruiti a runtime (es. i LAVORI) devono
+        /// appendere qui, non a un generico FindObjectOfType che puo' ritrovare
+        /// un canvas inattivo o del menu.</summary>
+        public Canvas HUD { get { return canvas; } }
+
         public ScreenFader fader;
         public DynamicJoystick joystick;
         public OrbitZone orbit;
 
         private LegalManager _legal;
+        private RectTransform actionCenterButton;
+        private GameObject actionMenuRoot;
+        private TMP_Text actionLabel;
+        private RectTransform actionMenuContent;
 
         private LegalManager legal
         {
@@ -37,6 +47,7 @@ namespace City.UI
         private static readonly Color Accent = new Color(0.20f, 0.75f, 0.55f, 1f);
         private static readonly Color RowBg = new Color(0.20f, 0.22f, 0.25f, 1f);
         private static readonly Color ButtonBg = new Color(0.28f, 0.30f, 0.34f, 1f);
+        private static readonly Color ActionBg = new Color(0.95f, 0.75f, 0.20f, 0.95f);
 
         private TMP_FontAsset font;
         private Canvas canvas;
@@ -45,6 +56,7 @@ namespace City.UI
         private TMP_Text moneyText;
         private TMP_Text eggCountText;
         private TMP_Text missionText;
+        private TMP_Text playerText;
         private GameObject interactButton;
         private TMP_Text interactLabel;
 
@@ -79,7 +91,13 @@ namespace City.UI
 
         private void Awake()
         {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
             Instance = this;
+            DontDestroyOnLoad(gameObject);
             font = TMP_Settings.defaultFontAsset;
             if (font == null) font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
             BuildCanvas();
@@ -89,6 +107,57 @@ namespace City.UI
         {
             Wallet.OnChanged += OnMoneyChanged;
             OnMoneyChanged(Wallet.Money);
+            HamburgerMenu.Ensure(this);
+            ContextActionController.Ensure();
+            City.NPC.FamilyManager.Ensure();
+            City.NPC.FamilyKidHost.Ensure();
+            ApplyProfileAgeAndGender();
+        }
+
+        // ── Profilo Huntix: età e sesso scelti in registrazione ─────
+        // Sesso ed età NON vengono più chiesti dentro Miacittà: la fonte di
+        // verità è il profilo Huntix (PlayerProfile). Qui li leggiamo all'avvio
+        // e applichiamo l'età alla vita del player; la scelta interna viene
+        // forzata come già fatta così il dialogo non compare mai.
+        [System.Serializable]
+        private class ProfileSnapshot
+        {
+            public string gender = "";
+            public int birthYear = 0;
+            public bool isMinor = false;
+        }
+
+        private static readonly int ThisYear = System.DateTime.UtcNow.Year;
+
+        private void ApplyProfileAgeAndGender()
+        {
+            try
+            {
+                string json = Huntix.Bridge.UnityBridge.GetPlayerProfileJson();
+                ProfileSnapshot snap = JsonUtility.FromJson<ProfileSnapshot>(json);
+                int age = 0;
+                if (snap != null && snap.birthYear > 0)
+                    age = System.Math.Max(0, ThisYear - snap.birthYear);
+
+                if (age > 0)
+                {
+                    City.NPC.FamilyManager.SetInitialAge(age);
+                    City.NPC.FamilyManager.MarkAgeChosen();
+                    // Sesso dal profilo: usato come base per "Marco"/"Giulia" e
+                    // per il modello del personaggio, coerente con la scelta in
+                    // registrazione.
+                    City.NPC.FamilyManager.SetProfileGender(
+                        string.Equals(snap.gender, "female", System.StringComparison.OrdinalIgnoreCase));
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UIManager] ApplyProfileAgeAndGender: " + e.Message);
+            }
+            // Fallback: se non siamo riusciti a leggere l'età dal profilo, ma
+            // nemmeno l'utente l'ha ancora scelta, chiediamogliela una volta.
+            if (!City.NPC.FamilyManager.HasChosenAge)
+                ShowAgeChoice();
         }
 
         private void OnDestroy()
@@ -162,12 +231,6 @@ namespace City.UI
         private GameObject drivingPanel;
         private TMP_Text speedText;
 
-        public void ShowVehicleShop(VehicleInteract vi)
-        {
-            if (VehicleShopUI.Instance != null)
-                VehicleShopUI.Instance.ShowPurchaseDialog(vi);
-        }
-
         public void ShowDrivingUI(bool show)
         {
             if (drivingPanel == null) BuildDrivingUI();
@@ -218,6 +281,7 @@ namespace City.UI
 
         private void Update()
         {
+            UpdateActionLabel();
             if (joystick == null) return;
             PlayerController player = Game.Instance != null ? Game.Instance.player : null;
 
@@ -384,6 +448,10 @@ namespace City.UI
             // --- money HUD
             moneyText = MakeText(root, "€ 0", 36f, new Color(1f, 1f, 1f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -28f), new Vector2(200f, -72f));
 
+            // --- unified player identity (nome + livello dal profilo Huntix)
+            playerText = MakeText(root, "", 24f, new Color(0.55f, 0.85f, 1f, 1f), TextAlignmentOptions.Right, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-260f, -28f), new Vector2(-24f, -72f));
+            playerText.gameObject.SetActive(false);
+
             // --- egg counter (under money)
             eggCountText = MakeText(root, "", 26f, new Color(1f, 0.95f, 0.5f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -74f), new Vector2(200f, -100f));
             eggCountText.gameObject.SetActive(false);
@@ -401,22 +469,20 @@ namespace City.UI
             rwBtn.targetGraphic = rwBg;
             rwBtn.onClick.AddListener(OnRewardedAdPressed);
             MakeText(rewardRt, "GUARDA VIDEO +€25", 18f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            MakeText(root, "per muoverti tocca e trascina · scorri a destra per ruotare la telecamera", 18f, new Color(1f, 1f, 1f, 0.45f), TextAlignmentOptions.Center, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -96f), new Vector2(0f, -128f));
+
+            // --- Bestiario uova button (top-right, a sinistra del video)
+            var dexRt = MakeRect("DexButton", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-300f, -80f), new Vector2(-168f, -118f));
+            Image dexBg = dexRt.gameObject.AddComponent<Image>();
+            dexBg.color = new Color(0.40f, 0.55f, 0.85f, 0.85f);
+            dexBg.raycastTarget = true;
+            Button dexBtn = dexRt.gameObject.AddComponent<Button>();
+            dexBtn.targetGraphic = dexBg;
+            dexBtn.onClick.AddListener(() => City.Economy.EggDexUI.Toggle());
+            MakeText(dexRt, "BESTIARIO", 18f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // --- stato GPS/OSM (riga piccola semi-trasparente con attribuzione permanente)
             gpsText = MakeText(root, "© OpenStreetMap contributors · ODbL", 15f, new Color(1f, 1f, 1f, 0.38f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -136f), new Vector2(-24f, -160f));
 
-            // --- pulsante Note Legali (piccolo, sotto l'attribuzione OSM)
-            var legalRt = MakeRect("LegalButton", root, new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(24f, -166f), new Vector2(160f, -186f));
-            Image legalBg = legalRt.gameObject.AddComponent<Image>();
-            legalBg.color = new Color(0.20f, 0.22f, 0.25f, 0.7f);
-            legalBg.raycastTarget = true;
-            Button legalBtn = legalRt.gameObject.AddComponent<Button>();
-            legalBtn.targetGraphic = legalBg;
-            legalBtn.onClick.AddListener(ShowLegal);
-            TMP_Text legalTxt = MakeText(legalRt, "Note legali", 16f, new Color(0.8f, 0.8f, 0.8f, 0.8f), TextAlignmentOptions.Center,
-                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // --- LegalManager (pannello a schede per i documenti legali)
             var legalMgrGo = new GameObject("LegalManager");
@@ -424,13 +490,6 @@ namespace City.UI
             _legal = legalMgrGo.AddComponent<LegalManager>();
             _legal.Init(canvas, root);
 
-            // --- exit button (angolo in alto a destra: torna alla Home)
-            exitButton = MakeRect("ExitButton", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-104f, -24f), new Vector2(-24f, -72f)).gameObject;
-            Image eb = exitButton.AddComponent<Image>();
-            eb.color = new Color(0f, 0f, 0f, 0.45f);
-            eb.raycastTarget = true;
-            exitButton.AddComponent<Button>().onClick.AddListener(OnExitPressed);
-            MakeText(exitButton.GetComponent<RectTransform>(), "ESCI", 22f, new Color(1f, 1f, 1f, 0.9f), TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // --- pannello conferma uscita (evita tap accidentali sull'ESCI)
             exitPanel = MakeRect("ExitPanel", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-300f, -130f), new Vector2(300f, 130f)).gameObject;
@@ -451,6 +510,8 @@ namespace City.UI
             interactButton.AddComponent<Button>().onClick.AddListener(OnInteractPressed);
             interactLabel = MakeText(interactButton.GetComponent<RectTransform>(), "", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             interactButton.SetActive(false);
+
+            BuildActionRadial();
 
             // --- shop panel
             shopPanel = MakeRect("ShopPanel", root, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-320f, -300f), new Vector2(320f, 300f)).gameObject;
@@ -515,6 +576,161 @@ namespace City.UI
             Game.Instance.OnInteractPressed();
         }
 
+        // ── menu' radiale Fai Azione ───────────────────────────
+
+        private void BuildActionRadial()
+        {
+            // pulsante azioni contestuali in basso al centro: mostra l azione
+            // principale corrente e, al tocco, apre il menu con le azioni
+            // del momento (salto/fischio/sprint, auto, pacchi, porte, persone).
+            var actionBg = MakeCircle(root, "ActionCenterBg",
+                92f, new Color(0f, 0f, 0f, 0.35f));
+            actionBg.anchorMin = new Vector2(0.5f, 0f);
+            actionBg.anchorMax = new Vector2(0.5f, 0f);
+            actionBg.pivot = new Vector2(0.5f, 0.5f);
+            actionBg.anchoredPosition = new Vector2(0f, 190f);
+
+            actionCenterButton = MakeCircle(actionBg, "ActionCenter",
+                74f, ActionBg);
+            var cb = actionCenterButton.GetComponent<Image>();
+            cb.raycastTarget = true;
+            var btn = actionCenterButton.gameObject.AddComponent<Button>();
+            btn.targetGraphic = cb;
+            btn.onClick.AddListener(ToggleActionRadial);
+            actionLabel = MakeText(actionCenterButton, "AZIONI", 20f, Color.black,
+                TextAlignmentOptions.Center, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+            
+            // menu a tendina con le azioni del contesto corrente
+            actionMenuRoot = MakeRect("ActionMenu", root,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(-190f, 370f), new Vector2(190f, 600f)).gameObject;
+            Image backdrop = actionMenuRoot.AddComponent<Image>();
+            backdrop.color = new Color(0.11f, 0.12f, 0.14f, 0.95f);
+            backdrop.raycastTarget = true;
+            var bgBtn = actionMenuRoot.AddComponent<Button>();
+            bgBtn.targetGraphic = backdrop;
+            bgBtn.onClick.AddListener(CloseActionRadial);
+
+            actionMenuContent = MakeRect("ActionMenuContent",
+                actionMenuRoot.GetComponent<RectTransform>(),
+                new Vector2(0f, 1f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero);
+            actionMenuContent.pivot = new Vector2(0.5f, 1f);
+            var vlg = actionMenuContent.gameObject.AddComponent<VerticalLayoutGroup>();
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.spacing = 6f;
+            vlg.padding = new RectOffset(8, 8, 8, 8);
+            actionMenuContent.gameObject.AddComponent<ContentSizeFitter>()
+                .verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            actionMenuRoot.SetActive(false);
+        }
+
+        private void UpdateActionLabel()
+        {
+            if (actionCenterButton == null || actionLabel == null) return;
+            string lbl = ContextActionController.Instance != null
+                ? ContextActionController.Instance.PrimaryLabel() : "AZIONI";
+            actionLabel.text = lbl;
+        }
+
+        private void ToggleActionRadial()
+        {
+            if (actionMenuRoot == null) return;
+            if (actionMenuRoot.activeSelf) CloseActionRadial();
+            else RebuildActionMenu();
+        }
+
+        private void RebuildActionMenu()
+        {
+            if (actionMenuContent == null) return;
+            foreach (Transform child in actionMenuContent)
+                Destroy(child.gameObject);
+
+            var list = new List<ContextActionController.Action>();
+            if (ContextActionController.Instance != null)
+                ContextActionController.Instance.BuildActions(list);
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var act = list[i];
+                RectTransform row = MakeActionRow("A" + i, actionMenuContent);
+                Image rowImg = row.gameObject.AddComponent<Image>();
+                rowImg.color = new Color(0.25f, 0.55f, 0.45f, 1f);
+                rowImg.raycastTarget = true;
+                var captured = act;
+                row.gameObject.AddComponent<Button>().onClick.AddListener(
+                    () => RunContext(captured));
+                MakeText(row, act.label, 24f, Color.white,
+                    TextAlignmentOptions.Center, Vector2.zero, Vector2.one,
+                    Vector2.zero, Vector2.zero);
+            }
+
+            // accessi sempre presenti: LAVORI e FISCHIO
+            RectTransform jobRow = MakeActionRow("AJobs", actionMenuContent);
+            Image jobImg = jobRow.gameObject.AddComponent<Image>();
+            jobImg.color = new Color(0.25f, 0.55f, 0.85f, 1f);
+            jobImg.raycastTarget = true;
+            jobRow.gameObject.AddComponent<Button>().onClick.AddListener(
+                OnJobsPressed);
+            MakeText(jobRow, "LAVORI", 24f, Color.white,
+                TextAlignmentOptions.Center, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+
+            actionMenuRoot.SetActive(true);
+            actionCenterButton.GetComponent<Image>().color =
+                new Color(0.75f, 0.55f, 0.10f, 0.95f);
+        }
+
+        private RectTransform MakeActionRow(string name, RectTransform parent)
+        {
+            RectTransform row = MakeRect(name, parent,
+                new Vector2(0f, 1f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero);
+            row.sizeDelta = new Vector2(0f, 52f);
+            row.anchorMin = new Vector2(0f, 1f);
+            row.anchorMax = new Vector2(1f, 1f);
+            row.pivot = new Vector2(0.5f, 1f);
+            return row;
+        }
+
+        private void RunContext(ContextActionController.Action act)
+        {
+            CloseActionRadial();
+            if (act != null && act.run != null) act.run();
+        }
+
+        private void CloseActionRadial()
+        {
+            if (actionMenuRoot == null) return;
+            actionMenuRoot.SetActive(false);
+            if (actionCenterButton != null)
+                actionCenterButton.GetComponent<Image>().color = ActionBg;
+        }
+
+        private void OnWhistlePressed()
+        {
+            CloseActionRadial();
+            if (City.Vehicle.TaxiService.Instance != null)
+                City.Vehicle.TaxiService.Instance.Whistle(Game.Instance);
+            else
+                ShowToast("TaxiService non disponibile");
+        }
+
+        private void OnJobsPressed()
+        {
+            CloseActionRadial();
+            if (JobManager.Instance != null)
+                JobManager.Instance.OpenPanel();
+            else
+                ShowToast("Lavori non disponibili");
+        }
+
+
         private void OnRewardedAdPressed()
         {
             if (RewardedAdHelper.Instance != null)
@@ -537,6 +753,20 @@ namespace City.UI
             }
         }
 
+        /// <summary>Mostra l'identita' del player unico Huntix (nome + livello),
+        /// letta dal profilo condiviso, così Miacitta mostra lo stesso player
+        /// degli altri moduli (stessa XP, stesso livello).</summary>
+        public void UpdatePlayerProfile(string name, int level)
+        {
+            if (playerText != null)
+            {
+                string label = name.Trim();
+                if (string.IsNullOrEmpty(label) || label == "Giocatore") label = "Giocatore";
+                playerText.gameObject.SetActive(true);
+                playerText.text = label + "  ·  Lv." + level;
+            }
+        }
+
         public void UpdateMissionText(string text)
         {
             if (missionText != null)
@@ -545,6 +775,8 @@ namespace City.UI
                 missionText.text = text;
             }
         }
+
+        public void OnExitPressedPublic() { OnExitPressed(); }
 
         private void OnExitPressed()
         {
@@ -717,6 +949,43 @@ namespace City.UI
             HideInteract();
         }
 
+        /// <summary>Chiede al player con quanti anni iniziare la partita
+        /// (preset: 0, 13, 25, 70). Retrodatta il giorno di nascita.</summary>
+        public void ShowAgeChoice()
+        {
+            ShowDialog("Benvenuto a Hutix",
+                new string[] {
+                    "Da che eta inizierai la tua vita?",
+                    "1. Bambino/a (0 anni)",
+                    "2. Adolescente (13 anni)",
+                    "3. Adulto/a (25 anni)",
+                    "4. Anziano/a (70 anni)"
+                },
+                (int idx) =>
+                {
+                    int age = 0;
+                    switch (idx)
+                    {
+                        case 1: age = 0; break;
+                        case 2: age = 13; break;
+                        case 3: age = 25; break;
+                        case 4: age = 70; break;
+                        default: age = 0; break;
+                    }
+                    City.NPC.FamilyManager.SetInitialAge(age);
+                    City.NPC.FamilyManager.MarkAgeChosen();
+                    ShowToast("Inizi come " + AgeLabel(age) + " (" + age + " anni).");
+                });
+        }
+
+        private static string AgeLabel(int age)
+        {
+            if (age <= 0) return "Bambino/a";
+            if (age < 18) return "Adolescente";
+            if (age < 60) return "Adulto/a";
+            return "Anziano/a";
+        }
+
         public void HideDialog()
         {
             if (dialogPanel == null) return;
@@ -741,8 +1010,8 @@ namespace City.UI
 
         private void OnDialogEnter()
         {
-            int choice = 0;
             var cb = dialogCallback;
+            int choice = dialogIndex;
             HideDialog();
             cb?.Invoke(choice);
         }

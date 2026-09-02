@@ -365,7 +365,13 @@ internal fun MainActivity.startHunt() {
 
     val trapInfo = if (eggs.any { it.isTrap }) "  Attenzione alle trappole!" else ""
     val firstMsg = when (turnMode) {
-        "alternating" -> "Inizia ${currentPlayer}! Trova l'uovo #1!$trapInfo"
+        "alternating" -> {
+            // Show turn banner in Unity 3D store
+            try {
+                com.intelligame.huntix.bridge.StoreUnityBridge.showTurnBanner(currentPlayer)
+            } catch (_: Exception) {}
+            "Inizia ${currentPlayer}! Trova l'uovo #1!$trapInfo"
+        }
         else          -> "Trova l'uovo #1!$trapInfo"
     }
     Toast.makeText(this, firstMsg, Toast.LENGTH_LONG).show()

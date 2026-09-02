@@ -59,6 +59,12 @@ class PoiSearchPanel @JvmOverloads constructor(
     var locationSupplier: (() -> Location?)? = null
     /** Notifica quando il carico nearby è completato (per aggiornare il contatore). */
     var onNearbyLoaded: (() -> Unit)? = null
+
+    /** Se impostata, verifica il permesso GPS prima di caricare; se negato chiama [onPermissionDeniedTap]. */
+    var requirePermissionCheck: (() -> Boolean)? = null
+
+    /** Richiesto quando [requirePermissionCheck] fallisce (es. mostra il dialog di permesso). */
+    var onPermissionDeniedTap: (() -> Unit)? = null
     private var nearbyHeader: TextView? = null
 
     /** Selezione corrente (aggiornata in modo sincrono al cambio dei menu). */
@@ -316,6 +322,11 @@ class PoiSearchPanel @JvmOverloads constructor(
 
     /** (Ri)carica i POI intorno alla posizione corrente. */
     fun loadNearby(radiusMeters: Int = OsmPoiRepository.DEFAULT_RADIUS_METERS) {
+        val permCheck = requirePermissionCheck
+        if (permCheck != null && !permCheck()) {
+            onPermissionDeniedTap?.invoke()
+            return
+        }
         val loader = nearbyLoader
         val supplier = locationSupplier
         if (loader == null || supplier == null) {
@@ -336,6 +347,11 @@ class PoiSearchPanel @JvmOverloads constructor(
             runQuery(searchEdit.text.toString())
             onNearbyLoaded?.invoke()
         }
+    }
+
+    /** Mostra un suggerimento che invita a toccare per abilitare il GPS (nessun dialog automatico). */
+    fun showPermissionHint() {
+        nearbyHeader?.text = "📍 Abilita il GPS per vedere i locali vicini — tocca per abilitare"
     }
 
     private fun renderResults(results: List<PoiSearchManager.SearchResult>, query: String) {

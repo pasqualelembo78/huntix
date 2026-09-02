@@ -203,6 +203,11 @@ namespace Huntix.Core
                 var skin = System.Text.RegularExpressions.Regex.Match(json, "\"skin\"\\s*:\\s*\"([^\"]+)\"");
                 if (skin.Success)
                     ApplyCitySkin(skin.Groups[1].Value);
+
+                // Pet di compagnia scelto nel profilo Android
+                var pet = System.Text.RegularExpressions.Regex.Match(json, "\"pet\"\\s*:\\s*\"([^\"]+)\"");
+                if (pet.Success)
+                    ApplyPet(pet.Groups[1].Value);
             }
             catch (System.Exception e)
             {
@@ -216,6 +221,14 @@ namespace Huntix.Core
             Debug.Log($"[GameManager] skin profilo: {skinName}");
             var pc = City.Player.PlayerController.Instance;
             if (pc != null) pc.ApplySkin(skinName);
+        }
+
+        private void ApplyPet(string petId)
+        {
+            if (string.IsNullOrEmpty(petId)) return;
+            PlayerPrefs.SetString(City.Player.PetController.PrefKey, petId);
+            Debug.Log($"[GameManager] pet profilo: {petId}");
+            City.Player.PetController.Spawn(petId, null);
         }
 
         private void HandleEggCaptured(string jsonData)

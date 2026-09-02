@@ -2,6 +2,27 @@
 SISTEMA CICLO-VITA & OLTRETOMBE - STATO (AGGIORNATO: REGNI = SCENE SEPARATE)
 ==================================================================
 
+AGGIORNAMENTO SESSIONE (pulsante azioni, crash MORI, età/sesso in registrazione):
+- Pulsante azioni Miacittà: ridotto (ActionCenter 104->74, bg 128->92, in basso
+  a y=190, testo 28->20) per non coprire la scena. (UIManager.cs)
+- Crash "MORI" risolto: RealmSceneManager.TryLoadScene() avvolge LoadScene in
+  try/catch; se la scena regno non è nelle Build Settings (APK non ricompilato)
+  costruisce l'arena nella scena corrente senza crashare. Inferno/Purgatorio/
+  Paradiso aggiunte a EditorBuildSettings.asset (guid acd6b7f4.../4e02ab3f.../
+  733ea86c...).
+- Età/sesso spostati fuori da Miacittà => scelti in registrazione Huntix:
+  * ProfileSetupActivity: toggle MASCHIO/FEMMINA (playerGender= male/female) +
+    fascia d'età (6-12 / 13-17 / 18+, set birthYear e isMinor). Obbligatori.
+    Sesso ed età NON più modificabili in seguito.
+  * GenderChangeActivity: ora read-only (mostra il sesso scelto, bloccato).
+  * StoreUnityBridge.getPlayerProfileJson: espone gender/birthYear/isMinor.
+  * UIManager.ApplyProfileAgeAndGender(): all'avvio legge il profilo (via
+    GetPlayerProfileJson) e chiama FamilyManager.SetInitialAge(età) +
+    SetProfileGender(female) e MarkAgeChosen -> il dialogo età interno non
+    compare più. Fallback: se manca l'età dal profilo lo chiede comunque.
+  * FamilyManager: nuovo IsFemale / SetProfileGender; reincarnazione usa il
+    sesso del profilo (Giulia/Marco) invece del random.
+
 PRINCIPIO UNIFORME: 1 anno = DaysPerYear (5) giorni REALI di vita.
 Sia il player sia i figli invecchiano allo stesso ritmo: daysElapsed / 5.
 
@@ -224,5 +245,68 @@ INTEGRAZIONE ECO-SISTEMA (uova MiAcitta -> inventario Huntix):
 - Replica del flusso canonico di OutdoorManager.tryCatch (stesso feed).
 - Mappatura rarita': City ha 4 (Common/Uncommon/Rare/Legendary), Huntix ne ha
   5 (aggiunge Epic) -> le uova City mappano sulle 4 rarita' condivise.
+- Compilazione: check.sh CSCHECK OK (Unity) + :app:compileDebugKotlin BUILD
+  SUCCESSFUL (Android).
+
+RETROSYNC UNIFICATO (unico giocatore, unico universo Huntix):
+- Visione: il player e' UNA sola entita' in tutto l'universo (MiaCitta, Esplora,
+  Outdoor, Indoor, mercato). PlayerProfile Huntix e' l'unica fonte di verita';
+  MiaCitta NON ha più un proprio XP/energia separati, ma legge/scrive lo STESSO
+  profilo. Quello che succede in MiaCitta (matrimonio, figli, foster, missioni,
+  morte/reincarnazione, cibo/lavori) alimenta XP, livello, power, gemme, energia
+  e classifica mondiale.
+- Android StoreUnityBridge.kt (letture, ritornano il profilo condiviso):
+  getPlayerName, getPlayerXp, getPlayerLevel, getPlayerPower, getPlayerGems,
+  getPlayerEnergy, getEggCount, getPlayerProfileJson (snapshot JSON).
+  Scritture: addXpFromCity (XP + weeklyXp + persist), addPowerFromCity,
+  addGemsFromCity, syncEnergyFromCity (0..100 clamp), setPlayerNameFromCity.
+  Tutte usano PlayerProfileManager (Firestore) + EggInventoryManager.
+- Android Bridge.kt (eventi Unity -> profilo):
+  "CityXpEarned" -> handleCityXpEarned (xp+source)
+  "CityPowerEarned" -> handleCityPowerEarned
+  "CityGemsEarned" -> handleCityGemsEarned
+  "CityEnergyUpdate" -> handleCityEnergyUpdate
+  "PlayerReincarnated" -> handlePlayerReincarnated (aggiorna NOME + bonus xp)
+- Unity UnityBridge.cs: wrapper nuovi metodi (GetPlayerName/Level/Xp/Power/Gems/
+  Energy/EggCount/GetPlayerProfileJson + AddXpFromCity/AddPowerFromCity/
+  AddGemsFromCity/SyncEnergyFromCity/SetPlayerNameFromCity) che chiamano
+  StoreUnityBridge via AndroidJavaClass (#if UNITY_ANDROID && !UNITY_EDITOR).
+- Unity FamilyManager.cs:
+  * FlushCityXpToHuntix(): raccoglie family_wedding_xp + family_foster_xp +
+    family_spouse_xp e li accredita su Huntix (chiamato nel tick ogni ~6s e
+    alla reincarnazione).
+  * SyncXpToHuntix(xp, source): invia "CityXpEarned".
+  * SyncEnergyToHuntix(energy): invia "CityEnergyUpdate".
+  * SyncReincarnationToHuntix(newName): alla nuova vita il nome "Marco/Giulia"
+    viene propagato al profilo Huntix + bonus 25 XP (il player unico cambia nome
+    senza perdere XP/classifica).
+- Unity EnergySystem.cs: Set() ora invia l'energia al profilo Huntix (unica barra).
+- Unity Game.cs/UIManager.cs: HUD mostra l'identita' unica (nome + Lv.) letta dal
+  profilo Huntix (UpdatePlayerProfile in Start); playerText in alto a destra.
+- Stub: HuntixStubs.cs (UnityBridge) aggiornato con i nuovi metodi no-op.
+- Compilazione: check.sh CSCHECK OK (Unity) + :app:compileDebugKotlin BUILD
+  SUCCESSFUL (Android).
+
+GAMEPLAY CACCIATORE (uova + scoperta, spirito Huntix):
+- RADAR UOVA (EggRadar.cs, nuovo): indicatore in basso a sinistra che punta
+  all'uovo piu' vicino non ancora raggiunto (distanza in metri + freccia). La
+  freccia cambia colore in base alla rarita'. Quando l'uovo e' vicino (già
+  visibile/evidenziato) sparisce dal radar. EggSpawnManager.ActiveEggs espone le
+  uova vive; EggController.PlayerNearCanRadar = uova preda (non catturate, non
+  raggiunte). Costruito 100% a runtime.
+- BESTIARIO/BESTIARIO UOVA (EggDex.cs + EggDexUI.cs, nuovi): registro persistito
+  (PlayerPrefs "huntix_eggdex") delle combinazioni tipo×rarita' scoperte. Ogni
+  nuova combinazione (Game.OnEggCollected -> EggDex.Record) mostra un toast
+  "Nuova voce nel Bestiario". Pannello a griglia (bottone "BESTIARIO" in alto a
+  destra) con celle accese/spente + contatore progresso
+  (es. "12/44"). Obiettivo di collezione.
+- UOVA POI-ANCORATE (EggSpawnManager.SpawnPoiEggs): fino a 2 uova per chunk di
+  rarita' premiata (Rare o Legendary) ancorate a edifici POI reali di tipi
+  specifici (chiesa/cattedrale/cappella/moschea/sinagoga/tempio, scuola/asilo/
+  college/universita', bar/pub/ristorante/caffe'/hotel/ospedale/biblioteca/
+  museo/teatro/cinema/municipio/postale/banca). Premiano chi esplora i luoghi
+  reali della citta' (b.t da OSM), non solo i punti casuali della mappa.
+- Stub aggiornati: HuntixStubsGame.cs (EggController: enum EggType +
+  eggType/Captured/PlayerNearCanRadar), HuntixStubs.cs (EggSpawnManager.ActiveEggs).
 - Compilazione: check.sh CSCHECK OK (Unity) + :app:compileDebugKotlin BUILD
   SUCCESSFUL (Android).

@@ -14,7 +14,7 @@ namespace City.Vehicle
     [RequireComponent(typeof(Collider))]
     public class VehiclePoiZone : MonoBehaviour
     {
-        public enum PoiKind { Dealer, Repair, Garage }
+        public enum PoiKind { Dealer, Repair, Garage, Hospital, Ramp, School, Bar, Bank }
 
         public PoiKind kind;
         public string poiId = "";
@@ -37,6 +37,11 @@ namespace City.Vehicle
                 {
                     case PoiKind.Dealer: return "\uD83D\uDE97 CONCESSIONARIA - " + nm;
                     case PoiKind.Repair: return "\uD83D\uDD27 OFFICINA - " + nm;
+                    case PoiKind.Hospital: return "\u2695 OSPEDALE - " + nm;
+                    case PoiKind.Ramp: return "\u2B07 SOTTERRANEO - " + nm;
+                    case PoiKind.School: return "\uD83C\uDFEB SCUOLA - " + nm;
+                    case PoiKind.Bar: return "\u2615 BAR - " + nm;
+                    case PoiKind.Bank: return "\uD83D\uDCB0 BANCA - " + nm;
                     default: return "\uD83C\uDE51 GARAGE - " + nm;
                 }
             }
@@ -46,6 +51,10 @@ namespace City.Vehicle
         {
             return kind == PoiKind.Dealer ? "Auto Usato e Nuovo"
                 : kind == PoiKind.Repair ? "Riparazioni"
+                : kind == PoiKind.Hospital ? "Ospedale"
+                : kind == PoiKind.School ? "Scuola"
+                : kind == PoiKind.Bar ? "Bar"
+                : kind == PoiKind.Bank ? "Banca / ATM"
                 : "Parcheggio Coperto";
         }
 
@@ -93,6 +102,9 @@ namespace City.Vehicle
                     break;
                 case PoiKind.Repair:
                     OfficinaUI.Open(this);
+                    break;
+                case PoiKind.Ramp:
+                    UndergroundUI.Enter(this);
                     break;
                 default:
                     GarageUI.Open(this);

@@ -1,0 +1,849 @@
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using City.Vehicle;
+
+namespace City.OSM
+{
+    /// <summary>
+    /// Mappa a schermo intero aperta col tap sulla minimappa.
+    /// Pan (trascina con un dito), zoom (pinch a due dita o bottoni),
+    /// tap su POI per selezionarlo come destinazione di navigazione.
+    /// </summary>
+    public class MapSelectUI : MonoBehaviour
+    {
+        public static MapSelectUI Instance { get; private set; }
+
+        private const int TexSize = 1024;
+        private static readonly float[] Spans =
+            { 12800f, 6400f, 3200f, 1600f };
+
+        private GameObject root;
+        private RectTransform mapRt;
+        private RawImage mapImg;
+        private Texture2D tex;
+        private Text infoText;
+        private Button goBtn;
+        private int zoomIdx = 1;
+
+        private NavigationState.Destination candidate;
+
+        private float nextRedraw;
+        private bool dirty = true;
+
+        // pan offset in metri rispetto al giocatore
+        private Vector2 panOffset;
+
+        // pinch / drag state
+        private bool dragging;
+        private Vector2 dragStartScreen;
+        private Vector2 dragStartPan;
+        private float pinchStartSpan;
+        private float pinchStartDist;
+
+        private static readonly Color ColBg = new Color(0.05f, 0.07f, 0.09f);
+        private static readonly Color ColMajor = new Color(0.90f, 0.92f, 0.95f);
+        private static readonly Color ColMid = new Color(0.62f, 0.67f, 0.72f);
+        private static readonly Color ColMinor = new Color(0.40f, 0.45f, 0.51f);
+        private static readonly Color ColPlayer = new Color(0.95f, 0.15f, 0.12f);
+        private static readonly Color ColDest =
+            new Color(1f, 0.80f, 0.20f);
+
+        // ── ricerca POI ──
+        private InputField _searchField;
+        private RectTransform _resultList;
+        private readonly List<GameObject> _resultItems = new List<GameObject>();
+        private static readonly Color ColSearch = new Color(0.10f, 0.13f, 0.18f, 0.95f);
+        private static readonly Color ColResult = new Color(0.14f, 0.18f, 0.24f, 0.92f);
+        private static readonly Color ColResultHi = new Color(0.22f, 0.30f, 0.42f, 0.95f);
+
+        public static void Ensure()
+        {
+            if (Instance == null)
+            {
+                var go = new GameObject("MapSelectUI", typeof(MapSelectUI));
+                DontDestroyOnLoad(go);
+            }
+        }
+
+        public static void Open()
+        {
+            if (Instance == null)
+            {
+                var go = new GameObject("MapSelectUI", typeof(MapSelectUI));
+                DontDestroyOnLoad(go);
+            }
+            Instance.Show();
+        }
+
+        public static void Toggle()
+        {
+            if (Instance != null && Instance.root.activeSelf) Close();
+            else Open();
+        }
+
+        public static void Close()
+        {
+            if (Instance != null) Instance.Hide();
+        }
+
+        private void Awake()
+        {
+            Instance = this;
+            Build();
+        }
+
+        private void Show()
+        {
+            root.SetActive(true);
+            panOffset = Vector2.zero;
+            dirty = true;
+        }
+
+        private void Hide()
+        {
+            root.SetActive(false);
+            candidate = null;
+            dragging = false;
+        }
+
+        // ───────────────────── UI ─────────────────────
+        private void Build()
+        {
+            root = new GameObject("Root", typeof(Canvas),
+                typeof(GraphicRaycaster));
+            root.transform.SetParent(transform, false);
+            var rc = root.GetComponent<Canvas>();
+            rc.renderMode = RenderMode.ScreenSpaceOverlay;
+            rc.sortingOrder = 100;
+
+            var dim = new GameObject("Dim", typeof(Image));
+            dim.transform.SetParent(root.transform, false);
+            var dimg = dim.GetComponent<Image>();
+            dimg.color = new Color(0f, 0f, 0f, 0.85f);
+            Stretch(dim.GetComponent<RectTransform>());
+
+            int mapSize = Mathf.Min(Screen.width, Screen.height) - 60;
+            var mapGo = new GameObject("Mappa", typeof(RawImage));
+            mapGo.transform.SetParent(root.transform, false);
+            mapImg = mapGo.GetComponent<RawImage>();
+            tex = new Texture2D(TexSize, TexSize,
+                TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            mapImg.texture = tex;
+            mapRt = mapGo.GetComponent<RectTransform>();
+            mapRt.anchorMin = mapRt.anchorMax = mapRt.pivot =
+                new Vector2(0.5f, 0.5f);
+            mapRt.sizeDelta = new Vector2(mapSize, mapSize);
+
+            MakeBtn(mapGo.transform, "+", new Vector2(64f, -64f),
+                () => { zoomIdx = Mathf.Max(0, zoomIdx - 1); dirty = true; });
+            MakeBtn(mapGo.transform, "-", new Vector2(64f, -150f),
+                () =>
+                {
+                    zoomIdx = Mathf.Min(Spans.Length - 1, zoomIdx + 1);
+                    dirty = true;
+                });
+            MakeBtn(mapGo.transform, "X", new Vector2(-64f, -64f), Close);
+
+            infoText = NewText(mapGo.transform, "Info", 30,
+                new Color(0.95f, 0.96f, 0.98f));
+            var irt = infoText.rectTransform;
+            irt.anchorMin = new Vector2(0f, 0f);
+            irt.anchorMax = new Vector2(1f, 0f);
+            irt.pivot = new Vector2(0.5f, 0f);
+            irt.anchoredPosition = new Vector2(0f, 14f);
+            irt.sizeDelta = new Vector2(-24f, 84f);
+
+            goBtn = MakeBtn(mapGo.transform, "VAI", new Vector2(-190f, 110f),
+                ConfirmGo, new Color(0.85f, 0.62f, 0.10f));
+            goBtn.gameObject.SetActive(false);
+
+            MakeBtn(mapGo.transform, "CANCELLA DEST",
+                new Vector2(-210f, 200f),
+                () =>
+                {
+                    NavigationState.Clear();
+                    dirty = true;
+                },
+                new Color(0.35f, 0.18f, 0.16f));
+
+            BuildSearch(mapGo.transform);
+
+            root.SetActive(false);
+        }
+
+        private static Text NewText(Transform parent, string name, int size,
+            Color col)
+        {
+            var go = new GameObject(name, typeof(Text));
+            go.transform.SetParent(parent, false);
+            var t = go.GetComponent<Text>();
+            t.font = CompassUI.UiFont();
+            t.fontSize = size;
+            t.color = col;
+            t.alignment = TextAnchor.MiddleCenter;
+            return t;
+        }
+
+        private static Button MakeBtn(Transform parent, string caption,
+            Vector2 pos, System.Action onClick)
+        {
+            return MakeBtn(parent, caption, pos, onClick,
+                new Color(0.13f, 0.17f, 0.22f));
+        }
+
+        private static Button MakeBtn(Transform parent, string caption,
+            Vector2 pos, System.Action onClick, Color col)
+        {
+            var go = new GameObject("Btn_" + caption, typeof(Button));
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<Image>();
+            img.color = col;
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            float w = caption.Length > 2 ? 300f : 96f;
+            rt.sizeDelta = new Vector2(w, 76f);
+
+            var t = NewText(go.transform, "T", 32, Color.white);
+            t.text = caption;
+            t.rectTransform.anchorMin = Vector2.zero;
+            t.rectTransform.anchorMax = Vector2.one;
+            t.rectTransform.sizeDelta = Vector2.zero;
+
+            var b = go.GetComponent<Button>();
+            b.onClick.AddListener(() => onClick());
+            return b;
+        }
+
+        private static void Stretch(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+        }
+
+        // ───────────────────── ricerca POI ─────────────────────
+        private void BuildSearch(Transform parent)
+        {
+            var panel = new GameObject("SearchPanel", typeof(Image));
+            panel.transform.SetParent(parent, false);
+            var prt = panel.GetComponent<RectTransform>();
+            prt.anchorMin = new Vector2(0f, 1f);
+            prt.anchorMax = new Vector2(0f, 1f);
+            prt.pivot = new Vector2(0f, 1f);
+            prt.anchoredPosition = new Vector2(14f, -14f);
+            prt.sizeDelta = new Vector2(340f, 420f);
+            panel.GetComponent<Image>().color = ColSearch;
+
+            var ph = new GameObject("Placeholder", typeof(Text));
+            ph.transform.SetParent(panel.transform, false);
+            var phText = ph.GetComponent<Text>();
+            phText.font = CompassUI.UiFont();
+            phText.fontSize = 26;
+            phText.fontStyle = FontStyle.Italic;
+            phText.color = new Color(0.5f, 0.55f, 0.6f);
+            phText.text = "Cerca POI...";
+            phText.alignment = TextAnchor.MiddleLeft;
+
+            var txtGo = new GameObject("Text", typeof(Text));
+            txtGo.transform.SetParent(panel.transform, false);
+            var txt = txtGo.GetComponent<Text>();
+            txt.font = CompassUI.UiFont();
+            txt.fontSize = 26;
+            txt.color = Color.white;
+            txt.alignment = TextAnchor.MiddleLeft;
+
+            var inputGo = new GameObject("Input", typeof(InputField));
+            inputGo.transform.SetParent(panel.transform, false);
+            _searchField = inputGo.AddComponent<InputField>();
+            _searchField.textComponent = txt;
+            _searchField.placeholder = phText;
+            var irt = inputGo.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0f, 1f);
+            irt.anchorMax = new Vector2(1f, 1f);
+            irt.pivot = new Vector2(0f, 1f);
+            irt.anchoredPosition = new Vector2(12f, -8f);
+            irt.sizeDelta = new Vector2(-24f, 44f);
+
+            var bgImg = inputGo.AddComponent<Image>();
+            bgImg.color = new Color(0.06f, 0.08f, 0.12f, 0.9f);
+
+            var listGo = new GameObject("Results", typeof(Image));
+            listGo.transform.SetParent(panel.transform, false);
+            _resultList = listGo.GetComponent<RectTransform>();
+            _resultList.anchorMin = new Vector2(0f, 0f);
+            _resultList.anchorMax = new Vector2(1f, 1f);
+            _resultList.pivot = new Vector2(0f, 1f);
+            _resultList.anchoredPosition = new Vector2(0f, -60f);
+            _resultList.sizeDelta = new Vector2(0f, 60f);
+            listGo.GetComponent<Image>().color = Color.clear;
+
+            var mask = listGo.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+
+            _searchField.onValueChanged.AddListener(OnSearchChanged);
+            _searchField.onEndEdit.AddListener(OnSearchEndEdit);
+        }
+
+        private void OnSearchEndEdit(string val) { }
+
+        private void OnSearchChanged(string query)
+        {
+            ClearResults();
+            if (string.IsNullOrEmpty(query) || query.Length < 2) return;
+
+            string q = query.ToLowerInvariant();
+            Transform t = PlayerWorld();
+            float span = Spans[zoomIdx];
+            float halfSpan = span * 0.5f;
+            Vector3 pw = t != null ? t.position : Vector3.zero;
+
+            var matches = new List<VehiclePoiRegistry.PoiInfo>();
+            foreach (var poi in VehiclePoiRegistry.All())
+            {
+                string nm = (poi.name ?? "").ToLowerInvariant();
+                string kd = (poi.kind ?? "").ToLowerInvariant();
+                if (!nm.Contains(q) && !kd.Contains(q)) continue;
+
+                if (t != null)
+                {
+                    Vector3 w = WorldOrigin.ToWorld(poi.lat, poi.lng);
+                    float dx = w.x - pw.x;
+                    float dz = w.z - pw.z;
+                    if (Mathf.Abs(dx) > halfSpan || Mathf.Abs(dz) > halfSpan)
+                        continue;
+                }
+                matches.Add(poi);
+            }
+
+            matches.Sort((a, b) =>
+            {
+                if (t == null) return 0;
+                Vector3 wa = WorldOrigin.ToWorld(a.lat, a.lng);
+                Vector3 wb = WorldOrigin.ToWorld(b.lat, b.lng);
+                float da = Vector3.Distance(wa, pw);
+                float db = Vector3.Distance(wb, pw);
+                return da.CompareTo(db);
+            });
+
+            int maxShow = Mathf.Min(matches.Count, 8);
+            float itemH = 42f;
+            _resultList.sizeDelta = new Vector2(0f, 60f + maxShow * itemH);
+
+            for (int i = 0; i < maxShow; i++)
+            {
+                var poi = matches[i];
+                string caption = PoiSignpost.Caption(poi.kind) + " " + poi.name;
+                float y = -i * itemH;
+
+                var item = new GameObject("R_" + i, typeof(Image), typeof(Button));
+                item.transform.SetParent(_resultList, false);
+                var irt = item.GetComponent<RectTransform>();
+                irt.anchorMin = new Vector2(0f, 1f);
+                irt.anchorMax = new Vector2(1f, 1f);
+                irt.pivot = new Vector2(0f, 1f);
+                irt.anchoredPosition = new Vector2(4f, y);
+                irt.sizeDelta = new Vector2(-8f, itemH - 4f);
+                item.GetComponent<Image>().color = ColResult;
+
+                var btn = item.GetComponent<Button>();
+                float la = (float)poi.lat, lo = (float)poi.lng;
+                string nm = poi.name ?? "";
+                string kd = poi.kind ?? "";
+                btn.onClick.AddListener(() => SelectSearchResult(nm, kd, la, lo));
+
+                var lbl = NewText(item.transform, "L", 24,
+                    CompassUI.KindColor(poi.kind));
+                lbl.text = caption;
+                lbl.alignment = TextAnchor.MiddleLeft;
+                lbl.rectTransform.anchorMin = Vector2.zero;
+                lbl.rectTransform.anchorMax = Vector2.one;
+                lbl.rectTransform.sizeDelta = Vector2.zero;
+                lbl.rectTransform.offsetMin = new Vector2(12f, 0f);
+                lbl.rectTransform.offsetMax = new Vector2(-12f, 0f);
+
+                _resultItems.Add(item);
+            }
+        }
+
+        private void SelectSearchResult(string name, string kind,
+            double lat, double lng)
+        {
+            string label = string.IsNullOrEmpty(name)
+                ? PoiSignpost.Caption(kind) : name;
+            candidate = new NavigationState.Destination
+            {
+                name = label, kind = kind, lat = lat, lng = lng
+            };
+            goBtn.gameObject.SetActive(true);
+            dirty = true;
+            _searchField.text = "";
+            _searchField.ActivateInputField();
+            ClearResults();
+        }
+
+        private void ClearResults()
+        {
+            foreach (var go in _resultItems) { if (go != null) Destroy(go); }
+            _resultItems.Clear();
+            if (_resultList != null)
+                _resultList.sizeDelta = new Vector2(0f, 60f);
+        }
+
+        // ───────────────────── gestures ─────────────────────
+        private void Update()
+        {
+            if (root == null || !root.activeSelf) return;
+            HandleGestures();
+            if (!dirty && Time.unscaledTime >= nextRedraw)
+                dirty = true;
+            if (dirty)
+            {
+                dirty = false;
+                nextRedraw = Time.unscaledTime + 0.15f;
+                Redraw();
+            }
+        }
+
+        private void HandleGestures()
+        {
+            if (Input.touchCount == 2)
+            {
+                HandlePinch();
+                return;
+            }
+
+            if (Input.touchCount == 1)
+            {
+                var touch = Input.GetTouch(0);
+
+                // se tocco una UI button, lascia passare
+                if (IsPointerOverUI(touch.fingerId)) return;
+
+                if (touch.phase == TouchPhase.Began)
+                {
+                    if (IsInsideMap(touch.position))
+                    {
+                        dragging = true;
+                        dragStartScreen = touch.position;
+                        dragStartPan = panOffset;
+                    }
+                }
+                else if (touch.phase == TouchPhase.Moved && dragging)
+                {
+                    float span = Spans[zoomIdx];
+                    float mPerPx = span / TexSize;
+                    Vector2 delta = touch.position - dragStartScreen;
+                    panOffset = dragStartPan - new Vector2(
+                        delta.x * mPerPx, delta.y * mPerPx);
+                    dirty = true;
+                }
+                else if (touch.phase == TouchPhase.Ended && dragging)
+                {
+                    float moved = Vector2.Distance(
+                        touch.position, dragStartScreen);
+                    dragging = false;
+                    if (moved < 15f)
+                        HandleTap(touch.position);
+                }
+                return;
+            }
+
+            // mouse fallback
+            if (Input.GetMouseButtonDown(0)
+                && !IsPointerOverUIMouse())
+            {
+                if (IsInsideMap(Input.mousePosition))
+                {
+                    dragging = true;
+                    dragStartScreen = Input.mousePosition;
+                    dragStartPan = panOffset;
+                }
+            }
+            else if (Input.GetMouseButton(0) && dragging)
+            {
+                float span = Spans[zoomIdx];
+                float mPerPx = span / TexSize;
+                Vector2 delta = (Vector2)Input.mousePosition - dragStartScreen;
+                panOffset = dragStartPan - new Vector2(
+                    delta.x * mPerPx, delta.y * mPerPx);
+                dirty = true;
+            }
+            else if (Input.GetMouseButtonUp(0) && dragging)
+            {
+                float moved = Vector2.Distance(
+                    (Vector2)Input.mousePosition, dragStartScreen);
+                dragging = false;
+                if (moved < 15f)
+                    HandleTap(Input.mousePosition);
+            }
+
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
+            if (scroll != 0f && IsInsideMap(Input.mousePosition))
+            {
+                if (scroll > 0f)
+                    zoomIdx = Mathf.Max(0, zoomIdx - 1);
+                else
+                    zoomIdx = Mathf.Min(Spans.Length - 1, zoomIdx + 1);
+                dirty = true;
+            }
+        }
+
+        private void HandlePinch()
+        {
+            Touch t0 = Input.GetTouch(0);
+            Touch t1 = Input.GetTouch(1);
+
+            if (t0.phase == TouchPhase.Began || t1.phase == TouchPhase.Began)
+            {
+                pinchStartDist = Vector2.Distance(
+                    t0.position, t1.position);
+                pinchStartSpan = Spans[zoomIdx];
+            }
+            else if (t0.phase == TouchPhase.Moved ||
+                     t1.phase == TouchPhase.Moved)
+            {
+                float dist = Vector2.Distance(
+                    t0.position, t1.position);
+                float ratio = pinchStartDist / Mathf.Max(dist, 1f);
+                float newSpan = Mathf.Clamp(
+                    pinchStartSpan * ratio,
+                    Spans[Spans.Length - 1], Spans[0]);
+
+                // trova lo zoomIdx piu' vicino
+                for (int i = 0; i < Spans.Length; i++)
+                {
+                    if (Spans[i] <= newSpan + 1f)
+                    {
+                        zoomIdx = i;
+                        break;
+                    }
+                }
+                dirty = true;
+            }
+        }
+
+        private bool IsInsideMap(Vector2 screenPos)
+        {
+            if (mapRt == null) return false;
+            var c = mapRt.position;
+            var half = mapRt.sizeDelta * 0.5f;
+            return Mathf.Abs(screenPos.x - c.x) <= half.x &&
+                   Mathf.Abs(screenPos.y - c.y) <= half.y;
+        }
+
+        private static bool IsPointerOverUI(int fingerId)
+        {
+            if (EventSystem.current == null) return false;
+            var ped = new PointerEventData(EventSystem.current)
+            {
+                pointerId = fingerId,
+                position = Input.GetTouch(fingerId).position
+            };
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(ped, results);
+            return results.Count > 0;
+        }
+
+        private static bool IsPointerOverUIMouse()
+        {
+            if (EventSystem.current == null) return false;
+            var ped = new PointerEventData(EventSystem.current)
+            {
+                pointerId = -1,
+                position = Input.mousePosition
+            };
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(ped, results);
+            return results.Count > 0;
+        }
+
+        // ───────────────────── tap → destination ─────────────────────
+        private void HandleTap(Vector2 screenPos)
+        {
+            var c = mapRt.position;
+            var half = mapRt.sizeDelta * 0.5f;
+            if (Mathf.Abs(screenPos.x - c.x) > half.x ||
+                Mathf.Abs(screenPos.y - c.y) > half.y) return;
+
+            float span = Spans[zoomIdx];
+            float mPerPx = span / TexSize;
+
+            float u = (screenPos.x - (c.x - half.x)) / (half.x * 2f);
+            float v = 1f - (screenPos.y - (c.y - half.y)) / (half.y * 2f);
+
+            Transform t = PlayerWorld();
+            if (t == null) return;
+
+            float dxM = ((u * TexSize) - TexSize * 0.5f) * mPerPx;
+            float dzM = ((v * TexSize) - TexSize * 0.5f) * mPerPx;
+            Vector3 world = t.position + new Vector3(
+                panOffset.x + dxM, 0f, panOffset.y + dzM);
+            GeoCoord g = WorldOrigin.ToGeo(world);
+
+            var poi = VehiclePoiRegistry.NearestAny(g.lat, g.lng, 60.0);
+            if (poi != null)
+            {
+                candidate = new NavigationState.Destination
+                {
+                    name = string.IsNullOrEmpty(poi.name)
+                        ? PoiSignpost.Caption(poi.kind)
+                        : poi.name,
+                    kind = poi.kind,
+                    lat = poi.lat,
+                    lng = poi.lng
+                };
+            }
+            else
+            {
+                candidate = new NavigationState.Destination
+                {
+                    name = "Destinazione", kind = "",
+                    lat = g.lat, lng = g.lng
+                };
+            }
+            goBtn.gameObject.SetActive(true);
+            dirty = true;
+        }
+
+        private static Transform PlayerWorld()
+        {
+            var mgr = CityChunkedWorld.Instance != null
+                ? CityChunkedWorld.Instance.Manager : null;
+            return mgr != null ? mgr.target : null;
+        }
+
+        private void ConfirmGo()
+        {
+            if (candidate == null) return;
+            NavigationState.Set(candidate.name, candidate.kind,
+                candidate.lat, candidate.lng);
+            Hide();
+        }
+
+        // ───────────────────── rendering ─────────────────────
+        private void Redraw()
+        {
+            var cols = new Color32[TexSize * TexSize];
+            var bg = (Color32)ColBg;
+            for (int i = 0; i < cols.Length; i++) cols[i] = bg;
+
+            Transform t = PlayerWorld();
+            if (t == null)
+            {
+                tex.SetPixels32(cols);
+                tex.Apply(false);
+                return;
+            }
+
+            float span = Spans[zoomIdx];
+            float halfSpan = span * 0.5f;
+            float mPerPx = span / TexSize;
+            Vector3 pw = t.position + new Vector3(
+                panOffset.x, 0f, panOffset.y);
+
+            var mgr = CityChunkedWorld.Instance != null
+                ? CityChunkedWorld.Instance.Manager : null;
+            if (mgr != null)
+            {
+                var seen = new HashSet<TileGeoDoc>();
+                foreach (var c in mgr.BuiltChunks())
+                {
+                    if (c.geo == null || !seen.Add(c.geo)) continue;
+                    DrawRoads(c.geo, pw, halfSpan, mPerPx, cols);
+                }
+            }
+
+            DrawPois(pw, halfSpan, mPerPx, cols);
+            DrawDestLine(pw, halfSpan, mPerPx, cols);
+            DrawPlayer(pw, mPerPx, cols);
+
+            tex.SetPixels32(cols);
+            tex.Apply(false);
+
+            UpdateInfo(pw);
+        }
+
+        private void UpdateInfo(Vector3 pw)
+        {
+            var d = NavigationState.Current;
+            string dest = "";
+            if (d != null)
+            {
+                float dist = Vector3.Distance(d.WorldPos, pw);
+                dest = "\nDEST: " + d.name + " (" +
+                    CompassUI.FormatDist(dist) + ")";
+            }
+            string cand = candidate == null ? ""
+                : "\nSELEZIONATO: " + candidate.name;
+            infoText.text = "Tocca la mappa per scegliere" + cand + dest;
+        }
+
+        private bool Px(Vector3 pWorld, float halfSpan, float mPerPx,
+            Vector3 w, out int x, out int y)
+        {
+            float dx = w.x - pWorld.x;
+            float dz = w.z - pWorld.z;
+            x = Mathf.RoundToInt(TexSize * 0.5f + dx / mPerPx);
+            y = Mathf.RoundToInt(TexSize * 0.5f + dz / mPerPx);
+            return x > -20 && y > -20 && x < TexSize + 20 &&
+                y < TexSize + 20;
+        }
+
+        private void DrawRoads(TileGeoDoc geo, Vector3 pWorld,
+            float halfSpan, float mPerPx, Color32[] buf)
+        {
+            if (geo.roads == null) return;
+            foreach (var r in geo.roads)
+            {
+                if (r?.pts == null || r.pts.Length < 2) continue;
+                int wpx; Color col;
+                switch (r.hw)
+                {
+                    case "motorway":
+                    case "trunk":
+                    case "primary":
+                        wpx = 7; col = ColMajor; break;
+                    case "secondary":
+                    case "tertiary":
+                        wpx = 4; col = ColMid; break;
+                    default:
+                        wpx = 2; col = ColMinor; break;
+                }
+                int ax, ay, bx, by;
+                Vector3 wa = WorldOrigin.ToWorld(r.pts[0].a, r.pts[0].o);
+                bool pa = Px(pWorld, halfSpan, mPerPx, wa, out ax, out ay);
+                for (int i = 1; i < r.pts.Length; i++)
+                {
+                    Vector3 wb = WorldOrigin.ToWorld(
+                        r.pts[i].a, r.pts[i].o);
+                    bool pb = Px(pWorld, halfSpan, mPerPx, wb,
+                        out bx, out by);
+                    if (pa && pb) Line(ax, ay, bx, by, col, wpx, buf);
+                    ax = bx; ay = by; pa = pb;
+                }
+            }
+        }
+
+        private void DrawPois(Vector3 pWorld, float halfSpan, float mPerPx,
+            Color32[] buf)
+        {
+            foreach (var poi in VehiclePoiRegistry.All())
+            {
+                Vector3 w = WorldOrigin.ToWorld(poi.lat, poi.lng);
+                int x, y;
+                if (!Px(pWorld, halfSpan, mPerPx, w, out x, out y)) continue;
+                Color col = CompassUI.KindColor(poi.kind);
+                Fill(x - 6, y - 6, 12, 12, col, buf);
+                Fill(x - 3, y - 3, 6, 6, Color.white, buf);
+            }
+
+            if (candidate != null)
+            {
+                Vector3 cw = WorldOrigin.ToWorld(
+                    candidate.lat, candidate.lng);
+                int cx, cy;
+                if (Px(pWorld, halfSpan, mPerPx, cw, out cx, out cy))
+                    Ring(cx, cy, 26, ColDest, buf);
+            }
+        }
+
+        private void DrawDestLine(Vector3 pWorld, float halfSpan,
+            float mPerPx, Color32[] buf)
+        {
+            var d = NavigationState.Current;
+            if (d == null) return;
+            Vector3 dw = d.WorldPos;
+            int ax, ay, bx, by;
+            if (!Px(pWorld, halfSpan, mPerPx, dw, out bx, out by))
+            {
+                bx = TexSize / 2; by = TexSize / 2;
+                Ring(bx, by, 20, ColDest, buf);
+                return;
+            }
+            Ring(bx, by, 22, ColDest, buf);
+            ax = TexSize / 2; ay = TexSize / 2;
+            Dashed(ax, ay, bx, by, ColDest, 3, buf);
+        }
+
+        private void DrawPlayer(Vector3 pw, float mPerPx, Color32[] buf)
+        {
+            int cx = TexSize / 2, cy = TexSize / 2;
+            Ring(cx, cy, Mathf.Max(6, Mathf.RoundToInt(8 / mPerPx)),
+                Color.white, buf);
+            Fill(cx - 5, cy - 5, 10, 10, ColPlayer, buf);
+        }
+
+        // ── primitive su buffer ──
+        private static void Plot(int x, int y, Color c, Color32[] buf)
+        {
+            if (x < 0 || y < 0 || x >= TexSize || y >= TexSize) return;
+            buf[y * TexSize + x] = c;
+        }
+
+        private static void Fill(int x0, int y0, int w, int h, Color c,
+            Color32[] buf)
+        {
+            for (int j = y0; j < y0 + h; j++)
+                for (int i = x0; i < x0 + w; i++)
+                    Plot(i, j, c, buf);
+        }
+
+        private static void Line(int x0, int y0, int x1, int y1, Color c,
+            int w, Color32[] buf)
+        {
+            int dx = Mathf.Abs(x1 - x0), dy = Mathf.Abs(y1 - y0);
+            int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+            int err = dx - dy;
+            int hw = Mathf.Max(0, w / 2);
+            while (true)
+            {
+                for (int j = -hw; j <= hw; j++)
+                    for (int i = -hw; i <= hw; i++)
+                        Plot(x0 + i, y0 + j, c, buf);
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = err * 2;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                if (e2 < dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        private static void Dashed(int x0, int y0, int x1, int y1, Color c,
+            int w, Color32[] buf)
+        {
+            int steps = Mathf.CeilToInt(
+                Vector2.Distance(new Vector2(x0, y0), new Vector2(x1, y1)));
+            if (steps < 1) return;
+            for (int s = 0; s <= steps; s++)
+            {
+                if ((s / 14) % 2 != 0) continue;
+                float f = s / (float)steps;
+                int x = Mathf.RoundToInt(Mathf.Lerp(x0, x1, f));
+                int y = Mathf.RoundToInt(Mathf.Lerp(y0, y1, f));
+                for (int j = -w / 2; j <= w / 2; j++)
+                    for (int i = -w / 2; i <= w / 2; i++)
+                        Plot(x + i, y + j, c, buf);
+            }
+        }
+
+        private static void Ring(int cx, int cy, int r, Color c,
+            Color32[] buf)
+        {
+            int prevX = cx + r, prevY = cy;
+            for (int a = 1; a <= 48; a++)
+            {
+                float ang = a / 48f * Mathf.PI * 2f;
+                int nx = cx + Mathf.RoundToInt(Mathf.Cos(ang) * r);
+                int ny = cy + Mathf.RoundToInt(Mathf.Sin(ang) * r);
+                if (nx != prevX || ny != prevY)
+                {
+                    Line(prevX, prevY, nx, ny, c, 3, buf);
+                    prevX = nx; prevY = ny;
+                }
+            }
+        }
+    }
+}

@@ -13,8 +13,16 @@ import io.sentry.Sentry
 
 class ProfileSetupActivity : BaseNavActivity() {
     private var editNickname: EditText? = null
-    private var cbAdult: CheckBox? = null
     private var tvWarning: TextView? = null
+
+    // ── Scelte obbligatorie: sesso + fascia d'età ──────────────────
+    private var selectedGender: String = ""            // "male" / "female"
+    private var selectedFascia: Int = -1               // 0 = 6-12, 1 = 13-17, 2 = 18+
+    private var btnMaschio: Button? = null
+    private var btnFemmina: Button? = null
+    private var btnF1: Button? = null
+    private var btnF2: Button? = null
+    private var btnF3: Button? = null
 
     companion object {
         val COUNTRIES = listOf(
@@ -29,6 +37,12 @@ class ProfileSetupActivity : BaseNavActivity() {
             "JP" to "Giappone", "KR" to "Corea del Sud", "AU" to "Australia",
             "CA" to "Canada", "IN" to "India", "TR" to "Turchia", "ZZ" to "Altro"
         )
+        val FASCIA_AGES = listOf(9, 15, 25)             // età rappresentativa per fascia
+        val FASCIA_LABELS = listOf("Fascia 1 · 6-12 anni", "Fascia 2 · 13-17 anni", "18 anni o più")
+        fun fasciaBirthYear(fascia: Int): Int {
+            if (fascia < 0 || fascia >= FASCIA_AGES.size) return 0
+            return java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - FASCIA_AGES[fascia]
+        }
         fun launch(activity: Activity) { activity.startActivity(Intent(activity, ProfileSetupActivity::class.java)) }
     }
 
@@ -47,7 +61,7 @@ class ProfileSetupActivity : BaseNavActivity() {
         scroll.addView(content); root.addView(scroll)
 
         content.addView(mkLabel("Benvenuto in Huntix!", 22f, Color.WHITE, true))
-        content.addView(mkLabel("Scegli il tuo nickname e conferma l'età per iniziare.", 12f, Color.parseColor("#AABBDD"), false).also { (it.layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(6); bottomMargin = dp(24) } })
+        content.addView(mkLabel("Scegli nickname, sesso ed età per iniziare. Sesso ed età non saranno più modificabili.", 12f, Color.parseColor("#AABBDD"), false).also { (it.layoutParams as LinearLayout.LayoutParams).apply { topMargin = dp(6); bottomMargin = dp(24) } })
 
         val currentName = PlayerProfileManager.myProfile?.name ?: "Cacciatore"
         content.addView(mkLabel("Nickname", 14f, Color.parseColor("#88AADD"), true))
@@ -60,15 +74,23 @@ class ProfileSetupActivity : BaseNavActivity() {
         }
         content.addView(editNickname)
 
-        cbAdult = CheckBox(this).apply {
-            text = "Confermo di aver compiuto 18 anni"
-            setTextColor(Color.WHITE); textSize = 14f
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(4) }
-            setOnCheckedChangeListener { _, _ -> updateWarning() }
-        }
-        content.addView(cbAdult)
+        content.addView(mkLabel("Sesso", 14f, Color.parseColor("#88AADD"), true))
+        val genderRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
+        btnMaschio = mkChip("MASCHIO") { selectGender("male", btnMaschio!!, btnFemmina!!) }
+        btnFemmina = mkChip("FEMMINA") { selectGender("female", btnMaschio!!, btnFemmina!!) }
+        genderRow.addView(btnMaschio, LinearLayout.LayoutParams(0, dp(46), 1f).also { it.rightMargin = dp(8) })
+        genderRow.addView(btnFemmina, LinearLayout.LayoutParams(0, dp(46), 1f))
+        content.addView(genderRow)
 
-        tvWarning = TextView(this).apply { textSize = 12f; setTextColor(Color.parseColor("#FF8A65")); visibility = View.GONE; gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(16) } }
+        content.addView(mkLabel("Fascia d'età", 14f, Color.parseColor("#88AADD"), true).also { (it.layoutParams as LinearLayout.LayoutParams).topMargin = dp(10) })
+        btnF1 = mkChip(FASCIA_LABELS[0]) { selectFascia(0, btnF1!!, btnF2!!, btnF3!!) }
+        btnF2 = mkChip(FASCIA_LABELS[1]) { selectFascia(1, btnF1!!, btnF2!!, btnF3!!) }
+        btnF3 = mkChip(FASCIA_LABELS[2]) { selectFascia(2, btnF1!!, btnF2!!, btnF3!!) }
+        content.addView(btnF1)
+        content.addView(btnF2)
+        content.addView(btnF3)
+
+        tvWarning = TextView(this).apply { textSize = 12f; setTextColor(Color.parseColor("#FF8A65")); visibility = View.GONE; gravity = Gravity.CENTER; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(8); it.bottomMargin = dp(8) } }
         content.addView(tvWarning)
 
         content.addView(Button(this).apply {
@@ -81,22 +103,64 @@ class ProfileSetupActivity : BaseNavActivity() {
         setContentView(root)
     }
 
-    private fun updateWarning() {
-        if (cbAdult?.isChecked == true) {
-            tvWarning?.visibility = View.GONE
+    private fun mkChip(text: String, onClick: () -> Unit) = Button(this).apply {
+        this.text = text; textSize = 14f; setTextColor(Color.WHITE)
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        background = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(Color.parseColor("#1A1A3E")); setStroke(1, Color.parseColor("#334466")) }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(46)).also { it.topMargin = dp(6) }
+        setOnClickListener { onClick() }
+    }
+
+    private fun setChipSelected(btn: Button, selected: Boolean) {
+        val bg = btn.background as GradientDrawable
+        if (selected) {
+            bg.setColor(Color.parseColor("#00E5FF")); bg.setStroke(1, Color.parseColor("#00E5FF"))
+            btn.setTextColor(Color.BLACK)
         } else {
-            tvWarning?.text = "Non hai confermato la maggiore età. Chat, amici e scambi saranno limitati."
+            bg.setColor(Color.parseColor("#1A1A3E")); bg.setStroke(1, Color.parseColor("#334466"))
+            btn.setTextColor(Color.WHITE)
+        }
+        updateWarning()
+    }
+
+    private fun selectGender(gender: String, maschio: Button, femmina: Button) {
+        selectedGender = gender
+        setChipSelected(maschio, gender == "male")
+        setChipSelected(femmina, gender == "female")
+    }
+
+    private fun selectFascia(fascia: Int, f1: Button, f2: Button, f3: Button) {
+        selectedFascia = fascia
+        setChipSelected(f1, fascia == 0)
+        setChipSelected(f2, fascia == 1)
+        setChipSelected(f3, fascia == 2)
+    }
+
+    private fun updateWarning() {
+        if (selectedFascia == -1) {
+            tvWarning?.text = "Scegli la tua fascia d'età."
             tvWarning?.visibility = View.VISIBLE
+        } else if (selectedFascia != 2) {
+            tvWarning?.text = "Minorenne: chat, amici e scambi saranno limitati."
+            tvWarning?.visibility = View.VISIBLE
+        } else {
+            tvWarning?.visibility = View.GONE
         }
     }
 
     private fun onConfirm() {
         val nickname = editNickname?.text?.toString()?.trim() ?: ""
         if (nickname.isBlank() || nickname.length < 2) { Toast.makeText(this, "Inserisci un nickname valido!", Toast.LENGTH_SHORT).show(); return }
+        if (selectedGender.isEmpty()) { Toast.makeText(this, "Scegli il sesso (Maschio o Femmina)!", Toast.LENGTH_SHORT).show(); return }
+        if (selectedFascia == -1) { Toast.makeText(this, "Scegli la fascia d'età!", Toast.LENGTH_SHORT).show(); return }
         val profile = PlayerProfileManager.myProfile
         if (profile == null) { Toast.makeText(this, "Errore: profilo non caricato. Riprova.", Toast.LENGTH_LONG).show(); return }
         profile.name = nickname.replaceFirstChar { it.uppercase() }
-        profile.isMinor = !(cbAdult?.isChecked ?: false)
+        // Sesso ed età scelti qui in registrazione: diventano immutabili.
+        profile.playerGender = selectedGender
+        profile.genderChosenAt = if (profile.genderChosenAt == 0L) System.currentTimeMillis() else profile.genderChosenAt
+        profile.birthYear = fasciaBirthYear(selectedFascia)
+        profile.isMinor = selectedFascia != 2
         profile.profileCompleted = true
         PlayerProfileManager.persistMyProfile()
         if (profile.isMinor) {

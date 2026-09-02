@@ -1185,8 +1185,14 @@ namespace City.OSM
             if (_registry == null && Huntix.Core.GameManager.Instance != null)
                 _registry = Huntix.Core.GameManager.Instance.cityKitRegistry;
 
+            // Fase 3.5: fonde gli edifici adiacenti (muri condivisi) in blocchi
+            var mergedBuildings = BuildingMergeHelper.MergeLegacy(
+                new System.Collections.Generic.List<OsmBuilding>(env.buildings));
+            UnityEngine.Debug.Log("[CityOSM] edifici OSM: " + env.buildings.Length
+                + " -> dopo merge: " + mergedBuildings.Count);
+
             int count = 0;
-            foreach (var b in env.buildings)
+            foreach (var b in mergedBuildings)
             {
                 var fp = CalcFootprint(b.points);
                 if (fp == null) continue;

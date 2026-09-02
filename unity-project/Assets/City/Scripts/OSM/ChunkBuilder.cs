@@ -25,8 +25,35 @@ namespace City.OSM
         public static IEnumerator Build(ChunkManager mgr, ChunkData chunk,
             TileGeoDoc geo, Stopwatch clock, long budgetMs)
         {
+            // ── guardie difensive: se arriva qualcosa di nullo logghiamo
+            // esattamente cosa manca invece di fare NRE silenzioso nel prologo
+            if (mgr == null) { UnityEngine.Debug.LogError("[ChunkBuilder] mgr == null"); yield break; }
+            if (chunk == null) { UnityEngine.Debug.LogError("[ChunkBuilder] chunk == null"); yield break; }
+            if (chunk.key == null) { UnityEngine.Debug.LogError("[ChunkBuilder] chunk.key == null index=" + (chunk.index != null ? chunk.index.ToString() : "null")); yield break; }
+            if (geo == null) { UnityEngine.Debug.LogError("[ChunkBuilder] geo == null chunk=" + chunk.key); yield break; }
+            if (clock == null) { UnityEngine.Debug.LogError("[ChunkBuilder] clock == null"); yield break; }
+
+            var totalClock = Stopwatch.StartNew();
+            OsmDiag.Log("[Builder] === BUILD START === " + chunk.key + " roads=" + (geo.roads != null ? geo.roads.Length : 0) + " buildings=" + (geo.buildings != null ? geo.buildings.Length : 0));
             chunk.root = new GameObject(chunk.key);
+            if (mgr.ChunkRootParent == null)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " mgr.ChunkRootParent == null (ChunkManager not fully started?)");
+                yield break;
+            }
             chunk.root.transform.SetParent(mgr.ChunkRootParent, false);
+
+            // WorldOrigin potrebbe non essere inizializzato se Start() non ha ancora
+            // girato (race con primo tick). ToWorld usa statici _lat/_lng che
+            // valgono 0 prima di Init -> posiziona chunk a 0,0,0 invece che nel
+            // punto giusto, ma NON fa NRE. Proteggiamo comunque.
+            if (!WorldOrigin.Initialized)
+            {
+                UnityEngine.Debug.LogWarning("[ChunkBuilder] " + chunk.key +
+                    " WorldOrigin non inizializzato, chiamo Init default");
+                WorldOrigin.Init(41.9028, 12.4964);
+            }
             chunk.root.transform.position = WorldOrigin.ToWorld(chunk.center);
 
             Vector3 originWorld = chunk.root.transform.position;
@@ -44,13 +71,35 @@ namespace City.OSM
             // vuoto senza collider fra le colonne (la "striscia" dove si cade).
             // Proiettando gli angoli geografici i bordi condivisi combaciano:
             // entrambi i chunk passano dallo stesso ToWorld in double.
+            // Guardiamo chunk.index valido (non default 0,0 se non ha senso)
+            if (chunk.index == default(Vector2Int) && chunk.key != "C_0000_0000")
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " chunk.index == default (0,0) ma key non coincide -> corruzione dati");
+            }
+            GeoCoord cornerSW_geo;
+            try { cornerSW_geo = CityGrid.ChunkCorner(chunk.index); }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " CityGrid.ChunkCorner(chunk.index) fallito: " + e);
+                yield break;
+            }
             Vector3 cornerSW = ToLocal(new GeoLL {
-                a = CityGrid.ChunkCorner(chunk.index).lat,
-                o = CityGrid.ChunkCorner(chunk.index).lng });
+                a = cornerSW_geo.lat,
+                o = cornerSW_geo.lng });
             var idxNE = new Vector2Int(chunk.index.x + 1, chunk.index.y + 1);
+            GeoCoord cornerNE_geo;
+            try { cornerNE_geo = CityGrid.ChunkCorner(idxNE); }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " CityGrid.ChunkCorner(idxNE) fallito: " + e);
+                yield break;
+            }
             Vector3 cornerNE = ToLocal(new GeoLL {
-                a = CityGrid.ChunkCorner(idxNE).lat,
-                o = CityGrid.ChunkCorner(idxNE).lng });
+                a = cornerNE_geo.lat,
+                o = cornerNE_geo.lng });
             Rect bounds = new Rect(
                 cornerSW.x, cornerSW.z,
                 cornerNE.x - cornerSW.x, cornerNE.z - cornerSW.z);
@@ -134,6 +183,18 @@ namespace City.OSM
             chunk.buildingsGo.transform.SetParent(chunk.root.transform, false);
             BuildingPlacer.ResetChunkBudget();
 
+            // Fase 3.5: fonde gli edifici adiacenti (muri condivisi) in blocchi
+            // unici, così il prefab Kenney viene piazzato una volta sola per
+            // l'intero isolato anziché uno per ogni record OSM separato.
+            // Merge disabilitato (troppo lento su device reali: 26s per
+            // 1121 edifici, O(n^2) in confronti spigoli). Piazziamo i record
+            // OSM tal quali; il prefab Kenney gestisce ogni edificio singolo.
+            TileBuildingRec[] mergedBuildings = geo.buildings;
+            OsmDiag.Log("[Builder] " + chunk.key +
+                " edifici OSM: " + (geo.buildings != null ? geo.buildings.Length : 0) +
+                " (merge disabilitato)");
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+
             // i lotti delle concessionarie/officine/garage sono nostri:
             // gli edifici generici OSM che caderci sopra vengono saltati
             List<Vector3> poiSpots = null;
@@ -145,10 +206,13 @@ namespace City.OSM
                 poiSpots = null;
             }
 
-            if (geo.buildings != null)
+            // yield before heavy building placement
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+
+            if (mergedBuildings != null)
             {
                 int placed = 0, scanned = 0, skipped = 0;
-                foreach (var b in geo.buildings)
+                foreach (var b in mergedBuildings)
                 {
                     if (b?.c == null || b.c.Length < 2) continue;
 
@@ -181,6 +245,20 @@ namespace City.OSM
                         " edifici saltati totali: " + skipped);
             }
 
+            // ── aeroporti: piste + velivoli (dati OSM aeroway=aerodrome) ──
+            try
+            {
+                int airCount = AirportRenderer.Build(chunk, geo, ToLocal, bounds);
+                if (airCount > 0)
+                    OsmDiag.Log("[Builder] " + chunk.key + " aeroporti=" + airCount);
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE sezione AEROPORTI: " + e);
+            }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+
             // ── natura e arredo ──
             chunk.natureGo = new GameObject("Natura");
             chunk.natureGo.transform.SetParent(chunk.root.transform, false);
@@ -194,6 +272,9 @@ namespace City.OSM
                     " ERRORE sezione NATURA: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+
+            // yield after heavy sections to keep frame budget
+            yield return null;
 
             // ── veicoli: parcheggi deterministici + traffico AI ──
             try
@@ -217,6 +298,19 @@ namespace City.OSM
                     " ERRORE sezione NPC: " + e);
             }
 
+            // ── uova raccoglibili (missioni CollectEggs) ──
+            try
+            {
+                City.Economy.EggSpawnManager.Instance?.SpawnEggsInChunk(
+                    chunk.root.transform, geo, ToLocal, bounds,
+                    unchecked(chunk.index.x * 73856093 ^ chunk.index.y * 19349663));
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE sezione UOVA: " + e);
+            }
+
             // ── POI veicoli: concessionarie / officine / garage da OSM ──
             try
             {
@@ -228,6 +322,17 @@ namespace City.OSM
             {
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione POI VEICOLI: " + e);
+            }
+
+            // ── segnali stradali con distanze POI ──
+            try
+            {
+                Vehicle.RoadSignSpawner.Populate(chunk, ToLocal, bounds);
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE segnali stradali: " + e);
             }
 
             // ── arredo urbano interattivo + POI dagli edifici OSM ──
@@ -244,6 +349,7 @@ namespace City.OSM
             chunk.built = true;
             chunk.lod = -1;
             chunk.SetLod(0);
+            OsmDiag.Log("[Builder] === BUILD DONE === " + chunk.key + " totalMs=" + totalClock.ElapsedMilliseconds + "ms");
 
             // telemetria: utile per capire tempi/contenuti dei chunk grandi
             if (!stradeOk && geo.roads != null && geo.roads.Length > 0)

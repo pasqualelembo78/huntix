@@ -37,7 +37,7 @@ object OsmClient {
     // --- HTTP client ---
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
@@ -48,10 +48,11 @@ object OsmClient {
     private val OVERPASS_MIRRORS = listOf(
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
-        "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://overpass.openstreetmap.ru/api/interpreter"
     )
 
-    private const val MIRROR_RETRY_ATTEMPTS = 2
+    private const val MIRROR_RETRY_ATTEMPTS = 1
     private const val MIRROR_BACKOFF_BASE_MS = 1000L
     private const val MIRROR_COOLDOWN_MS = 30_000L
 
@@ -136,7 +137,17 @@ object OsmClient {
             .add("data", query)
             .build()
 
-        val body = downloadWithMirrors(requestBody)
+        val body = try {
+            downloadWithMirrors(requestBody)
+        } catch (e: Exception) {
+            AppLog.w(TAG, "$label: Overpass download failed: ${e.message}, trying stale cache fallback")
+            val stale = loadStaleFromDisk(cacheKey)
+            if (stale != null) {
+                AppLog.d(TAG, "$label: stale cache HIT (nodes=${stale.nodes.size}, roads=${stale.roads.size}, buildings=${stale.buildings.size})")
+                return@withContext stale
+            }
+            throw e
+        }
 
         val data = parseOverpassResponse(body, south, north, west, east)
         AppLog.d(TAG, "$label: parsed (nodes=${data.nodes.size}, roads=${data.roads.size}, buildings=${data.buildings.size}, trees=${data.trees.size})")
@@ -244,8 +255,7 @@ object OsmClient {
             // Check TTL
             val age = System.currentTimeMillis() - file.lastModified()
             if (age > CACHE_MAX_AGE_MS) {
-                AppLog.d(TAG, "loadFromDisk: cache expired (${age / 3600000}h old), deleting")
-                file.delete()
+                AppLog.d(TAG, "loadFromDisk: cache expired (${age / 3600000}h old)")
                 return null
             }
 
@@ -332,6 +342,73 @@ object OsmClient {
      * Elimina file cache più vecchi di CACHE_MAX_AGE_MS.
      * Chiamata all'init per pulire dati stale.
      */
+
+    /**
+     * Load expired cache (stale fallback): returns OsmData from disk even if older
+     * than CACHE_MAX_AGE_MS. Used when Overpass is down but we have old data.
+     * Does NOT delete the file so it can be used again.
+     */
+    private fun loadStaleFromDisk(cacheKey: String): OsmData? {
+        val ctx = appContext ?: return null
+        try {
+            val file = File(ctx.filesDir, cacheKey)
+            if (!file.exists()) return null
+
+            val age = System.currentTimeMillis() - file.lastModified()
+            AppLog.d(TAG, "loadStaleFromDisk: reading stale cache $cacheKey (${age / 3600000}h old)")
+            val json = file.readText(Charsets.UTF_8)
+            if (json.isEmpty()) return null
+
+            val root = JsonParser.parseString(json).asJsonObject
+            val bounds = root.getAsJsonObject("bounds") ?: return null
+            val south = bounds.get("south").asDouble
+            val north = bounds.get("north").asDouble
+            val west = bounds.get("west").asDouble
+            val east = bounds.get("east").asDouble
+
+            val elements = root.getAsJsonArray("elements") ?: return null
+
+            val nodesMap = mutableMapOf<Long, OsmNode>()
+            val waysList = mutableListOf<OsmWay>()
+
+            for (el in elements) {
+                val obj = el.asJsonObject
+                val type = obj.get("type").asString
+                val id = obj.get("id").asLong
+                if (type == "node") {
+                    val lat = obj.get("lat").asDouble
+                    val lon = obj.get("lon").asDouble
+                    val tags = parseTags(obj)
+                    nodesMap[id] = OsmNode(id, lat, lon, tags)
+                }
+            }
+            for (el in elements) {
+                val obj = el.asJsonObject
+                val type = obj.get("type").asString
+                val id = obj.get("id").asLong
+                if (type == "way") {
+                    val nodeIds = obj.getAsJsonArray("nodes")?.map { it.asLong } ?: emptyList()
+                    val tags = parseTags(obj)
+                    val way = OsmWay(id, nodeIds, tags)
+                    way.nodes = nodeIds.mapNotNull { nodesMap[it] }
+                    waysList.add(way)
+                }
+            }
+
+            return OsmData(
+                nodes = nodesMap,
+                ways = waysList,
+                south = south,
+                north = north,
+                west = west,
+                east = east
+            )
+        } catch (e: Exception) {
+            AppLog.w(TAG, "loadStaleFromDisk: FAILED to parse $cacheKey: ${e.message}")
+            return null
+        }
+    }
+
     private fun cleanStaleCache() {
         val ctx = appContext ?: return
         try {

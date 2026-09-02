@@ -3,6 +3,7 @@ using System.Collections;
 using UnityEngine;
 using City.Player;
 using City.UI;
+using City.Vehicle;
 using City.World;
 using Huntix.Bridge;
 
@@ -31,6 +32,14 @@ namespace City.Interior
 
         public bool IsInside { get; private set; }
 
+        /// <summary>Zona POI veicolo associata all'interno attuale (per il bancone
+        /// interno che apre i menu veicolo). Null per edifici non veicolo.</summary>
+        public VehiclePoiZone ActiveVehicleZone { get; private set; }
+
+        /// <summary>Posizione del player interno (per lo scan dei trigger nel tap).</summary>
+        public Vector3 InteriorPlayerPos =>
+            interiorPlayer != null ? interiorPlayer.transform.position : Vector3.zero;
+
         private void Awake()
         {
             Instance = this;
@@ -47,9 +56,19 @@ namespace City.Interior
             float width, float depth, float height, int floors,
             Vector3 worldPos, Quaternion worldRot, Shop shop)
         {
+            EnterInterior(buildingType, buildingName, width, depth, height, floors,
+                worldPos, worldRot, shop, null);
+        }
+
+        public void EnterInterior(string buildingType, string buildingName,
+            float width, float depth, float height, int floors,
+            Vector3 worldPos, Quaternion worldRot, Shop shop,
+            VehiclePoiZone vehicleZone)
+        {
             if (IsInside) { Log("EnterInterior: already inside, skip"); return; }
             Log("EnterInterior: " + buildingName + " (" + buildingType + ")");
 
+            ActiveVehicleZone = vehicleZone;
             exitWorldPos = worldPos;
             exitWorldRot = worldRot;
             totalFloors = Mathf.Clamp(floors, 1, 5);
@@ -154,6 +173,7 @@ namespace City.Interior
         private void DoExit()
         {
             IsInside = false;
+            ActiveVehicleZone = null;
 
             // Distruggi l'interno
             if (interiorRoot != null)
@@ -248,7 +268,6 @@ namespace City.Interior
         {
             var go = new GameObject("InteriorPlayer");
             go.tag = "Player";
-            go.layer = go.layer;
 
             // CharacterController
             var cc = go.AddComponent<CharacterController>();
@@ -269,15 +288,25 @@ namespace City.Interior
             cam.fieldOfView = 70f;
             camGo.AddComponent<AudioListener>();
 
-            // Luce direzionale locale per illuminare l'interno
+            // Luce direzionale principale (sole caldo)
             var lightGo = new GameObject("InteriorLight");
             lightGo.transform.SetParent(go.transform, false);
             lightGo.transform.localPosition = new Vector3(0f, 3f, 0f);
             lightGo.transform.localRotation = Quaternion.Euler(50f, -30f, 0f);
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.2f;
+            light.intensity = 1.4f;
             light.color = new Color(1f, 0.97f, 0.9f);
+
+            // Luce punto calda vicino al player (simula lampade)
+            var pointLightGo = new GameObject("InteriorPointLight");
+            pointLightGo.transform.SetParent(go.transform, false);
+            pointLightGo.transform.localPosition = new Vector3(0f, 2.5f, 1f);
+            var pointLight = pointLightGo.AddComponent<Light>();
+            pointLight.type = LightType.Point;
+            pointLight.range = 8f;
+            pointLight.intensity = 0.8f;
+            pointLight.color = new Color(1f, 0.9f, 0.7f);
 
             interiorPlayer = go.AddComponent<InteriorPlayer>();
             interiorPlayer.camera = cam;

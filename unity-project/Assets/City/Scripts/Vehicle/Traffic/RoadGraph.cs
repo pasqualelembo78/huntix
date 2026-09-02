@@ -29,6 +29,7 @@ namespace City.Vehicle.Traffic
         public string highway;
         public float width;
         public float length;
+        public bool oneway;
     }
 
     public class RoadGraph
@@ -47,7 +48,8 @@ namespace City.Vehicle.Traffic
             return node;
         }
 
-        public RoadArc AddArc(int fromId, int toId, Vector3[] waypoints, string roadName, string highway, float width)
+        public RoadArc AddArc(int fromId, int toId, Vector3[] waypoints,
+            string roadName, string highway, float width, bool oneway = false)
         {
             int arcId = arcs.Count;
             float len = 0f;
@@ -63,7 +65,8 @@ namespace City.Vehicle.Traffic
                 roadName = roadName,
                 highway = highway,
                 width = width,
-                length = len
+                length = len,
+                oneway = oneway
             };
             arcs.Add(arc);
             arcMap[arcId] = arc;

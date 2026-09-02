@@ -103,6 +103,7 @@ async def vehicles_state(player: str = ""):
                 "price": int(v.get("price") or 0),
                 "condition": round(float(v.get("condition", 100.0)), 1),
                 "odometer_m": int(v.get("odometer_m") or 0),
+                "damage": v.get("damage", ""),
                 "anti_theft": v.get("anti_theft") or [],
                 "in_garage": bool(v.get("garage_id")),
                 "garage_id": v.get("garage_id") or "",

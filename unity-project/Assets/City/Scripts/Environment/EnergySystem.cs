@@ -54,6 +54,9 @@ namespace City.Environment
             RefreshBar();
             var h = OnChanged;
             if (h != null) h(v);
+            // Unico player: mantiene l'energia del profilo Huntix aggiornata.
+            try { City.NPC.FamilyManager.SyncEnergyToHuntix(v); }
+            catch (Exception) { }
         }
 
         // ── HUD ──────────────────────────────────────────────────

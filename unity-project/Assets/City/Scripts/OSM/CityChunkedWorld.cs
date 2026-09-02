@@ -102,6 +102,7 @@ namespace City.OSM
         public static CityChunkedWorld EnsureInstance()
         {
             if (Instance != null) return Instance;
+            OsmDiag.Log("[CityChunkedWorld] === MIACITTA ENTRY === EnsureInstance called");
             var go = new GameObject("CityChunkedWorld");
             DontDestroyOnLoad(go);
             return go.AddComponent<CityChunkedWorld>();
@@ -154,6 +155,7 @@ namespace City.OSM
         private void EnterCityScene()
         {
             if (_inCityScene) return;
+            OsmDiag.Log("[CityChunkedWorld] === MIACITTA === EnterCityScene (Unity splash done)");
             _inCityScene = true;
 
             // CRITICO: colliders generati a runtime senza autoSyncTransforms non
@@ -167,6 +169,7 @@ namespace City.OSM
 
         private IEnumerator EnterCityWhenReady()
         {
+            OsmDiag.Log("[CityChunkedWorld] === MIACITTA === EnterCityWhenReady START");
             // NB: niente try/catch esterno (C# vieta yield dentro try-catch);
             // le sezioni a rischio sono protette singolarmente
             if (useDeviceGps && Application.isMobilePlatform)
@@ -220,6 +223,28 @@ namespace City.OSM
                                   legacyQuarterRootName + "' disattivato");
                     }
                 }
+
+                // Riabilita il CharacterController che
+                // CityOSMWorld.HideSeedCityAndFreezePlayer() aveva disabilitato.
+                // Senza questo il player resta sospeso a mezz aria (no gravita,
+                // no movimento).  Se il player era figlio del quartiere legacy
+                // disattivato, lo stacca e lo riattiva.
+                if (City.Game.Instance != null && City.Game.Instance.player != null)
+                {
+                    var pl = City.Game.Instance.player;
+                    if (!pl.gameObject.activeSelf)
+                    {
+                        pl.transform.SetParent(null);
+                        pl.gameObject.SetActive(true);
+                        Debug.Log("[CityChunkedWorld] player riattivato (era figlio del quartiere legacy)");
+                    }
+                    var cc = pl.GetComponent<CharacterController>();
+                    if (cc != null && !cc.enabled)
+                    {
+                        cc.enabled = true;
+                        Debug.Log("[CityChunkedWorld] CharacterController riabilitato");
+                    }
+                }
             }
             catch (Exception e)
             {
@@ -256,6 +281,12 @@ namespace City.OSM
                 LocationHud.Create();
             if (enableMinimap && GameObject.Find("MinimapHud") == null)
                 MinimapHud.Create();
+            if (GameObject.Find("CompassUI") == null)
+                City.Vehicle.CompassUI.Create();
+            if (GameObject.Find("MapSelectUI") == null)
+                City.OSM.MapSelectUI.Ensure();
+            if (GameObject.Find("OfferDialog") == null)
+                City.UI.OfferDialog.Ensure();
 
             // ── veicoli: spawner, shop UI, popolatore chunk e API possesso ──
             if (City.Vehicle.VehicleSpawnManager.Instance == null)
@@ -264,12 +295,6 @@ namespace City.OSM
                 DontDestroyOnLoad(vgo);
                 vgo.AddComponent<City.Vehicle.VehicleSpawnManager>();
                 OsmDiag.Log("[CityChunkedWorld] VehicleSpawnManager creato");
-            }
-            if (City.Vehicle.VehicleShopUI.Instance == null)
-            {
-                var sgo = new GameObject("VehicleShopUI");
-                DontDestroyOnLoad(sgo);
-                sgo.AddComponent<City.Vehicle.VehicleShopUI>();
             }
             if (City.Economy.JobManager.Instance == null)
             {
@@ -307,10 +332,23 @@ namespace City.OSM
             if (Manager.target != null)
                 Manager.target.position = new Vector3(0f, 1.5f, 0f);   // origine = punto GPS
 
+            // Attendi il refresh dei veicoli posseduti prima di partire coi
+            // chunk: altrimenti i primi chunk popolano il parcheggio con
+            // l'auto "in vendita" dell'utente mentre lo stato reale (proprieta')
+            // arriva in ritardo, e le auto possedute spariscono all'avvio.
+            var vehApi = City.Vehicle.VehicleOwnershipApi.Instance;
+            float vehWait = 0f;
+            while (Manager.target != null && !vehApi.Refreshed && vehWait < 8f)
+            {
+                yield return null;
+                vehWait += Time.unscaledDeltaTime;
+            }
+
             // origine definitiva fissata e target agganciato: si puo' partire
             // (l'health-check puo' aver creato il manager congelato in attesa
             // del fix GPS)
             Manager.StreamingEnabled = true;
+            OsmDiag.Log("[CityChunkedWorld] === MIACITTA === StreamingEnabled=true");
 
             OsmDiag.Log("[CityChunkedWorld] attivo su " +
                 startLat.ToString(CultureInfo.InvariantCulture) + "," +

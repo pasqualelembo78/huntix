@@ -94,7 +94,7 @@ namespace Huntix.Indoor
                   ? null
                   : (KenneyReg != null ? KenneyReg.colormap : null);
              _loaded = true;
-             Debug.Log($"[StoreBuilder] Prefabs loaded via {(useCuteStore ? "CuteStore (non-Kenney" : "KenneyMiniMarket")} ({(_floorPrefab != null ? "ok" : "NULL")}, urpLit={_urplit != null}, colormap={_colormap != null})");
+             Debug.Log($"[StoreBuilder] Prefabs loaded via {(useCuteStore ? "CuteStore (non-Kenney)" : "KenneyMiniMarket")} ({(_floorPrefab != null ? "ok" : "NULL")}, urpLit={_urplit != null}, colormap={_colormap != null})");
          }
 
          private void FixMaterials(GameObject go)

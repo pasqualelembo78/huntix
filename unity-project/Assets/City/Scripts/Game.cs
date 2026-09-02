@@ -114,6 +114,21 @@ namespace City
             }
 
             EnergySystem.EnsureHud();
+            // Radar di caccia uova (direzione/distanza preda piu' vicina).
+            try { City.Economy.EggRadar.EnsureHud(); }
+            catch (System.Exception) { }
+
+            // Unico player: mostra in Miacitta l'identita' (nome + livello)
+            // del profilo Huntix condiviso, così si vede lo stesso player
+            // degli altri moduli. Su editor resta "Giocatore" (no bridge).
+            try
+            {
+                if (ui != null)
+                    ui.UpdatePlayerProfile(
+                        Huntix.Bridge.UnityBridge.GetPlayerName(),
+                        Huntix.Bridge.UnityBridge.GetPlayerLevel());
+            }
+            catch (System.Exception) { }
         }
 
         private void Update()
@@ -403,6 +418,12 @@ namespace City
 
             if (EggSpawnManager.Instance != null)
                 EggSpawnManager.Instance.RemoveEgg(egg.gameObject);
+
+            // Bestiario cacciatore: registra la combinazione tipo×rarita' la
+            // prima volta che viene scoperta.
+            bool first = City.Economy.EggDex.Record(egg);
+            if (first && ui != null)
+                ui.ShowToast("Nuova voce nel Bestiario: " + egg.eggType + " (" + egg.rarity + ")");
 
             // eco-sistema Huntix: l'uovo va anche nell'inventario uova generale
             // (collezione/evoluzione) lato Android, non solo come monete City.

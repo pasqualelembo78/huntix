@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using City.OSM;
+using City.Interior;
 
 namespace City.Environment
 {
@@ -16,6 +17,10 @@ namespace City.Environment
         private const float Y_SIDEWALK = 0.12f;
         private const float SIDEWALK_W = 1.8f;
         private const int MaxPoisPerChunk = 6;
+        // distanza minima di spawn dai portali d'ingresso: le panchine
+        // (collider solidi) non devono mai bloccare l'accesso a una porta.
+        private const float PORTA_RADIUS = 4f;
+        private const float PORTA_RADIUS2 = PORTA_RADIUS * PORTA_RADIUS;
 
         private static readonly HashSet<string> UrbanHw = new HashSet<string>
         {
@@ -33,17 +38,33 @@ namespace City.Environment
             var root = new GameObject("Props");
             root.transform.SetParent(chunk.root.transform, false);
 
+            // raccoglie le posizioni dei portali d'ingresso gia' costruiti
+            // nella sezione EDIFICI: i prop solidi non devono spawnare nell'
+            // area davanti alle porte (bloccherebbero l'accesso).
+            List<Vector3> portaPos = CollectDoorPositions(chunk);
+
             int n = 0;
-            n += SpawnStreetProps(chunk, rng, root.transform, toLocal);
-            n += SpawnBuildingPois(chunk, rng, root.transform, toLocal, bounds);
+            n += SpawnStreetProps(chunk, rng, root.transform, toLocal, portaPos);
+            n += SpawnBuildingPois(chunk, rng, root.transform, toLocal, bounds, portaPos);
             if (n > 0)
                 OsmDiag.Log("[Props] " + chunk.key + ": " + n + " oggetti");
+        }
+
+        private static List<Vector3> CollectDoorPositions(ChunkData chunk)
+        {
+            var list = new List<Vector3>();
+            if (chunk.buildingsGo == null) return list;
+            var entrances = chunk.buildingsGo.GetComponentsInChildren<BuildingEntrance>(true);
+            for (int i = 0; i < entrances.Length; i++)
+                list.Add(entrances[i].transform.position);
+            return list;
         }
 
         // ── panchine / fontanelle / cestini ─────────────────────
 
         private static int SpawnStreetProps(ChunkData chunk,
-            System.Random rng, Transform parent, Func<GeoLL, Vector3> toLocal)
+            System.Random rng, Transform parent, Func<GeoLL, Vector3> toLocal,
+            List<Vector3> portaPos)
         {
             var roads = chunk.geo.roads;
             if (roads == null || roads.Length == 0) return 0;
@@ -73,6 +94,7 @@ namespace City.Environment
                     for (float t = 15f; t < len - 6f; t += 32f)
                     {
                         Vector3 p = a + dir * t + side * (SIDEWALK_W + 0.55f);
+                        if (!FarFromDoors(p, portaPos)) continue;
                         p.y = Y_SIDEWALK;
                         points.Add(p);
                         dirs.Add(-side);
@@ -105,17 +127,32 @@ namespace City.Environment
                 GameObject go = builder(parent, pts[idx],
                     Quaternion.LookRotation(fwd, Vector3.up));
                 placed++;
-                pts.RemoveAt(idx);
-                dirs.RemoveAt(idx);
-            }
+                    pts.RemoveAt(idx);
+                    dirs.RemoveAt(idx);
+                }
             return placed;
+        }
+
+        /// <summary>Vero se il punto e' a piu' di PORTA_RADIUS (in pianta, x/z)
+        /// da ogni portale d'ingresso: i prop solidi non bloccano le porte.</summary>
+        private static bool FarFromDoors(Vector3 p, List<Vector3> portaPos)
+        {
+            if (portaPos == null) return true;
+            for (int i = 0; i < portaPos.Count; i++)
+            {
+                float dx = p.x - portaPos[i].x;
+                float dz = p.z - portaPos[i].z;
+                if (dx * dx + dz * dz < PORTA_RADIUS2) return false;
+            }
+            return true;
         }
 
         // ── POI dagli edifici OSM ───────────────────────────────
 
         private static int SpawnBuildingPois(ChunkData chunk,
             System.Random rng, Transform parent,
-            Func<GeoLL, Vector3> toLocal, Rect bounds)
+            Func<GeoLL, Vector3> toLocal, Rect bounds,
+            List<Vector3> portaPos)
         {
             var buildings = chunk.geo.buildings;
             if (buildings == null) return 0;
@@ -143,7 +180,38 @@ namespace City.Environment
                     pos.y = 0.05f;
                     Quaternion facing = Quaternion.Euler(0f, b.r + 180f, 0f);
 
-                    BuildPoi(parent, pos, facing, kind.Value);
+                    // Il punto centrale della facciata è dove BuildingPlacer
+                    // mette il portale d'ingresso: un POI SOLIDO proprio li'
+                    // (a 1.5 m dal muro) la rende inavvicinabile. Se cade nel
+                    // raggio porta lo sposto a lato della facciata (lato
+                    // deterministico da b.id); se l'edificio è troppo stretto
+                    // per spostarlo senza ostruire comunque la porta, il
+                    // collider diventa trigger (non solido) e l'accesso resta
+                    // libero.
+                    if (!FarFromDoors(pos, portaPos))
+                    {
+                        float halfW = Mathf.Max(b.d[0], 1.5f) * 0.5f;
+                        float side = (b.id % 2) == 0 ? -1f : 1f;
+                        // a filo col bordo della facciata: porta sempre libera
+                        float sideX = halfW - 0.85f;
+                        if (sideX >= 2.6f)
+                        {
+                            Vector3 shifted = pos +
+                                Quaternion.Euler(0f, b.r, 0f) *
+                                Vector3.right * side * sideX;
+                            if (bounds.Contains(new Vector2(shifted.x, shifted.z)))
+                            {
+                                BuildPoi(parent, shifted, facing, kind.Value, true);
+                                placed++;
+                                continue;
+                            }
+                        }
+                        BuildPoi(parent, pos, facing, kind.Value, false);
+                        placed++;
+                        continue;
+                    }
+
+                    BuildPoi(parent, pos, facing, kind.Value, true);
                     placed++;
                 }
                 catch (Exception)
@@ -233,11 +301,14 @@ namespace City.Environment
         }
 
         private static void BuildPoi(Transform parent, Vector3 pos,
-            Quaternion rot, InteractableProp.Kind kind)
+            Quaternion rot, InteractableProp.Kind kind, bool solid)
         {
             string name = kind == InteractableProp.Kind.Cafe ? "Cafe"
                 : kind == InteractableProp.Kind.Pharmacy ? "Pharmacy" : "Atm";
-            var go = Base(name, pos, rot, true);
+            // solido=false (edificio troppo stretto, non si può spostare il
+            // POI lontano dalla porta): il collider resta un trigger, così il
+            // POI è ancora tappabile ma non blocca l'ingresso.
+            var go = Base(name, pos, rot, !solid);
 
             var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             UnityEngine.Object.Destroy(pole.GetComponent<Collider>());
@@ -274,22 +345,32 @@ namespace City.Environment
             Paint(disc, c);
             Paint(pole, new Color(0.75f, 0.76f, 0.78f));
 
-            AddBox(go, new Vector3(1.6f, 2.4f, 1.6f), new Vector3(0f, 1.2f, 0f));
-            Tag(go, kind, title, action);
-
-            // vetrina rompibile davanti al cartello (solo bar/farmacia)
-            if (kind == InteractableProp.Kind.Cafe ||
-                kind == InteractableProp.Kind.Pharmacy)
+            // vetrina rompibile davanti al cartello (solo bar/farmacia) e
+            // collider: solo la variante solida li mette, quella trigger no
+            if (solid)
             {
-                var win = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                UnityEngine.Object.Destroy(win.GetComponent<Collider>());
-                win.transform.SetParent(go.transform, false);
-                win.transform.localPosition = new Vector3(0f, 1.15f, 0.55f);
-                win.transform.localScale = new Vector3(1.7f, 1.35f, 0.07f);
-                var bw = win.AddComponent<City.Environment.BreakableWindow>();
-                go.GetComponent<InteractableProp>().Window = bw;
+                AddBox(go, new Vector3(1.6f, 2.4f, 1.6f), new Vector3(0f, 1.2f, 0f));
+                if (kind == InteractableProp.Kind.Cafe ||
+                    kind == InteractableProp.Kind.Pharmacy)
+                {
+                    var win = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    UnityEngine.Object.Destroy(win.GetComponent<Collider>());
+                    win.transform.SetParent(go.transform, false);
+                    win.transform.localPosition = new Vector3(0f, 1.15f, 0.55f);
+                    win.transform.localScale = new Vector3(1.7f, 1.35f, 0.07f);
+                    var bw = win.AddComponent<City.Environment.BreakableWindow>();
+                    go.GetComponent<InteractableProp>().Window = bw;
+                }
+            }
+            else
+            {
+                var col = go.GetComponent<BoxCollider>();
+                col.isTrigger = true;
+                col.size = new Vector3(1.6f, 2.4f, 1.6f);
+                col.center = new Vector3(0f, 1.2f, 0f);
             }
 
+            Tag(go, kind, title, action);
             Attach(parent, go);
         }
 

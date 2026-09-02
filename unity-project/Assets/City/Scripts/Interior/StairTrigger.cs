@@ -54,10 +54,10 @@ namespace City.Interior
             bool canGoUp = managerFloor < totalFloors - 1;
             bool canGoDown = managerFloor > 0;
 
-            if (canGoUp)
-                InteriorManager.Instance.ChangeFloor(1);
-            else if (canGoDown)
+            if (canGoDown && managerFloor > 0)
                 InteriorManager.Instance.ChangeFloor(-1);
+            else if (canGoUp)
+                InteriorManager.Instance.ChangeFloor(1);
         }
     }
 }

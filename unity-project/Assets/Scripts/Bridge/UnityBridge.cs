@@ -275,6 +275,68 @@ namespace Huntix.Bridge
         }
 
         // Apre la pagina del POI (custom JSON / web / JSON sintetico OSM).
+        // ── MiAcitma: cambio MVC (Huntix Coins) ↔ soldi citta ─────────────
+        // L'MVC e' la valuta guadagnata fuori da MiAcitma (minigiochi, lavori,
+        // battle, presenza): vive in SavedManager lato Android. Questi metodi
+        // espongono saldo e movimenti per lo scambio in banca/bancomat.
+
+        /// <summary>Saldo MVC attuale (0 se fuori da Android o bridge assente).</summary>
+        public static double GetMvcBalance()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return (double)jc.CallStatic<double>("getMvcBalance");
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] GetMvcBalance: " + e.Message);
+            }
+            #endif
+            return 0.0;
+        }
+
+        /// <summary>Prova a spendere [amount] MVC. True se il saldo bastava.</summary>
+        public static bool SpendMvc(double amount)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<bool>("spendMvc", amount);
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] SpendMvc: " + e.Message);
+            }
+            #endif
+            return false;
+        }
+
+        /// <summary>Accredita [amount] MVC; ritorna il nuovo saldo.</summary>
+        public static double AddMvc(double amount)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return (double)jc.CallStatic<double>("addMvc", amount);
+                }
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[UnityBridge] AddMvc: " + e.Message);
+            }
+            #endif
+            return 0.0;
+        }
+
         public static void OpenPoiPage(string osmId, string name, string buildingType,
                                        string poiType, string pageType, string url,
                                        double lat, double lng, string category)
@@ -285,6 +347,213 @@ namespace Huntix.Bridge
                 jc.CallStatic("openPoiPage", osmId, name, buildingType, poiType,
                               url, pageType, lat, lng, category);
             }
+            #endif
+        }
+
+        // ── Unified player profile (unico giocatore, unico universo) ──
+        // Miacitta legge/scrive LO STESSO profilo Huntix (fonte di verita'),
+        // non un profilo separato: stesso nome, stessa XP, stessa classifica.
+
+        /// <summary>Nome del player Huntix (Unified profile).</summary>
+        public static string GetPlayerName()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("getPlayerName") ?? "Giocatore";
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerName: " + e.Message); }
+            #endif
+            return "Giocatore";
+        }
+
+        /// <summary>XP totale cumulata del player Huntix.</summary>
+        public static long GetPlayerXp()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<long>("getPlayerXp");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerXp: " + e.Message); }
+            #endif
+            return 0L;
+        }
+
+        /// <summary>Livello del player Huntix (dalla XP).</summary>
+        public static int GetPlayerLevel()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<int>("getPlayerLevel");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerLevel: " + e.Message); }
+            #endif
+            return 1;
+        }
+
+        /// <summary>Potere totale del player Huntix.</summary>
+        public static long GetPlayerPower()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<long>("getPlayerPower");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerPower: " + e.Message); }
+            #endif
+            return 0L;
+        }
+
+        /// <summary>Gemme premium del player Huntix.</summary>
+        public static int GetPlayerGems()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<int>("getPlayerGems");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerGems: " + e.Message); }
+            #endif
+            return 0;
+        }
+
+        /// <summary>Energia corrente del player Huntix (0..100).</summary>
+        public static int GetPlayerEnergy()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<int>("getPlayerEnergy");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerEnergy: " + e.Message); }
+            #endif
+            return 100;
+        }
+
+        /// <summary>Conteggio uova nell'inventario Huntix del player.</summary>
+        public static int GetEggCount()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<int>("getEggCount");
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetEggCount: " + e.Message); }
+            #endif
+            return 0;
+        }
+
+        /// <summary>Snapshot completo del profilo Huntix come JSON.</summary>
+        public static string GetPlayerProfileJson()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("getPlayerProfileJson") ?? "{}";
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetPlayerProfileJson: " + e.Message); }
+            #endif
+            return "{}";
+        }
+
+        /// <summary>Accredita XP guadagnati in Miacitta al profilo Huntix.</summary>
+        public static void AddXpFromCity(long xpAmount)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("addXpFromCity", xpAmount);
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] AddXpFromCity: " + e.Message); }
+            #endif
+        }
+
+        /// <summary>Accredita potere guadagnato in Miacitta al profilo Huntix.</summary>
+        public static void AddPowerFromCity(long powerAmount)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("addPowerFromCity", powerAmount);
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] AddPowerFromCity: " + e.Message); }
+            #endif
+        }
+
+        /// <summary>Accredita gemme guadagnate in Miacitta al profilo Huntix.</summary>
+        public static void AddGemsFromCity(int amount)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("addGemsFromCity", amount);
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] AddGemsFromCity: " + e.Message); }
+            #endif
+        }
+
+        /// <summary>Sincronizza l'energia del player dalla citta' al profilo Huntix.</summary>
+        public static void SyncEnergyFromCity(int energy)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("syncEnergyFromCity", energy);
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] SyncEnergyFromCity: " + e.Message); }
+            #endif
+        }
+
+        /// <summary>Cambia il nome del player da Miacitta (es. reincarnazione) sul profilo Huntix.</summary>
+        public static void SetPlayerNameFromCity(string newName)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("setPlayerNameFromCity", newName);
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] SetPlayerNameFromCity: " + e.Message); }
             #endif
         }
     }

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEngine;
+using City.Vehicle.Traffic;
 
 namespace City.OSM
 {
@@ -17,7 +18,7 @@ namespace City.OSM
         public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
         public const int UnloadRadius = 5;
         private const float TickIntervalS = 0.25f;
-        private const long BuildBudgetMs = 8;
+        private const long BuildBudgetMs = 12;
 
         public Transform target;
 
@@ -40,6 +41,25 @@ namespace City.OSM
         private readonly Dictionary<string, TileBundle> _tiles =
             new Dictionary<string, TileBundle>();
         private readonly HashSet<string> _loading = new HashSet<string>();
+
+        // ── retry chunk con tile/geo non disponibili ──
+        // Senza questo meccanismo un chunk con tile fallita (rete giu', server
+        // ancora in generazione) restava in _chunks col solo terreno e NON
+        // veniva piu' ri-accodato: la citta' restava piatta/grigia per tutta
+        // la sessione. Ora viene riprovato con backoff 5s..120s.
+        private const float RetryBaseDelayS = 5f;
+        private const float RetryMaxDelayS = 120f;
+        private readonly Dictionary<Vector2Int, float> _retryAt =
+            new Dictionary<Vector2Int, float>();
+        private readonly Dictionary<Vector2Int, int> _retryCount =
+            new Dictionary<Vector2Int, int>();
+
+        // tile nota-mancante: cooldown per non martellare il server con fetch
+        // a catena (prima ogni chunk della stessa tile ripeteva l'intero
+        // scaricamento, fino a ~100 download seriali per una tile morta)
+        private const float TileCooldownS = 60f;
+        private readonly Dictionary<string, float> _tileCooldownAt =
+            new Dictionary<string, float>();
 
         private Material _roadMat;
         private Material _sidewalkMat;
@@ -178,8 +198,51 @@ namespace City.OSM
 
             EnqueueMissing(cur);
             UnloadFar(cur);
+            RetryMissingTiles();
             UpdateLods(cur);
             WorldOrigin.TryRebase(target.position);
+        }
+
+        /// <summary>Riporta in coda di build i chunk con tile fallita, dopo il
+        /// backoff crescente. Il vecchio percorso non lo faceva MAI: il chunk
+        /// restava in _chunks e EnqueueMissing lo saltava per sempre.</summary>
+        private void RetryMissingTiles()
+        {
+            float now = Time.realtimeSinceStartup;
+
+            // pulizia cooldown tile scaduti: altrimenti crescono per tutta la
+            // sessione con tile fallite in zone diverse
+            if (_tileCooldownAt.Count > 0)
+            {
+                List<string> expired = null;
+                foreach (var kv in _tileCooldownAt)
+                    if (now >= kv.Value)
+                    {
+                        if (expired == null) expired = new List<string>();
+                        expired.Add(kv.Key);
+                    }
+                if (expired != null)
+                    foreach (var k in expired) _tileCooldownAt.Remove(k);
+            }
+
+            if (_retryAt.Count == 0) return;
+            List<Vector2Int> ready = null;
+            foreach (var kv in _retryAt)
+            {
+                if (now < kv.Value) continue;
+                if (_inFlight.Contains(kv.Key)) continue;    // gia' in costruzione
+                if (!_chunks.ContainsKey(kv.Key)) continue;  // scaricato nel mentre
+                if (ready == null) ready = new List<Vector2Int>();
+                ready.Add(kv.Key);
+            }
+            if (ready == null) return;
+            foreach (var c in ready)
+            {
+                _retryAt.Remove(c);
+                _inFlight.Add(c);
+                OsmDiag.Log("[ChunkManager] retry build chunk " + c.x + "," + c.y);
+                StartCoroutine(BuildChunkCoroutine(c));
+            }
         }
 
         private bool ResolveTarget()
@@ -216,11 +279,13 @@ namespace City.OSM
         private void Update()
         {
             if (!StreamingEnabled || _pending.Count == 0) return;
+            int building = _pending.Count;
             var clock = Stopwatch.StartNew();
             while (_pending.Count > 0 && clock.ElapsedMilliseconds < BuildBudgetMs)
             {
                 var c = _pending[0];
                 _pending.RemoveAt(0);
+                OsmDiag.Log("[ChunkManager] === BUILD START === chunk " + c.x + "," + c.y + " pending=" + _pending.Count);
                 StartCoroutine(BuildChunkCoroutine(c));
             }
         }
@@ -244,22 +309,69 @@ namespace City.OSM
                 yield break;
             }
 
-            var chunk = new ChunkData
+            // riusa il chunk se gia' presente (retry dopo una tile fallita):
+            // pulisce la root residua e ricostruisce da zero
+            ChunkData chunk;
+            if (!_chunks.TryGetValue(c, out chunk))
             {
-                index = c,
-                key = ChunkData.KeyOf(c),
-                center = CityGrid.ChunkCenter(c),
-            };
-            _chunks[c] = chunk;
+                // Il chunk non esiste ancora: registro appena ne arriva il
+                // turno. Precedentemente il ramo "else" interrompeva qui, ma
+                // nessun altro creava piu' il chunk: _chunks restava vuoto e
+                // ogni chunk veniva rimesso in coda all'infinito (la mappa
+                // "spariva" con stradeMesh=0/0 e pending mai in calo).
+                chunk = new ChunkData
+                {
+                    index = c,
+                    key = ChunkData.KeyOf(c),
+                    center = CityGrid.ChunkCenter(c),
+                };
+                _chunks[c] = chunk;
+            }
+            else
+            {
+                // retry dopo tile fallita: il chunk esiste gia' (magari con la
+                // geo mai assegnata). Verifichiamo che non sia stato
+                // scaricato (UnloadFar) durante il fetch della tile: in tal
+                // caso non va ricreato come ghost vuoto.
+                if (!_chunks.ContainsKey(c))
+                {
+                    _inFlight.Remove(c);
+                    yield break;
+                }
+                if (chunk.root != null)
+                {
+                    chunk.Destroy();
+                    chunk.root = null;
+                }
+            }
 
             TileBundle bundle;
             if (!_tiles.TryGetValue(tileKey, out bundle) || bundle.geo == null)
             {
-                // tile non disponibile (offline e non in cache): chunk vuoto col solo terreno
-                UnityEngine.Debug.LogWarning("[ChunkManager] tile " + tileKey + " non disponibile");
+                // tile non disponibile (offline e non in cache, o server ancora
+                // in generazione): il chunk resta vuoto e viene RITENTATO con
+                // backoff crescente invece di essere abbandonato per la sessione
+                int attempts;
+                _retryCount.TryGetValue(c, out attempts);
+                float delay = Mathf.Min(
+                    RetryBaseDelayS * Mathf.Pow(2f, attempts), RetryMaxDelayS);
+                _retryCount[c] = attempts + 1;
+                _retryAt[c] = Time.realtimeSinceStartup + delay;
+                UnityEngine.Debug.LogWarning("[ChunkManager] tile " + tileKey +
+                    " non disponibile: prossimo tentativo per " +
+                    chunk.key + " tra " + (int)delay + "s (n." +
+                    (attempts + 1) + ")");
             }
             else
             {
+                // retry riuscito (o primo tentativo): nessuna attesa residua
+                _retryAt.Remove(c);
+                _retryCount.Remove(c);
+                if (chunk.root != null)
+                {
+                    chunk.Destroy();
+                    chunk.root = null;
+                }
                 // CRITICO per LocationHud/MinimapHud: BuiltChunks() filtra su
                 // geo != null, senza questo assegnamento gli HUD restano muti
                 chunk.geo = bundle.geo;
@@ -328,6 +440,13 @@ namespace City.OSM
                 yield break;
             }
 
+            // tile nota-mancante di poco fa: non rifare subito l'intero fetch
+            // (evita la catena di download seriali a vuoto sugli stessi chunk)
+            float cd;
+            if (_tileCooldownAt.TryGetValue(tileKey, out cd) &&
+                Time.realtimeSinceStartup < cd)
+                yield break;
+
             var bundle = new TileBundle { refs = 1 };
             _loading.Add(tileKey);
             _tiles[tileKey] = bundle;
@@ -361,15 +480,20 @@ namespace City.OSM
 
             if (geo == null)
             {
-                // senza geo i chunk non si costruiscono: scartiamo tutto e
-                // riproviamo al prossimo giro invece di tenere una tile cieca
+                // senza geo i chunk non si costruiscono: scartiamo la tile e
+                // mettiamo un cooldown per non riscaricarla a vuoto; il retry
+                // dei chunk che la usano e' gestito da _retryAt/_retryCount
                 OsmDiag.Log("[ChunkManager] tile " + tileKey + " NON disponibile (graph=" +
                     (graph != null) + ")");
                 _tiles.Remove(tileKey);   // libera il posto, retry al prossimo giro
+                _tileCooldownAt[tileKey] = Time.realtimeSinceStartup + TileCooldownS;
                 yield break;
             }
+            _tileCooldownAt.Remove(tileKey);
             bundle.graph = graph;
             bundle.geo = geo;
+            if (graph != null)
+                TileRoadNetwork.Ensure().AddTile(tileKey, graph);
             OsmDiag.Log("[ChunkManager] tile " + tileKey + " caricata (graph=" +
                 (graph != null) + ", geo=" + (geo != null) + ")");
         }
@@ -390,6 +514,8 @@ namespace City.OSM
             {
                 var chunk = _chunks[key];
                 _chunks.Remove(key);
+                _retryAt.Remove(key);
+                _retryCount.Remove(key);
                 ReleaseTile(CityGrid.TileKeyOfChunk(key));
                 chunk.Destroy();
             }
@@ -400,7 +526,12 @@ namespace City.OSM
             TileBundle bundle;
             if (!_tiles.TryGetValue(tileKey, out bundle)) return;
             bundle.refs--;
-            if (bundle.refs <= 0) _tiles.Remove(tileKey);
+            if (bundle.refs <= 0)
+            {
+                _tiles.Remove(tileKey);
+                if (TileRoadNetwork.Instance != null)
+                    TileRoadNetwork.Instance.RemoveTile(tileKey);
+            }
         }
 
         // ── LOD ─────────────────────────────────────────────────
@@ -438,8 +569,13 @@ namespace City.OSM
 
         public void UnloadAll()
         {
+            StopAllCoroutines();
             _pending.Clear();
             _inFlight.Clear();
+            _retryAt.Clear();
+            _retryCount.Clear();
+            _tileCooldownAt.Clear();
+            _loading.Clear();
             foreach (var kv in _chunks) kv.Value.Destroy();
             _chunks.Clear();
             _tiles.Clear();

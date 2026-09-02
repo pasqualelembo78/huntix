@@ -36,6 +36,7 @@ namespace City.Vehicle
             public int price;
             public float condition;
             public long odometer_m;
+            public string damage;
             public string[] anti_theft;
             public bool in_garage;
             public bool stolen;
@@ -103,6 +104,11 @@ namespace City.Vehicle
             public GarageStatusRental rental;
         }
         [Serializable]
+        private class DamageReq
+        {
+            public string code; public string player; public string damage;
+        }
+        [Serializable]
         private class OkResp { public bool ok; public string error; }
 
         // ── modello pubblico per le UI ──────────────────────────────
@@ -113,6 +119,7 @@ namespace City.Vehicle
             public int price;
             public float condition = 100f;
             public long odometer_m;
+            public string damage = "";
             public string[] anti_theft;
             public bool in_garage;
             public bool stolen;
@@ -132,7 +139,51 @@ namespace City.Vehicle
             public GarageInfo rental;
         }
 
+        [Serializable]
+        private class EnterUGReq
+        {
+            public string player;
+            public string city;
+            public float lat;
+            public float lon;
+        }
+        [Serializable]
+        private class ExitUGReq { public string player; }
+        [Serializable]
+        private class UGStatusResp
+        {
+            public int? owned_spot;
+            public string owned_city;
+            public bool car_parked;
+            public int price;
+            public int levels;
+        }
+        [Serializable]
+        private class UGExitResp
+        {
+            public bool ok;
+            public float lat;
+            public float lon;
+            public string city;
+        }
+        [Serializable]
+        private class UGEnterResp { public bool ok; public int levels; }
+
+        public class UndergroundStatus
+        {
+            public int? owned_spot;
+            public string owned_city;
+            public bool car_parked;
+            public int price;
+            public int levels;
+        }
+
         public static VehicleOwnershipApi Instance { get; private set; }
+
+        /// <summary>Vero dopo il primo Refresh completato (anche senza rete):
+        /// i chunk possono popolare i parcheggi con lo stato noto reale,
+        /// evitando di generare l'auto "in vendita" dell'utente all'avvio.</summary>
+        public bool Refreshed { get; private set; }
 
         private readonly System.Collections.Generic.HashSet<string> owned =
             new System.Collections.Generic.HashSet<string>();
@@ -157,11 +208,18 @@ namespace City.Vehicle
             public double abandonedLon;
             public float condition = 100f;
             public long odometer_m;
+            public string damage = "";
             public string[] anti_theft;
         }
 
         private static readonly System.Collections.Generic.Dictionary<string, ParkedVehicle>
             sold = new System.Collections.Generic.Dictionary<string, ParkedVehicle>();
+
+        // snapshot cache: invalidato quando sold cambia, riusato dalla minimappa
+        private static System.Collections.Generic.List<
+            System.Collections.Generic.KeyValuePair<string, ParkedVehicle>>
+            _soldSnapshot;
+        private static bool _soldDirty = true;
 
         /// <summary>Ultimo stato noto dei MIEI veicoli (dopo ogni Refresh).</summary>
         private static readonly System.Collections.Generic.Dictionary<string, MyVehicle>
@@ -218,13 +276,28 @@ namespace City.Vehicle
         {
             if (string.IsNullOrEmpty(code)) return;
             owned.Add(code);
-            sold[code] = new ParkedVehicle
+            _soldDirty = true;
+            if (sold.TryGetValue(code, out var pv))
             {
-                owner = PlayerId,
-                lat = lat,
-                lon = lon,
-                heading = heading,
-            };
+                // veicolo gia' conosciuto (stato Refresh/rinascita): NON buttare
+                // modello, condizione, odometro e antifurti. Prima qui si come
+                // sostituiva l'intero ParkedVehicle, perdendo lo stato server
+                // purche' la posizione fosse aggiornata (es. la consegna).
+                pv.owner = PlayerId;
+                pv.lat = lat;
+                pv.lon = lon;
+                pv.heading = heading;
+            }
+            else
+            {
+                sold[code] = new ParkedVehicle
+                {
+                    owner = PlayerId,
+                    lat = lat,
+                    lon = lon,
+                    heading = heading,
+                };
+            }
         }
 
         public void MarkSold(string code)
@@ -232,6 +305,7 @@ namespace City.Vehicle
             if (string.IsNullOrEmpty(code)) return;
             owned.Remove(code);
             sold.Remove(code);
+            _soldDirty = true;
             myState.Remove(code);
         }
 
@@ -243,13 +317,34 @@ namespace City.Vehicle
         public static System.Collections.Generic.List<
             System.Collections.Generic.KeyValuePair<string, ParkedVehicle>> SoldSnapshot()
         {
-            return new System.Collections.Generic.List<
-                System.Collections.Generic.KeyValuePair<string, ParkedVehicle>>(sold);
+            if (_soldDirty || _soldSnapshot == null)
+            {
+                _soldSnapshot = new System.Collections.Generic.List<
+                    System.Collections.Generic.KeyValuePair<string,
+                    ParkedVehicle>>(sold);
+                _soldDirty = false;
+            }
+            return _soldSnapshot;
         }
 
         public static bool IsOwnedSafe(string code)
         {
             return Instance != null && Instance.IsOwned(code);
+        }
+
+        /// <summary>True se ho almeno un veicolo (stato gia' ricevuto dal server).</summary>
+        public static bool HasOwnedCached()
+        {
+            return myState.Count > 0;
+        }
+
+        /// <summary>Condizione peggiore tra i miei veicoli (100 se nessuno).</summary>
+        public static float WorstConditionCached()
+        {
+            float worst = 100f;
+            foreach (var kv in myState)
+                if (kv.Value.condition < worst) worst = kv.Value.condition;
+            return worst;
         }
 
         public ParkedVehicle GetParkedInfo(string code)
@@ -292,7 +387,8 @@ namespace City.Vehicle
             if (vc == null) vc = vehicleGo.GetComponentInChildren<VehicleController>();
             if (vc == null) return;
             if (myState.TryGetValue(code, out var mv))
-                vc.SetServiceState(mv.condition, mv.odometer_m);
+                vc.SetServiceState(mv.condition, mv.odometer_m,
+                    ParseDamage(mv.damage));
             else
                 vc.SetServiceState(100f, 0L);
         }
@@ -304,7 +400,9 @@ namespace City.Vehicle
             if (vc == null || string.IsNullOrEmpty(code)) return;
             if (myState.TryGetValue(code, out var mv))
                 vc.SetServiceState(mv.condition,
-                    System.Math.Max(mv.odometer_m, VehicleController.StoredOdometer(code)));
+                    System.Math.Max(mv.odometer_m,
+                        VehicleController.StoredOdometer(code)),
+                    ParseDamage(mv.damage));
         }
 
         // ── refresh stato + motore eventi furto ─────────────────────
@@ -336,11 +434,13 @@ namespace City.Vehicle
                     }
                 }
             }
+            Refreshed = true;
             onDone?.Invoke();
         }
 
         private void ProcessState(OwnedVehicle[] list)
         {
+            _soldDirty = true;
             string me = PlayerId;
             foreach (var v in list)
             {
@@ -364,6 +464,8 @@ namespace City.Vehicle
                 pv.abandonedLon = v.abandoned_at_lon;
                 pv.condition = v.condition;
                 pv.odometer_m = v.odometer_m;
+                pv.damage = string.IsNullOrEmpty(v.damage)
+                    ? "" : v.damage;
                 pv.anti_theft = v.anti_theft;
 
                 if (v.lost_forever)
@@ -392,6 +494,8 @@ namespace City.Vehicle
                     price = v.price,
                     condition = v.condition,
                     odometer_m = v.odometer_m,
+                    damage = string.IsNullOrEmpty(v.damage)
+                        ? "" : v.damage,
                     anti_theft = v.anti_theft,
                     in_garage = v.in_garage,
                     stolen = v.stolen,
@@ -508,6 +612,86 @@ namespace City.Vehicle
             }, done));
         }
 
+        // ── danni / soccorso (carro attrezzi + vigili del fuoco) ──
+        [Serializable]
+        private class TowReq
+        {
+            public string code; public string player;
+            public double officina_lat; public double officina_lon;
+        }
+        [Serializable]
+        private class ServReq { public string code; public string player; }
+
+        /// <summary>Converte una stringa danno del server nello stato locale.</summary>
+        public static VehicleDamage ParseDamage(string damage)
+        {
+            if (damage == "flat") return VehicleDamage.Flat;
+            if (damage == "wrecked") return VehicleDamage.Wrecked;
+            if (damage == "fire") return VehicleDamage.Fire;
+            return VehicleDamage.None;
+        }
+
+        /// <summary>Azzera localmente il danno dopo una riparazione in officina.</summary>
+        public void MarkRepaired(string code)
+        {
+            if (myState.TryGetValue(code, out var mv))
+                mv.damage = "";
+            if (sold.TryGetValue(code, out var pv))
+                pv.damage = "";
+        }
+
+        /// <summary>Segnala il danno subito per impatto (persistito sul server).</summary>
+        public void ReportDamage(string code, VehicleDamage damage,
+            Action<bool> done)
+        {
+            string d = damage == VehicleDamage.Flat ? "flat"
+                : damage == VehicleDamage.Wrecked ? "wrecked"
+                : damage == VehicleDamage.Fire ? "fire" : "";
+            StartCoroutine(PostOk("/damage", new DamageReq
+            {
+                code = code, player = PlayerId, damage = d,
+            }, done));
+            if (myState.TryGetValue(code, out var mv))
+                mv.damage = d;
+            if (sold.TryGetValue(code, out var pv))
+                pv.damage = d;
+        }
+
+        /// <summary>Chiama il carro attrezzi: l'auto viene consegnata
+        /// all'officina indicata (posizione aggiornata sul server e in locale).</summary>
+        public void Tow(string code, double offLat, double offLon,
+            Action<bool, string> done)
+        {
+            StartCoroutine(PostCo("/tow", new TowReq
+            {
+                code = code, player = PlayerId,
+                officina_lat = offLat, officina_lon = offLon,
+            }, (ok, err) =>
+            {
+                if (ok)
+                {
+                    UpdateParkedPosition(code, offLat, offLon, 0.0);
+                    if (myState.TryGetValue(code, out var mv))
+                        mv.in_garage = false;
+                }
+                done?.Invoke(ok, err);
+            }));
+        }
+
+        /// <summary>I vigili del fuoco spengono l'auto: resta incidentata.</summary>
+        public void ExtinguishFire(string code, Action<bool, string> done)
+        {
+            StartCoroutine(PostCo("/fire/extinguish", new ServReq
+            {
+                code = code, player = PlayerId,
+            }, (ok, err) =>
+            {
+                if (ok && myState.TryGetValue(code, out var mv))
+                    mv.damage = "wrecked";
+                done?.Invoke(ok, err);
+            }));
+        }
+
         // ── telemetria di guida ─────────────────────────────────────
 
         public void DrivePing(string code, long odometerM, float condition)
@@ -618,6 +802,93 @@ namespace City.Vehicle
             if (sold.TryGetValue(code, out var pv)) { lat = pv.lat; lng = pv.lon; }
             var poi = VehiclePoiRegistry.NearestRepair(lat, lng);
             done?.Invoke(poi?.lat ?? lat, poi?.lng ?? lng, poi?.name ?? "officina");
+        }
+
+        // ── parcheggio sotterraneo ────────────────────────────────
+
+        public void EnterUnderground(string city, Vector3 rampPos,
+            Action<bool> done)
+        {
+            StartCoroutine(UgPost("/enter", new EnterUGReq
+            {
+                player = PlayerId, city = city,
+                lat = rampPos.x, lon = rampPos.z,
+            }, (ok, _) => done?.Invoke(ok)));
+        }
+
+        public void ExitUnderground(Action<Vector3> done)
+        {
+            StartCoroutine(UgExitCo(done));
+        }
+
+        public void GetUndergroundStatus(Action<UndergroundStatus> done)
+        {
+            StartCoroutine(UgStatusCo(done));
+        }
+
+        private IEnumerator UgPost(string path, object body,
+            Action<bool, string> done)
+        {
+            string json = JsonUtility.ToJson(body);
+            string url = BaseUrl + "/api/underground" + path;
+            using (var req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] data = System.Text.Encoding.UTF8.GetBytes(json);
+                req.uploadHandler = new UploadHandlerRaw(data);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 8;
+                yield return req.SendWebRequest();
+                bool ok = req.result == UnityWebRequest.Result.Success;
+                done?.Invoke(ok, ok ? null : req.error);
+            }
+        }
+
+        private IEnumerator UgExitCo(Action<Vector3> done)
+        {
+            string url = BaseUrl + "/api/underground/exit";
+            string json = JsonUtility.ToJson(new ExitUGReq { player = PlayerId });
+            using (var req = new UnityWebRequest(url, "POST"))
+            {
+                byte[] data = System.Text.Encoding.UTF8.GetBytes(json);
+                req.uploadHandler = new UploadHandlerRaw(data);
+                req.downloadHandler = new DownloadHandlerBuffer();
+                req.SetRequestHeader("Content-Type", "application/json");
+                req.timeout = 8;
+                yield return req.SendWebRequest();
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    var resp = JsonUtility.FromJson<UGExitResp>(
+                        req.downloadHandler.text);
+                    done?.Invoke(new Vector3(resp.lat, 0f, resp.lon));
+                }
+                else done?.Invoke(Vector3.zero);
+            }
+        }
+
+        private IEnumerator UgStatusCo(Action<UndergroundStatus> done)
+        {
+            string url = BaseUrl + "/api/underground/status?player="
+                + UnityWebRequest.EscapeURL(PlayerId);
+            using (var req = UnityWebRequest.Get(url))
+            {
+                req.timeout = 8;
+                yield return req.SendWebRequest();
+                if (req.result == UnityWebRequest.Result.Success)
+                {
+                    var resp = JsonUtility.FromJson<UGStatusResp>(
+                        req.downloadHandler.text);
+                    done?.Invoke(new UndergroundStatus
+                    {
+                        owned_spot = resp.owned_spot,
+                        owned_city = resp.owned_city,
+                        car_parked = resp.car_parked,
+                        price = resp.price,
+                        levels = resp.levels,
+                    });
+                }
+                else done?.Invoke(null);
+            }
         }
 
         // ── plumbing HTTP ───────────────────────────────────────────

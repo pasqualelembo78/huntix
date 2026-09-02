@@ -42,7 +42,14 @@ class MiniGamesHubActivity : BaseNavActivity() {
         val hasAr: Boolean get() = arCls != null
     }
 
-    private val games = listOf(
+    companion object {
+        /** Numero di minigiochi con versione normale (mostrato sulla tile Home). */
+        val NORMAL_COUNT: Int get() = GAME_CATALOG.count { it.hasNormal }
+
+        /** Numero di minigiochi con versione AR (mostrato sulla tile Home). */
+        val AR_COUNT: Int get() = GAME_CATALOG.count { it.hasAr }
+
+        private val GAME_CATALOG = listOf(
         GameEntry("battle3d", "Battaglia 3D", "\u2694\uFE0F", com.intelligame.huntix.ui.FighterSelectActivity::class.java, null),
         GameEntry(MiniGameManager.GAME_MEMORY, "Memory", "🧠", MemoryGameActivity::class.java, ARMemoryActivity::class.java),
         GameEntry(MiniGameManager.GAME_FROGGER, "Frogger", "🐸", FroggerActivity::class.java, ARFroggerActivity::class.java),
@@ -70,6 +77,9 @@ class MiniGamesHubActivity : BaseNavActivity() {
         GameEntry(MiniGameManager.GAME_UNITY_SHEEP, "Pecorelle", "🐑", com.intelligame.huntix.ui.UnityGameActivity::class.java, null),
         GameEntry(MiniGameManager.GAME_UNITY_AR_DICE, "AR Dadi", "🎲", null, com.intelligame.huntix.ui.UnityARGameActivity::class.java)
     )
+    }
+
+    private val games = GAME_CATALOG
 
     private var filter = 0 // 0 = Tutti, 1 = Normali, 2 = AR
     private lateinit var gridBox: GridLayout

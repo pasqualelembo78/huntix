@@ -581,6 +581,10 @@ class MainActivity : AppCompatActivity() {
         eggStartMs = android.os.SystemClock.elapsedRealtime()
         if (viewModel.turnMode == "alternating") {
             safeManager.showTurnSwitchOverlay(currentPlayer)
+            // Show turn banner in Unity 3D store too
+            try {
+                com.intelligame.huntix.bridge.StoreUnityBridge.showTurnBanner(currentPlayer)
+            } catch (_: Exception) {}
         } else {
             playState = com.intelligame.huntix.model.PlayState.SEARCHING
             updateUI()

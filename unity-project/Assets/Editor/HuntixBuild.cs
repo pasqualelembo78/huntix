@@ -92,6 +92,10 @@ namespace Huntix.EditorTools
 
         public static void ExportAndroidGradleProject()
         {
+            // Batchmode: allinea l'asset database ai file aggiunti/cancellati
+            // fuori dall'editor prima di compilare (evita CS2001 su file rimossi).
+            AssetDatabase.Refresh();
+
             ConfigurePlayerSettings();
 
             // Path relativo al progetto: dobbiamo esportare in "<repo>/unity-export.gradle"

@@ -46,6 +46,8 @@ namespace City.NPC
         // personaggio RealLife associato (roleplay): id reale del backend,
         // usato per la chat cosi' l'IA parla con la personalita' giusta
         public string CharacterId { get; private set; }
+
+        private bool poiWander;
         public string CharacterRole { get; private set; }
         public string CharacterAvatar { get; private set; }
 
@@ -56,10 +58,10 @@ namespace City.NPC
             "Rosaria", "Domenico", "Carmela", "Vito", "Nadia",
         };
 
-        public void Init(Vector3[] path, System.Random rng, string npcId)
+        public void Init(Vector3[] path, System.Random rng, string npcId, int startIndex = 0)
         {
             waypoints = path;
-            currentTarget = 0;
+            currentTarget = startIndex;
             walking = false;
             pauseTimer = Random.Range(0.5f, 2f);
             NpcId = npcId;
@@ -67,7 +69,7 @@ namespace City.NPC
 
             SetupModel(rng);
             if (waypoints.Length > 0)
-                transform.position = waypoints[0];
+                transform.position = waypoints[startIndex % waypoints.Length];
 
             // Targhetta col nome anche per i cittadini senza personaggio
             // RealLife: rende evidente chi si puo' toccare per parlare.
@@ -105,6 +107,38 @@ namespace City.NPC
         }
 
         /// <summary>Applica l'identita' del personaggio RealLife (roleplay).</summary>
+        /// <summary>
+        /// Attiva la passeggiata verso POI (in coordinate MONDO): i passeggeri
+        /// dei taxi che scendono per strada dirigono verso le aree d'interesse
+        /// piu' vicine, come cittadini veri. I pedoni dei chunk non la usano
+        /// (i loro waypoint sono locali al chunk).
+        /// </summary>
+        public void EnablePoiWander(bool on)
+        {
+            poiWander = on;
+        }
+
+        /// <summary>Inserisce nel giro di cammino una tappa verso il POI piu'
+        /// vicino (coordinate mondo), se esiste nelle vicinanze.</summary>
+        public void WanderToNearestPoi()
+        {
+            if (!poiWander) return;
+            if (waypoints == null || waypoints.Length == 0) return;
+            if (Random.Range(0f, 1f) > 0.8f) return;
+            GeoCoord g = WorldOrigin.ToGeo(transform.position);
+            var poi = City.Vehicle.VehiclePoiRegistry.NearestAny(
+                g.lat, g.lng, 1500);
+            if (poi == null) return;
+            Vector3 wp = WorldOrigin.ToWorld(poi.lat, poi.lng);
+            wp.y = 0.12f;
+
+            // tappa subito dopo quella corrente (non a meta' percorso)
+            var list = new List<Vector3>(waypoints);
+            int at = (currentTarget + 1) % list.Count;
+            list.Insert(at, wp);
+            waypoints = list.ToArray();
+        }
+
         public void ApplyCharacter(CityCharacterDirectory.CharacterDef def)
         {
             if (def == null || string.IsNullOrEmpty(def.id)) return;
@@ -124,6 +158,7 @@ namespace City.NPC
         private float _baseSpeed = -1f;
         private Quaternion _rotBeforeFall;
         private Coroutine _fallCo;
+        private Coroutine _bloodCoroutine;
 
         /// <summary>Il player ha travolto il pedone: cade, si lamenta, poi
         /// si rialza e scappa al doppio della velocita'. Se era un amico,
@@ -141,6 +176,8 @@ namespace City.NPC
             var cap = GetComponent<CapsuleCollider>();
             if (cap != null) cap.enabled = false;
 
+            SpawnBlood();
+
             if (!string.IsNullOrEmpty(CharacterId))
             {
                 RelationshipManager.RemovePoints(CharacterId, 3);
@@ -155,6 +192,89 @@ namespace City.NPC
 
             if (_fallCo != null) StopCoroutine(_fallCo);
             _fallCo = StartCoroutine(FallAndFlee(pushDir));
+        }
+
+        /// <summary>Crea una macchia di sangue a terra (decals piatte) piu' un
+        /// piccolo burst di particelle rosse nel punto di impatto. Sparisce da
+        /// sola dopo qualche secondo.</summary>
+        private void SpawnBlood()
+        {
+            Vector3 ground = transform.position;
+            ground.y = 0.02f;
+            Vector3 fwd = transform.forward;
+            fwd.y = 0f;
+
+            int splats = Random.Range(2, 4);
+            for (int i = 0; i < splats; i++)
+            {
+                var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                q.name = "Sangue";
+                UnityEngine.Object.Destroy(q.GetComponent<Collider>());
+                q.transform.position = ground + fwd * (Random.Range(-0.35f, 0.45f))
+                    + Vector3.Cross(Vector3.up, fwd) * (Random.Range(-0.25f, 0.25f));
+                q.transform.rotation = Quaternion.Euler(90f, Random.Range(0f, 360f), 0f);
+                float s = Random.Range(0.3f, 0.55f);
+                q.transform.localScale = new Vector3(s, s, 1f);
+
+                var mr = q.GetComponent<Renderer>();
+                var mat = MakeBloodMat(new Color(0.5f, 0.02f, 0.02f, 0.9f));
+                bool urp = mat.shader.name.StartsWith("Universal Render Pipeline/Lit");
+                mr.sharedMaterial = mat;
+
+                if (_bloodCoroutine != null) StopCoroutine(_bloodCoroutine);
+                _bloodCoroutine = StartCoroutine(FadeBlood(q, mat, urp));
+            }
+
+            // piccolo burst di gocce rosse proiettate all'indietro
+            Vector3 origin = ground + Vector3.up * 0.6f;
+            Vector3 back = -fwd;
+            int drops = Random.Range(8, 14);
+            for (int i = 0; i < drops; i++)
+            {
+                var drop = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                drop.name = "SangueGoccia";
+                UnityEngine.Object.Destroy(drop.GetComponent<Collider>());
+                drop.transform.position = origin;
+                float s = Random.Range(0.04f, 0.1f);
+                drop.transform.localScale = Vector3.one * s;
+                drop.GetComponent<Renderer>().sharedMaterial =
+                    MakeBloodMat(Color.red);
+                Vector3 v = back * Random.Range(1f, 3f)
+                    + Vector3.up * Random.Range(0.6f, 2.2f)
+                    + Vector3.Cross(Vector3.up, fwd) * Random.Range(-0.8f, 0.8f);
+                StartCoroutine(BloodDropFlight(drop, v));
+            }
+        }
+
+        private IEnumerator BloodDropFlight(GameObject drop, Vector3 vel)
+        {
+            float t = 0f;
+            float dur = Random.Range(0.5f, 0.8f);
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                vel.y -= 6f * Time.deltaTime;   // gravita'
+                drop.transform.position += vel * Time.deltaTime;
+                yield return null;
+            }
+            if (drop != null) Object.Destroy(drop);
+        }
+
+        private IEnumerator FadeBlood(GameObject q, Material mat, bool urp)
+        {
+            float t = 0f;
+            float dur = 4f;
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                float a = Mathf.Lerp(0.9f, 0f, t / dur);
+                if (urp) mat.SetColor("_BaseColor",
+                    new Color(0.5f, 0.02f, 0.02f, Mathf.Clamp01(a)));
+                else mat.SetColor("_Color",
+                    new Color(0.5f, 0.02f, 0.02f, Mathf.Clamp01(a)));
+                yield return null;
+            }
+            if (q != null) Object.Destroy(q);
         }
 
         private IEnumerator FallAndFlee(Vector3 dir)
@@ -358,6 +478,14 @@ namespace City.NPC
             cc.height = 1.7f;
             cc.radius = 0.25f;
             cc.center = new Vector3(0f, 0.85f, 0f);
+
+            // Corpo cinematico: il pedone resta un ostacolo SOLIDO per le auto
+            // (giocatore e traffico) anche se si muove via transform; senza un
+            // Rigidbody qui la fisica non garantisce il blocco contro la car.
+            var rb = gameObject.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+            rb.useGravity = false;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
         private static readonly Color[] SkinColors = new Color[]
@@ -418,6 +546,29 @@ namespace City.NPC
 
         private static readonly System.Collections.Generic.Dictionary<Color, Material> matCache
             = new System.Collections.Generic.Dictionary<Color, Material>();
+
+        private static Material MakeBloodMat(Color c)
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            bool urp = shader != null && shader.name.StartsWith("Universal Render Pipeline/Lit");
+            var m = new Material(shader);
+            if (urp)
+            {
+                m.SetColor("_BaseColor", c);
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_ZWrite", 0f);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            }
+            else
+            {
+                m.SetColor("_Color", c);
+                m.SetFloat("_Mode", 3f);
+                m.SetFloat("_ZWrite", 0f);
+                m.EnableKeyword("_ALPHABLEND_ON");
+            }
+            return m;
+        }
 
         private static Material MakeMat(Color c)
         {

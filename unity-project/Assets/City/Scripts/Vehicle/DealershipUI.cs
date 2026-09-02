@@ -24,6 +24,12 @@ namespace City.Vehicle
         private VehiclePoiZone zone;
         private TMP_FontAsset font;
 
+        // contatore anti-collisione dei codici di acquisto (vedi TryPurchase)
+        private static int purchaseSeq;
+
+        // debounce: evita doppio tap su "COMPRA E RITIRA"
+        private bool buyPending;
+
         private static readonly Color PanelBg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
         private static readonly Color RowBg = new Color(0.20f, 0.22f, 0.26f, 1f);
         private static readonly Color BuyColor = new Color(0.15f, 0.65f, 0.45f, 1f);
@@ -191,17 +197,28 @@ namespace City.Vehicle
 
         private void TryPurchase(VehicleSpawnManager.VehicleDef def)
         {
+            if (buyPending) return;
             if (zone == null || zone.deliveryPoint == null) return;
             if (!Wallet.CanAfford(def.price))
             {
                 Toast("Soldi insufficienti");
                 return;
             }
+            buyPending = true;
 
             // codice univoco generato dal client: il registro server rende
             // comunque esclusivo il possesso (stesso modello di /buy esistente)
-            string code = "D" + zone.poiId + "_" +
-                System.DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString("X");
+            // codice univoco generato dal client: prima usava il solo timestamp
+            // in secondi in HEX -> due acquisti nello stesso secondo producevano
+            // lo STESSO codice (possessi ambigui sul server). Ora millisecondi
+            // + contatore di sessione: univoco per acquisto.
+            string code;
+            {
+                int seq = System.Threading.Interlocked.Increment(ref purchaseSeq);
+                code = "D" + zone.poiId + "_" +
+                    System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                        .ToString("X") + seq.ToString("X");
+            }
 
             GeoCoord g = WorldOrigin.ToGeo(zone.deliveryPoint.position);
             float heading = zone.deliveryPoint.eulerAngles.y;
@@ -211,6 +228,7 @@ namespace City.Vehicle
             {
                 if (!ok)
                 {
+                    buyPending = false;
                     Toast("Acquisto rifiuto dal server: " + (err ?? "?"));
                     return;
                 }
@@ -224,11 +242,24 @@ namespace City.Vehicle
                     zone.deliveryPoint, def, Vector3.zero, heading, code);
                 api.ApplyOwnedState(delivered, code);
 
+                buyPending = false;
                 Close();
-                Toast(def.name + " \u00e8 tua! Consegnata sul piazzale.");
+
+                // freccia rossa della bussola verso l'auto appena consegnata:
+                // il piazzale e' grande, si capisce subito dove sta
                 var vi = delivered != null
                     ? delivered.GetComponentInChildren<VehicleInteract>() : null;
                 if (vi != null) vi.NotifyStateChanged();
+
+                if (delivered != null)
+                {
+                    GeoCoord cg = WorldOrigin.ToGeo(delivered.transform.position);
+                    NavigationState.Set(
+                        def.name + " (la tua auto)", "", cg.lat, cg.lng);
+                }
+
+                Toast(def.name +
+                    " \u00e8 tua! Segui la freccia rossa sul piazzale.");
             });
         }
 

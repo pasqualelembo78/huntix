@@ -32,6 +32,18 @@ public class BridgeActivity extends UnityPlayerActivity {
                 setModeJson = "{\"action\":\"setMode\",\"mode\":\"" + mode
                         + "\",\"skin\":\"" + skin + "\"}";
             }
+            // Pet di compagnia scelto nel profilo (cache locale)
+            String pet = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                    .getString("pet_skin", null);
+            if (pet != null && !pet.isEmpty()) {
+                if (skin != null && !skin.isEmpty()) {
+                    setModeJson = "{\"action\":\"setMode\",\"mode\":\"" + mode
+                            + "\",\"skin\":\"" + skin + "\",\"pet\":\"" + pet + "\"}";
+                } else {
+                    setModeJson = "{\"action\":\"setMode\",\"mode\":\"" + mode
+                            + "\",\"pet\":\"" + pet + "\"}";
+                }
+            }
             com.unity3d.player.UnityPlayer.UnitySendMessage("GameManager", "OnEvent", setModeJson);
         }
     }

@@ -43,7 +43,21 @@ namespace Huntix.Indoor
 
         private void Start()
         {
-            isARAvailable = CheckARAvailability();
+            StartCoroutine(InitARAsync());
+        }
+
+        private System.Collections.IEnumerator InitARAsync()
+        {
+            // Wait for AR session availability check (async)
+            if (ARSession.state == ARSessionState.None ||
+                ARSession.state == ARSessionState.CheckingAvailability)
+            {
+                Debug.Log("[IndoorARManager] Waiting for AR availability check...");
+                yield return ARSession.CheckAvailability();
+            }
+
+            isARAvailable = ARSession.state == ARSessionState.SessionTracking ||
+                            ARSession.state == ARSessionState.SessionInitializing;
             Debug.Log($"[IndoorARManager] AR available: {isARAvailable}");
 
             if (isARAvailable && enableARPassthrough)
@@ -60,26 +74,6 @@ namespace Huntix.Indoor
         {
             if (arPlaneManager != null)
                 arPlaneManager.planesChanged -= OnPlanesChanged;
-        }
-
-        private bool CheckARAvailability()
-        {
-            try
-            {
-                // Check if ARCore is supported on this device
-                if (ARSession.state == ARSessionState.None ||
-                    ARSession.state == ARSessionState.CheckingAvailability)
-                {
-                    // Will be resolved async
-                    return false;
-                }
-                return ARSession.state == ARSessionState.SessionTracking ||
-                       ARSession.state == ARSessionState.SessionInitializing;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private void InitializeAR()

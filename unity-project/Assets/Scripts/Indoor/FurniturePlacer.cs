@@ -126,18 +126,27 @@ namespace Huntix.Indoor
                 _previewObject.transform.localScale = item.scale;
                 _previewObject.name = "FurniturePreview";
 
-                // Make it semi-transparent
+                // Make it semi-transparent (URP-compatible)
                 foreach (var renderer in _previewObject.GetComponentsInChildren<Renderer>())
                 {
                     foreach (var mat in renderer.materials)
                     {
-                        mat.SetFloat("_Mode", 3); // Transparent mode
-                        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                        mat.SetInt("_ZWrite", 0);
-                        mat.DisableKeyword("_ALPHATEST_ON");
-                        mat.EnableKeyword("_ALPHABLEND_ON");
-                        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                        // URP: set surface to Transparent
+                        if (mat.HasProperty("_Surface"))
+                            mat.SetFloat("_Surface", 1f);
+                        // Set alpha via BaseColor
+                        if (mat.HasProperty("_BaseColor"))
+                        {
+                            var c = mat.GetColor("_BaseColor");
+                            c.a = 0.4f;
+                            mat.SetColor("_BaseColor", c);
+                        }
+                        if (mat.HasProperty("_Color"))
+                        {
+                            var c = mat.GetColor("_Color");
+                            c.a = 0.4f;
+                            mat.SetColor("_Color", c);
+                        }
                         mat.renderQueue = 3000;
                     }
                 }
@@ -161,16 +170,25 @@ namespace Huntix.Indoor
             // Make permanent
             _previewObject.transform.localScale = _currentItem.scale;
 
-            // Remove preview materials
+            // Remove preview materials (restore to Opaque)
             foreach (var renderer in _previewObject.GetComponentsInChildren<Renderer>())
             {
                 foreach (var mat in renderer.materials)
                 {
-                    mat.SetFloat("_Mode", 0); // Opaque mode
-                    mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-                    mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-                    mat.SetInt("_ZWrite", 1);
-                    mat.DisableKeyword("_ALPHABLEND_ON");
+                    if (mat.HasProperty("_Surface"))
+                        mat.SetFloat("_Surface", 0f);
+                    if (mat.HasProperty("_BaseColor"))
+                    {
+                        var c = mat.GetColor("_BaseColor");
+                        c.a = 1f;
+                        mat.SetColor("_BaseColor", c);
+                    }
+                    if (mat.HasProperty("_Color"))
+                    {
+                        var c = mat.GetColor("_Color");
+                        c.a = 1f;
+                        mat.SetColor("_Color", c);
+                    }
                     mat.renderQueue = -1;
                 }
             }

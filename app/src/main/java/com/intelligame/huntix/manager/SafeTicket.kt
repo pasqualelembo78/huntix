@@ -27,6 +27,12 @@ internal fun SafeManager.onTicketClosed() {
 
 internal fun SafeManager.showTurnSwitchOverlay(playerName: String) {
     SoundManager.playTurnSwitch()
+
+    // Mostra banner anche in Unity (store 3D) se in modalita indoor store
+    try {
+        com.intelligame.huntix.bridge.StoreUnityBridge.showTurnBanner(playerName)
+    } catch (_: Exception) {}
+
     val root = binding.arContainer
     val tv = TextView(activity).apply {
         text = "  Turno di\n$playerName!"

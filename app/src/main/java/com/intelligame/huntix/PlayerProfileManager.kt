@@ -270,8 +270,7 @@ object PlayerProfileManager {
      * Fase 6: salva il personaggio scelto per la città (skin Kenney).
      * Firestore field "cityCharacterId" + cache locale per il bridge Unity.
      */
-    fun updateCityCharacter(skinId: String, ctx: Context, onComplete: () -> Unit, onError: (String) -> Unit) {
-        val profile = _myProfile ?: run { onError("Profilo non caricato"); return }
+    fun updateCityCharacter(skinId: String, ctx: Context, onComplete: () -> Unit, onError: (String) -> Unit) {        val profile = _myProfile ?: run { onError("Profilo non caricato"); return }
         profile.cityCharacterId = skinId
         // Local first: la City (BridgeActivity) legge questa preferenza,
         // quindi la scelta vale subito anche se il sync remoto fallisse.
@@ -291,6 +290,20 @@ object PlayerProfileManager {
     }
 
     /**
+     * Pet di compagnia per la città: salva l'id pet scelto nel profilo.
+     * Cache locale in "huntix_prefs" (chiave "pet_skin") che il bridge
+     * Unity (BridgeActivity) legge per iniettare il pet nel setMode.
+     */
+    fun updatePetCharacter(petId: String, ctx: Context, onComplete: () -> Unit) {
+        val p = _myProfile ?: run { onComplete(); return }
+        p.petCharacterId = petId
+        _myProfile = p
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putString("pet_skin", petId).apply()
+        onComplete()
+    }
+
+    /**
      * Ricarica il profilo dal cache locale o da Firestore.
      * Utile per aggiornare l'UI dopo partite o mini giochi.
      */
@@ -305,6 +318,12 @@ object PlayerProfileManager {
                 .getString("city_skin", null)
             if (!savedSkin.isNullOrBlank()) {
                 profile.cityCharacterId = savedSkin
+                _myProfile = profile
+            }
+            val savedPet = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+                .getString("pet_skin", null)
+            if (!savedPet.isNullOrBlank()) {
+                profile.petCharacterId = savedPet
                 _myProfile = profile
             }
             onComplete?.invoke(profile)

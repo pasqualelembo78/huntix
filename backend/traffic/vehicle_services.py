@@ -66,6 +66,27 @@ ANTI_THEFT_DEVICES = {
     "pedals": {"name": "Blocco pedali", "price": 50,  "mult": 0.85},
 }
 
+# ── Danni da incidente ──────────────────────────────────────────
+# Il client simula gli impatti (cordolo/muro a velocita') e segnala qui lo
+# stato del mezzo. flat = gomma a terra (guida zoppicando), wrecked =
+# incidentata (non parte: serve il carro attrezzi), fire = in fiamme
+# (prima i vigili del fuoco, poi il carro attrezzi). Riparazione in officina
+# azzera il danno. I prezzi del soccorso sono scalati dal wallet CLIENT
+# (modello fiducia del resto del modulo).
+DAMAGE_OK = ""
+DAMAGE_FLAT = "flat"
+DAMAGE_WRECKED = "wrecked"
+DAMAGE_FIRE = "fire"
+DAMAGES = {DAMAGE_OK, DAMAGE_FLAT, DAMAGE_WRECKED, DAMAGE_FIRE}
+DAMAGE_LABEL = {
+    DAMAGE_OK: "In ordine",
+    DAMAGE_FLAT: "Gomma a terra",
+    DAMAGE_WRECKED: "Incidentata",
+    DAMAGE_FIRE: "In fiamme",
+}
+TOW_PRICE_EUR = 15       # carro attrezzi
+FIRE_PRICE_EUR = 15      # vigili del fuoco
+
 _TZ_ROME = ZoneInfo("Europe/Rome")
 
 
@@ -161,8 +182,10 @@ def evaluate_vehicle(v: dict, code: str, now: float) -> None:
                     v["lost_forever"] = True
                     logger.info("veicolo %s perso definitivamente", code)
 
-    protection_valid = v.get("garage_id") and \
+    protection_valid = v.get("protected") or (
+        v.get("garage_id") and
         _garage_protected(v["owner"], v.get("garage_id"), now)
+    )
     driving_recently = (now - v.get("driving_ts", 0)) < DRIVING_GRACE_SEC
 
     if v.get("stolen") or protection_valid or driving_recently:
@@ -202,6 +225,7 @@ def _steal(v: dict, code: str, when: float) -> None:
         "ransom": ransom,
         "ransom_deadline": when + RANSOM_DEADLINE_H * 3600,
         "garage_id": None,
+        "protected": False,
         "theft_lat": v.get("lat"),
         "theft_lon": v.get("lon"),
     })
@@ -261,6 +285,21 @@ class OdometerBody(BaseModel):
     player: str
     odometer_m: int
     condition: float | None = None
+
+
+class DamageBody(BaseModel):
+    """Segnalazione danno dall'impatto (client): flat | wrecked | fire."""
+    code: str
+    player: str
+    damage: str = DAMAGE_OK
+
+
+class TowBody(BaseModel):
+    """Carro attrezzi: consegna dell'auto all'officina indicata."""
+    code: str
+    player: str
+    officina_lat: float = 0.0
+    officina_lon: float = 0.0
 
 
 # ── Helper comuni ────────────────────────────────────────────────
@@ -335,6 +374,7 @@ async def garage_exit(body: PlayerBody):
             if isinstance(v, dict) and v.get("owner") == body.player and \
                     v.get("garage_id"):
                 v["garage_id"] = None
+                v["protected"] = False
                 v["last_eval_ts"] = time.time()
                 _save(state)
                 return {"ok": True, "code": code}
@@ -406,11 +446,14 @@ async def service_repair(body: RepairBody):
         v = _get_owned(state, body.code, body.player)
         if v.get("stolen"):
             return {"ok": False, "error": "stolen"}
+        if v.get("damage") == DAMAGE_FIRE:
+            return {"ok": False, "error": "on_fire_extinguish_first"}
         _apply_odometer(v, body.odometer_m)
         before = float(v.get("condition", 100.0))
         price = max(int(v.get("price") or 50), 50)
         cost = round((100.0 - before) * price * REPAIR_PRICE_FACTOR)
         v["condition"] = 100.0
+        v["damage"] = DAMAGE_OK
         _save(state)
     return {"ok": True, "cost": cost, "condition_before": round(before, 1),
             "condition_after": 100.0}
@@ -448,6 +491,8 @@ async def drive_ping(body: OdometerBody):
             return {"ok": False, "error": "not_owner"}
         if v.get("stolen"):
             return {"ok": False, "error": "stolen"}
+        if v.get("damage") in (DAMAGE_WRECKED, DAMAGE_FIRE):
+            return {"ok": False, "error": "damaged"}
         _apply_odometer(v, body.odometer_m)
         if body.condition is not None:
             v["condition"] = round(max(0.0, min(100.0, body.condition)), 1)
@@ -524,3 +569,82 @@ async def abandoned_recover(body: PlayerBody):
         _save(state)
         return {"ok": True, "code": found, "lat": v.get("lat"),
                 "lon": v.get("lon"), "condition": v.get("condition", 20)}
+
+
+# ── Danni da incidente / soccorso ──────────────────────────────
+@router.post("/damage")
+async def vehicle_damage(body: DamageBody):
+    """Registra il danno subito da un impatto simulato dal client.
+    Il client decide il danno (flat/wrecked/fire) e paga solo le riparazioni:
+    qui conta la persistenza dello stato, e che un'auto incidentata non
+    possa guidare ne' essere venduta/parcheggiata tranquillamente."""
+    if body.damage not in DAMAGES:
+        raise HTTPException(400, "danno sconosciuto")
+    with _lock:
+        from vehicles import _load, _save
+        state = _load()
+        v = _get_owned(state, body.code, body.player)
+        if v.get("stolen"):
+            return {"ok": False, "error": "stolen"}
+        if v.get("garage_id"):
+            return {"ok": False, "error": "in_garage"}
+        # un'auto gia' incidentata e' peggio; un incendio non torna indietro
+        if body.damage == DAMAGE_OK:
+            v["damage"] = DAMAGE_OK
+        elif v.get("damage") == DAMAGE_FIRE:
+            pass
+        elif body.damage != v.get("damage"):
+            v["damage"] = body.damage
+        v["last_eval_ts"] = time.time()
+        _save(state)
+    return {"ok": True, "damage": v.get("damage", DAMAGE_OK)}
+
+
+@router.post("/fire/extinguish")
+async def fire_extinguish(body: PlayerBody):
+    """I vigili del fuoco spengono l'auto in fiamme: resta incidentata
+    (wrecked), poi sara' il carro attrezzi a portarla in officina."""
+    with _lock:
+        from vehicles import _load, _save
+        state = _load()
+        v = _get_owned(state, body.code, body.player)
+        if v.get("damage") != DAMAGE_FIRE:
+            return {"ok": False, "error": "not_on_fire"}
+        v["damage"] = DAMAGE_WRECKED
+        v["fire_extinguished_ts"] = time.time()
+        v["last_eval_ts"] = time.time()
+        _save(state)
+    return {"ok": True, "damage": DAMAGE_WRECKED}
+
+
+@router.post("/tow")
+async def vehicle_tow(body: TowBody):
+    """Carro attrezzi: consegna fisica dell'auto all'officina indicata.
+    La posizione geografica del veicolo viene aggiornata alle coordinate
+    dell'officina: da li' l'auto resta parcheggiata (non piu' guidabile se
+    incidentata) finche' non viene riparata. Il costo del servizio e'
+    scalato dal wallet CLIENT prima della chiamata."""
+    now = time.time()
+    with _lock:
+        from vehicles import _load, _save
+        state = _load()
+        v = _get_owned(state, body.code, body.player)
+        if v.get("stolen"):
+            return {"ok": False, "error": "stolen"}
+        if v.get("garage_id"):
+            return {"ok": False, "error": "in_garage"}
+        if v.get("damage") == DAMAGE_FIRE:
+            return {"ok": False, "error": "on_fire_extinguish_first"}
+        if body.officina_lat == 0.0 and body.officina_lon == 0.0:
+            return {"ok": False, "error": "no_officina"}
+        v.update({
+            "lat": round(body.officina_lat, 7),
+            "lon": round(body.officina_lon, 7),
+            "heading": 0.0,
+            "tow_ts": now,
+            "parked_ts": now,
+            "last_eval_ts": now,
+        })
+        _save(state)
+    return {"ok": True, "lat": v["lat"], "lon": v["lon"],
+            "damage": v.get("damage", DAMAGE_OK)}

@@ -40,19 +40,6 @@ namespace Huntix.Indoor
             public string interiorSceneName;
         }
 
-        public enum BuildingType
-        {
-            HOUSE,
-            SCHOOL,
-            RESTAURANT,
-            SUPERMARKET,
-            HOSPITAL,
-            GYM,
-            LIBRARY,
-            PARK,
-            OTHER
-        }
-
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -161,6 +148,10 @@ namespace Huntix.Indoor
             // Notify Android that the indoor scene is ready
             UnityBridge.SendMessageToAndroid("IndoorSceneReady",
                 $"{{\"poiId\":\"{data.id}\",\"name\":\"{data.name}\",\"type\":\"{_currentPoiType}\"}}");
+
+            // Refresh interactables AFTER store is built (StoreBuilder spawns them async)
+            var im = FindObjectOfType<InteractionManager>();
+            if (im != null) im.RefreshInteractables();
         }
 
         public void EnterBuilding(BuildingDef building)
@@ -377,6 +368,86 @@ namespace Huntix.Indoor
             catch (System.Exception e)
             {
                 Debug.LogWarning($"[IndoorManager] MovePlayer error: {e.Message}");
+            }
+        }
+
+        // ── Turn banner (shown in Unity when turns switch) ──
+
+        private GameObject _turnBanner;
+
+        /// <summary>
+        /// Shows a turn banner in the 3D store interior with the current player's name.
+        /// Called from Android when turns switch in multiplayer.
+        /// </summary>
+        public void ShowTurnBanner(string playerName)
+        {
+            Debug.Log($"[IndoorManager] ShowTurnBanner: {playerName}");
+            if (_turnBanner != null) Destroy(_turnBanner);
+
+            _turnBanner = new GameObject("TurnBanner");
+
+            // Create a world-space Canvas
+            var canvasGo = new GameObject("Canvas");
+            canvasGo.transform.SetParent(_turnBanner.transform, false);
+            var canvas = canvasGo.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.sortingOrder = 100;
+
+            var rt = canvasGo.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(400, 120);
+
+            // Position above the player
+            if (_playerTransform != null)
+            {
+                _turnBanner.transform.position = _playerTransform.position + Vector3.up * 2.5f;
+                _turnBanner.transform.LookAt(Camera.main != null ? Camera.main.transform : _turnBanner.transform);
+                _turnBanner.transform.Rotate(0, 180, 0);
+            }
+
+            // Background panel
+            var bgGo = new GameObject("BG");
+            bgGo.transform.SetParent(canvasGo.transform, false);
+            var bgImage = bgGo.AddComponent<UnityEngine.UI.Image>();
+            bgImage.color = new Color(0.1f, 0.12f, 0.25f, 0.85f);
+            var bgRt = bgGo.GetComponent<RectTransform>();
+            bgRt.anchorMin = Vector2.zero;
+            bgRt.anchorMax = Vector2.one;
+            bgRt.sizeDelta = Vector2.zero;
+
+            // Text
+            var textGo = new GameObject("Text");
+            textGo.transform.SetParent(bgGo.transform, false);
+            var text = textGo.AddComponent<TMPro.TextMeshProUGUI>();
+            text.text = $"  Turno di\n{playerName}!";
+            text.fontSize = 28;
+            text.fontStyle = TMPro.FontStyles.Bold;
+            text.color = Color.white;
+            text.alignment = TMPro.TextAlignmentOptions.Center;
+            var textRt = textGo.GetComponent<RectTransform>();
+            textRt.anchorMin = Vector2.zero;
+            textRt.anchorMax = Vector2.one;
+            textRt.sizeDelta = Vector2.zero;
+
+            // CanvasScaler for world space
+            var scaler = canvasGo.AddComponent<UnityEngine.UI.CanvasScaler>();
+            scaler.dynamicPixelsPerUnit = 10;
+
+            // Auto-destroy after 3 seconds
+            Destroy(_turnBanner, 3f);
+
+            // Notify Android that turn banner is ready
+            UnityBridge.SendMessageToAndroid("IndoorTurnBannerShown", $"{{\"player\":\"{playerName}\"}}");
+        }
+
+        /// <summary>
+        /// Hides and destroys the turn banner.
+        /// </summary>
+        public void HideTurnBanner()
+        {
+            if (_turnBanner != null)
+            {
+                Destroy(_turnBanner);
+                _turnBanner = null;
             }
         }
     }

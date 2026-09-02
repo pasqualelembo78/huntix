@@ -7,14 +7,14 @@
 #
 # Esclusioni permanenti (compilano in Unity ma non con mcs):
 #  - RoadGraphBuilder.cs      : local functions non supportate da mcs
-#  - Game.cs / VehicleShopUI.cs / UIManager.cs / NPCMission.cs /
-#    InteriorGenerator.cs / LegalManager.cs / DrivePedal.cs /
-#    DynamicJoystick.cs / OrbitZone.cs / ScreenFader.cs : TMPro/EventSystems/
-#    InputSystem/Image non stubbati
+#  - CityOSMWorld.cs          : sintassi C# moderna (target-typed new) non in mcs
+#  - NPCMission.cs / DrivePedal.cs / DynamicJoystick.cs / LegalManager.cs /
+#    OrbitZone.cs / EggController.cs / MissionManager.cs / InteractDoor.cs /
+#    EggSpawnManager.cs        : API Unity non stubbate
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJ="$ROOT/../../../unity-project"
-EXCL="Scripts/Game\.cs$|CityOSMWorld\.cs$|RoadGraphBuilder\.cs$|NPCMission\.cs$|InteriorGenerator\.cs$|DrivePedal\.cs$|DynamicJoystick\.cs$|LegalManager\.cs$|OrbitZone\.cs$|UIManager\.cs$|ScreenFader\.cs$|EggController\.cs$|MissionManager\.cs$|InteractDoor\.cs$|EggSpawnManager\.cs$"
+EXCL="CityOSMWorld\.cs$|RoadGraphBuilder\.cs$|NPCMission\.cs$|DrivePedal\.cs$|DynamicJoystick\.cs$|LegalManager\.cs$|OrbitZone\.cs$|ScreenFader\.cs$|EggController\.cs$|MissionManager\.cs$|InteractDoor\.cs$|EggSpawnManager\.cs$"
 if [ $# -gt 0 ]; then
   # Modalita' mirata: solo i file richiesti. Se dipendono da membri veicolo
   # dello stub Game passare anche i file City/Vehicle e DEFINES=-DHUNTIX_FULL.

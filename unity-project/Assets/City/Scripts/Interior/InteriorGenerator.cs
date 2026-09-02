@@ -47,11 +47,7 @@ namespace City.Interior
         private Material _darkMat;
         private Material _glassMat;
         private Material _tileMat;
-        private Material _counterMat;
         private Material _shelfMat;
-        private Material _bedMat;
-        private Material _sofaMat;
-        private Material _rugMat;
         private Material _doorMat;
 
         private void EnsureMaterials()
@@ -64,11 +60,7 @@ namespace City.Interior
             _darkMat = Lit(new Color(0.22f, 0.22f, 0.22f));
             _glassMat = Lit(new Color(0.6f, 0.75f, 0.85f, 0.5f));
             _tileMat = Lit(new Color(0.85f, 0.85f, 0.82f));
-            _counterMat = Lit(new Color(0.7f, 0.5f, 0.3f));
             _shelfMat = Lit(new Color(0.6f, 0.4f, 0.25f));
-            _bedMat = Lit(new Color(0.9f, 0.88f, 0.8f));
-            _sofaMat = Lit(new Color(0.5f, 0.35f, 0.25f));
-            _rugMat = Lit(new Color(0.65f, 0.25f, 0.2f));
             _doorMat = Lit(new Color(0.18f, 0.14f, 0.10f));
         }
 
@@ -111,6 +103,28 @@ namespace City.Interior
                 case "apartment":
                     BuildApartment(parent, w, d, floorH, floors, shop);
                     break;
+                case "bar":
+                    BuildBar(parent, w, d, floorH, floors);
+                    break;
+                case "hospital":
+                    BuildHospital(parent, w, d, floorH, floors);
+                    break;
+                case "dealer":
+                    BuildDealer(parent, w, d, floorH, floors);
+                    break;
+                case "repair":
+                case "garage":
+                    BuildWorkshop(parent, w, d, floorH, floors);
+                    break;
+                case "bank":
+                    BuildBank(parent, w, d, floorH, floors);
+                    break;
+                case "school":
+                    BuildSchool(parent, w, d, floorH, floors);
+                    break;
+                case "hotel":
+                    BuildHotel(parent, w, d, floorH, floors);
+                    break;
                 default:
                     BuildHouse(parent, w, d, floorH, floors, shop);
                     break;
@@ -145,10 +159,11 @@ namespace City.Interior
 
             for (int f = 0; f < totalFloors; f++)
             {
-                float yBase = 500f + f * floorH;
                 var floorGo = new GameObject("Floor_" + f);
                 floorGo.transform.SetParent(parent, false);
                 floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                float yBase = 0f;
 
                 // Pavimento
                 Box(floorGo.transform, "Pavimento", new Vector3(0f, yBase, 0f),
@@ -223,6 +238,10 @@ namespace City.Interior
 
                     // ── Scala (angolo) ──
                     BuildStairs(floorGo.transform, w * 0.35f, yBase, floorH, d * 0.35f);
+
+                    // Trigger scala (piano terra, come shop/apartment)
+                    if (totalFloors > 1)
+                        BuildStairTrigger(floorGo.transform, w * 0.35f, yBase, d * 0.35f, 0, totalFloors);
 
                     // ── Bagno (angolo opposto) ──
                     float bagnoX = -w * 0.35f;
@@ -325,11 +344,10 @@ namespace City.Interior
         private void BuildShop(Transform parent, float w, float d, float floorH, int floors, Shop shop)
         {
             int totalFloors = Mathf.Clamp(floors, 1, 3);
-            float yBase = 500f;
 
             for (int f = 0; f < totalFloors; f++)
             {
-                float yf = yBase + f * floorH;
+                float yf = f * floorH;
                 var floorGo = new GameObject("Floor_" + f);
                 floorGo.transform.SetParent(parent, false);
                 floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
@@ -454,11 +472,10 @@ namespace City.Interior
         private void BuildApartment(Transform parent, float w, float d, float floorH, int floors, Shop shop)
         {
             int totalFloors = Mathf.Clamp(floors, 2, 5);
-            float yBase = 500f;
 
             for (int f = 0; f < totalFloors; f++)
             {
-                float yf = yBase + f * floorH;
+                float yf = f * floorH;
                 var floorGo = new GameObject("Floor_" + f);
                 floorGo.transform.SetParent(parent, false);
                 floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
@@ -577,6 +594,409 @@ namespace City.Interior
                     BuildStairTrigger(floorGo.transform, 0f, yf, d * 0.2f, f, totalFloors);
                 }
             }
+        }
+
+        // ── SHARED SHELL (POI) ─────────────────────────────────────
+        // I layout dei POI condividono lo stesso involucro (pavimento,
+        // soffitto, muri perimetrali, porta ingresso, etichetta USCITA,
+        // trigger uscita) e cambiano solo gli arredi interni.
+
+        private void BuildPoiShell(Transform parent, float w, float d,
+            float floorH, float yBase, int totalFloors, string title)
+        {
+            Box(parent, "Pavimento", new Vector3(0f, yBase, 0f),
+                new Vector3(w, 0.15f, d), _floorMat);
+            Box(parent, "Soffitto", new Vector3(0f, yBase + floorH, 0f),
+                new Vector3(w, 0.1f, d), _ceilingMat);
+            BuildWalls(parent, w, d, floorH, yBase, true);
+            Box(parent, "PortaIngresso", new Vector3(0f, yBase + 1.1f, d * 0.5f + 0.05f),
+                new Vector3(1.2f, 2.2f, 0.15f), _doorMat);
+            AddLabel(parent, title, new Vector3(0f, yBase + 2.8f, d * 0.5f + 0.1f),
+                new Vector3(Mathf.Max(1.5f, title.Length * 0.25f), 0.35f, 0.02f));
+            BuildExitTrigger(parent, w, d, yBase);
+        }
+
+        // ── BAR ────────────────────────────────────────────────────
+
+        private void BuildBar(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 2);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                if (f == 0)
+                {
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "BAR");
+
+                    // Bancone bar (lungo il lato destro)
+                    Furniture(floorGo.transform, "Bancone", new Vector3(w * 0.35f, yf + 0.5f, -d * 0.1f),
+                        new Vector3(w * 0.3f, 1.0f, d * 0.6f));
+
+                    // Scaffale bottiglie dietro al bancone
+                    Furniture(floorGo.transform, "Scaffale", new Vector3(w * 0.45f, yf + 0.9f, -d * 0.25f),
+                        new Vector3(0.4f, 1.8f, d * 0.4f));
+
+                    // Tavolini con sedie disseminate
+                    Furniture(floorGo.transform, "Tavolo", new Vector3(-w * 0.25f, yf + 0.38f, d * 0.15f),
+                        new Vector3(1.2f, 0.7f, 0.8f));
+                    Furniture(floorGo.transform, "Sedia1", new Vector3(-w * 0.25f - 0.5f, yf + 0.22f, d * 0.15f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    Furniture(floorGo.transform, "Sedia2", new Vector3(-w * 0.25f + 0.5f, yf + 0.22f, d * 0.15f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    Furniture(floorGo.transform, "TavoloA", new Vector3(-w * 0.25f, yf + 0.38f, -d * 0.35f),
+                        new Vector3(1.2f, 0.7f, 0.8f));
+                    Furniture(floorGo.transform, "SediaA1", new Vector3(-w * 0.25f - 0.5f, yf + 0.22f, -d * 0.35f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    Furniture(floorGo.transform, "SediaA2", new Vector3(-w * 0.25f + 0.5f, yf + 0.22f, -d * 0.35f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+
+                    if (totalFloors > 1)
+                    {
+                        BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                        BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, 0, totalFloors);
+                    }
+                }
+                else
+                {
+                    // Piano superiore: saletta privata
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "PRIVATO");
+                    Furniture(floorGo.transform, "Divano", new Vector3(-w * 0.2f, yf + 0.35f, 0f),
+                        new Vector3(2.0f, 0.8f, 0.9f));
+                    Furniture(floorGo.transform, "Tavolino", new Vector3(-w * 0.2f, yf + 0.3f, 0.5f),
+                        new Vector3(0.8f, 0.4f, 0.5f));
+                    Furniture(floorGo.transform, "Tavolo", new Vector3(w * 0.25f, yf + 0.38f, 0f),
+                        new Vector3(1.4f, 0.7f, 0.8f));
+                    Furniture(floorGo.transform, "Sedia1", new Vector3(w * 0.25f, yf + 0.22f, 0.5f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    Furniture(floorGo.transform, "Sedia2", new Vector3(w * 0.25f, yf + 0.22f, -0.5f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── HOSPITAL ───────────────────────────────────────────────
+
+        private void BuildHospital(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 2);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors,
+                    f == 0 ? "OSPEDALE" : "REPARTO");
+
+                if (f == 0)
+                {
+                    // Accettazione (davanti)
+                    Furniture(floorGo.transform, "Bancone", new Vector3(0f, yf + 0.5f, d * 0.3f),
+                        new Vector3(w * 0.5f, 1.0f, 0.6f));
+
+                    // Parete divisoria accettazione/reparto
+                    float divZ = -d * 0.1f;
+                    Box(floorGo.transform, "PareteDiv", new Vector3(0f, yf + floorH * 0.5f, divZ),
+                        new Vector3(w * 0.9f, floorH, WALL_THICK), _wallMat);
+
+                    // Due letti da visita (retro)
+                    Furniture(floorGo.transform, "LettoA", new Vector3(-w * 0.25f, yf + 0.28f, -d * 0.3f),
+                        new Vector3(1.0f, 0.5f, 2.0f));
+                    Furniture(floorGo.transform, "LettoB", new Vector3(w * 0.25f, yf + 0.28f, -d * 0.3f),
+                        new Vector3(1.0f, 0.5f, 2.0f));
+
+                    // Armadietti medicinali
+                    Furniture(floorGo.transform, "Armadio1", new Vector3(-w * 0.42f, yf + 0.9f, -d * 0.2f),
+                        new Vector3(0.6f, 1.8f, 0.4f));
+                    Furniture(floorGo.transform, "Armadio2", new Vector3(w * 0.42f, yf + 0.9f, -d * 0.2f),
+                        new Vector3(0.6f, 1.8f, 0.4f));
+                }
+                else
+                {
+                    // Reparto con 3 letti
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float bx = -w * 0.3f + i * w * 0.3f;
+                        Furniture(floorGo.transform, "Letto" + i, new Vector3(bx, yf + 0.28f, -d * 0.15f),
+                            new Vector3(1.0f, 0.5f, 2.0f));
+                        Furniture(floorGo.transform, "Comodino" + i, new Vector3(bx, yf + 0.35f, d * 0.2f),
+                            new Vector3(0.4f, 0.5f, 0.35f));
+                    }
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── DEALER (concessionaria) ────────────────────────────────
+
+        private void BuildDealer(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 2);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                if (f == 0)
+                {
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "CONCESSIONARIA");
+
+                    // Ufficio vendite (retro)
+                    Furniture(floorGo.transform, "Bancone", new Vector3(0f, yf + 0.5f, -d * 0.3f),
+                        new Vector3(w * 0.5f, 1.0f, 0.6f));
+                    Furniture(floorGo.transform, "Scrivania", new Vector3(-w * 0.3f, yf + 0.38f, -d * 0.15f),
+                        new Vector3(1.2f, 0.7f, 0.6f));
+                    Furniture(floorGo.transform, "SediaUff", new Vector3(-w * 0.3f, yf + 0.22f, d * 0.05f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+
+                    // Showroom: 2 pedane con auto in vetrina
+                    Furniture(floorGo.transform, "Libreria", new Vector3(w * 0.4f, yf + 0.35f, d * 0.2f),
+                        new Vector3(2.0f, 0.7f, 0.3f));
+                    Furniture(floorGo.transform, "Divano", new Vector3(w * 0.25f, yf + 0.4f, d * 0.35f),
+                        new Vector3(2.0f, 0.8f, 0.9f));
+                    Furniture(floorGo.transform, "Tavolino", new Vector3(w * 0.25f, yf + 0.35f, d * 0.0f),
+                        new Vector3(0.8f, 0.3f, 0.5f));
+                    BuildVehicleCounter(floorGo.transform, w, d, yf);
+                }
+                else
+                {
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "UFFICI");
+                    Furniture(floorGo.transform, "TavoloUff", new Vector3(-w * 0.2f, yf + 0.38f, 0f),
+                        new Vector3(1.4f, 0.7f, 0.7f));
+                    Furniture(floorGo.transform, "SediaUff", new Vector3(-w * 0.2f, yf + 0.22f, 0.6f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    Furniture(floorGo.transform, "Divano", new Vector3(w * 0.3f, yf + 0.35f, 0f),
+                        new Vector3(2.0f, 0.8f, 0.9f));
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── REPAIR / GARAGE (officina) ─────────────────────────────
+
+        private void BuildWorkshop(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 2);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                if (f == 0)
+                {
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "OFFICINA");
+
+                    // Ponte di sollevamento con vettura in lavorazione (scatola scura)
+                    Box(floorGo.transform, "Ponte", new Vector3(-w * 0.25f, yf + 0.5f, 0f),
+                        new Vector3(0.8f, 1.0f, 1.8f), _darkMat);
+                    Box(floorGo.transform, "AutoInLavoro", new Vector3(-w * 0.25f, yf + 0.2f, 0f),
+                        new Vector3(2.0f, 0.4f, 1.0f), _darkMat);
+
+                    // Banco attrezzi
+                    Furniture(floorGo.transform, "Bancone", new Vector3(w * 0.35f, yf + 0.45f, 0f),
+                        new Vector3(w * 0.3f, 0.9f, 0.6f));
+
+                    // Scaffali ricambi
+                    Furniture(floorGo.transform, "Scaffale", new Vector3(-w * 0.42f, yf + 0.9f, -d * 0.25f),
+                        new Vector3(0.5f, 1.8f, d * 0.35f));
+                    Furniture(floorGo.transform, "ScaffaleA", new Vector3(w * 0.42f, yf + 0.9f, -d * 0.3f),
+                        new Vector3(0.5f, 1.8f, d * 0.3f));
+
+                    // Scrivania accettazione
+                    Furniture(floorGo.transform, "Scrivania", new Vector3(0f, yf + 0.38f, -d * 0.4f),
+                        new Vector3(1.4f, 0.7f, 0.6f));
+                    Furniture(floorGo.transform, "SediaUff", new Vector3(0f, yf + 0.22f, -d * 0.4f + 0.6f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    BuildVehicleCounter(floorGo.transform, w, d, yf);
+                }
+                else
+                {
+                    BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors, "DEPOSITO");
+                    for (int i = 0; i < 4; i++)
+                    {
+                        Furniture(floorGo.transform, "Scaffale" + i, new Vector3(-w * 0.35f, yf + 0.9f, -d * 0.3f + i * d * 0.2f),
+                            new Vector3(0.6f, 1.8f, 0.4f));
+                    }
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── BANK ───────────────────────────────────────────────────
+
+        private void BuildBank(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 2);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors,
+                    f == 0 ? "BANCA" : "UFFICI");
+
+                if (f == 0)
+                {
+                    // Bancone cassa con vetro protettivo
+                    Furniture(floorGo.transform, "Bancone", new Vector3(-w * 0.3f, yf + 0.6f, -d * 0.3f),
+                        new Vector3(w * 0.4f, 1.2f, 0.6f));
+
+                    // Postazioni ATM / scrivanie consulenti
+                    for (int i = 0; i < 2; i++)
+                    {
+                        float zx = -w * 0.2f + i * w * 0.4f;
+                        Furniture(floorGo.transform, "Scrivania" + i, new Vector3(zx, yf + 0.38f, d * 0.25f),
+                            new Vector3(1.2f, 0.7f, 0.6f));
+                        Furniture(floorGo.transform, "Sedia" + i, new Vector3(zx, yf + 0.22f, d * 0.5f),
+                            new Vector3(0.5f, 0.44f, 0.5f));
+                    }
+
+                    // Sala d'attesa con sedie
+                    Furniture(floorGo.transform, "Divano", new Vector3(w * 0.35f, yf + 0.35f, -d * 0.1f),
+                        new Vector3(1.8f, 0.7f, 0.8f));
+                }
+                else
+                {
+                    Furniture(floorGo.transform, "TavoloUff", new Vector3(-w * 0.2f, yf + 0.38f, 0f),
+                        new Vector3(1.4f, 0.7f, 0.7f));
+                    Furniture(floorGo.transform, "SediaUff", new Vector3(-w * 0.2f, yf + 0.22f, 0.6f),
+                        new Vector3(0.5f, 0.44f, 0.5f));
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── SCHOOL ─────────────────────────────────────────────────
+
+        private void BuildSchool(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 3);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors,
+                    f == 0 ? "SCUOLA" : "CLASSE " + f);
+
+                if (f == 0)
+                {
+                    // Atrio + banco docente
+                    Furniture(floorGo.transform, "Bancone", new Vector3(-w * 0.35f, yf + 0.5f, d * 0.3f),
+                        new Vector3(w * 0.3f, 1.0f, 0.6f));
+                    Furniture(floorGo.transform, "Libreria", new Vector3(w * 0.35f, yf + 0.9f, d * 0.3f),
+                        new Vector3(0.8f, 1.8f, 0.4f));
+                }
+                else
+                {
+                    // Aula: cattedra + banchi in fila
+                    Furniture(floorGo.transform, "Scrivania", new Vector3(0f, yf + 0.42f, d * 0.3f),
+                        new Vector3(1.6f, 0.8f, 0.6f));
+                    for (int row = 0; row < 2; row++)
+                    {
+                        for (int col = 0; col < 2; col++)
+                        {
+                            float bx = -w * 0.2f + col * w * 0.35f;
+                            float bz = -d * 0.1f - row * d * 0.3f;
+                            Furniture(floorGo.transform, "Scr" + row + "_" + col,
+                                new Vector3(bx, yf + 0.38f, bz),
+                                new Vector3(0.9f, 0.7f, 0.5f));
+                            Furniture(floorGo.transform, "Sed" + row + "_" + col,
+                                new Vector3(bx, yf + 0.22f, bz - 0.5f),
+                                new Vector3(0.5f, 0.44f, 0.5f));
+                        }
+                    }
+                    // Lavagna sulla parete frontale
+                    Box(floorGo.transform, "Lavagna", new Vector3(0f, yf + 1.6f, d * 0.5f + 0.03f),
+                        new Vector3(w * 0.6f, 1.2f, 0.05f), _darkMat);
+                }
+
+                if (totalFloors > 1 && f < totalFloors - 1)
+                {
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── HOTEL ──────────────────────────────────────────────────
+
+        private void BuildHotel(Transform parent, float w, float d, float floorH, int floors)
+        {
+            int totalFloors = Mathf.Clamp(floors, 1, 4);
+            for (int f = 0; f < totalFloors; f++)
+            {
+                float yf = f * floorH;
+                var floorGo = new GameObject("Floor_" + f);
+                floorGo.transform.SetParent(parent, false);
+                floorGo.transform.localPosition = new Vector3(0f, f * floorH, 0f);
+
+                BuildPoiShell(floorGo.transform, w, d, floorH, yf, totalFloors,
+                    f == 0 ? "HOTEL" : "PIANO " + f);
+
+                if (f == 0)
+                {
+                    // Reception (retro)
+                    Furniture(floorGo.transform, "Bancone", new Vector3(0f, yf + 0.5f, -d * 0.35f),
+                        new Vector3(w * 0.5f, 1.0f, 0.6f));
+
+                    // Lobby: divani + tavolino
+                    Furniture(floorGo.transform, "Divano", new Vector3(-w * 0.3f, yf + 0.35f, d * 0.2f),
+                        new Vector3(2.0f, 0.8f, 0.9f));
+                    Furniture(floorGo.transform, "Tavolino", new Vector3(-w * 0.3f, yf + 0.3f, -0.05f),
+                        new Vector3(0.8f, 0.4f, 0.5f));
+                    Furniture(floorGo.transform, "DivanoA", new Vector3(w * 0.3f, yf + 0.35f, d * 0.2f),
+                        new Vector3(2.0f, 0.8f, 0.9f));
+                }
+                else
+                {
+                    // Corridoio con 2-3 camere
+                    for (int i = 0; i < 3; i++)
+                    {
+                        float x = -w * 0.3f + i * w * 0.3f;
+                        Furniture(floorGo.transform, "Letto" + i, new Vector3(x, yf + 0.28f, -d * 0.15f),
+                            new Vector3(1.0f, 0.5f, 1.8f));
+                        Furniture(floorGo.transform, "Comodino" + i, new Vector3(x, yf + 0.35f, d * 0.2f),
+                            new Vector3(0.4f, 0.5f, 0.35f));
+                        Furniture(floorGo.transform, "Armadio" + i, new Vector3(x, yf + 0.9f, d * 0.35f),
+                            new Vector3(0.6f, 1.8f, 0.4f));
+                    }
+                    BuildStairs(floorGo.transform, w * 0.35f, yf, floorH, d * 0.35f);
+                    BuildStairTrigger(floorGo.transform, w * 0.35f, yf, d * 0.35f, f, totalFloors);
+                }
+            }
+        }
+
+        // ── Bancone POI veicolo (apre il menu veicolo) ─────────────
+
+        private void BuildVehicleCounter(Transform floorGo, float w, float d, float yBase)
+        {
+            var counterGo = new GameObject("VehicleCounter");
+            counterGo.transform.SetParent(floorGo.transform, false);
+            counterGo.transform.localPosition = new Vector3(0f, yBase + 0.5f, -d * 0.35f);
+            var col = counterGo.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(2.5f, 2f, 1.5f);
+            counterGo.AddComponent<VehicleCounterTrigger>();
         }
 
         // ── MURI PERIMETRALI ───────────────────────────────────────

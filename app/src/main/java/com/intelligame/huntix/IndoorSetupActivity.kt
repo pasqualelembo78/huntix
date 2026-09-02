@@ -20,6 +20,7 @@ class IndoorSetupActivity : AppCompatActivity() {
     private var trapEggCount = 0
     private var penaltySecs = 30
     private lateinit var nameBoxes: LinearLayout
+    private lateinit var turnRow: LinearLayout
     private lateinit var autoContainer: LinearLayout
     private lateinit var modeManualBtn: View
     private lateinit var modeAutoBtn: View
@@ -53,14 +54,14 @@ class IndoorSetupActivity : AppCompatActivity() {
             })
         }
 
-        val turnRow = LinearLayout(c).apply {
+        turnRow = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER
             setPadding(0, UiKit.dp(c, 8), 0, 0)
         }
         listOf(
             "Sequenziale" to "sequential",
-            "Alternato" to "alternated",
+            "Alternato" to "alternating",
             "Casuale" to "random"
         ).forEach { (label, mode) ->
             val btn = UiKit.button(c, label, UiKit.PURPLE) {
@@ -146,8 +147,8 @@ class IndoorSetupActivity : AppCompatActivity() {
     }
 
     private fun refreshTurnHighlight() {
-        listOf("sequential", "alternated", "random").forEach { mode ->
-            nameBoxes.findViewWithTag<TextView>("turn_$mode")?.alpha = if (turnMode == mode) 1f else 0.4f
+        listOf("sequential", "alternating", "random").forEach { mode ->
+            turnRow.findViewWithTag<TextView>("turn_$mode")?.alpha = if (turnMode == mode) 1f else 0.4f
         }
     }
 

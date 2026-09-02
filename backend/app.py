@@ -225,7 +225,9 @@ try:
     app.include_router(vehicles_router)
     from traffic.vehicle_services import router as vehicle_services_router
     app.include_router(vehicle_services_router)
-    logger.info("Vehicle ownership registry + services initialized")
+    from traffic.underground import router as underground_router
+    app.include_router(underground_router)
+    logger.info("Vehicle ownership registry + services + underground initialized")
 except Exception as _ve:
     logger.error(f"Vehicle registry init failed (continuing without): {_ve}")
 app.include_router(characters_router)

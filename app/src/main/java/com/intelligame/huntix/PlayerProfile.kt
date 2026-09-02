@@ -58,6 +58,10 @@ data class PlayerProfile(
     // ── Fase 6: personaggio della città (kit Kenney Characters) ──
     var cityCharacterId:         String  = "humanMaleA",  // Skin Kenney: humanMaleA/humanFemaleA/zombieMaleA/zombieFemaleA
 
+    // Pet di compagnia per la città (kit Kenney cube-pets): id animale.
+    // "none" (default) = nessun pet.
+    var petCharacterId:          String  = "none",
+
     // Social Profile
     var country: String = "", var city: String = "",
     var birthYear: Int = 0, var isMinor: Boolean = false, var profileCompleted: Boolean = false,
@@ -187,6 +191,7 @@ data class PlayerProfile(
         "characterChangesCount"  to characterChangesCount,
         "fidatoCreatureId"        to fidatoCreatureId,
         "cityCharacterId"         to cityCharacterId,
+        "petCharacterId"          to petCharacterId,
         "playerGender"           to playerGender,
         "genderChangesCount"     to genderChangesCount,
         "genderChosenAt"         to genderChosenAt,
@@ -242,6 +247,7 @@ data class PlayerProfile(
                 characterChangesCount  = (map["characterChangesCount"] as? Long)?.toInt() ?: 0,
                 fidatoCreatureId        = map["fidatoCreatureId"] as? String ?: "",
                 cityCharacterId         = map["cityCharacterId"] as? String ?: "humanMaleA",
+                petCharacterId          = map["petCharacterId"] as? String ?: "none",
                 playerGender           = map["playerGender"] as? String ?: "",
                 genderChangesCount     = (map["genderChangesCount"] as? Number)?.toInt() ?: 0,
                 genderChosenAt         = (map["genderChosenAt"] as? Number)?.toLong() ?: 0L,

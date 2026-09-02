@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -176,13 +177,15 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
         webViewLoader.setBackgroundColor(Color.TRANSPARENT);
         webViewLoader.setVisibility(View.GONE);
 
-        //Sceglie l'immagine del pulsante di profilo in base al sesso dell'utente
+        //Sceglie l'immagine del pulsante di profilo in base alla skin Kenney
         ImageButton imgProfilo = (ImageButton) findViewById(R.id.bottoneProfilo);
         Utente utente = GiocoSingleton.getInstance().getUtente();
-        if (utente != null && utente.getSesso() != null && utente.getSesso().equals("M"))
-            imgProfilo.setImageResource(R.drawable.male_profile);
-        else
+        String citySkinBtn = getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+                .getString("city_skin", null);
+        if (citySkinBtn != null && citySkinBtn.contains("Female"))
             imgProfilo.setImageResource(R.drawable.female_profile);
+        else
+            imgProfilo.setImageResource(R.drawable.male_profile);
 
         //Configura il nome dell'utente sotto il pulsante di profilo
         TextView txtNomeUser = (TextView) findViewById(R.id.txtNomeUser);
@@ -353,8 +356,22 @@ public class MapActivity extends Activity implements LocationListener, Runnable,
         Style style = map.getStyle();
         GeoJsonSource src = style.getSourceAs(SOURCE_EU);
         if(src == null) return;
-        boolean masculino = GiocoSingleton.getInstance().getUtente().getSesso().equals("M");
-        addIconaAoStyle(style, masculino ? R.drawable.male : R.drawable.female, "personagem", PERSONAGGIO_MAX_DP);
+        // Legge la skin Kenney scelta nel profilo (city_skin)
+        String citySkin = getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+                .getString("city_skin", null);
+        int iconRes;
+        if (citySkin != null) {
+            switch (citySkin) {
+                case "humanFemaleA":  iconRes = R.drawable.female; break;
+                case "zombieMaleA":   iconRes = R.drawable.male;   break;  // TODO: icona zombie
+                case "zombieFemaleA": iconRes = R.drawable.female; break;  // TODO: icona zombie
+                default:              iconRes = R.drawable.male;   break;
+            }
+        } else {
+            boolean masculino = GiocoSingleton.getInstance().getUtente().getSesso().equals("M");
+            iconRes = masculino ? R.drawable.male : R.drawable.female;
+        }
+        addIconaAoStyle(style, iconRes, "personagem", PERSONAGGIO_MAX_DP);
         Point p = Point.fromLngLat(posizioneAttuale.getLongitude(), posizioneAttuale.getLatitude());
         src.setGeoJson(FeatureCollection.fromFeature(featureCom(p, "eu", "", "personagem", null)));
     }

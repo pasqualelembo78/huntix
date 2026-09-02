@@ -197,16 +197,19 @@ namespace City.OSM
             box.center = baseB.center;
             inst.layer = BuildingLayer;
 
-            MaybeAddEntrance(inst, b, baseB, w, d, h);
+            MaybeAddEntrance(inst, b, baseB, w, d, h, sx, sy, sz);
             return true;
         }
 
-        // Alcuni edifici piccoli diventano visitabili: un trigger perimetrale
-        // alla base (sul layer Buildings, quindi invisibile ai raycast di
-        // teleport/interazione) avvicina il fuoco e l'ingresso automatico
-        // gestiti da Game.OnEntranceFocusChanged + BuildingEntrance.
+        // Alcuni edifici piccoli diventano visitabili: un PORTALE stretto sul
+        // lato della facciata (dove l'interno mette la PortaIngresso, +Z
+        // locale), largo quanto una porta. L'ingresso scatta SOLO attraversando
+        // la porta (OnTriggerEnter del BuildingEntrance -> auto-entry): passare
+        // semplicemente accanto al muro o in mezzo alla strada NON attiva nulla.
+        // NOTA: gli edifici fusi (blocco > 350 sqm) vengono saltati dalla soglia.
         private static void MaybeAddEntrance(GameObject inst, TileBuildingRec b,
-            Bounds baseB, float w, float d, float h)
+            Bounds baseB, float w, float d, float h,
+            float sx, float sy, float sz)
         {
             if (enterableBudget <= 0) return;
             float area = w * d;
@@ -216,13 +219,47 @@ namespace City.OSM
 
             bool shop = IsCommercial(b.t);
 
-            var trig = new GameObject("Ingresso");
+            // Lato porta = +Z locale (facciata), coerente con la PortaIngresso
+            // interna di InteriorGenerator (a +d*0.5). Il trigger-porta sporge
+            // appena oltre il muro frontale e resta stretto in larghezza, cosi'
+            // il giocatore deve passare ATTRAVERSO la porta, non solo accanto.
+            const float doorW = 2.4f;     // larghezza porta (mondo)
+            const float doorT = 0.4f;     // spessore fascia porta (mondo)
+            const float protr = 0.15f;    // sporgenza oltre il muro (mondo)
+            const float doorCenterY = 1.0f; // altezza centro porta (mondo)
+
+            // offset del muro frontale rispetto al box center (+ baseB.size.z/2)
+            float frontOffsetZ = baseB.size.z * 0.5f + protr;
+            float doorCenterZ = baseB.center.z + frontOffsetZ;
+
+            var trig = new GameObject("Porta");
             trig.transform.SetParent(inst.transform, false);
             trig.layer = BuildingLayer;
+            // posiziono il GAMEOBJECT al centro del portale e tengo il collider
+            // centrato sull'origine: cosi' il segnaposto visivo (figlio) sta
+            // al centro. Le coordinate locali sono sottoposte alla scala NON
+            // uniforme del genitore -> divido per (sx,sy,sz) per i metri mondo.
+            trig.transform.localPosition =
+                new Vector3(baseB.center.x, doorCenterY / sy, doorCenterZ / sz);
             var tc = trig.AddComponent<BoxCollider>();
             tc.isTrigger = true;
-            tc.size = new Vector3(w + 1.5f, 1.6f, d + 1.5f);
-            tc.center = new Vector3(baseB.center.x, 0.8f, baseB.center.z);
+            tc.center = Vector3.zero;
+            tc.size = new Vector3(doorW / sx, 2.2f / sy, doorT / sz);
+
+            // segnaposto VISIVO della porta: una piastra piana verticale sul
+            // muro frontale, cosi' il giocatore sa dove passare
+            var doorMark = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            UnityEngine.Object.Destroy(doorMark.GetComponent<Collider>());
+            doorMark.name = "PortaSegnaposto";
+            doorMark.transform.SetParent(trig.transform, false);
+            doorMark.transform.localPosition = Vector3.zero;
+            doorMark.transform.localRotation = Quaternion.identity;
+            doorMark.transform.localScale = new Vector3(2.3f / sx, 2.1f / sy, 1f);
+            var r = doorMark.GetComponent<Renderer>();
+            var dm = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            if (dm.shader == null) dm = new Material(Shader.Find("Standard"));
+            dm.SetColor("_BaseColor", new Color(0.35f, 0.28f, 0.2f));
+            r.sharedMaterial = dm;
 
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
             entrance.buildingType = shop ? "shop" : "house";
@@ -232,6 +269,43 @@ namespace City.OSM
             entrance.buildingHeight = h;
             entrance.floorCount = h > 7f ? 2 : 1;
             enterableBudget--;
+
+            if (shop)
+            {
+                // Negozi nel mondo chunked: il bancone di acquisto dentro
+                // l'interno viene creato da InteriorGenerator SOLO se
+                // entrance.shop != null. Prima lo Shop era attachato solo nel
+                // percorso legacy (disattivato) percio' il commercio era morto.
+                var shopComp = inst.AddComponent<City.World.Shop>();
+                shopComp.shopName = string.IsNullOrEmpty(b.nm)
+                    ? "Negozio " + b.id : b.nm;
+                ShopItemsFor(shopComp, b.id);
+                entrance.shop = shopComp;
+            }
+        }
+
+        /// <summary>Catalogo deterministico per id OSM. I placement della tile
+        /// espongono solo il tipo building (senza amenity/shop), quindi non si
+        /// puo' distinguere supermercato/pizzeria: prodotti "da quartiere"
+        /// variati dall'id.</summary>
+        private static void ShopItemsFor(City.World.Shop shop, long bId)
+        {
+            string[][] cats =
+            {
+                new[] { "Pane", "Latte", "Acqua", "Mele" },
+                new[] { "Caffe", "Cornetto", "Cappuccino" },
+                new[] { "Maglietta", "Cappellino", "Jeans" },
+                new[] { "Cuffie", "Cavo USB", "Powerbank" },
+                new[] { "Libro", "Quaderno", "Penna" },
+                new[] { "Cerotti", "Vitamine", "Nastro adesivo" },
+            };
+            int h = Hash(bId);
+            var cat = cats[h % cats.Length];
+            for (int i = 0; i < cat.Length; i++)
+            {
+                int price = 1 + (h >> (2 + i * 2)) % (4 + i * 2);
+                shop.items.Add(new City.World.ShopItem(cat[i], price));
+            }
         }
 
         public static Bounds UnionBounds(GameObject go)

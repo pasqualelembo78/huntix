@@ -40,7 +40,44 @@ GEO_DISK_CAP_BYTES = int(float(os.environ.get("HUNTIX_GEO_CACHE_GB", "3")) * 1_0
 RAM_CACHE_BYTES = int(os.environ.get("HUNTIX_TILE_RAM_MB", "512")) * 1_000_000
 GEN_TIMEOUT_S = int(os.environ.get("HUNTIX_GEN_TIMEOUT", "600"))
 
-_KEY_RE = re.compile(r"^IT_(-?\d{1,3})_(-?\d{1,3})$")
+_KEY_RE = re.compile(r"^IT_(-?\d{1,5})_(-?\d{1,5})$")
+
+# ── registry paesi (HUNTIX_COUNTRY): bbox per la geo on-demand ───
+# Determinato dal data/italy-land? No: bbox. Un tile e' assegnato al PRIMO
+# paese registrato il cui bbox contiene il centro della tile. Tenere l'Italia
+# per prima: il suo bbox (33.9..48.1 lat, 3.9..19.1 lon) riproduce il vecchio
+# envelope. Per i paesi confinanti usare bbox il piu' stretti possibile.
+_WC_FILE = _PREPROC / "world_countries.json"
+
+
+def _load_countries() -> list[dict]:
+    try:
+        with open(_WC_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list) or not all(
+                isinstance(c, dict) and "slug" in c and "bbox" in c
+                for c in data):
+            logger.warning("[TileServer] world_countries.json malformato")
+            return []
+        return data
+    except Exception as e:
+        logger.warning("[TileServer] world_countries.json: %s", e)
+        return [{"slug": "italy",
+                 "bbox": [33.9, 3.9, 48.1, 19.1]}]
+
+
+_countries = _load_countries()
+
+
+def _country_for(ilat: int, ilon: int) -> str | None:
+    """Slug del paese che contiene il centro della tile (primo match)."""
+    clat = 34.0 + (ilat + 0.5) * 0.090
+    clon = 5.0 + (ilon + 0.5) * 0.121
+    for c in _countries:
+        a, b, cc, d = c["bbox"]
+        if a <= clat <= cc and b <= clon <= d:
+            return c["slug"]
+    return None
 
 # ── cache RAM LRU (JSON decompressi) ─────────────────────────────
 _ram: "OrderedDict[str, bytes]" = OrderedDict()
@@ -200,6 +237,15 @@ async def tiles_ping():
             "disk_cap_gb": round(GEO_DISK_CAP_BYTES / 1e9, 1)}
 
 
+@router.post("/cache/clear")
+async def tiles_cache_clear():
+    """Svuota la cache RAM delle tile (per sviluppo)."""
+    global _ram, _ram_bytes
+    _ram = OrderedDict()
+    _ram_bytes = 0
+    return {"ok": True}
+
+
 @router.get("/{key}/status")
 async def tiles_status(key: str):
     _validate_key(key)
@@ -225,12 +271,12 @@ async def tiles_graph(key: str):
                     headers={"Cache-Control": "public, max-age=604800"})
 
 
-async def _generate_geo(key: str) -> bool:
+async def _generate_geo(key: str, country: str) -> bool:
     """Lancia gen-tile --skip-graph nel venv di preprocessing. True se ok."""
     cmd = [str(VENV_PY), str(PROCESSOR), "gen-tile", key, "--skip-graph"]
+    env = {**os.environ, "HUNTIX_COUNTRY": country}
     proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        cwd=str(_PREPROC),
+        *cmd, cwd=str(_PREPROC), env=env,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
@@ -254,8 +300,10 @@ async def tiles_geo(key: str):
 
     m = _KEY_RE.match(key)
     ilat, ilon = int(m.group(1)), int(m.group(2))
-    # fuori dall'estratto OSM italiano (lat 34-48, lon 5-19): niente da generare
-    if not (-1 <= ilat <= 156 and -9 <= ilon <= 116):
+    # paese di riferimento per la generazione on-demand; nessun paese
+    # registrato (mare aperto / nazione non preparata) -> documento vuoto
+    country = _country_for(ilat, ilon)
+    if country is None:
         bbox = _tile_bbox_from_key(key)
         body = _EMPTY_GEO % (key, ",".join(str(v) for v in bbox))
         return Response(content=body, media_type="application/json",
@@ -265,7 +313,7 @@ async def tiles_geo(key: str):
         lock = _gen_locks.setdefault(key, asyncio.Lock())
         async with lock:
             if not path.exists():
-                await _generate_geo(key)
+                await _generate_geo(key, country)
 
     if not path.exists():
         # tile senza record (mare/aree remote): documento sintetico vuoto

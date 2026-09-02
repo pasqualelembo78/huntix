@@ -131,6 +131,81 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
         }
     })
 
+    // ── Pet di compagnia per la città (kit Kenney cube-pets) ──────
+    val pets = listOf(
+        Triple("none",     "🚫 Nessun pet", "Disattiva il pet di compagnia"),
+        Triple("dog",      "🐶 Cane",       "Il fedele compagno a quattro zampe"),
+        Triple("cat",      "🐱 Gatto",      "Il felino che ti segue ovunque"),
+        Triple("bunny",    "🐰 Coniglio",   "Salterino e simpatico"),
+        Triple("fox",      "🦊 Volpe",      "Svelta e astuta"),
+        Triple("panda",    "🐼 Panda",      "Bianco e nero, delizioso"),
+        Triple("koala",    "🐨 Koala",      "Lento ma adorabile"),
+        Triple("penguin",  "🐧 Pinguino",   "Ondeggia dietro di te"),
+        Triple("chick",    "🐥 Pulcino",    "Piccolo e coccoloso"),
+        Triple("pig",      "🐷 Maialino",   "Rosa e paffuto"),
+        Triple("deer",     "🦌 Cervo",      "Elegante nel bosco"),
+        Triple("tiger",    "🐯 Tigre",      "Fiero e possente"),
+        Triple("lion",     "🦁 Leone",      "Il re della savana"),
+        Triple("elephant", "🐘 Elefante",   "Grande e bonario"),
+        Triple("monkey",   "🐵 Scimmia",    "Giocosa e vivace"),
+        Triple("beaver",   "🦫 Castoro",    "Ingegnoso costruttore"),
+        Triple("crab",     "🦀 Granchio",   "Cammina di lato con te")
+    )
+    val currentPet = p?.petCharacterId?.takeIf { it.isNotBlank() } ?: "none"
+
+    root.addView(sectionCard("#001B26", "#00E5A0") {
+        addView(tv("🐾 Pet di Compagnia", 15f, Color.parseColor("#7CF5C8"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(4)) })
+        addView(tv("Il tuo pet ti seguirà ovunque in Mia Città!",
+            12f, Color.parseColor("#B2DFDB"), Gravity.START)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+
+        for ((id, label, desc) in pets) {
+            val selected = id == currentPet
+            addView(LinearLayout(this@buildProfileTab).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE; cornerRadius = dp(10).toFloat()
+                    setColor(Color.parseColor(if (selected) "#0A4A3D" else "#0E1A22"))
+                    setStroke(dp(1), Color.parseColor(if (selected) "#00E5A0" else "#2A3B44"))
+                }
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(6) }
+
+                addView(tv(label, 14f, Color.WHITE, Gravity.START, true).also {
+                    it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                addView(tv(desc, 10f, Color.parseColor("#80CBC4"), Gravity.END))
+
+                if (selected) {
+                    addView(tv("✓ In uso", 12f, Color.parseColor("#00E5A0"), Gravity.END, true)
+                        .also { it.setPadding(dp(8), 0, 0, 0) })
+                } else {
+                    val c = this@buildProfileTab
+                    addView(Button(c).apply {
+                        text = "Usa"; textSize = 12f; setTextColor(Color.WHITE)
+                        background = GradientDrawable().apply {
+                            shape = GradientDrawable.RECTANGLE; cornerRadius = dp(20).toFloat()
+                            setColor(Color.parseColor("#00875F"))
+                        }
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(34))
+                            .also { it.marginStart = dp(8) }
+                        setOnClickListener {
+                            PlayerProfileManager.updatePetCharacter(id, c) {
+                                android.widget.Toast.makeText(c,
+                                    "✅ Pet aggiornato: $label",
+                                    android.widget.Toast.LENGTH_SHORT).show()
+                                c.recreate()
+                            }
+                        }
+                    })
+                }
+            })
+        }
+    })
+
     // Team
     if (p?.teamId?.isNotEmpty() == true) {
         root.addView(sectionCard("#001A10", "#00FF88") {

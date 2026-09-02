@@ -41,6 +41,7 @@ namespace Huntix.Indoor
         private float _waitTimer;
         private bool _isWaiting;
         private bool _isTalking;
+        private bool _pendingPatrolStart;
         private Transform _playerTransform;
         private Animator _animator;
 
@@ -62,12 +63,26 @@ namespace Huntix.Indoor
             if (patrolPoints == null || patrolPoints.Length == 0)
                 GeneratePatrolPoints();
 
-            GoToNextPatrolPoint();
+            if (_agent.isOnNavMesh)
+            {
+                GoToNextPatrolPoint();
+            }
+            else
+            {
+                // NavMesh may not be ready yet; retry in the next frame
+                _pendingPatrolStart = true;
+            }
         }
 
         private void Update()
         {
             if (_agent == null) return;
+
+            if (_pendingPatrolStart && _agent.isOnNavMesh)
+            {
+                _pendingPatrolStart = false;
+                GoToNextPatrolPoint();
+            }
 
             float distToPlayer = _playerTransform != null
                 ? Vector3.Distance(transform.position, _playerTransform.position)
@@ -117,6 +132,7 @@ namespace Huntix.Indoor
         private void GoToNextPatrolPoint()
         {
             if (patrolPoints == null || patrolPoints.Length == 0) return;
+            if (_agent == null || !_agent.isOnNavMesh) return;
 
             _currentPatrolIndex = (_currentPatrolIndex + 1) % patrolPoints.Length;
             var target = patrolPoints[_currentPatrolIndex];

@@ -6,8 +6,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 /**
- * GenderChangeActivity — cambio genere del personaggio.
- * Aggiorna PlayerProfile e persiste su Firestore/locale.
+ * GenderChangeActivity — il sesso viene scelto una sola volta in registrazione
+ * e per ora NON può essere modificato (read-only). Questa schermata lo mostra
+ * come informazione bloccata.
  */
 class GenderChangeActivity : BaseNavActivity() {
 
@@ -17,34 +18,28 @@ class GenderChangeActivity : BaseNavActivity() {
         super.onCreate(savedInstanceState)
         val c = this
         val profile = PlayerProfileManager.myProfile
+        val gender = profile?.playerGender.orEmpty()
+        val label = when (gender) {
+            "female" -> "♀️  Femmina"
+            "male" -> "♂️  Maschio"
+            else -> "⚧  Non definito"
+        }
+        val emoji = when (gender) {
+            "female" -> "\uD83D\uDC69"
+            "male" -> "\uD83D\uDC68"
+            else -> "\uD83E\uDDD1"
+        }
 
         val content = UiKit.scroll(c,
-            UiKit.title(c, "Cambia Genere", "\uD83E\uDDD1"),
-            UiKit.subtitle(c, "Il genere determina il modello 3D del tuo personaggio."),
-            UiKit.section(c, "Seleziona"),
-            genderOption("♂️  Maschio", "male"),
-            genderOption("♀️  Femmina", "female"),
-            genderOption("⚧  Non binario", "nonbinary"),
-            UiKit.section(c, "Cambi effettuati: ${profile?.genderChangesCount ?: 0}")
+            UiKit.title(c, "Sesso", emoji),
+            UiKit.subtitle(c, "Il sesso determina il modello 3D del tuo personaggio."),
+            UiKit.section(c, "Il tuo sesso"),
+            UiKit.button(c, "$label  ·  scelto in registrazione", UiKit.GREEN) {
+                Toast.makeText(c, "Il sesso non è modificabile per ora.", Toast.LENGTH_SHORT).show()
+            },
+            UiKit.section(c, "Bloccato"),
+            UiKit.button(c, "Il sesso è stato scelto all'iscrizione e al momento non può essere cambiato.", UiKit.PURPLE) { }
         )
         setContentView(content)
-    }
-
-    private fun genderOption(label: String, value: String): LinearLayout {
-        val c = this
-        val current = PlayerProfileManager.myProfile?.playerGender == value
-        return UiKit.button(c, if (current) "✓ $label" else label,
-            if (current) UiKit.GREEN else UiKit.PURPLE) {
-            val profile = PlayerProfileManager.myProfile ?: run {
-                Toast.makeText(c, "Profilo non disponibile", Toast.LENGTH_SHORT).show(); return@button
-            }
-            profile.playerGender = value
-            profile.genderChangesCount += 1
-            profile.genderChosenAt = System.currentTimeMillis()
-            PlayerProfileManager.persistMyProfile {
-                Toast.makeText(c, "Genere aggiornato!", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-        }
     }
 }

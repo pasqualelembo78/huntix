@@ -23,9 +23,7 @@ namespace City.Vehicle
         private const double FillMain = 0.45;
         private const float LaneOffset = 2.7f;      // distanza dal centro strada
         private const float MarginFromJunction = 5f;  // niente auto sull'incrocio
-        private const int MaxParkedPerChunk = 180;
-        private const int MaxMovingPerChunk = 8;
-        private const float MinMoveRoadLen = 70f;
+        private const int MaxParkedPerChunk = 100;
         // densita' urbana (edifici/km2 della tile come proxy): limiti del
         // fattore e lato della tile in chunk (le tile sono 10x10 chunk)
         private const float MinDensityFactor = 0.35f;
@@ -34,8 +32,9 @@ namespace City.Vehicle
         // 170 m tagliava troppo aggressive: a media 77 auto/chunk sparse su
         // 1 km2 si vedevano poche auto alla volta. 260 m tiene il costo
         // render basso (Kenney low-poly) senza strade deserte.
-        private const float CullRadius = 260f;
-        private const float CullInterval = 0.4f;
+        private const float CullRadius = 500f;
+        private const float CullInterval = 0.6f;
+        private const int GLOBAL_VEHICLE_CAP = 20000;
 
         public static ChunkVehiclePopulator Instance { get; private set; }
 
@@ -106,7 +105,14 @@ namespace City.Vehicle
                 MinDensityFactor, MaxDensityFactor);
             int maxParked = (int)Mathf.Clamp(
                 MaxParkedPerChunk * density, 40f, 260f);
-            int maxMoving = Mathf.Max(3, (int)(MaxMovingPerChunk * density));
+            // Global cap: prevent memory/perf issues across many chunks
+            int globalTracked = host.tracked.Count;
+            if (globalTracked >= GLOBAL_VEHICLE_CAP)
+            {
+                maxParked = 0;
+                OsmDiag.Log("[ChunkVehiclePopulator] chunk " + chunk.index +
+                    ": GLOBAL CAP reached (" + globalTracked + "/" + GLOBAL_VEHICLE_CAP + "), skipping");
+            }
 
             // distribuzione uniforme: se le prime vie della lista basterebbero
             // a saturare il budget, gli slot finirebbero tutti li' (spesso su
@@ -132,7 +138,7 @@ namespace City.Vehicle
                     1f, 10f)
                 : 1f;
 
-            int parked = 0, moving = 0, slot = 0;
+            int parked = 0, slot = 0;
             string prefix = "V" + chunk.index.x.ToString("0000") +
                             chunk.index.y.ToString("0000");
 
@@ -184,6 +190,13 @@ namespace City.Vehicle
                                         Mathf.Rad2Deg + (leftSide ? 180f : 0f);
                                     int idx = rng.Next(
                                         VehicleSpawnManager.Catalogue.Length);
+                                    // i pullman non si parcheggiano sul ciglio
+                                    // delle strade residenziali: se il modello
+                                    // scelto e' un pullman lo sostituisco con
+                                    // una berlina (stesso slot, RNG invariato,
+                                    // quindi i codici venduti restano validi)
+                                    if (VehicleSpawnManager.IsStreetBus(idx))
+                                        idx = 0;
                                     // Il codice include l'indice del catalogo
                                     // (ultime 2 cifre) e avanza con uno slot
                                     // counter SEPARATO da "parked": cosi' il
@@ -226,13 +239,15 @@ namespace City.Vehicle
                     break;
             }
 
-            SpawnMovingTraffic(chunk, toLocal, bounds, rng, host,
-                prefix, ref moving, maxMoving);
-
+            // Il traffico in MOVIMENTO non nasce più qui (percorsi avanti-indietro
+            // su strada singola): ora segue la rete stradale unificata via
+            // TileRoadNetwork (grafo dalle tile, pathfinding A*, svolte agli
+            // incroci, cross-tile). Qui restano solo parcheggi e veicoli dal server.
             SpawnParkedFromServer(chunk, toLocal, bounds, host);
 
             OsmDiag.Log("[ChunkVehiclePopulator] chunk " + chunk.index +
-                ": parcheggi=" + parked + " inMovimento=" + moving +
+                ": parcheggi=" + parked +
+                " (movimento su rete in TileRoadNetwork)" +
                 " densita=" + density.ToString("F2"));
         }
 
@@ -252,6 +267,10 @@ namespace City.Vehicle
                 // nel garage = non e' in strada; rubata = il ladro la sta
                 // spostando (ricompare solo se ritrovata abbandonata)
                 if (kv.Value.inGarage || kv.Value.stolen) continue;
+
+                // gia' materializzata fuori dal flusso (es. auto rimorchiata
+                // all'officina): niente duplicati
+                if (VehicleSpawnManager.IsActiveOwned(kv.Key)) continue;
 
                 Vector3 p = toLocal(new GeoLL { a = kv.Value.lat, o = kv.Value.lon });
                 p.y = 0.02f;
@@ -290,54 +309,6 @@ namespace City.Vehicle
             if (us < 0 || us == code.Length - 1) return -1;
             return int.TryParse(code.Substring(us + 1), out int idx) &&
                 idx < VehicleSpawnManager.Catalogue.Length ? idx : -1;
-        }
-
-        /// <summary>Traffico AI: percorsi ciclici lungo strade lunghe del chunk.</summary>
-        private static void SpawnMovingTraffic(ChunkData chunk,
-            System.Func<GeoLL, Vector3> toLocal, Rect bounds,
-            System.Random rng, ChunkVehiclePopulator host,
-            string prefix, ref int moving, int maxMoving)
-        {
-            foreach (var road in chunk.geo.roads)
-            {
-                if (moving >= maxMoving) break;
-                if (road?.pts == null || road.pts.Length < 3) continue;
-                if (!IsDrivable(road.hw ?? "")) continue;
-
-                var pathList = new List<Vector3>(road.pts.Length);
-                for (int i = 0; i < road.pts.Length; i++)
-                {
-                    Vector3 p = toLocal(road.pts[i]);
-                    p.y = 0.05f;
-                    pathList.Add(p);
-                }
-                if (pathList.Count < 3) continue;
-
-                float len = 0f;
-                for (int i = 1; i < pathList.Count; i++)
-                    len += Vector3.Distance(pathList[i - 1], pathList[i]);
-                if (len < MinMoveRoadLen) continue;
-                if (rng.NextDouble() > 0.6) continue;
-
-                // corsia destra: offset costante verso destra della direzione media
-                Vector3 avgDir = (pathList[pathList.Count - 1] - pathList[0]).normalized;
-                Vector3 right = Vector3.Cross(Vector3.up, avgDir) * 2.2f;
-                var path = pathList.ToArray();
-                for (int i = 0; i < path.Length; i++) path[i] += right;
-
-                var go = new GameObject(prefix + "_T" + moving);
-                go.transform.SetParent(chunk.root.transform, false);
-                go.transform.localPosition = path[0];
-                var tc = go.AddComponent<TrafficCar>();
-                // & 0x7FFFFFFF: il seed deve restare non-negativo, altrimenti
-                // il modulo in TrafficCar.BuildCarModel produce indici negativi
-                tc.Init(path, 4f + (float)rng.NextDouble() * 5f,
-                    (SeedFor(chunk.index) + moving) & 0x7FFFFFFF);
-
-                // le auto AI restano ostacoli morbidi: solo trigger
-                host.Track(go);
-                moving++;
-            }
         }
 
         /// <summary>Registra un veicolo per il culling a distanza.</summary>

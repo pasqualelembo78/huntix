@@ -5,20 +5,28 @@ using UnityEngine;
 using UnityEngine.UI;
 using City.World;
 using City.OSM;
+using City.Vehicle;
+using City.UI;
 
 namespace City.Economy
 {
     /// <summary>
     /// Lavori ripetibili del roleplay urbano: Tassista, Corriere e Ronda.
-    /// Una stazione "LAVORI" appare vicino al player: entrandoci si apre il
-    /// pannello con i lavori disponibili. Ogni lavoro genera punti obiettivo
-    /// randomici attorno al player (beacon luminosi), pagati con Wallet e
-    /// moltiplicati dal livello di esperienza del lavoro (XP persistiti).
-    /// I beacon seguono il rebase del floating origin come i chunk.
+    /// Ogni lavoro genera punti obiettivo attorno al player (beacon luminosi)
+    /// e una freccia dedicata (ciano) indica sempre dove andare. Ronda e
+    /// Corriere durano meglio in auto: alla partenza viene posizionata una
+    /// auto del lavoro vicina da guidare. Il Corriere ha una fase di raccolta
+    /// del pacco (deposito) e poi le consegne: si agisce col pulsante azioni
+    /// in basso (RACCOGLI / LASCIA) invece di avanzare da solo.
     /// </summary>
     public class JobManager : MonoBehaviour
     {
         public static JobManager Instance;
+
+        // stato condiviso col pulsante azioni contestuale (raccogli/lascia)
+        public static bool CargoActive;
+        public static bool NearCargo;
+        public static bool CargoStepIsPickup;
 
         public enum JobType { Taxi, Consegne, Ronda }
 
@@ -38,10 +46,10 @@ namespace City.Economy
                 desc = "Prendi il passeggero e portalo a destinazione",
                 payPerStep = 0, steps = 2 },
             new JobDef{ type = JobType.Consegne, title = "Corriere", icon = "\uD83D\uDCE6",
-                desc = "Consegna 3 pacchi nei punti segnalati",
+                desc = "Raccogli il pacco e consegnalo nei punti segnalati",
                 payPerStep = 12, steps = 3 },
             new JobDef{ type = JobType.Ronda, title = "Ronda", icon = "\uD83D\uDC6E",
-                desc = "Tocca i 4 punti di controllo della ronda",
+                desc = "Tocca i 4 checkpoint della ronda (in auto e meglio)",
                 payPerStep = 10, steps = 4 },
         };
 
@@ -53,7 +61,6 @@ namespace City.Economy
             public JobDef def;
             public int step;
             public List<Vector3> pts = new List<Vector3>();
-            public float totalDist;
             public string[] labels;
         }
 
@@ -65,10 +72,14 @@ namespace City.Economy
         private TMP_Text _hudText;
         private float _reopenGuard;
         private readonly List<Transform> _stationSigns = new List<Transform>();
-        // stazioni LAVORI presso i negozi: id entrance -> cartello istanziato
         private readonly Dictionary<int, GameObject> _stations =
             new Dictionary<int, GameObject>();
         private float _nextScan;
+
+        // veicoli del lavoro: taxi del Tassista, auto di Ronda/Corriere
+        private VehicleController _jobTaxi;
+        private bool _taxiBoarded;
+        private VehicleController _jobCar;
 
         private Transform Player
         {
@@ -76,7 +87,7 @@ namespace City.Economy
                 ? Game.Instance.player.transform : null; }
         }
 
-        // ── ciclo di vita ────────────────────────────────────────
+        // ciclo di vita
 
         private void Awake()
         {
@@ -100,7 +111,17 @@ namespace City.Economy
         {
             if (Player != null) ScanShopStations();
 
-            if (_job == null || Player == null) return;
+            if (_job == null || Player == null)
+            {
+                CompassUI.JobTarget = null;
+                CargoActive = false;
+                NearCargo = false;
+                return;
+            }
+
+            // freccia del lavoro: punta sempre al punto obiettivo corrente
+            CompassUI.JobTarget = _job.pts[_job.step];
+            CompassUI.JobLabel = _job.def.icon + " " + _job.labels[_job.step];
 
             Vector3 target = _job.pts[_job.step];
             Vector3 pp = Player.position;
@@ -114,7 +135,40 @@ namespace City.Economy
                         _stationSigns[i].rotation = Camera.main.transform.rotation;
             }
 
-            if ((pp - target).sqrMagnitude <= ArriveDistSq) AdvanceStep(pp);
+            // Il taxi avanza di fase quando il player GUIDA il taxi
+            // (step 0: prendere il taxi), non per semplice vicinanza.
+            if (_job.def.type == JobType.Taxi && _job.step == 0)
+            {
+                bool driving = Game.Instance != null && Game.Instance.IsDriving &&
+                    Game.Instance.CurrentVehicle == _jobTaxi;
+                if (driving) { _taxiBoarded = true; AdvanceStep(pp); }
+                else
+                {
+                    if (_jobTaxi != null)
+                        _job.pts[0] = _jobTaxi.transform.position;
+                    RefreshHud(pp);
+                }
+                return;
+            }
+
+            // stato del contesto corriere per il pulsante azioni
+            if (_job.def.type == JobType.Consegne)
+            {
+                CargoActive = true;
+                CargoStepIsPickup = _job.step == 0;
+                NearCargo = (pp - target).sqrMagnitude <= ArriveDistSq;
+            }
+            else
+            {
+                CargoActive = false;
+                NearCargo = false;
+            }
+
+            // Il corriere non avanza da solo: si agisce col pulsante azioni
+            // (RACCOGLI il pacco al deposito, LASCIA alle consegne).
+            // Ronda avanza per semplice prossimita al checkpoint.
+            if (_job.def.type != JobType.Consegne &&
+                (pp - target).sqrMagnitude <= ArriveDistSq) AdvanceStep(pp);
             else RefreshHud(pp);
         }
 
@@ -128,7 +182,7 @@ namespace City.Economy
                     _job.pts[i] -= delta;
         }
 
-        // ── XP / livelli / paga ──────────────────────────────────
+        // XP / livelli / paga
 
         public static int Xp(JobType t)
         {
@@ -145,16 +199,13 @@ namespace City.Economy
             return 1f + 0.15f * (Level(t) - 1);
         }
 
-        // ── stazione LAVORI ─────────────────────────────────────
+        // stazione LAVORI
 
         private const float ScanEvery = 3f;
         private const float StationRadius = 250f;
         private const float StationForgetDist = 420f;
         private const int MaxStations = 8;
 
-        /// <summary>Le stazioni LAVORI non nascono accanto al player:
-        /// compaiono solo presso i locali che assumono (buildingType shop)
-        /// quando il player e' in zona, e spariscono se ci si allontana.</summary>
         private void ScanShopStations()
         {
             if (Time.unscaledTime < _nextScan) return;
@@ -245,8 +296,6 @@ namespace City.Economy
             r.sharedMaterials = mats;
         }
 
-        /// <summary>Chiamato dal gate sulla stazione (i callback di trigger
-        /// arrivano solo ai componenti dello stesso GameObject).</summary>
         public void StationEntered(Collider other)
         {
             if (!other.CompareTag("Player")) return;
@@ -255,7 +304,6 @@ namespace City.Economy
             OpenPanel();
         }
 
-        /// <summary>Inoltra i trigger della stazione al manager.</summary>
         private class StationGate : MonoBehaviour
         {
             public JobManager mgr;
@@ -266,7 +314,7 @@ namespace City.Economy
             }
         }
 
-        // ── avvio / avanzamento / fine lavoro ───────────────────
+        // avvio / avanzamento / fine lavoro
 
         public void StartJob(int defIndex)
         {
@@ -275,40 +323,52 @@ namespace City.Economy
             if (p == null) return;
             if (!City.Environment.EnergySystem.CanWork)
             {
-                Toast("⚡ Sei troppo stanco per lavorare: siediti su una panchina o bevi qualcosa");
+                Toast("Solo stanco: siediti su una panchina o bevi qualcosa");
                 return;
             }
             JobDef d = Defs[defIndex];
 
             ActiveJob j = new ActiveJob();
             j.def = d;
-            for (int i = 0; i < d.steps; i++) j.pts.Add(Vector3.zero);
             if (d.type == JobType.Taxi)
             {
-                j.labels = new string[] { "PASSEGGERO", "DESTINAZIONE" };
-                j.pts[0] = RandomPointAround(p.position, 80f, 250f);
-                j.pts[1] = RandomPointAround(j.pts[0], 250f, 550f);
-                j.totalDist = Vector3.Distance(j.pts[0], j.pts[1]);
+                j.pts.Add(Vector3.zero);                 // taxi
+                j.pts.Add(RandomPointAround(p.position, 120f, 350f));
+                j.pts.Add(RandomPointAround(j.pts[1], 300f, 800f));
+                j.labels = new string[] { "TAXI", "PASSEGGERO", "DESTINAZIONE" };
+                _jobTaxi = SpawnJobTaxi(p.position);
+                if (_jobTaxi != null)
+                    j.pts[0] = _jobTaxi.transform.position;
+                _taxiBoarded = false;
             }
             else if (d.type == JobType.Consegne)
             {
-                j.labels = new string[d.steps];
-                Vector3 prev = p.position;
+                // passo 0 = raccolta pacco al deposito (azione RACCOGLI),
+                // poi le 3 consegne (azione LASCIA)
+                int totalSteps = d.steps + 1;
+                j.pts.AddRange(new Vector3[totalSteps]);
+                j.labels = new string[totalSteps];
+                j.pts[0] = RandomPointAround(p.position, 60f, 180f);
+                j.labels[0] = "RACCOGLI PACCO";
+                Vector3 prev = j.pts[0];
                 for (int i = 0; i < d.steps; i++)
                 {
-                    j.pts[i] = RandomPointAround(prev, 120f, 400f);
-                    prev = j.pts[i];
-                    j.labels[i] = "CONSEGNA " + (i + 1) + "/" + d.steps;
+                    j.pts[1 + i] = RandomPointAround(prev, 120f, 400f);
+                    prev = j.pts[1 + i];
+                    j.labels[1 + i] = "CONSEGNA " + (i + 1) + "/" + d.steps;
                 }
+                _jobCar = SpawnJobCar(p.position, d.type);
             }
             else
             {
+                j.pts.AddRange(new Vector3[d.steps]);
                 j.labels = new string[d.steps];
                 for (int i = 0; i < d.steps; i++)
                 {
-                    j.pts[i] = RandomPointAround(p.position, 60f, 220f);
+                    j.pts[i] = RandomPointAround(p.position, 300f, 900f);
                     j.labels[i] = "CHECKPOINT " + (i + 1) + "/" + d.steps;
                 }
+                _jobCar = SpawnJobCar(p.position, d.type);
             }
 
             _job = j;
@@ -316,7 +376,43 @@ namespace City.Economy
             ShowBeacon();
             HidePanel();
             Toast(d.icon + " " + d.title + ": " + d.desc);
+            if (d.type == JobType.Ronda)
+                Toast("Ronda: checkpoint lontani, sali sulla auto del lavoro!");
+            else if (d.type == JobType.Consegne)
+                Toast("Corriere: raccogli il pacco al deposito col pulsante azioni.");
+            if (CompassUI.Instance == null) CompassUI.Create();
+            CompassUI.JobTarget = _job.pts[0];
+            CompassUI.JobLabel = _job.def.icon + " " + _job.labels[0];
             RefreshHud(p.position);
+        }
+
+        private VehicleController SpawnJobTaxi(Vector3 near)
+        {
+            VehicleSpawnManager.VehicleDef def;
+            if (!VehicleSpawnManager.TryGetDef("Taxi", out def)) return null;
+            return SpawnWorkVehicle(near, def, "jobtaxi");
+        }
+
+        private VehicleController SpawnJobCar(Vector3 near, JobType t)
+        {
+            string name = t == JobType.Consegne ? "Furgone" : "Hatchback";
+            VehicleSpawnManager.VehicleDef def;
+            if (!VehicleSpawnManager.TryGetDef(name, out def)) return null;
+            return SpawnWorkVehicle(near, def, "jobcar");
+        }
+
+        private VehicleController SpawnWorkVehicle(Vector3 near,
+            VehicleSpawnManager.VehicleDef def, string prefix)
+        {
+            Vector3 pos = RandomPointAround(near, 20f, 55f);
+            float angle = UnityEngine.Random.Range(0f, 360f);
+            string code = prefix + "_" + (int)(Time.time * 1000f) + "_" +
+                (int)UnityEngine.Random.Range(0f, 9999f);
+            GameObject go = VehicleSpawnManager.BuildVehicle(null, def, pos, angle, code);
+            if (go == null) return null;
+            var vc = go.GetComponent<VehicleController>();
+            vc.SetJobVehicle();
+            return vc;
         }
 
         public void CancelJob()
@@ -325,8 +421,30 @@ namespace City.Economy
             Toast("Lavoro annullato");
             EndJobVisuals();
             _job = null;
+            _jobTaxi = null;
+            _taxiBoarded = false;
+            _jobCar = null;
             HideHud();
             HidePanel();
+        }
+
+        public static void TriggerContextPackageAction()
+        {
+            if (Instance != null) Instance.DoContextPackageAction();
+        }
+
+        private void DoContextPackageAction()
+        {
+            if (_job == null || _job.def.type != JobType.Consegne) return;
+            if (Player == null) return;
+            Vector3 pp = Player.position;
+            Vector3 target = _job.pts[_job.step];
+            if ((pp - target).sqrMagnitude > ArriveDistSq)
+            {
+                Toast("Avvicinati per agire sul pacco");
+                return;
+            }
+            AdvanceStep(pp);
         }
 
         private void AdvanceStep(Vector3 playerPos)
@@ -335,11 +453,15 @@ namespace City.Economy
             City.Environment.EnergySystem.Consume(
                 City.Environment.EnergySystem.JobStepCost);
             int xpGain = _job.def.type == JobType.Taxi ? 12 : 6;
-            if (_job.step >= _job.def.steps)
+            int totalSteps = _job.pts.Count;
+            if (_job.step >= totalSteps)
             {
                 float pay;
                 if (_job.def.type == JobType.Taxi)
-                    pay = 40f + 0.08f * _job.totalDist;
+                {
+                    float dr = Vector3.Distance(_job.pts[1], _job.pts[2]);
+                    pay = 40f + 0.08f * dr;
+                }
                 else
                     pay = _job.def.payPerStep * _job.def.steps +
                         (_job.def.type == JobType.Ronda ? 15f : 0f);
@@ -355,17 +477,20 @@ namespace City.Economy
                         ? " (liv. " + Level(_job.def.type) + ")" : ""));
                 EndJobVisuals();
                 _job = null;
+                _jobTaxi = null;
+                _taxiBoarded = false;
+                _jobCar = null;
                 HideHud();
                 HidePanel();
                 return;
             }
             Toast(_job.def.icon + " passo " + (_job.step + 1) + "/" +
-                _job.def.steps);
+                totalSteps);
             ShowBeacon();
             RefreshHud(playerPos);
         }
 
-        // ── beacon obiettivo ─────────────────────────────────────
+        // beacon obiettivo
 
         private void ShowBeacon()
         {
@@ -398,10 +523,43 @@ namespace City.Economy
 
         private void EndJobVisuals()
         {
+            CompassUI.JobTarget = null;
+            CargoActive = false;
+            NearCargo = false;
             if (_beacon != null) _beacon.SetActive(false);
+            if (_jobTaxi != null)
+            {
+                VehicleController taxi = _jobTaxi;
+                _jobTaxi = null;
+                StartCoroutine(DestroyWorkVehicleAfterExit(taxi));
+            }
+            if (_jobCar != null)
+            {
+                VehicleController car = _jobCar;
+                _jobCar = null;
+                StartCoroutine(DestroyWorkVehicleAfterExit(car));
+            }
+            _taxiBoarded = false;
         }
 
-        // ── HUD obiettivo corrente ───────────────────────────────
+        private System.Collections.IEnumerator DestroyWorkVehicleAfterExit(
+            VehicleController veh)
+        {
+            if (veh == null) yield break;
+            if (Game.Instance != null && Game.Instance.IsDriving &&
+                Game.Instance.CurrentVehicle == veh)
+                Game.Instance.ExitVehicle();
+            yield return new WaitForSeconds(0.9f);
+            if (veh != null && Game.Instance != null &&
+                Game.Instance.IsDriving && Game.Instance.CurrentVehicle == veh)
+            {
+                Game.Instance.ExitVehicle();
+                yield return new WaitForSeconds(0.9f);
+            }
+            if (veh != null) Destroy(veh.gameObject);
+        }
+
+        // HUD obiettivo corrente
 
         private void RefreshHud(Vector3 playerPos)
         {
@@ -410,8 +568,9 @@ namespace City.Economy
             if (_hudText == null) return;
             float d = Vector3.Distance(playerPos, _job.pts[_job.step]);
             _hudText.gameObject.SetActive(true);
-            _hudText.text = _job.def.icon + " <b>" + _job.def.title + "</b> \u00b7 passo " +
-                (_job.step + 1) + "/" + _job.def.steps + " \u00b7 " +
+            int totalSteps = _job.pts.Count;
+            _hudText.text = _job.def.icon + " <b>" + _job.def.title + "</b> passo " +
+                (_job.step + 1) + "/" + totalSteps + " " +
                 Mathf.RoundToInt(d) + "m";
         }
 
@@ -423,7 +582,7 @@ namespace City.Economy
         private void EnsureHud()
         {
             if (_hudText != null) return;
-            var canvas = FindObjectOfType<Canvas>();
+            Canvas canvas = FindPanelCanvas();
             if (canvas == null) return;
             var go = new GameObject("JobHud");
             var rt = go.AddComponent<RectTransform>();
@@ -438,14 +597,11 @@ namespace City.Economy
             _hudText.alignment = TextAlignmentOptions.Center;
             _hudText.color = Color.white;
             _hudText.raycastTarget = false;
-            var font = TMP_Settings.defaultFontAsset;
-            if (font == null) font = Resources.Load<TMP_FontAsset>(
-                "Fonts & Materials/LiberationSans SDF");
-            _hudText.font = font;
+            _hudText.font = PanelFont();
             go.SetActive(false);
         }
 
-        // ── pannello scelta lavoro ───────────────────────────────
+        // pannello scelta lavoro
 
         public void TogglePanel()
         {
@@ -467,9 +623,20 @@ namespace City.Economy
             if (_panel != null) _panel.SetActive(false);
         }
 
+        private static Canvas FindPanelCanvas()
+        {
+            if (UIManager.Instance != null && UIManager.Instance.HUD != null)
+                return UIManager.Instance.HUD;
+            var all = FindObjectsOfType<Canvas>();
+            foreach (var c in all)
+                if (c != null && c.gameObject.activeInHierarchy)
+                    return c;
+            return all.Length > 0 ? all[0] : null;
+        }
+
         private void BuildPanel()
         {
-            var canvas = FindObjectOfType<Canvas>();
+            Canvas canvas = FindPanelCanvas();
             if (canvas == null) return;
 
             _panel = new GameObject("JobsPanel");
@@ -486,7 +653,6 @@ namespace City.Economy
                 Color.white, TextAlignmentOptions.Left,
                 new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(18f, -14f), new Vector2(-70f, -58f));
-            title.font = PanelFont();
 
             var closeBtn = MakeButton(prt, "X", () => HidePanel(),
                 new Color(0.28f, 0.30f, 0.34f, 1f),
@@ -547,15 +713,14 @@ namespace City.Economy
                     : new Color(0.20f, 0.22f, 0.25f, 1f);
 
                 var txt = MakeText(row,
-                    d.icon + " <b>" + d.title + "</b>  \u00b7 Liv. " +
-                        Level(d.type) + "  \u00b7 paga x" +
+                    d.icon + " <b>" + d.title + "</b>  Liv. " +
+                        Level(d.type) + "  paga x" +
                         PayMult(d.type).ToString("F2") + "\n<size=70%>" + d.desc +
-                        " \u00b7 \u26a1-" + City.Environment.EnergySystem.JobStepCost +
+                        "  energia -" + City.Environment.EnergySystem.JobStepCost +
                         "/passo</size>",
                     24f, Color.white, TextAlignmentOptions.Left,
                     new Vector2(0f, 0f), new Vector2(0.72f, 1f),
                     new Vector2(12f, 8f), new Vector2(0f, -8f));
-                txt.font = PanelFont();
 
                 string btnLabel = mine ? "ANNULLA"
                     : busy ? "\u2014" : "INIZIA";
@@ -577,7 +742,7 @@ namespace City.Economy
             }
         }
 
-        // ── helper UI (pattern VehicleShopUI) ────────────────────
+        // helper UI
 
         private static TMP_FontAsset _font;
 
@@ -637,7 +802,7 @@ namespace City.Economy
             return rt;
         }
 
-        // ── utilita' ─────────────────────────────────────────────
+        // utilita
 
         private static Vector3 RandomPointAround(Vector3 center, float minD, float maxD)
         {

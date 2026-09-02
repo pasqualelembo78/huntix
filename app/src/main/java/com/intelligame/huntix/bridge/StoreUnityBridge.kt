@@ -191,6 +191,36 @@ object StoreUnityBridge {
         IndoorActivity.instance?.onNPCFar(json)
     }
 
+    /** Chiamato da Unity quando il giocatore accetta una quest NPC. */
+    @JvmStatic
+    fun onNPCQuestAccepted(json: String) {
+        IndoorActivity.instance?.onNPCQuestAccepted(json)
+    }
+
+    /** Chiamato da Unity quando AR trova un piano. */
+    @JvmStatic
+    fun onARPlaneFound(json: String) {
+        IndoorActivity.instance?.onARPlaneFound(json)
+    }
+
+    /** Mostra il banner "Turno di [nome]" in Unity 3D. */
+    @JvmStatic
+    fun showTurnBanner(playerName: String) {
+        sendToUnityIfAlive("IndoorManager", "ShowTurnBanner", playerName)
+    }
+
+    /** Nasconde il banner turno in Unity. */
+    @JvmStatic
+    fun hideTurnBanner() {
+        sendToUnityIfAlive("IndoorManager", "HideTurnBanner", "")
+    }
+
+    /** Aggiornamento bisogni ricevuto da Unity dopo interazione con mobili. */
+    @JvmStatic
+    fun onNeedsUpdated(json: String) {
+        IndoorActivity.instance?.onNeedsUpdated(json)
+    }
+
     /** Chiamato da Unity quando un NPC è lontano (outdoor). */
     @JvmStatic
     fun onOutdoorNPCFar(json: String) {
@@ -302,8 +332,19 @@ object StoreUnityBridge {
                 AppLog.d(TAG, "requestOsmCity: json=${json.length} chars, invio a Unity")
                 sendToUnity("OnOsmCityReceived", json)
             } catch (e: Exception) {
-                AppLog.w(TAG, "requestOsmCity failed: ${e.message}")
-                sendToUnity("OnOsmCityFailed", e.message ?: "error")
+                AppLog.w(TAG, "requestOsmCity: fresh fetch failed: ${e.message}")
+                // Overpass may be down; OsmClient.fetchAreaCached already tried stale cache
+                // inside its own loadStaleFromDisk fallback. If we still got here, try
+                // the POI repo which also reads from disk cache independently.
+                try {
+                    val stale = OsmClient.fetchAreaCached(lat, lng, radiusMeters)
+                    val json = OsmCityJsonFactory.build(stale, lat, lng, radiusMeters)
+                    AppLog.d(TAG, "requestOsmCity: stale cache success, json=${json.length} chars")
+                    sendToUnity("OnOsmCityReceived", json)
+                } catch (e2: Exception) {
+                    AppLog.w(TAG, "requestOsmCity failed completely: ${e2.message}")
+                    sendToUnity("OnOsmCityFailed", e2.message ?: "error")
+                }
             }
         }.start()
     }
@@ -540,6 +581,186 @@ object StoreUnityBridge {
             val ref = osmId.removePrefix("osm:").substringAfter(":", "")
             activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/$osmType/$ref")))
         }
+    }
+
+    /** Saldo MVC (Huntix Coins) attuale, gestito dall'app esterna. */
+    @JvmStatic
+    fun getMvcBalance(): Double {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0.0
+        return com.intelligame.huntix.managers.SavedManager.getMvcBalance(ctx)
+    }
+
+    /** Tenta di spendere [amount] MVC. True se il saldo bastava, false altrimenti. */
+    @JvmStatic
+    fun spendMvc(amount: Double): Boolean {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return false
+        return com.intelligame.huntix.managers.SavedManager.spendMvc(ctx, amount)
+    }
+
+    /** Accredita [amount] MVC (es. scambio da soldi citta a MVC). Ritorna il nuovo saldo. */
+    @JvmStatic
+    fun addMvc(amount: Double): Double {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0.0
+        if (amount <= 0) return getMvcBalance()
+        return com.intelligame.huntix.managers.SavedManager.addMvc(ctx, amount)
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ── Unified player profile (unico giocatore, unico universo) ──
+    // Questi metodi espongono/aggiornano il PlayerProfile Huntix (la
+    // fonte di verita'), così Miacitta (Unity) e gli altri moduli
+    // leggono/scrivo lo STESSO profilo: un solo player, una sola XP,
+    // un solo nome, una sola classifica.
+    // ─────────────────────────────────────────────────────────────
+
+    /** Nome del player Huntix (Unified profile). */
+    @JvmStatic
+    fun getPlayerName(): String =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.name ?: "Giocatore"
+
+    /** XP totale cumulato del player (Unity non ha un proprio XP separato). */
+    @JvmStatic
+    fun getPlayerXp(): Long =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.xp ?: 0L
+
+    /** Livello calcolato dalla XP cumulata (getter PlayerProfile.level). */
+    @JvmStatic
+    fun getPlayerLevel(): Int =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.level ?: 1
+
+    /** Potere totale del player. */
+    @JvmStatic
+    fun getPlayerPower(): Long =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.power ?: 0L
+
+    /** Gemme premium del player. */
+    @JvmStatic
+    fun getPlayerGems(): Int =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.gems ?: 0
+
+    /** Energia corrente del player (0..100). */
+    @JvmStatic
+    fun getPlayerEnergy(): Int =
+        com.intelligame.huntix.PlayerProfileManager.myProfile?.energy ?: 100
+
+    /** Inventario uova del player (conteggio totale). */
+    @JvmStatic
+    fun getEggCount(): Int {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0
+        return com.intelligame.huntix.EggInventoryManager.getInventoryCount(ctx)
+    }
+
+    /**
+     * Snapshot completo del profilo come JSON, così Unity può mostrare
+     * lo stesso nome/XP/livello/uova ovunque. Compatibile anche quando il
+     * profilo non è ancora stato inizializzato (default sicuri).
+     */
+    @JvmStatic
+    fun getPlayerProfileJson(): String {
+        val p = com.intelligame.huntix.PlayerProfileManager.myProfile
+        if (p == null)
+            return "{\"name\":\"Giocatore\",\"xp\":0,\"level\":1,\"power\":0,\"gems\":0,\"energy\":100,\"eggCount\":0,\"eggsFound\":0}"
+        val ctx = UnityPlayer.currentActivity?.applicationContext
+        val eggCount = ctx?.let { com.intelligame.huntix.EggInventoryManager.getInventoryCount(it) } ?: 0
+        val j = org.json.JSONObject()
+        try {
+            j.put("name", p.name)
+            j.put("xp", p.xp)
+            j.put("level", p.level)
+            j.put("power", p.power)
+            j.put("gems", p.gems)
+            j.put("energy", p.energy)
+            j.put("eggCount", eggCount)
+            j.put("eggsFound", p.eggsFound)
+            j.put("playerId", p.playerId)
+            // Sesso ed età scelti in registrazione (fonte di verità per Miacittà).
+            j.put("gender", p.playerGender)          // "male" / "female"
+            j.put("birthYear", p.birthYear)
+            j.put("isMinor", p.isMinor)
+        } catch (_: Exception) { }
+        return j.toString()
+    }
+
+    /**
+     * Accredita XP guadagnati in Miacitta (matrimonio, figli, missioni,
+     * reincarnazione) direttamente sul profilo Huntix, così alimentano XP,
+     * livello e classifica mondiale.
+     *
+     * @return il nuovo totale XP (Long).
+     */
+    @JvmStatic
+    fun addXpFromCity(xpAmount: Long): Long {
+        if (xpAmount <= 0) return getPlayerXp()
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val p = pm.myProfile ?: return 0L
+        p.xp += xpAmount
+        p.weeklyXp += xpAmount
+        p.lastSeen = System.currentTimeMillis()
+        pm.persistMyProfile()
+        return p.xp
+    }
+
+    /**
+     * Accredita potere guadagnato in Miacitta al profilo Huntix.
+     * @return il nuovo potere totale.
+     */
+    @JvmStatic
+    fun addPowerFromCity(powerAmount: Long): Long {
+        if (powerAmount <= 0) return getPlayerPower()
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val p = pm.myProfile ?: return 0L
+        p.power += powerAmount
+        p.lastSeen = System.currentTimeMillis()
+        pm.persistMyProfile()
+        return p.power
+    }
+
+    /**
+     * Accreditare gemme guadagnate in Miacitta.
+     * @return il nuovo saldo gemme.
+     */
+    @JvmStatic
+    fun addGemsFromCity(amount: Int): Int {
+        if (amount <= 0) return getPlayerGems()
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val p = pm.myProfile ?: return 0
+        p.addGems(amount)
+        pm.persistMyProfile()
+        return p.gems
+    }
+
+    /**
+     * Sincronizza l'energia del player dalla citta' al profilo Huntix
+     * (0..100). Aggiorna anche Firestore così gli altri moduli la leggono.
+     */
+    @JvmStatic
+    fun syncEnergyFromCity(energy: Int): Int {
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val p = pm.myProfile ?: return energy.coerceIn(0, 100)
+        val clamped = energy.coerceIn(0, 100)
+        if (p.energy != clamped) {
+            p.energy = clamped
+            pm.persistMyProfile()
+        }
+        return p.energy
+    }
+
+    /**
+     * Cambia il nome del player da Miacitta (es. dopo la reincarnazione).
+     * Replica updatePlayerName sul profilo locale + Firestore best-effort.
+     *
+     * @return true se il nome è stato aggiornato.
+     */
+    @JvmStatic
+    fun setPlayerNameFromCity(newName: String): Boolean {
+        if (newName.isBlank()) return false
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val p = pm.myProfile ?: return false
+        p.name = newName
+        pm.persistMyProfile()
+        // Usa il canale esistente per tenere aggiornata anche la classifica
+        pm.updatePlayerName(newName, onComplete = { }, onError = { })
+        return true
     }
 
     private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {

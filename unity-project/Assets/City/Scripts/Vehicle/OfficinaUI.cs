@@ -91,8 +91,13 @@ namespace City.Vehicle
                 // ── stato del veicolo ──
                 MakeRow("Veicolo", my.model ?? my.code);
                 MakeRow("Condizione", my.condition.ToString("F1") + "%");
+                MakeRow("Stato", DamageCaption(my.damage));
                 MakeRow("Km percorsi",
                     (my.odometer_m / 1000f).ToString("F1") + " km");
+                if (my.damage == "fire")
+                    MakeNote("AUTO IN FIAMME: chiama prima i vigili del fuoco (fuori dall'officina).");
+                else if (my.damage == "wrecked")
+                    MakeNote("Auto incidentata: riparazione disponibile.");
 
                 bool needsRepair = my.condition < 100f - 0.05f;
                 bool canPay = Wallet.CanAfford(repairCost);
@@ -109,6 +114,10 @@ namespace City.Vehicle
                             if (ok)
                             {
                                 Wallet.Spend(repairCost);
+                                VehicleOwnershipApi.Ensure().MarkRepaired(
+                                    my.code);
+                                RescueDirector.SetLocalDamage(my.code,
+                                    VehicleDamage.None);
                                 Toast("Veicolo riparato!");
                                 Show();   // ricarica lo stato
                             }
@@ -157,6 +166,15 @@ namespace City.Vehicle
         {
             if (City.UI.UIManager.Instance != null)
                 City.UI.UIManager.Instance.ShowToast(msg);
+        }
+
+        /// <summary>Didascalia leggibile per il campo danno del server.</summary>
+        private static string DamageCaption(string damage)
+        {
+            if (damage == "fire") return "IN FIAMME";
+            if (damage == "wrecked") return "Incidentata (carro attrezzi)";
+            if (damage == "flat") return "Gomma a terra";
+            return "Intatto";
         }
 
         // ── widget helpers ─────────────────────────────────────────

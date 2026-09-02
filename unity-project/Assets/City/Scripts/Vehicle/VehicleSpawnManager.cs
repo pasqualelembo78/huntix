@@ -8,6 +8,30 @@ namespace City.Vehicle
     {
         public static VehicleSpawnManager Instance;
 
+        /// <summary>
+        /// Veicoli posseduti gia' materializzati in scena fuori dal flusso a
+        /// chunk (es. auto consegnata dal carro attrezzi all'officina): il
+        /// popolatore li salta per non creare duplicati. Le voci orfane
+        /// (GameObject distrutto) si ripuliscono da sole.
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<string, GameObject>
+            activeOwned = new System.Collections.Generic.Dictionary<string, GameObject>();
+
+        public static void RegisterActiveOwned(string code, GameObject go)
+        {
+            if (string.IsNullOrEmpty(code) || go == null) return;
+            activeOwned[code] = go;
+        }
+
+        public static bool IsActiveOwned(string code)
+        {
+            if (string.IsNullOrEmpty(code)) return false;
+            if (!activeOwned.TryGetValue(code, out var go)) return false;
+            if (go != null) return true;
+            activeOwned.Remove(code);
+            return false;
+        }
+
         private const int MAX_VEHICLES_PER_ROAD = 3;
         private const float MIN_ROAD_LENGTH = 15f;
         private const float SIDE_OFFSET = 2.5f;
@@ -53,6 +77,7 @@ namespace City.Vehicle
             new VehicleDef("Moto",          25,  20f, 12f, 150f, null,         0.8f, 2.0f),
             new VehicleDef("Scooter",       20,  7f,  10f, 130f, null,         0.7f, 1.7f),
             new VehicleDef("Bici Elettrica",15,  3.5f, 10f, 140f, null,        0.5f, 1.6f),
+            new VehicleDef("Pullman",       180, 16f, 5f,  48f,  null,         2.6f, 8.6f),
         };
 
         public struct VehicleDef
@@ -136,6 +161,14 @@ namespace City.Vehicle
                 if (d.name == name) { def = d; return true; }
             }
             return false;
+        }
+
+        /// <summary>True se l'elemento del catalogo all'indice dato e' il
+        /// pullman (non parcheggiabile sul ciglio delle strade).</summary>
+        public static bool IsStreetBus(int index)
+        {
+            if (index < 0 || index >= Catalogue.Length) return false;
+            return Catalogue[index].name == "Pullman";
         }
 
         public void SpawnParkedVehicles(Transform root, OsmCityEnvelope env)
@@ -237,7 +270,9 @@ namespace City.Vehicle
             boxCol.size = new Vector3(w, 1.2f, l);
             boxCol.center = new Vector3(0f, 0.6f, 0f);
 
-            // Controller
+            // Ruote anime + Controller (l'ordine conta: il VehicleController
+            // legge il WheelSpinner nella sua Awake)
+            go.AddComponent<WheelSpinner>();
             var vc = go.AddComponent<VehicleController>();
             vc.data = CreateVehicleData(def);
 
@@ -260,6 +295,9 @@ namespace City.Vehicle
 
         private static GameObject BuildProcedural(VehicleDef def, int colorSeed)
         {
+            if (def.name == "Pullman")
+                return BuildBusProcedural();
+
             var go = new GameObject("Parked_" + def.name);
 
             Color[] colors = new Color[]
@@ -300,6 +338,66 @@ namespace City.Vehicle
             w.GetComponent<Renderer>().sharedMaterial = MakeMat(c);
             var cld = w.GetComponent<Collider>();
             if (cld != null) cld.enabled = false;
+        }
+
+        // Pullman guidabile: carrozzeria + cabina finestrata + luci + 2 assi.
+        // Il collider fisico lo aggiunge BuildVehicle (box sulle dimensioni def).
+        private static GameObject BuildBusProcedural()
+        {
+            var go = new GameObject("Pullman");
+            var blue = MakeMat(new Color(0.05f, 0.45f, 0.72f));
+            var glass = MakeMat(new Color(0.4f, 0.62f, 0.85f));
+
+            var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            body.name = "Body";
+            body.transform.SetParent(go.transform, false);
+            body.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+            body.transform.localScale = new Vector3(2.6f, 2.0f, 8.6f);
+            body.GetComponent<Renderer>().sharedMaterial = blue;
+            Object.Destroy(body.GetComponent<Collider>());
+
+            var cabin = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cabin.name = "Cabin";
+            cabin.transform.SetParent(go.transform, false);
+            cabin.transform.localPosition = new Vector3(0f, 2.7f, 0.4f);
+            cabin.transform.localScale = new Vector3(2.34f, 0.5f, 6.6f);
+            cabin.GetComponent<Renderer>().sharedMaterial = glass;
+            Object.Destroy(cabin.GetComponent<Collider>());
+
+            var dark = MakeMat(new Color(0.12f, 0.12f, 0.13f));
+            var light = MakeMat(new Color(0.98f, 0.9f, 0.6f));
+            var tail = MakeMat(new Color(0.8f, 0.12f, 0.12f));
+            var head = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            head.name = "Headlight";
+            head.transform.SetParent(go.transform, false);
+            head.transform.localPosition = new Vector3(0f, 2.4f, 4.25f);
+            head.transform.localScale = new Vector3(1.8f, 0.15f, 0.06f);
+            head.GetComponent<Renderer>().sharedMaterial = light;
+            Object.Destroy(head.GetComponent<Collider>());
+            var tailObj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            tailObj.name = "Taillight";
+            tailObj.transform.SetParent(go.transform, false);
+            tailObj.transform.localPosition = new Vector3(0f, 2.4f, -4.25f);
+            tailObj.transform.localScale = new Vector3(1.8f, 0.15f, 0.06f);
+            tailObj.GetComponent<Renderer>().sharedMaterial = tail;
+            Object.Destroy(tailObj.GetComponent<Collider>());
+
+            // ruote (4, cerchioni scuri) su 2 assi
+            float[] zs = { 2.6f, -2.6f };
+            foreach (float x in new float[] { -1.25f, 1.25f })
+                foreach (float z in zs)
+                {
+                    var wObj = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                    wObj.name = "Wheel";
+                    wObj.transform.SetParent(go.transform, false);
+                    wObj.transform.localPosition = new Vector3(x, 0.36f, z);
+                    wObj.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+                    wObj.transform.localScale = new Vector3(0.66f, 0.3f, 0.66f);
+                    wObj.GetComponent<Renderer>().sharedMaterial = dark;
+                    Object.Destroy(wObj.GetComponent<Collider>());
+                }
+
+            return go;
         }
 
         // ── Helpers ────────────────────────────────────────────────

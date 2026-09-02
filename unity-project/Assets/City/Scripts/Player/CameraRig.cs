@@ -1,4 +1,5 @@
 using UnityEngine;
+using City.OSM;
 
 namespace City.Player
 {
@@ -29,7 +30,13 @@ namespace City.Player
 
         private void Awake()
         {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
             Instance = this;
+            DontDestroyOnLoad(gameObject);
         }
 
         private void Start()
@@ -72,6 +79,12 @@ namespace City.Player
         {
             if (Input.touchCount == 2)
             {
+                // pinza sulla minimappa = zoom della minimappa (non della
+                // camera); mappa espansa aperta = zoom della mappa stessa
+                if (MinimapHud.SwallowPinch()) return;
+                if (MapSelectUI.Instance != null && MapSelectUI.Instance.IsOpen)
+                    return;
+
                 Touch t0 = Input.GetTouch(0);
                 Touch t1 = Input.GetTouch(1);
                 float currDist = Vector2.Distance(t0.position, t1.position);

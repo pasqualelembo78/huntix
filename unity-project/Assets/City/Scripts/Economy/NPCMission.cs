@@ -46,6 +46,7 @@ namespace City.Economy
             public MissionType type;
             public int targetCount;
             public int reward;
+            public int currentCount;
         }
 
         public static MissionData GenerateMissionData(int seed)
@@ -158,6 +159,13 @@ namespace City.Economy
 
         public void OnPlayerInteract()
         {
+            string cid = npc != null ? npc.CharacterId : null;
+            if (City.NPC.FamilyManager.IsMissionBlocked(cid))
+            {
+                ShowToast("Dopo il divorzio, " + (npc != null ? npc.DisplayName : "l ex)") +
+                    " non vuole avere a che fare con te per un po.");
+                return;
+            }
             if (state == MissionState.Available)
             {
                 AcceptMission();
@@ -195,16 +203,24 @@ namespace City.Economy
         {
             state = MissionState.Completed;
 
-            // roleplay: punti amicizia con il personaggio e prezzo amico (+10%)
+            // roleplay: punti amicizia (+10% amico) e, se e il coniuge, +25%
             int paid = reward;
             string cid = npc != null ? npc.CharacterId : null;
+            bool spouse = !string.IsNullOrEmpty(cid) &&
+                City.NPC.FamilyManager.IsSpouse(cid);
             if (!string.IsNullOrEmpty(cid))
             {
                 City.NPC.RelationshipManager.AddMissionComplete(cid);
                 if (City.NPC.RelationshipManager.LevelIndex(cid) >=
                     City.NPC.RelationshipManager.FriendLevelForPerk)
-                    paid = Mathf.RoundToInt(reward * 1.1f);
+                    paid = Mathf.RoundToInt(reward * (spouse ? 1.25f : 1.1f));
+                else if (spouse)
+                    paid = Mathf.RoundToInt(reward * 1.25f);
             }
+            if (spouse && cid != null)
+                PlayerPrefs.SetInt("family_spouse_xp",
+                    PlayerPrefs.GetInt("family_spouse_xp", 0) +
+                    City.NPC.FamilyManager.SpouseXpPerMission);
             Wallet.Earn(paid);
 
             if (markerObj != null)
@@ -219,7 +235,7 @@ namespace City.Economy
 
             MissionManager.Instance?.CompleteMission(this);
             ShowToast("Missione completata! +€" + paid +
-                (paid != reward ? " (prezzo amico)" : ""));
+                (paid != reward ? (spouse ? " (prezzo coniuge +25%)" : " (prezzo amico)") : ""));
 
             // Respawn marker after delay for new mission
             StartCoroutine(RespawnMarkerDelayed());

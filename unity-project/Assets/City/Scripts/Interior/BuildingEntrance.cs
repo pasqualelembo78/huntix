@@ -17,6 +17,10 @@ namespace City.Interior
         public int floorCount = 1;
         public Shop shop;
 
+        /// <summary>Zona POI veicolo associata (concessionaria/officina/garage):
+        /// passata all'interno per il bancone che apre i menu veicolo.</summary>
+        public City.Vehicle.VehiclePoiZone poiZone;
+
         private bool focused;
         public bool IsFocused => focused;
 
@@ -77,25 +81,10 @@ namespace City.Interior
 
             yield return new WaitForSecondsRealtime(0.8f);
 
-            if (Game.Instance != null && Game.Instance.fader != null && Game.Instance.fader.gameObject != null)
-            {
-                Game.Instance.fader.gameObject.SetActive(true);
-                bool done = false;
-                Game.Instance.fader.FadeToBlack(() =>
-                {
-                    Enter();
-                    Game.Instance.fader.FadeFromBlack(() =>
-                    {
-                        Game.Instance.fader.gameObject.SetActive(false);
-                        done = true;
-                    });
-                });
-                yield return new WaitUntil(() => done);
-            }
-            else
-            {
-                Enter();
-            }
+            // Il fade e' gestito da InteriorManager.EnterInterior():
+            // non duplicare il FadeToBlack qui, altrimenti due coroutines
+            // di fade competono e causano flickering all'ingresso.
+            Enter();
         }
 
         public void Interact()
@@ -120,7 +109,8 @@ namespace City.Interior
                 floorCount,
                 transform.position,
                 transform.rotation,
-                shop
+                shop,
+                poiZone
             );
         }
     }

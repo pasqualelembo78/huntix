@@ -458,10 +458,12 @@ def fire_all_staff() -> int:
     try:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) AS n FROM venue_assignments")
-        count = cur.fetchone().get("n", 0) if cur.fetchone() else 0
+        row = cur.fetchone()
+        count = row.get("n", 0) if row else 0
         if count:
             cur.execute("DELETE FROM venue_assignments")
             conn.commit()
+            logger.info("licenziato personale di %d locali (rotazione)", count)
         return count
     finally:
         put_conn(conn)
@@ -472,11 +474,20 @@ def get_reassignment_schedule() -> dict:
     Returns info about when the next automatic reassignment should happen.
     Currently suggests monthly on the 1st.
     """
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT MAX(assigned_at) AS last FROM venue_assignments")
+        row = cur.fetchone()
+        last = row.get("last") if row else None
+    finally:
+        put_conn(conn)
+
     now = datetime.now()
     next_month = now.month % 12 + 1
     next_year = now.year + (1 if now.month == 12 else 0)
     return {
-        "last_reassignment": None,  # TODO: track in DB
+        "last_reassignment": last.isoformat() if last else None,
         "next_scheduled": f"{next_year}-{next_month:02d}-01",
         "interval_days": 30,
     }

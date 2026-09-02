@@ -150,6 +150,17 @@ namespace City.Economy
             eggs.Remove(egg);
         }
 
+        /// <summary>Uova attualmente vive (non distrutte), per il radar di caccia.</summary>
+        public List<GameObject> ActiveEggs
+        {
+            get
+            {
+                for (int i = eggs.Count - 1; i >= 0; i--)
+                    if (eggs[i] == null) eggs.RemoveAt(i);
+                return eggs;
+            }
+        }
+
         private struct EggCandidate
         {
             public Vector3 pos;
@@ -283,6 +294,69 @@ namespace City.Economy
                     UnityEngine.Debug.LogWarning("[EggSpawnManager] egg create failed: " + ex);
                 }
                 placed++;
+            }
+
+            // ── 6) Uova POI-ancorate (rarita' premiata alla scoperta) ──
+            // Uova RARE o LEGENDARIE legate a edifici POI reali di uno specifico
+            // tipo (chiesa, scuola, bar, ecc.): premiano chi esplora la citta'
+            // reale e cerca i luoghi, non solo i punti casuali sulla mappa.
+            SpawnPoiEggs(root, geo, toLocal, bounds);
+        }
+
+        private static readonly string[] PoiEggBuildingTypes = new[]
+        {
+            "church", "cathedral", "chapel", "mosque", "synagogue", "temple",
+            "school", "kindergarten", "college", "university",
+            "bar", "pub", "restaurant", "cafe", "hotel", "hospital", "library",
+            "museum", "theatre", "cinema", "townhall", "post_office", "bank"
+        };
+
+        /// <summary>Piazza fino a 2 uova POI-ancorate per chunk, con rarita'
+        /// premiata (Rare o Legendary) per spingere l'esplorazione dei POI reali.</summary>
+        private void SpawnPoiEggs(Transform root, TileGeoDoc geo,
+            Func<GeoLL, Vector3> toLocal, Rect bounds)
+        {
+            if (root == null || geo == null || toLocal == null || geo.buildings == null)
+                return;
+
+            int placedPoi = 0;
+            int poiMax = 2;
+            foreach (var b in geo.buildings)
+            {
+                if (placedPoi >= poiMax) break;
+                if (b == null || string.IsNullOrEmpty(b.t) || b.c == null || b.c.Length < 2)
+                    continue;
+                if (System.Array.IndexOf(PoiEggBuildingTypes, b.t) < 0)
+                    continue;
+                // probabilita' che il POI ospiti il nido (deterministico)
+                if (rng.NextDouble() > 0.25) continue;
+
+                var geoPt = new GeoLL { a = b.c[0], o = b.c[1] };
+                Vector3 local = SafeToLocal(toLocal, geoPt);
+                if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+
+                // angolo dell'edificio, appena fuori
+                local += new Vector3((float)(rng.NextDouble() - 0.5) * 9f, 0.3f,
+                                     (float)(rng.NextDouble() - 0.5) * 9f);
+                local.y = 0.3f;
+
+                EggController.Rarity r = rng.NextDouble() < 0.3
+                    ? EggController.Rarity.Legendary
+                    : EggController.Rarity.Rare;
+
+                try
+                {
+                    var go = new GameObject("Egg_Poi_" + b.t);
+                    go.transform.SetParent(root, false);
+                    var egg = go.AddComponent<EggController>();
+                    egg.Init(root.TransformPoint(local), r, EggController.EggType.Edificio);
+                    eggs.Add(go);
+                    placedPoi++;
+                }
+                catch (System.Exception ex)
+                {
+                    UnityEngine.Debug.LogWarning("[EggSpawnManager] POI egg failed: " + ex);
+                }
             }
         }
 
