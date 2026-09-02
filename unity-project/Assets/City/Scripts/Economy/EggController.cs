@@ -7,8 +7,10 @@ namespace City.Economy
     public class EggController : MonoBehaviour
     {
         public enum Rarity { Common, Uncommon, Rare, Legendary }
+        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia }
 
         public Rarity rarity;
+        public EggType eggType;
         public int value;
 
         private float bobSpeed = 1.5f;
@@ -24,6 +26,18 @@ namespace City.Economy
         private static readonly Color RareColor = new Color(0.3f, 0.5f, 1f);
         private static readonly Color LegendaryColor = new Color(1f, 0.6f, 0.1f);
 
+        private static readonly Color StradaColor = new Color(0.55f, 0.55f, 0.55f);
+        private static readonly Color ParcoColor = new Color(0.3f, 0.8f, 0.3f);
+        private static readonly Color BoscoColor = new Color(0.15f, 0.5f, 0.15f);
+        private static readonly Color AlberoColor = new Color(0.2f, 0.7f, 0.2f);
+        private static readonly Color EdificioColor = new Color(0.7f, 0.5f, 0.3f);
+        private static readonly Color TerraColor = new Color(0.6f, 0.45f, 0.25f);
+        private static readonly Color AcquaColor = new Color(0.2f, 0.6f, 1f);
+        private static readonly Color AriaColor = new Color(0.7f, 0.85f, 1f);
+        private static readonly Color SabbiaColor = new Color(0.9f, 0.8f, 0.5f);
+        private static readonly Color FangoColor = new Color(0.45f, 0.35f, 0.2f);
+        private static readonly Color BrecciaColor = new Color(0.6f, 0.55f, 0.5f);
+
         private void Awake()
         {
             Collider col = GetComponent<Collider>();
@@ -31,17 +45,22 @@ namespace City.Economy
             col.tag = "Untagged";
         }
 
-        public void Init(Vector3 position, Rarity r)
+        public void Init(Vector3 position, Rarity r, EggType t = EggType.Strada)
         {
+            if (transform == null) { UnityEngine.Debug.LogError("[EggController.Init] transform == null"); return; }
             rarity = r;
+            eggType = t;
             startPos = position;
             transform.position = position;
             value = GetValue(r);
 
-            BuildModel(r);
+            BuildModel(r, t);
             renderers = GetComponentsInChildren<Renderer>();
-            if (renderers.Length > 0)
-                glowBase = renderers[0].sharedMaterial.GetFloat("_GlossMapScale");
+            if (renderers != null && renderers.Length > 0 && renderers[0] != null && renderers[0].sharedMaterial != null)
+            {
+                try { glowBase = renderers[0].sharedMaterial.GetFloat("_GlossMapScale"); }
+                catch (System.Exception) { glowBase = 0f; }
+            }
         }
 
         private void Update()
@@ -86,7 +105,7 @@ namespace City.Economy
         private void SpawnBurst()
         {
             int count = 8;
-            Color col = GetColor(rarity);
+            Color col = GetColor(eggType);
             for (int i = 0; i < count; i++)
             {
                 var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -104,9 +123,9 @@ namespace City.Economy
             }
         }
 
-        private void BuildModel(Rarity r)
+        private void BuildModel(Rarity r, EggType t)
         {
-            Color col = GetColor(r);
+            Color col = GetColor(t);
 
             // Egg body (squashed sphere)
             var egg = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -148,7 +167,26 @@ namespace City.Economy
             light.intensity = 1.5f;
         }
 
-        private static Color GetColor(Rarity r)
+        private static Color GetColor(EggType t)
+        {
+            switch (t)
+            {
+                case EggType.Strada: return StradaColor;
+                case EggType.Parco: return ParcoColor;
+                case EggType.Bosco: return BoscoColor;
+                case EggType.Albero: return AlberoColor;
+                case EggType.Edificio: return EdificioColor;
+                case EggType.Terra: return TerraColor;
+                case EggType.Acqua: return AcquaColor;
+                case EggType.Aria: return AriaColor;
+                case EggType.Sabbia: return SabbiaColor;
+                case EggType.Fango: return FangoColor;
+                case EggType.Breccia: return BrecciaColor;
+                default: return TerraColor;
+            }
+        }
+
+        private static Color GetRarityColor(Rarity r)
         {
             switch (r)
             {
