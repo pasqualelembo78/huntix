@@ -1,0 +1,191 @@
+==================================================================
+SISTEMA CICLO-VITA & OLTRETOMBE - STATO (AGGIORNATO: REGNI = SCENE SEPARATE)
+==================================================================
+
+PRINCIPIO UNIFORME: 1 anno = DaysPerYear (5) giorni REALI di vita.
+Sia il player sia i figli invecchiano allo stesso ritmo: daysElapsed / 5.
+
+==================================================================
+1) CICLO DI VITA (gia' implementato e compilante, CSCHECK OK)
+==================================================================
+IMPLEMENTATO in FamilyManager.cs:
+- Costanti: MaxAge=100, DaysPerYear=5, TickSeconds=6f, AdoptCost=500,
+  FosterXpBonus=20, NeedsDecreasePerDay=5, NeedsCriticalDays=3, NeedsMax=100
+- Store: + playerBornDay (giorno di nascita del player)
+- enum DeathType: STARVATION, DEHYDRATION, EXHAUSTION, OLD_AGE,
+  INCIDENTE, CADUTA, MALATTIA
+- AgeYears, IsDead, lastDeathType, deathTime
+- UpdateNeeds() / AgingTick() (1 anno ogni 5 giorni reali, morte a MaxAge)
+- AgeChildren() unificato (days / DaysPerYear)
+- SetInitialAge(int) con retrodatazione playerBornDay; flag HasChosenAge
+- Die(DeathType) con messaggi; ResetPlayerState() (reincarnazione)
+- Hook in FamilyHost.Update() ogni TickSeconds: AgeChildren + UpdateNeeds
+  + AgingTick + TickAfterlife
+- ContextActionController.cs: azioni MORI (morte libera) e REINCARNA
+
+==================================================================
+2) INFERNO / PURGATORIO / PARADISO => SCENE UNITY SEPARATE (NUOVO)
+==================================================================
+DECISIONE UTENTE: i regni NON sono reskin della citta' ma 3 SCENE UNITY
+SEPARATE, coerenti col flusso "il gioco parte da mìacittà 3D (scene City) e
+si espande verso Inferno/Purgatorio/Paradiso". Il harness verifica SOLO la
+compilazione C# (mcs + stub); le scene .unity non sono validabili qui.
+
+FILE NUOVI CREATI (in Assets/City/Scripts/Afterlife/):
+- AfterlifeRealm (enum) + RealmColors + RealmSceneController.cs
+  * enum AfterlifeRealm { INFERNO, PURGATORIO, PARADISO }
+  * RealmColors: palette per regno (Sky/Light/Platform)
+    INFERNO: rosso cupo, luce fuoco (1,0.4,0.15), pietra lavica
+    PURGATORIO: grigio denso, luce neutra, pietra grigia
+    PARADISO: azzurro sereno, luce bianca calda, nuvola chiara
+  * RealmSceneController.Build(realm): genera a runtime pavimento +
+    piattaforme (7/9/6 per regno) + pozze laviche trigger in Inferno;
+    applica Camera.main.backgroundColor + Light direzionale.
+    TearDown(): ripristina sky e distrugge root.
+  * VINCOLO harness: niente RenderSettings/FogMode (non stubati).
+- RealmSceneManager.cs
+  * Persistente (DontDestroyOnLoad), reagisce a SceneManager.sceneLoaded.
+  * Costanti scene: City / InfernoScene / PurgatorioScene / ParadisoScene.
+  * EnterRealm(realm): imposta background e carica la scena del regno
+    (LoadScene Single => sostituisce la scena attiva, niente UnloadScene,
+    non in stub).
+  * OnSceneLoaded: se e' una scena regno => BuildRealm(_pending)
+    (riusa RealmSceneController.Build). Se e' la City => LeaveRealm
+    (teardown arena attiva).
+  * ReturnToCity(): torna alla scena City (fine ciclo -> reincarnazione).
+
+SCENE .unity CREATI (Assets/City/Scenes/):
+- InfernoScene.unity    guid acd6b7f42b6f4cd296d9d977929adce2
+- PurgatorioScene.unity guid 4e02ab3f082747899d95f987ed010a4f
+- ParadisoScene.unity   guid 733ea86c1dfb40ec81fc44e165655246
+- Tutti con .meta (DefaultImporter) con gli stessi GUID.
+- CONTENUTO: YAML con SceneGUID corrispondente al .meta, OcclusionCulling,
+  RenderSettings (fog color per regno), LightmapSettings, NavMeshSettings,
+  e un GameObject "RealmRoot" vuoto. Il mondo completo e' costruito 100% a
+  runtime da RealmSceneManager/RealmSceneController. CameraRig persiste
+  da City (DontDestroyOnLoad) cosi' Camera.main e' sempre disponibile.
+
+IMPOSTAZIONI DI COMPILAZIONE:
+- ProjectSettings/EditorBuildSettings.asset: aggiunte le 3 scene con i GUID
+  sopra (registrate prima di m_configObjects).
+
+COLLEGAMENTI in FamilyManager.cs (FamilyHost):
+- EnterRealm(realm) ora delega a RealmSceneManager.Ensure().EnterRealm(realm)
+  (niente piu' build diretta: la costruzione avviene quando la scena carica).
+- BeginAfterlife(type) -> EnterRealm(INFERNO)
+- Transizione 1->2: EnterRealm(PURGATORIO) ; 2->3: EnterRealm(PARADISO)
+- Reincarnazione (3->4): RealmSceneManager.Ensure().ReturnToCity() + ResetPlayerState
+- using City.Afterlife; aggiunto
+COMPILAZIONE: ./check.sh -> CSCHECK OK
+
+==================================================================
+3) COSE DA FARE SUL SERVER PRINCIPALE (con Unity Editor)
+==================================================================
+IMPORTANTE: le scene .unity generate qui sono YAML minimi fabbricati SENZA
+Unity Editor; non garantiti byte-validi. In piu' non contengono un
+Camera/Player/Game/UI. Prima di mandare in build, sul server principale:
+
+[3.1] Scene .unity: FATTO — SceneGUID nei .unity ora corrispondono ai GUID
+     dei rispettivi .meta; scena vuota con RealmRoot e RenderSettings per
+     regno. Al primo accesso in Editor: aprire e ri-salvare per normalizzare.
+
+[3.2] DontDestroyOnLoad - FATTO in codice (da validare in Editor):
+     - GameObject "Game" (radice, contiene anche UIManager): Game.cs Awake
+       ora ha guard duplicati + DontDestroyOnLoad (Game.cs:52-66).
+     - UIManager.cs Awake: guard + DontDestroyOnLoad (e' componente sullo
+       stesso root "Game"; il Persistente radice copre il figlio).
+     - PlayerController.cs Awake: guard + DontDestroyOnLoad (nuova).
+     - CameraRig.cs Awake: guard + DontDestroyOnLoad (nuova).
+     - RealmSceneManager.cs e FamilyHost: gia' DontDestroyOnLoad.
+     NB: al ritorno in City la scena ricrea Game/Player/PlayerCamera del
+     file .unity ma i guard in Awake li distruggono subito, mantenendo le
+     istanze persistenti (riferimenti player/rig/ui restano validi).
+
+[3.3] Listener per riposizionare il player nel regno - FATTO:
+     - RealmSceneManager.OnSceneLoaded esisteva gia'; ora BuildRealm() chiama
+       PositionPlayerOnRealm() che poggia il player (y=0.2) sul pavimento
+       dell'arena del regno appena costruito (slab a y=-0.5).
+     - REINCARNA libero ora torna in citta' se si e' ancora dentro un regno
+       (ContextActionController.ReincarnateNow).
+
+[3.4] MECCANICHE PER REGNO - FATTO a livello codice (da rifinire in Editor):
+      - PlayerController.cs:
+        * DOUBLE JUMP: in Inferno un secondo salto in aria (airJumpCount,
+          doubleJumpForce); reset appena atterra.
+        * DASH: DoDash() in Inferno (velocita' 18 per 0.25s, cooldown 1.2s,
+          direzione dal joystick; niente doppio Move).
+        * VOLO: in Paradiso StartFlight/StopFlight/SetFlightVertical(+1 sali,
+          -1 scendi, 0 neutro); gravita' ridotta (flightGravityScale 0.25),
+          caduta mai sotto -2 m/s; volo si disattiva atterrando.
+      - MovingPlatform.cs (NUOVO): piattaforme del Purgatorio oscillanti su/giu
+        (ampiezza 1.2, periodo 2.4, fase per piattaforma) che trascinano il
+        player se ci sta sopra.
+      - LavaDamage.cs (NUOVO): pozze laviche dell'Inferno infliggono danno
+        (FamilyManager.Hurt(12) riduce fame/sete/fatica una volta al secondo);
+        i trigger sferici le avevano gia' ma senza gestore.
+      - FamilyManager.Hurt(int): nuovo metodo danno diretto ai bisogni.
+      - ContextActionController.cs: azioni contestuali per regno -> DASH
+        (Inferno), VOLO/SALI/SCENDI/STABILIZZA (Paradiso); il menu' radiale
+        le mostra quando non ci sono contesti piu' rilevanti.
+      - Luce/skybox: gia' applicati da RealmSceneController.
+      FIX BUG (sessione corrente):
+      - sprintRemain decrement: era dentro if(moveInput) -> sprint timer
+        freezava quando il joystick veniva rilasciato; spostato fuori dal
+        blocco.
+      - Dash velocity: prima faceva `new Vector3(dashDir.x*dashSpeed, velocity.y, ...)`
+        che portava il valore y del frame precedente; ora `velocity = move*currentSpeed`
+        viene eseguito PRIMA, poi il dash sovrascrive solo i componenti x/z.
+      - Rimosso flightThrust (campo mai usato, flightUpSpeed basta).
+      I campi tunabili (doppio salto, dash, volo, piattaforme) sono public
+      negli script, regolabili da Inspector.
+
+[3.5] Dopo le 3.1-3.4 ricompilare in Unity (non solo harness mcs) e
+     aggiornare questo file. Compilazione harness attuale: ./check.sh ->
+     CSCHECK OK.
+
+==================================================================
+4) RIFERIMENTI OPEN SOURCE (licenze) - solo Unity
+==================================================================
+- Inferno:    Unguided-Team/unguided-game (Unity, codice MIT / art CC-BY-4.0)
+- Purgatorio: llafuente/unity-platformer (Unity) /
+              striderzz/2D-Platformer-Unity (Unity)
+  (altri anche: elifyener/TheLostForest, parwam/Pixel-Adventure, Unity2D)
+- Paradiso:   bzgeb/SimpleFlightController (Unity, CC0-1.0) /
+              arthurpellegrini/TinyFlightSimulator (Unity, MIT)
+Nessuno deve essere usato come clonazione: solo riferimento/adattamento
+(codice nuovo nel progetto).
+
+==================================================================
+5) PENDENTI / TODO STORICI
+==================================================================
+- "Vita da animale" (cane/gatto/topo) dopo la morte = NON implementato.
+- Wall-climb e checkpoint (riguardo Inferno) NON ancora applicati: fatto
+  solo doppio salto + dash; erosione Purgatorio non ancora (solo piattaforme
+  mobili). Volo Paradiso fatto in modo base (thrust + sali/scendi).
+- Morte per abbandono segue il loop rapido del tick (6s), indipendente
+  dal ritmo lento di invecchiamento (5 giorni/anno): volendo si puo' rivedere.
+
+==================================================================
+FILE TOCCATI (riepilogo)
+==================================================================
+- Assets/City/Scripts/NPC/FamilyManager.cs (ciclo-vita + collegamenti
+  oltretombe + Hurt())
+- Assets/City/Scripts/NPC/FamilyKidHost.cs
+- Assets/City/Scripts/UI/ContextActionController.cs (MORI/REINCARNA +
+  azioni regno: DASH, VOLO, SALI, SCENDI, STABILIZZA)
+- Assets/City/Scripts/UI/UIManager.cs (DontDestroyOnLoad, guard)
+- Assets/City/Scripts/Game.cs (DontDestroyOnLoad, guard)
+- Assets/City/Scripts/Player/PlayerController.cs (DontDestroyOnLoad +
+  doppio salto/dash/volo, Realm property)
+- Assets/City/Scripts/Player/CameraRig.cs (DontDestroyOnLoad, guard)
+- Assets/City/Scripts/Afterlife/RealmSceneController.cs (NUOVO, + piattaforme
+  mobili Purgatorio + LavaDamage sulle pozze)
+- Assets/City/Scripts/Afterlife/RealmSceneManager.cs (NUOVO, + riposiziona
+  il player sul pavimento del regno)
+- Assets/City/Scripts/Afterlife/MovingPlatform.cs (NUOVO)
+- Assets/City/Scripts/Afterlife/LavaDamage.cs (NUOVO)
+- Assets/City/Scenes/InfernoScene.unity(.meta)   (NUOVI, da validare in Editor)
+- Assets/City/Scenes/PurgatorioScene.unity(.meta) (NUOVI, da validare in Editor)
+- Assets/City/Scenes/ParadisoScene.unity(.meta)  (NUOVI, da validare in Editor)
+- ProjectSettings/EditorBuildSettings.asset (3 scene registrate)
+- Verifica compilazione: cd backend/preprocessing/cscheck && ./check.sh
