@@ -8,6 +8,7 @@ import com.intelligame.huntix.legacy.poi.gps.OutdoorManager
 import com.intelligame.huntix.legacy.poi.game.CatchController
 import com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge
 import com.unity3d.player.UnityPlayer
+import org.json.JSONObject
 
 object Bridge {
 
@@ -86,8 +87,9 @@ object Bridge {
             "IndoorNPCNearby" -> StoreUnityBridge.onNPCNearby(jsonData)
             "IndoorNPCFar" -> StoreUnityBridge.onNPCFar(jsonData)
             "IndoorNPCDialogue" -> StoreUnityBridge.onNPCDialogue(jsonData)
-            "IndoorNPCQuestAccepted" -> {} // TODO: gestire accettazione quest in IndoorActivity
-            "IndoorARPlaneFound" -> {}     // TODO: gestire in IndoorActivity se necessario
+            "IndoorNPCQuestAccepted" -> StoreUnityBridge.onNPCQuestAccepted(jsonData)
+            "IndoorARPlaneFound" -> StoreUnityBridge.onARPlaneFound(jsonData)
+            "IndoorNeedsUpdated" -> StoreUnityBridge.onNeedsUpdated(jsonData)
              // ── Outdoor NPC events (Unity → BridgeActivity/Outdoor) ──
             "OutdoorNPCNearby" -> StoreUnityBridge.onOutdoorNPCNearby(jsonData)
             "OutdoorNPCFar" -> StoreUnityBridge.onOutdoorNPCFar(jsonData)
@@ -108,7 +110,46 @@ object Bridge {
                 }
                 ctx.startActivity(intent)
             }
+            // ── MiAcitma: uovo catturato nel mini-gioco → inventario uova Huntix
+            "EggCapturedInCity" -> handleCityEggCaptured(jsonData)
         }
+    }
+
+    /**
+     * Uovo catturato in MiAcitma (Unity): lo versa nell'inventario uova del
+     * player Huntix + aggiorna il profilo (contatori rarita'/XP/power) + premia
+     * MVC, replicando il flusso canonico di OutdoorManager.tryCatch.
+     */
+    private fun handleCityEggCaptured(jsonData: String) {
+        val ctx = UnityPlayer.currentActivity ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+
+        val rarityId = j.optString("rarityId", "common")
+        val rarity = com.intelligame.huntix.EggRarity.fromId(rarityId)
+        val fantasyName = j.optString("fantasyName", rarity.randomName())
+        val power = j.optInt("power", rarity.basePower)
+        val xpReward = j.optInt("xpReward", rarity.xpReward)
+
+        val item = com.intelligame.huntix.EggInventoryItem(
+            eggId       = j.optString("eggId", "city_" + System.currentTimeMillis()),
+            rarityId    = rarity.id,
+            fantasyName = fantasyName,
+            power       = power,
+            xpReward    = xpReward
+        )
+        val added = com.intelligame.huntix.EggInventoryManager.addEgg(ctx, item)
+        com.intelligame.huntix.PlayerProfileManager.recordEggCatch(rarity) { }
+        val mvcReward = when (rarity) {
+            com.intelligame.huntix.EggRarity.COMMON -> 5.0
+            com.intelligame.huntix.EggRarity.UNCOMMON -> 15.0
+            com.intelligame.huntix.EggRarity.RARE -> 40.0
+            com.intelligame.huntix.EggRarity.EPIC -> 100.0
+            com.intelligame.huntix.EggRarity.LEGENDARY -> 250.0
+        }
+        com.intelligame.huntix.managers.SavedManager.addMvc(ctx, mvcReward)
+        val msg = if (added) "Uovo aggiunto all'inventario! +${mvcReward.toInt()} MVC"
+        else "Inventario uova pieno!"
+        showToast(msg)
     }
 
     @JvmStatic

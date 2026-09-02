@@ -210,3 +210,19 @@ SISTEMA CATTURA UOVA (premium) - AGGIUNTO
 - PlayerController.cs: Update() torna subito se EggCaptureMinigame.IsActive.
 - Stub aggiornati (HuntixStubsGame.cs: enum Rarity + StartCapture/OnCaptured;
   UnityStubs.cs: CanvasGroup) per far compilare il check. CSCHECK OK.
+
+INTEGRAZIONE ECO-SISTEMA (uova MiAcitta -> inventario Huntix):
+- La cattura in MiAcitta (Game.OnEggCollected) ora invia l'uovo all'inventario
+  uova generale di Huntix via bridge: UnityBridge.SendMessageToAndroid
+  ("EggCapturedInCity", json con rarityId/power/xp/fantasyName). Solo su
+  dispositivo reale (#if UNITY_ANDROID && !UNITY_EDITOR).
+- Android Bridge.kt: nuovo handler "EggCapturedInCity" -> handleCityEggCaptured():
+  * EggInventoryManager.addEgg (inventario uova condiviso, collezione/evoluzione)
+  * PlayerProfileManager.recordEggCatch (contatori rarita' per profilo + XP + power)
+  * SavedManager.addMvc (premio MVC: 5/15/40/100/250 per rarita')
+  * toast di conferma
+- Replica del flusso canonico di OutdoorManager.tryCatch (stesso feed).
+- Mappatura rarita': City ha 4 (Common/Uncommon/Rare/Legendary), Huntix ne ha
+  5 (aggiunge Epic) -> le uova City mappano sulle 4 rarita' condivise.
+- Compilazione: check.sh CSCHECK OK (Unity) + :app:compileDebugKotlin BUILD
+  SUCCESSFUL (Android).
