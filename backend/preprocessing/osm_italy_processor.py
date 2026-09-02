@@ -22,10 +22,14 @@ import argparse
 import datetime as _dt
 import gzip
 import json
+import math
+import os
+import random
 import shutil
 import subprocess
 import sys
 import time
+import zlib
 from collections import Counter, defaultdict, OrderedDict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -47,8 +51,36 @@ PARK_SIMPLIFY_TOL_M = 4.0
 # POI veicoli: concessionarie, officine e garage (estratti da OSM).
 # In Unity sono gli unici luoghi dove comprare/vendere, riparare,
 # mettere antifurti e parcheggiare al coperto.
+# Ospedali/cliniche: destinazioni di navigazione sulla mappa.
 SHOP_POI_TYPES = {"car": "dealer", "car_repair": "repair"}
 GARAGE_PARKING_TYPES = {"multi-storey", "underground", "shed"}
+HOSPITAL_AMENITIES = {"hospital", "clinic"}
+# Destinazioni di navigazione aggiuntive (menu POI della mappa): scuole e bar
+SCHOOL_AMENITIES = {"school", "kindergarten", "college", "university"}
+BAR_AMENITIES = {"bar", "cafe", "pub", "fast_food", "restaurant"}
+BANK_AMENITIES = {"bank", "atm"}
+
+
+def _poi_type_for(t) -> Optional[str]:
+    """Tipo POI (stringa wire) per i tag OSM, o None se non e' un POI.
+
+    Condiviso tra way e node cosi' le due categorie restano coerenti.
+    """
+    shop = t.get("shop")
+    if shop in SHOP_POI_TYPES:
+        return SHOP_POI_TYPES[shop]
+    if t.get("amenity") in HOSPITAL_AMENITIES:
+        return "hospital"
+    if t.get("amenity") in SCHOOL_AMENITIES:
+        return "school"
+    if t.get("amenity") in BAR_AMENITIES:
+        return "bar"
+    if t.get("amenity") in BANK_AMENITIES:
+        return "bank"
+    if t.get("amenity") == "parking" and \
+            t.get("parking") in GARAGE_PARKING_TYPES:
+        return "garage"
+    return None
 
 
 def log(msg: str) -> None:
@@ -199,15 +231,10 @@ class AreasEmit(osmium.SimpleHandler):
 
     def _emit_poi_way(self, w_id: int, t, pts: List[Tuple[float, float]],
                       closed: bool) -> None:
-        """POI veicolo da way (concessionaria/officina/garage poligono o linea):
-        emette il centroide come punto."""
-        shop = t.get("shop")
-        if shop in SHOP_POI_TYPES:
-            ptype = SHOP_POI_TYPES[shop]
-        elif t.get("amenity") == "parking" and \
-                t.get("parking") in GARAGE_PARKING_TYPES:
-            ptype = "garage"
-        else:
+        """POI da way (concessionaria/officina/garage/ospedale/scuola/bar
+        poligono o linea): emette il centroide come punto."""
+        ptype = _poi_type_for(t)
+        if ptype is None:
             return
         if closed:
             clat = sum(p[0] for p in pts[:-1]) / (len(pts) - 1)
@@ -250,10 +277,48 @@ class AreasEmit(osmium.SimpleHandler):
             kind = "b"
         elif t.get("natural") == "wood":
             kind, kd = "p", "wood"
+        elif t.get("natural") == "water":
+            kind, kd = "p", "water"
+        elif t.get("natural") == "wetland":
+            kind, kd = "p", "wetland"
+        elif t.get("natural") == "sand":
+            kind, kd = "p", "sand"
+        elif t.get("natural") == "beach":
+            kind, kd = "p", "beach"
+        elif t.get("natural") == "scrub":
+            kind, kd = "p", "scrub"
+        elif t.get("natural") == "grassland":
+            kind, kd = "p", "grassland"
         elif t.get("landuse") == "forest":
             kind, kd = "p", "forest"
+        elif t.get("landuse") == "farmland":
+            kind, kd = "p", "farmland"
+        elif t.get("landuse") == "grass":
+            kind, kd = "p", "grass"
+        elif t.get("landuse") == "meadow":
+            kind, kd = "p", "meadow"
+        elif t.get("landuse") == "vineyard":
+            kind, kd = "p", "vineyard"
+        elif t.get("landuse") == "orchard":
+            kind, kd = "p", "orchard"
+        elif t.get("landuse") == "residential":
+            kind, kd = "p", "residential"
+        elif t.get("landuse") == "commercial":
+            kind, kd = "p", "commercial"
+        elif t.get("landuse") == "industrial":
+            kind, kd = "p", "industrial"
+        elif t.get("landuse") == "retail":
+            kind, kd = "p", "retail"
+        elif t.get("landuse") == "cemetery":
+            kind, kd = "p", "cemetery"
+        elif t.get("landuse") == "construction":
+            kind, kd = "p", "construction"
         elif t.get("leisure") in ("park", "garden"):
             kind, kd = "p", t.get("leisure")
+        elif t.get("leisure") == "golf_course":
+            kind, kd = "p", "golf_course"
+        elif t.get("leisure") == "playground":
+            kind, kd = "p", "playground"
         elif t.get("aeroway") == "aerodrome":
             kind = "a"
         if kind is None:
@@ -275,9 +340,14 @@ class AreasEmit(osmium.SimpleHandler):
             if self.slice_ilat is not None and \
                     tile_idx_lat(clat) != self.slice_ilat:
                 return
+            # Poligono semplificato (0.5 m tolleranza) per merge preciso
+            # degli edifici adiacenti in Unity.
+            ring = pts[:-1] if closed else pts
+            bpts = simplify_polyline(ring, 0.5)
             self.geo.write(tile_key(clat, clon),
                            {"k": "b", "id": w.id, "c": cent, "d": dims,
-                            "r": rot, "t": bval, "nm": name})
+                            "r": rot, "t": bval, "nm": name,
+                            "pts": [list(p) for p in bpts]})
             self.n_bld += 1
         elif kind == "p":
             ring = pts[:-1] if closed else pts
@@ -338,17 +408,13 @@ class PointsEmit(osmium.SimpleHandler):
                            {"k": "a", "id": n.id, "nm": t.get("name", ""),
                             "c": p, "d": [0, 0], "r": 0})
             self.n_air += 1
-        elif t.get("shop") in SHOP_POI_TYPES:
-            self.geo.write(tile_key(*p),
-                           {"k": "i", "id": n.id, "t": SHOP_POI_TYPES[t["shop"]],
-                            "p": p, "nm": t.get("name", "")})
-            self.n_poi += 1
-        elif t.get("amenity") == "parking" and \
-                t.get("parking") in GARAGE_PARKING_TYPES:
-            self.geo.write(tile_key(*p),
-                           {"k": "i", "id": n.id, "t": "garage",
-                            "p": p, "nm": t.get("name", "")})
-            self.n_poi += 1
+        else:
+            ptype = _poi_type_for(t)
+            if ptype is not None:
+                self.geo.write(tile_key(*p),
+                               {"k": "i", "id": n.id, "t": ptype,
+                                "p": p, "nm": t.get("name", "")})
+                self.n_poi += 1
 
 
 # ── Merge ────────────────────────────────────────────────────────
@@ -436,7 +502,161 @@ def merge_graph_tile(spill_file: Path, out_dir: Path) -> dict:
     return {"key": key, "nodes": len(nodes), "arcs": len(arcs)}
 
 
-def merge_geo_tile(spill_files: List[Path], out_dir: Path) -> dict:
+def _load_poi_overrides(data_dir: Path) -> dict:
+    path = data_dir / "poi_overrides.json"
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return doc if isinstance(doc, dict) else {}
+    except Exception:
+        log(f"avviso: {path.name} illeggibile, ignorato")
+        return {}
+
+
+_SYNTH_GARAGE_NAMES = [
+    "Autorimessa Comunale", "Garage Centrale", "Parcheggio Stazione",
+    "Autorimessa Garibaldi", "Garage Vittorio Emanuele",
+    "Parcheggio del Mercato", "Autorimessa Dante", "Garage Roma",
+    "Parcheggio Villa Comunale", "Autorimessa Italia",
+]
+
+_MAJOR_HW = {"primary", "secondary", "tertiary"}
+
+
+def _synth_garages(key: str, geo: dict) -> list:
+    """Garage sintetici per tile urbane senza parcheggi coperti OSM.
+
+    Posizioni deterministiche lungo le strade principali, sfalsate ~12 m
+    dal centrostrada; nomi plausibili ruotati. Stessa tile = stessi POI.
+    """
+    buildings = len(geo.get("buildings") or [])
+    if buildings < 400:
+        return []
+    pois = geo.get("pois") or []
+    if any(p.get("t") == "garage" for p in pois):
+        return []
+
+    want = 3 + min(3, buildings // 5000)
+    mlat = 1.0 / 111320.0
+    candidates = []
+    for r in geo.get("roads") or []:
+        if r.get("hw") not in _MAJOR_HW:
+            continue
+        pts = r.get("pts") or []
+        for i in range(len(pts) - 1):
+            a, b = pts[i], pts[i + 1]
+            dlat = b["a"] - a["a"]
+            dlon = (b["o"] - a["o"]) * math.cos(math.radians(a["a"]))
+            seg_m = math.hypot(dlat / mlat, dlon / 111320.0)
+            if seg_m < 120.0:
+                continue
+            mlon = 111320.0 * math.cos(math.radians(a["a"]))
+            ux, uy = dlon * mlon / seg_m, dlat / mlat / seg_m
+            px, py = -uy, ux
+            lat = (a["a"] + b["a"]) / 2.0 + py * 12.0 * mlat
+            lon = (a["o"] + b["o"]) / 2.0 + px * 12.0 / mlon
+            candidates.append((lat, lon, r.get("nm") or ""))
+            break
+
+    rng = random.Random(zlib.crc32(key.encode("utf-8")))
+    rng.shuffle(candidates)
+    picked = []
+    min_sep_deg = 800.0 * mlat
+    for cand in candidates:
+        if len(picked) >= want:
+            break
+        if all(abs(cand[0] - q[0]) > min_sep_deg
+               or abs(cand[1] - q[1]) > min_sep_deg for q in picked):
+            picked.append(cand)
+
+    base_id = -(zlib.crc32(("garage_" + key).encode("utf-8")) % 10**8) * 10
+    out = []
+    for i, (lat, lon, street) in enumerate(picked):
+        nm = (_SYNTH_GARAGE_NAMES[i % len(_SYNTH_GARAGE_NAMES)]
+              if not street else f"Garage {street}")
+        out.append({"id": base_id - i, "t": "garage",
+                    "p": [round(lat, 6), round(lon, 6)], "nm": nm})
+    return out
+
+
+_RAMP_NAMES = [
+    "Entrata Parcheggio Nord", "Entrata Parcheggio Sud",
+    "Entrata Parcheggio Est", "Entrata Parcheggio Ovest",
+    "Ingresso Sotterraneo", "Rampa Sotterranea",
+]
+
+
+def _synth_ramps(key: str, geo: dict) -> list:
+    """Rampe di ingresso al parcheggio sotterraneo nelle tile urbane.
+    2-4 rampe per tile, ogni ~1.5 km, lungo le strade principali.
+    Deterministiche: stessa tile = stessi POI.
+    """
+    buildings = len(geo.get("buildings") or [])
+    if buildings < 400:
+        return []
+
+    want = 2 + min(2, buildings // 8000)
+    mlat = 1.0 / 111320.0
+    candidates = []
+    for r in geo.get("roads") or []:
+        if r.get("hw") not in _MAJOR_HW:
+            continue
+        pts = r.get("pts") or []
+        for i in range(len(pts) - 1):
+            a, b = pts[i], pts[i + 1]
+            dlat = b["a"] - a["a"]
+            dlon = (b["o"] - a["o"]) * math.cos(math.radians(a["a"]))
+            seg_m = math.hypot(dlat / mlat, dlon / 111320.0)
+            if seg_m < 200.0:
+                continue
+            mlon = 111320.0 * math.cos(math.radians(a["a"]))
+            ux, uy = dlon * mlon / seg_m, dlat / mlat / seg_m
+            px, py = -uy, ux
+            lat = (a["a"] + b["a"]) / 2.0 + py * 15.0 * mlat
+            lon = (a["o"] + b["o"]) / 2.0 + px * 15.0 / mlon
+            candidates.append((lat, lon))
+            break
+
+    rng = random.Random(zlib.crc32(("ramp_" + key).encode("utf-8")))
+    rng.shuffle(candidates)
+    picked = []
+    min_sep = 1500.0 * mlat
+    for cand in candidates:
+        if len(picked) >= want:
+            break
+        if all(abs(cand[0] - q[0]) > min_sep or
+               abs(cand[1] - q[1]) > min_sep for q in picked):
+            picked.append(cand)
+
+    base_id = -(zlib.crc32(("ramp_" + key).encode("utf-8")) % 10**8) * 10
+    out = []
+    for i, (lat, lon) in enumerate(picked):
+        out.append({"id": base_id - i, "t": "rampa",
+                    "p": [round(lat, 6), round(lon, 6)],
+                    "nm": _RAMP_NAMES[i % len(_RAMP_NAMES)]})
+    return out
+
+
+def _augment_geo(key: str, geo: dict, overrides: dict) -> None:
+    extra = overrides.get(key) or []
+    oid = -1_000_000_000
+    for e in extra:
+        geo.setdefault("pois", []).append(
+            {"id": oid, "t": e.get("t", "garage"),
+             "p": [e["p"][0], e["p"][1]], "nm": e.get("nm", "")})
+        oid -= 1
+    synth = _synth_garages(key, geo)
+    if synth:
+        geo["pois"].extend(synth)
+    ramps = _synth_ramps(key, geo)
+    if ramps:
+        geo["pois"].extend(ramps)
+
+
+def merge_geo_tile(spill_files: List[Path], out_dir: Path,
+                   overrides: dict | None = None) -> dict:
     if not spill_files:
         return {}
     key = spill_files[0].stem
@@ -455,6 +675,9 @@ def merge_geo_tile(spill_files: List[Path], out_dir: Path) -> dict:
             r["pts"] = [{"a": p[0], "o": p[1]} for p in r["pts"]]
             geo["roads"].append(r)
         elif k == "b":
+            # Serializza poligono semplificato in formato GeoLL (a=lat, o=lon)
+            if "pts" in r:
+                r["pts"] = [{"a": p[0], "o": p[1]} for p in r["pts"]]
             geo["buildings"].append(r)
         elif k == "p":
             r["poly"] = [{"a": p[0], "o": p[1]} for p in r["poly"]]
@@ -467,6 +690,9 @@ def merge_geo_tile(spill_files: List[Path], out_dir: Path) -> dict:
             geo["pois"].append(r)
         elif k == "a":
             geo["airports"].append(r)
+    if overrides is None:
+        overrides = _load_poi_overrides(out_dir.parent / "data")
+    _augment_geo(key, geo, overrides or {})
     with gzip.open(out_dir / f"{key}_geo.json.gz", "wt",
                    encoding="utf-8", compresslevel=6) as gz:
         gz.write(json.dumps(geo, separators=(",", ":")))
@@ -486,6 +712,14 @@ class Ctx:
         self.tiles = Path(args.tiles_dir) if args.tiles_dir else BASE / "tiles"
         self.work = Path(args.work_dir) if args.work_dir else BASE / "work"
         self.tiles.mkdir(parents=True, exist_ok=True)
+        # Paese attivo (env): default "italy". I file filtrati sono
+        # data/<paese>-{roads,areas,points}.pbf; la chiave tile resta quella
+        # posizionale globale IT_<ilat>_<ilon> (griglia tipo tile_builder).
+        self.country = os.environ.get("HUNTIX_COUNTRY", "italy").strip()
+
+    def pbf(self, name: str) -> Path:
+        """Percorso data/<paese>-<name>.pbf del paese attivo."""
+        return self.data / f"{self.country}-{name}.pbf"
 
 
 def run_osmium(cmd: List[str]) -> None:
@@ -496,26 +730,93 @@ def run_osmium(cmd: List[str]) -> None:
         raise SystemExit(f"osmium fallito: {' '.join(cmd[:3])}")
 
 
+class _LandScan(osmium.SimpleHandler):
+    """Rileva le tile che contengono almeno un oggetto (terra, non mare).
+    Usato dai batch per generare solo le tile con contenuto.""" 
+
+    def __init__(self):
+        super().__init__()
+        self.keys = set()
+
+    def way(self, w):
+        locs = w.nodes
+        n = len(locs)
+        if n == 0:
+            return
+        lat = sum(l.lat for l in locs) / n
+        lon = sum(l.lon for l in locs) / n
+        self.keys.add(tile_key(lat, lon))
+
+    def node(self, n):
+        try:
+            self.keys.add(tile_key(n.location.lat, n.location.lon))
+        except Exception:
+            pass
+
+
+def cmd_land(ctx: Ctx, with_areas: bool = False) -> None:
+    """Elenco tile di terra del paese attivo: data/<paese>-land_keys.txt.
+    Default: solo points+roads (veloce; le aree edifici raddoppiavano i tempi
+    senza aumentare la copertura). Con --with-areas copre anche il verde.""" 
+    out = ctx.data / f"{ctx.country}-land_keys.txt"
+    keys = set()
+    names = ["points", "roads"] + (["areas"] if with_areas else [])
+    for name in names:
+        srcp = ctx.pbf(name)
+        if not srcp.exists():
+            log(f"land: salto {name} (manca {srcp.name})")
+            continue
+        scan = _LandScan()
+        scan.apply_file(str(srcp), locations=True, idx="sparse_mem_array")
+        keys |= scan.keys
+        log(f"land {name}: {len(keys)} tile")
+    with open(out, "w") as f:
+        f.write("\n".join(sorted(keys)) + "\n")
+    log(f"land keys ({ctx.country}): {len(keys)} tile -> {out.name}")
+
+
 def cmd_filter(ctx: Ctx, src: Path, clean: bool, force: bool) -> None:
     targets = {
-        "roads": ctx.data / "italy-roads.pbf",
-        "areas": ctx.data / "italy-areas.pbf",
-        "points": ctx.data / "italy-points.pbf",
+        "roads": ctx.pbf("roads"),
+        "areas": ctx.pbf("areas"),
+        "points": ctx.pbf("points"),
     }
     filters = {
         "roads": ["w/highway=" + ",".join(sorted(ROAD_HIGHWAYS))],
-        "areas": ["w/building", "w/natural=wood", "w/landuse=forest",
-                  "w/leisure=park", "w/leisure=garden", "w/aeroway=aerodrome",
+        "areas": ["w/building",
+                  "w/natural=wood", "w/natural=water", "w/natural=wetland",
+                  "w/natural=sand", "w/natural=beach", "w/natural=scrub",
+                  "w/natural=grassland",
+                  "w/landuse=forest", "w/landuse=farmland", "w/landuse=grass",
+                  "w/landuse=meadow", "w/landuse=vineyard", "w/landuse=orchard",
+                  "w/landuse=residential", "w/landuse=commercial",
+                  "w/landuse=industrial", "w/landuse=retail",
+                  "w/landuse=cemetery", "w/landuse=construction",
+                  "w/leisure=park", "w/leisure=garden",
+                  "w/leisure=golf_course", "w/leisure=playground",
+                  "w/aeroway=aerodrome",
                   "w/shop=car", "w/shop=car_repair",
                   "w/amenity=parking AND parking=multi-storey",
                   "w/amenity=parking AND parking=underground",
-                  "w/amenity=parking AND parking=shed"],
+                  "w/amenity=parking AND parking=shed",
+                  "w/amenity=hospital", "w/amenity=clinic",
+                  "w/amenity=school", "w/amenity=kindergarten",
+                  "w/amenity=college", "w/amenity=university",
+                  "w/amenity=bar", "w/amenity=cafe", "w/amenity=pub",
+                  "w/amenity=fast_food", "w/amenity=restaurant",
+                  "w/amenity=bank", "w/amenity=atm"],
         "points": ["n/natural=tree", "n/highway=traffic_signals",
                    "n/aeroway=aerodrome",
                    "n/shop=car", "n/shop=car_repair",
                    "n/amenity=parking AND parking=multi-storey",
                    "n/amenity=parking AND parking=underground",
-                   "n/amenity=parking AND parking=shed"],
+                   "n/amenity=parking AND parking=shed",
+                   "n/amenity=hospital", "n/amenity=clinic",
+                   "n/amenity=school", "n/amenity=kindergarten",
+                   "n/amenity=college", "n/amenity=university",
+                   "n/amenity=bar", "n/amenity=cafe", "n/amenity=pub",
+                   "n/amenity=fast_food", "n/amenity=restaurant",
+                   "n/amenity=bank", "n/amenity=atm"],
     }
     missing = [t for t in targets.values() if force or not t.exists()]
     if not missing:
@@ -540,7 +841,7 @@ def cmd_filter(ctx: Ctx, src: Path, clean: bool, force: bool) -> None:
 
 
 def cmd_graph(ctx: Ctx) -> None:
-    roads = ctx.data / "italy-roads.pbf"
+    roads = ctx.pbf("roads")
     if not roads.exists():
         raise SystemExit(f"manca {roads}: esegui prima 'filter'")
     spill_g = SpillWriter(ctx.work / "spill" / "graph")
@@ -586,7 +887,7 @@ def cmd_gen_tile(ctx: Ctx, key: str, skip_graph: bool) -> None:
     try:
         extracted = {}
         for name in ("roads", "areas", "points"):
-            srcp = ctx.data / f"italy-{name}.pbf"
+            srcp = ctx.pbf(name)
             dstp = tmp / f"x-{name}.pbf"
             if not srcp.exists():
                 log(f"avviso: manca {srcp.name}, salto {name}")
@@ -648,11 +949,16 @@ def cmd_gen_tile(ctx: Ctx, key: str, skip_graph: bool) -> None:
 
 
 def cmd_index(ctx: Ctx) -> None:
+    geo_by_key = {}
+    for gf in ctx.tiles.glob("IT_*_geo.json.gz"):
+        geo_by_key[gf.name[: -len("_geo.json.gz")]] = gf
     files = sorted(ctx.tiles.glob("IT_*.json.gz"))
     tiles = []
     tot_bytes = 0
     for f in files:
-        key = f.name.replace(".json.gz", "").replace("_geo", "")
+        if f.name.endswith("_geo.json.gz"):
+            continue
+        key = f.name[: -len(".json.gz")]
         try:
             with gzip.open(f, "rt", encoding="utf-8") as gz:
                 d = json.load(gz)
@@ -667,6 +973,20 @@ def cmd_index(ctx: Ctx) -> None:
                              ("pois", "pois")):
             if field in d:
                 entry[alias] = len(d[field])
+        gf = geo_by_key.get(key)
+        if gf:
+            try:
+                with gzip.open(gf, "rt", encoding="utf-8") as gz:
+                    gd = json.load(gz)
+            except Exception as e:
+                log(f"avviso: {gf.name} illeggibile ({e})")
+            else:
+                entry["geo_bytes"] = gf.stat().st_size
+                tot_bytes += gf.stat().st_size
+                for field in ("roads", "buildings", "parks", "airports",
+                              "trees", "signals", "pois"):
+                    if field in gd:
+                        entry[field] = len(gd[field])
         tiles.append(entry)
         tot_bytes += entry["bytes"]
     idx = {
@@ -706,6 +1026,11 @@ def main() -> None:
     gt = sub.add_parser("gen-tile")
     gt.add_argument("tile_key")
     gt.add_argument("--skip-graph", action="store_true")
+    gt.add_argument("--no-index", dest="no_index", action="store_true",
+                    help="non ricostruire index.json (per batch)")
+    land = sub.add_parser("land", help="tile di terra del paese attivo (HUNTIX_COUNTRY)")
+    land.add_argument("--with-areas", action="store_true",
+                      help="scan anche le aree (piu' lento)")
     sub.add_parser("index")
     inf = sub.add_parser("info")
     inf.add_argument("file")
@@ -718,21 +1043,23 @@ def main() -> None:
 
     ctx = Ctx(args)
     if args.cmd == "filter":
-        src = Path(args.input) if args.input else \
-            ctx.data / "italy-latest.osm.pbf"
+        src = Path(args.input) if args.input else ctx.pbf("latest")
         cmd_filter(ctx, src, args.clean, args.force)
     elif args.cmd == "graph":
         cmd_graph(ctx)
         cmd_index(ctx)
     elif args.cmd == "gen-tile":
         cmd_gen_tile(ctx, args.tile_key, args.skip_graph)
-        cmd_index(ctx)
+        if not args.no_index:
+            cmd_index(ctx)
     elif args.cmd == "index":
         cmd_index(ctx)
+    elif args.cmd == "land":
+        cmd_land(ctx, args.with_areas)
     elif args.cmd == "info":
         cmd_info(Path(args.file))
     elif args.cmd == "download":
-        dst = ctx.data / "italy-latest.osm.pbf"
+        dst = ctx.pbf("latest")
         ctx.data.mkdir(parents=True, exist_ok=True)
         subprocess.run(["wget", "-c", "-q", "--show-progress",
                         "https://download.geofabrik.de/europe/italy-latest"

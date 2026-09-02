@@ -159,7 +159,7 @@ namespace City.Economy
         /// <summary>
         /// Uova per il mondo chunked: 5-6 per chunk, distribuite su tutte le
         /// superfici disponibili (strade, parchi, boschi, alberi, edifici,
-        /// terreno libero). Deterministiche sul seed del chunk.
+        /// acqua, sabbia, fango, ecc.). Deterministiche sul seed del chunk.
         /// </summary>
         public void SpawnEggsInChunk(Transform root, TileGeoDoc geo,
             Func<GeoLL, Vector3> toLocal, Rect bounds, int chunkSeed)
@@ -195,16 +195,13 @@ namespace City.Economy
                 }
             }
 
-            // ── 2) Parchi / giardini ────────────────────────────
+            // ── 2) Parchi / terreni (tutti i kd dal geo) ────────
             if (geo.parks != null)
             {
                 foreach (var park in geo.parks)
                 {
                     if (park == null || park.poly == null || park.poly.Length < 3) continue;
-                    string kd = park.kd ?? "";
-                    EggController.EggType ptype = kd == "wood" || kd == "forest"
-                        ? EggController.EggType.Bosco
-                        : EggController.EggType.Parco;
+                    EggController.EggType ptype = KdToEggType(park.kd);
                     for (int tries = 0; tries < 3; tries++)
                     {
                         Vector3 pt = RandomPointInPolygon(park.poly, toLocal);
@@ -245,18 +242,20 @@ namespace City.Economy
                 }
             }
 
-            // ── 5) Terreno libero (acqua, aria, sabbia, fango, breccia, terra) ──
-            var terrainTypes = new[] {
-                EggController.EggType.Terra, EggController.EggType.Acqua,
-                EggController.EggType.Aria, EggController.EggType.Sabbia,
-                EggController.EggType.Fango, EggController.EggType.Breccia
-            };
-            for (int i = 0; i < 8; i++)
+            // ── 5) Terreno libero nel bbox (se pochi candidati) ──
+            if (candidates.Count < maxEggs)
             {
-                float x = bounds.xMin + (float)rng.NextDouble() * bounds.width;
-                float z = bounds.yMin + (float)rng.NextDouble() * bounds.height;
-                var t = terrainTypes[rng.Next(terrainTypes.Length)];
-                candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f, z), type = t });
+                var fallbackTypes = new[] {
+                    EggController.EggType.Terra, EggController.EggType.Aria,
+                    EggController.EggType.Breccia
+                };
+                for (int i = 0; i < maxEggs; i++)
+                {
+                    float x = bounds.xMin + (float)rng.NextDouble() * bounds.width;
+                    float z = bounds.yMin + (float)rng.NextDouble() * bounds.height;
+                    var t = fallbackTypes[rng.Next(fallbackTypes.Length)];
+                    candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f, z), type = t });
+                }
             }
 
             // ── Shuffle + piazza ────────────────────────────────
@@ -284,6 +283,27 @@ namespace City.Economy
                     UnityEngine.Debug.LogWarning("[EggSpawnManager] egg create failed: " + ex);
                 }
                 placed++;
+            }
+        }
+
+        private static EggController.EggType KdToEggType(string kd)
+        {
+            switch (kd)
+            {
+                case "wood": case "forest": return EggController.EggType.Bosco;
+                case "park": case "garden": return EggController.EggType.Parco;
+                case "water": return EggController.EggType.Acqua;
+                case "wetland": case "marsh": return EggController.EggType.Fango;
+                case "sand": case "beach": return EggController.EggType.Sabbia;
+                case "scrub": case "grassland": return EggController.EggType.Breccia;
+                case "farmland": case "meadow": case "vineyard": case "orchard":
+                    return EggController.EggType.Terra;
+                case "grass": return EggController.EggType.Parco;
+                case "residential": case "commercial": case "industrial":
+                case "retail": case "construction": return EggController.EggType.Edificio;
+                case "cemetery": return EggController.EggType.Terra;
+                case "golf_course": case "playground": return EggController.EggType.Parco;
+                default: return EggController.EggType.Terra;
             }
         }
 

@@ -81,13 +81,18 @@ namespace City.OSM
         public int r;          // rotazione gradi attorno a Y
         public string t;       // tipo OSM building ("yes", "commercial", ...)
         public string nm;      // nome opzionale
+        public GeoLL[] pts;    // poligono semplificato (lat/lon) per merge preciso
     }
 
     [Serializable]
     public class TileParkRec
     {
         public long id;
-        public string kd;      // park | garden | wood | forest
+        public string kd;      // wood | forest | park | garden | water | wetland |
+                               // sand | beach | scrub | grassland | farmland |
+                               // grass | meadow | vineyard | orchard | residential |
+                               // commercial | industrial | retail | cemetery |
+                               // construction | golf_course | playground
         public string nm;
         public GeoLL[] poly;
     }
@@ -118,6 +123,8 @@ namespace City.OSM
         public string t;       // dealer | repair | garage
         public double[] p;     // [lat, lon]
         public string nm;      // nome OSM opzionale
+        public string ph;      // telefono (se presente nei tag OSM)
+        public string web;     // sito web (se presente nei tag OSM)
     }
 
     [Serializable]
