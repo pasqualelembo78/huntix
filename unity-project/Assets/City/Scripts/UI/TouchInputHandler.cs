@@ -30,6 +30,12 @@ namespace City.UI
 
         private void Update()
         {
+            // mini-gioco di cattura uova attivo: niente move/teleport/talk
+            if (City.Economy.EggCaptureMinigame.Instance != null &&
+                City.Economy.EggCaptureMinigame.Instance.IsActive) { ResetTracking(); return; }
+            // con la mappa espansa aperta lo schermo e' coperto da un overlay:
+            // niente teleport/talk sotto la mappa (la selezione e' gestita dalla mappa)
+            if (MapSelectUI.Instance != null && MapSelectUI.Instance.IsOpen) { ResetTracking(); return; }
             if (Input.touchCount != 1) { ResetTracking(); return; }
             if (City.Game.Instance != null && City.Game.Instance.IsInInterior) { ResetTracking(); return; }
             if (City.Game.Instance != null && City.Game.Instance.IsDriving) { ResetTracking(); return; }
@@ -116,6 +122,14 @@ namespace City.UI
             if (!Physics.Raycast(ray, out RaycastHit hit, 40f,
                     ~0, QueryTriggerInteraction.Collide)) return;
 
+            // uovo: se il player e' nella zona, avvia il mini-gioco di cattura
+            var egg = hit.collider.GetComponentInParent<City.Economy.EggController>();
+            if (egg != null)
+            {
+                egg.StartCapture();
+                return;
+            }
+
             // oggetti interattivi dell'ambiente prima dei pedoni
             var prop = City.Environment.InteractableProp.FromHit(
                 hit.collider.gameObject);
@@ -124,6 +138,20 @@ namespace City.UI
                 UnityBridge.LogToAndroid("TouchInput",
                     "Interagisce con " + prop.title);
                 prop.Interact();
+                return;
+            }
+
+            // tap su un veicolo: entra se e' tuo, altrimenti apre il negozio
+            // (il trigger e' figlio della carrozzeria: cerca in entrambi i versi)
+            var vi = hit.collider.GetComponentInParent<City.Vehicle.VehicleInteract>();
+            if (vi == null)
+                vi = hit.collider.GetComponentInChildren<City.Vehicle.VehicleInteract>();
+            if (vi != null)
+            {
+                UnityBridge.LogToAndroid("TouchInput",
+                    "Tap sul veicolo: " + (vi.vehicleCode ?? ""));
+                if (City.Game.Instance != null)
+                    City.Game.Instance.OnVehicleTapped(vi);
                 return;
             }
 

@@ -45,6 +45,30 @@ namespace City.Economy
             col.tag = "Untagged";
         }
 
+        // distanza entro cui il player puo' tentare la cattura con un tap
+        public float captureRange = 5f;
+        private bool playerNear;
+        private bool captured;
+
+        public bool PlayerNear { get { return playerNear; } }
+        public bool Captured { get { return captured; } }
+
+        /// <summary>Il player e' entrato nella zona: l'uovo diventa catturabile
+        /// (evidenziato) ma NON si raccoglie da solo: serve il mini-gioco.</summary>
+        private void OnTriggerEnter(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            playerNear = true;
+            Highlight(true);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            playerNear = false;
+            Highlight(false);
+        }
+
         public void Init(Vector3 position, Rarity r, EggType t = EggType.Strada)
         {
             if (transform == null) { UnityEngine.Debug.LogError("[EggController.Init] transform == null"); return; }
@@ -88,18 +112,53 @@ namespace City.Economy
             }
         }
 
-        private void OnTriggerEnter(Collider other)
+        /// <summary>Mini-gioco terminato con successo: l'uovo viene raccolto.</summary>
+        public void OnCaptured()
         {
-            if (!other.CompareTag("Player")) return;
-
-            // Notify game
+            if (captured) return;
+            captured = true;
             if (Game.Instance != null)
                 Game.Instance.OnEggCollected(this);
-
-            // Particle burst (simple)
             SpawnBurst();
-
             Destroy(gameObject);
+        }
+
+        /// <summary>Avvia il mini-gioco di cattura (chiamato dal tap sull'uovo).</summary>
+        public void StartCapture()
+        {
+            if (captured || !playerNear) return;
+            if (EggCaptureMinigame.Instance == null)
+                EggCaptureMinigame.Ensure();
+            EggCaptureMinigame.Instance.Begin(this, result =>
+            {
+                if (result.success) OnCaptured();
+                else OnMissed();
+            });
+        }
+
+        /// <summary>Mancato: l'uovo resta al suo posto (il mini-gioco si riapre).</summary>
+        public void OnMissed()
+        {
+        }
+
+        private void Highlight(bool on)
+        {
+            if (captured || renderers == null) return;
+            foreach (var r in renderers)
+            {
+                if (r == null) continue;
+                var mat = r.sharedMaterial;
+                if (mat == null) continue;
+                if (on)
+                {
+                    mat.EnableKeyword("_EMISSION");
+                    mat.SetColor("_EmissionColor", GetColor(eggType) * 1.6f);
+                }
+                else
+                {
+                    mat.SetColor("_EmissionColor", GetColor(eggType) * 0.3f);
+                }
+            }
         }
 
         private void SpawnBurst()

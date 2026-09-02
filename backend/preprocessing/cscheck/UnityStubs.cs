@@ -20,6 +20,9 @@ namespace UnityEngine
         public static Vector2 operator +(Vector2 a, Vector2 b) => a;
         public static Vector2 operator -(Vector2 a, Vector2 b) => a;
         public static Vector2 operator *(Vector2 a, float d) => a;
+        public static Vector2 operator /(Vector2 a, float d) => a;
+        public static Vector2 operator -(Vector2 a) => a;
+        public static implicit operator Vector3(Vector2 v) => new Vector3(v.x, v.y, 0f);
         public static bool operator ==(Vector2 a, Vector2 b) => true;
         public static bool operator !=(Vector2 a, Vector2 b) => false;
         public override bool Equals(object o) => o is Vector2;
@@ -63,7 +66,9 @@ namespace UnityEngine
         [Serializable] public struct Vector2Int { public int x, y;
         public Vector2Int(int x, int y) { this.x = x; this.y = y; }
         public override bool Equals(object o) => o is Vector2Int v && v.x == x && v.y == y;
-        public override int GetHashCode() => x * 397 ^ y; }
+        public override int GetHashCode() => x * 397 ^ y;
+        public static bool operator ==(Vector2Int a, Vector2Int b) => a.x == b.x && a.y == b.y;
+        public static bool operator !=(Vector2Int a, Vector2Int b) => !(a == b); }
 
     public struct Rect { public float x, y, width, height;
         public Rect(float x, float y, float w, float h) { this.x = x; this.y = y; width = w; height = h; }
@@ -80,6 +85,8 @@ namespace UnityEngine
         public static Quaternion Slerp(Quaternion a, Quaternion b, float t) => new Quaternion();
         public static Quaternion Lerp(Quaternion a, Quaternion b, float t) => new Quaternion();
         public static Quaternion AngleAxis(float deg, Vector3 axis) => new Quaternion();
+        public static Quaternion FromToRotation(Vector3 from, Vector3 to) => new Quaternion();
+        public static Quaternion Inverse(Quaternion q) => new Quaternion();
         public static float Angle(Quaternion a, Quaternion b) => 0f;
         public Quaternion normalized => this;
         public Vector3 eulerAngles { get => Vector3.zero; set {} }
@@ -89,13 +96,17 @@ namespace UnityEngine
     public struct Color { public float r, g, b, a;
         public Color(float r, float g, float b) { this.r = r; this.g = g; this.b = b; a = 1f; }
         public Color(float r, float g, float b, float a) { this.r = r; this.g = g; this.b = b; this.a = a; }
+        public static implicit operator Color32(Color c) => new Color32(255,255,255,255);
         public static Color white => new Color(1,1,1); public static Color black => new Color(0,0,0);
         public static Color red => new Color(1,0,0); public static Color green => new Color(0,1,0);
         public static Color blue => new Color(0,0,1); public static Color yellow => new Color(1,1,0);
         public static Color gray => new Color(0.5f,0.5f,0.5f);
+        public static Color clear => new Color(0,0,0,0);
         public static Color operator *(Color c, float f) => c;
         public static Color operator +(Color a, Color b) => a;
         public static Color Lerp(Color a, Color b, float t) => a; }
+
+    public enum FontStyle { Normal, Bold, Italic, BoldAndItalic }
 
     public static class Mathf { public const float Deg2Rad = 0.01745f; public const float Rad2Deg = 57.2958f;
         public const float PI = 3.141593f; public const float Epsilon = 1.19e-7f;
@@ -123,9 +134,17 @@ namespace UnityEngine
         public static float Floor(float f) => f; public static float Ceil(float f) => f; }
     public class HeaderAttribute : Attribute { public HeaderAttribute(string h) {} }
 
+    public struct Color32 { public byte r, g, b, a;
+        public Color32(byte r, byte g, byte b, byte a)
+        { this.r = r; this.g = g; this.b = b; this.a = a; }
+        public static implicit operator Color(Color32 c) =>
+            new Color(c.r / 255f, c.g / 255f, c.b / 255f, c.a / 255f);
+    }
+
     public class GameObject : Object {
         public static GameObject Find(string name) => null;
         public static GameObject FindGameObjectWithTag(string tag) => null;
+        public static GameObject FindWithTag(string tag) => null;
         public bool activeInHierarchy => true;
         public GameObject(string n, params Type[] comps) {}
         public T GetComponent<T>() where T : Component => default(T);
@@ -165,7 +184,7 @@ namespace UnityEngine
         public Vector3 localEulerAngles { get => Vector3.zero; set {} }
         public Quaternion rotation { get; set; }
         public Vector3 eulerAngles { get; set; }
-        public Transform parent => null;
+        public Transform parent { get; set; }
         public string name { get; set; }
         public Vector3 forward => Vector3.forward;
         public Vector3 right => Vector3.right;
@@ -218,6 +237,8 @@ namespace UnityEngine
         public static T Instantiate<T>(T o) where T : Object => o;
         public static UnityEngine.Object Instantiate(UnityEngine.Object o) => o;
         public static UnityEngine.Object Instantiate(UnityEngine.Object o, Transform parent) => o;
+        public static UnityEngine.Object Instantiate(UnityEngine.Object o, Transform parent, bool worldPositionStays) => o;
+        public static T Instantiate<T>(T o, Transform parent, bool worldPositionStays) where T : Object => o;
         public static UnityEngine.Object Instantiate(UnityEngine.Object o, Vector3 pos, Quaternion rot) => o;
         public static T Instantiate<T>(T o, Transform parent) where T : Object => o;
         public static T FindObjectOfType<T>() where T : Object => default(T);
@@ -236,7 +257,7 @@ namespace UnityEngine
         public static T CreateInstance<T>() where T : ScriptableObject, new() => new T();
     }
 
-    public static class Debug { public static void Log(object m) {} public static void LogWarning(object m) {} public static void LogError(object m) {} }
+    public static class Debug { public static void Log(object m) {} public static void LogWarning(object m) {} public static void LogError(object m) {} public static void LogException(System.Exception e) {} }
 
     public struct Bounds { public Bounds(Vector3 c, Vector3 s) { center = c; size = s; min = c; extents = s; max = c; }
         public Vector3 center, size, min, max, extents;
@@ -262,6 +283,7 @@ namespace UnityEngine
         public void SetInt(string n, int v) {} public int GetInt(string n) => 0;
         public void EnableKeyword(string k) {} public void DisableKeyword(string k) {}
         public void SetTexture(string n, Texture t) {}
+        public Texture GetTexture(string n) => null;
         public void SetMainTexture(Texture t) {} }
 
     public class Shader { public string name => ""; public static Shader Find(string n) => null; }
@@ -322,6 +344,7 @@ namespace UnityEngine
     public class AudioListener : Behaviour { }
     public class Light : Behaviour { public LightType type { get; set; }
         public float intensity { get; set; } public Color color { get; set; }
+        public float range { get; set; }
         public Transform transform => null; }
     public enum LightType { Spot, Directional, Point, Area }
     public class Renderer : Component { public Bounds bounds => default(Bounds);
@@ -403,6 +426,14 @@ namespace UnityEngine
     public enum TouchPhase { Began, Moved, Stationary, Ended, Canceled }
     public struct Touch { public TouchPhase phase; public Vector2 position;
         public Vector2 deltaPosition; public Vector2 rawPosition; public int fingerId; }
+
+    // schermo (mappa espansa)
+    public static class Screen
+    {
+        public static int width => 1080;
+        public static int height => 1920;
+    }
+
     public static class Input
     {
         public static bool touchSupported => false;
@@ -516,9 +547,20 @@ namespace UnityEngine.UI
     public class Canvas : Behaviour { public RenderMode renderMode { get; set; }
         public int sortingOrder { get; set; } }
 
+    public class CanvasScaler : Behaviour
+    {
+        public enum ScaleMode { ConstantPixelSize, ScaleWithScreenSize }
+        public enum ScreenMatchMode { MatchWidthOrHeight, Expand, Shrink }
+        public ScaleMode uiScaleMode { get; set; }
+        public Vector2 referenceResolution { get; set; }
+        public float matchWidthOrHeight { get; set; }
+        public ScreenMatchMode screenMatchMode { get; set; }
+    }
+
     public class Graphic : Component
     {
         public Color color { get; set; }
+        public bool raycastTarget { get; set; }
         public RectTransform rectTransform => new RectTransform();
     }
 
@@ -526,40 +568,63 @@ namespace UnityEngine.UI
     {
         public Font font { get; set; }
         public int fontSize { get; set; }
+        public FontStyle fontStyle { get; set; }
         public TextAnchor alignment { get; set; }
         public string text { get; set; }
     }
 
     public class RawImage : Graphic { public Texture texture { get; set; } }
     public class Image : Graphic { public Sprite sprite { get; set; }
-        public bool raycastTarget { get; set; }
         public enum Type { Simple, Sliced, Tiled, Filled }
         public Type type { get; set; }
         public enum FillMethod { Horizontal, Vertical, Radial90, Radial180, Radial360 }
         public FillMethod fillMethod { get; set; }
         public float fillAmount { get; set; } }
-    public class Sprite : Object { }
+    public class Sprite : Object {
+        public static Sprite Create(Texture2D tex, Rect rect,
+            Vector2 pivot, float pixelsPerUnit) => null;
+    }
 
     // ── widget interattivi (pannelli runtime: concessionaria, garage...) ──
     public class RectOffset { public int left, right, top, bottom;
         public RectOffset(int l, int r, int t, int b) { left = l; right = r; top = t; bottom = b; } }
 
+    public struct Navigation
+    {
+        public enum Mode { None, Horizontal, Vertical, Automatic, Explicit }
+        public Mode mode { get; set; }
+    }
+
     public class Button : Component
     {
         public Graphic targetGraphic { get; set; }
+        public Navigation navigation { get; set; }
         public UnityEngine.Events.UnityEvent onClick { get; } = new UnityEngine.Events.UnityEvent();
     }
 
     public class Mask : Component { public bool showMaskGraphic { get; set; } }
-
     public class GraphicRaycaster : Component {}
+
+    public class CanvasGroup : Component { public float alpha { get; set; } }
+
+    public class InputField : Component
+    {
+        public Text textComponent { get; set; }
+        public Text placeholder { get; set; }
+        public string text { get; set; }
+        public UnityEngine.Events.UnityEvent<string> onValueChanged { get; } = new UnityEngine.Events.UnityEvent<string>();
+        public UnityEngine.Events.UnityEvent<string> onEndEdit { get; } = new UnityEngine.Events.UnityEvent<string>();
+        public void ActivateInputField() {}
+    }
 
     public class ScrollRect : Component
     {
+        public enum MovementType { Unrestricted, Elastic, Clamped }
         public RectTransform content { get; set; }
         public RectTransform viewport { get; set; }
         public bool vertical { get; set; }
         public bool horizontal { get; set; }
+        public MovementType movementType { get; set; }
     }
 
     public class LayoutGroup : Component
@@ -583,6 +648,11 @@ namespace UnityEngine.UI
     }
 }
 
+namespace UnityEngine.Rendering
+{
+    public enum CullMode { Off }
+}
+
 namespace UnityEngine.Events
 {
     public class UnityEventBase {}
@@ -592,7 +662,14 @@ namespace UnityEngine.Events
         public void RemoveListener(UnityAction call) {}
         public void Invoke() {}
     }
+    public class UnityEvent<T> : UnityEventBase
+    {
+        public void AddListener(UnityAction<T> call) {}
+        public void RemoveListener(UnityAction<T> call) {}
+        public void Invoke(T arg0) {}
+    }
     public delegate void UnityAction();
+    public delegate void UnityAction<T>(T arg0);
 }
 
 namespace UnityEngine
@@ -607,6 +684,8 @@ namespace UnityEngine
         public Texture2D(int w, int h, TextureFormat f, bool mip) {}
         public FilterMode filterMode { get; set; }
         public void SetPixels(Color[] pixels) {}
+        public void SetPixels32(Color32[] pixels) {}
+        public void SetPixel(int x, int y, Color c) {}
         public void Apply(bool updateMipmaps) {}
     }
 
@@ -626,16 +705,56 @@ namespace UnityEngine
         public Vector2 offsetMin { get; set; }
         public Vector2 offsetMax { get; set; }
     }
+
+    public static class RectTransformUtility
+    {
+        public static bool ScreenPointToLocalPointInRectangle(RectTransform rect,
+            Vector2 screenPoint, Camera cam, out Vector2 localPoint)
+        {
+            localPoint = Vector2.zero;
+            return false;
+        }
+    }
 }
 
 namespace UnityEngine.EventSystems
 {
     using UnityEngine;
+    using UnityEngine.UI;
     public class EventSystem : Behaviour
     {
         public static EventSystem current => null;
+        public void RaycastAll(PointerEventData ped,
+            System.Collections.Generic.List<RaycastResult> r) {}
     }
     public class StandaloneInputModule : Behaviour {}
+    public class PointerEventData
+    {
+        public PointerEventData(EventSystem es) {}
+        public int pointerId;
+        public Vector2 position;
+        public UnityEngine.Camera pressEventCamera;
+    }
+    public interface IPointerDownHandler
+    {
+        void OnPointerDown(PointerEventData eventData);
+    }
+    public interface IInitializePotentialDragHandler
+    {
+        void OnInitializePotentialDrag(PointerEventData eventData);
+    }
+    public interface IDragHandler
+    {
+        void OnDrag(PointerEventData eventData);
+    }
+    public interface IPointerUpHandler
+    {
+        void OnPointerUp(PointerEventData eventData);
+    }
+    public struct RaycastResult
+    {
+        public GameObject gameObject;
+    }
 }
 
 namespace TMPro
@@ -652,8 +771,15 @@ namespace TMPro
         public Color color { get; set; }
         public TextAlignmentOptions alignment { get; set; }
         public TMP_FontAsset font { get; set; }
+        public bool enableWordWrapping { get; set; }
         public bool raycastTarget { get; set; }
+        public float outlineWidth { get; set; }
+        public Color outlineColor { get; set; }
+        public TextOverflowModes overflowMode { get; set; }
     }
+
+    public enum TextOverflowModes { Overflow, Ellipsis, Mask, ScrollRect, Page, Linked }
+
 
     public class TextMeshProUGUI : TMP_Text {}
 

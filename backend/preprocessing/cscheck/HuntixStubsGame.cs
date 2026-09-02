@@ -1,53 +1,69 @@
-// Stub del Game reale (escluso dal check perche' usa UIManager/TMPro).
-// I membri che referenziano tipi City.Vehicle sono attivi solo in full mode
-// (check.sh senza argomenti definisce HUNTIX_FULL e compila anche Vehicle/).
+// Stub residui: classi reali ANCORA escluse dal check (vedi EXCL in check.sh).
+// Game.cs e UIManager.cs ora compilano davvero: i loro stub sono stati tolti.
 using UnityEngine;
 
-namespace City
+namespace City.Interior
 {
-    public class Game : UnityEngine.MonoBehaviour
+    // stub di Interior/InteractDoor.cs (escluso dal check)
+    public class InteractDoor : MonoBehaviour
     {
-        public static Game Instance => null;
-        public City.Player.PlayerController player;
-        public City.UI.UIManager ui;
-        public City.UI.ScreenFader fader;
-        public City.Player.CameraRig rig;
-        public bool IsDriving => false;
-        public bool IsInInterior => false;
-#if HUNTIX_FULL
-        public City.Vehicle.VehicleController CurrentVehicle => null;
-        public City.Vehicle.VehiclePoiZone CurrentPoiZone => null;
-        public void EnterVehicle(City.Vehicle.VehicleController vc) {}
-        public void OnVehicleFocusChanged(City.Vehicle.VehicleInteract vi) {}
-        public void OnPoiZoneFocusChanged(City.Vehicle.VehiclePoiZone zone) {}
-#endif
-        public void TeleportPlayer(Vector3 pos, Quaternion rot) {}
-        public void ExitVehicle() {}
-        public void OnMissionNPCFocusChanged(City.Economy.NPCMission mission, bool focused) {}
-        public void OnEntranceFocusChanged(City.Interior.BuildingEntrance entrance) {}
-        public void OpenShop() {}
-        public void OpenShop(City.World.Shop shop) {}
+        public bool IsFocused => false;
+        public string label = "";
+        public void Interact() {}
+    }
+}
+
+namespace City.Economy
+{
+    // stub di EggController.cs (escluso dal check)
+    public class EggController : MonoBehaviour
+    {
+        public enum Rarity { Common, Uncommon, Rare, Legendary }
+        public Rarity rarity;
+        public int value = 10;
+        public void OnCaptured() {}
+        public void StartCapture() {}
     }
 }
 
 namespace City.UI
 {
-    // stub di UIManager (reale escluso: usa TMPro)
-    public class UIManager : UnityEngine.MonoBehaviour
+    // stub di UI/DynamicJoystick.cs (escluso dal check)
+    public class DynamicJoystick : MonoBehaviour
     {
-        public static UIManager Instance;
-        public ScreenFader fader;
-        public void ShowToast(string message) {}
-        public void HideInteract() {}
-        public void ShowInteract(string label) {}
-        public void OpenShop(City.World.Shop shop) {}
-        public void ShowVehicleShop(City.Vehicle.VehicleInteract vi) {}
-        public void ShowDrivingUI(bool show) {}
+        public Vector2 Value => Vector2.zero;
+        public void Configure(RectTransform root, RectTransform baseRt, RectTransform handleRt) {}
+    }
+
+    // stub di UI/OrbitZone.cs (escluso dal check)
+    public class OrbitZone : MonoBehaviour
+    {
+        public System.Action<float> OnDragDelta;
+    }
+
+    // stub di UI/LegalManager.cs (escluso dal check)
+    public class LegalManager : MonoBehaviour
+    {
+        public bool IsVisible => false;
+        public void Init(UnityEngine.UI.Canvas parentCanvas, RectTransform parentRoot) {}
+        public void Show() {}
+        public void Hide() {}
     }
 
     public class ScreenFader : UnityEngine.MonoBehaviour
     {
+        public float duration = 0.4f;
+        public UnityEngine.UI.Image image;
         public void FadeToBlack(System.Action done) {}
         public void FadeFromBlack(System.Action done) {}
+    }
+}
+
+namespace UnityEngine.InputSystem.UI
+{
+    // stub del pacchetto Input System usato da UIManager
+    public class InputSystemUIInputModule : MonoBehaviour
+    {
+        public void AssignDefaultActions() {}
     }
 }

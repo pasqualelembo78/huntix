@@ -108,6 +108,11 @@ namespace City.Player
 
         private void Update()
         {
+            // mini-gioco di cattura uova attivo: il player e' congelato
+            if (City.Economy.EggCaptureMinigame.Instance != null &&
+                City.Economy.EggCaptureMinigame.Instance.IsActive)
+                return;
+
             Vector3 move = Vector3.zero;
             float targetSpeed = 0f;
 

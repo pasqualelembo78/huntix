@@ -189,3 +189,24 @@ FILE TOCCATI (riepilogo)
 - Assets/City/Scenes/ParadisoScene.unity(.meta)  (NUOVI, da validare in Editor)
 - ProjectSettings/EditorBuildSettings.asset (3 scene registrate)
 - Verifica compilazione: cd backend/preprocessing/cscheck && ./check.sh
+
+------------------------------------------------------------------
+SISTEMA CATTURA UOVA (premium) - AGGIUNTO
+------------------------------------------------------------------
+- EggController.cs: raccolta NON piu' automatica al trigger. Il player entra
+  nella zona (playerNear) e l'uovo si "accende"; si tappa sull'uovo per
+  avviare il mini-gioco (StartCapture). OnCaptured() = raccolta reale.
+- EggCaptureMinigame.cs (NUOVO): mini-gioco "ago rotante" full-screen.
+  * Dial con ago che gira a velocita' random (540-720°/s).
+  * Zona di cattura che si stringe con la rarita': Comune 90°, Non comune 60°,
+    Raro 38°, Leggendario 20°.
+  * Tap per fermare l'ago: se cade nella zona -> PRESO + bonus moltiplicatore
+    (fino a x3 per bullseye); se manca -> "MANCATO" e si riprova (l'uovo resta).
+  * UI costruita 100% a runtime (Canvas + RectTransform + Button + TMP),
+    nessun prefab.
+- TouchInputHandler.cs: il tap sull'uovo (raycast su trigger, GetComponentInParent)
+  avvia il mini-gioco; durante il mini-gioco il player e' congelato e i tap
+  non fanno altro (guard in Update + PlayerController.Update).
+- PlayerController.cs: Update() torna subito se EggCaptureMinigame.IsActive.
+- Stub aggiornati (HuntixStubsGame.cs: enum Rarity + StartCapture/OnCaptured;
+  UnityStubs.cs: CanvasGroup) per far compilare il check. CSCHECK OK.
