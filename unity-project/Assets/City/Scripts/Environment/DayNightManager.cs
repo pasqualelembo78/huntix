@@ -1,4 +1,5 @@
 using UnityEngine;
+using Huntix.Bridge;
 
 namespace City.Environment
 {
@@ -73,6 +74,19 @@ namespace City.Environment
             RenderSettings.sun = sun;
 
             skyMat = RenderSettings.skybox;
+            if (skyMat == null)
+            {
+                var dayTex = Resources.Load<Texture2D>("Skyboxes/skybox-day");
+                var shader = Shader.Find("Skybox/Panoramic");
+                if (shader == null) shader = Shader.Find("Skybox/Cubemap");
+                if (dayTex != null && shader != null)
+                {
+                    skyMat = new Material(shader);
+                    skyMat.SetTexture("_MainTex", dayTex);
+                    RenderSettings.skybox = skyMat;
+                    UnityBridge.LogToAndroid("DayNight", "Kenney skybox applied (chunked)");
+                }
+            }
         }
 
         private int _lastHour = -1;
@@ -124,14 +138,21 @@ namespace City.Environment
             RenderSettings.ambientIntensity = Mathf.Lerp(0.3f, 0.9f, dayNight);
 
             if (skyMat != null)
-                skyMat.color = Color.Lerp(nightSky, daySky, dayNight);
+            {
+                Color skyCol = Color.Lerp(nightSky, daySky, dayNight);
+                if (skyMat.HasProperty("_Tint"))
+                    skyMat.SetColor("_Tint", skyCol);
+                else
+                    skyMat.color = skyCol;
+            }
 
-            // nebbia notturna leggera (dai e' anche amica dell'performance)
+            // nebbia leggera sempre: di giorno fonde l'orizzonte col cielo ed
+            // evita il bordo netto tra rilievi/bacini colorati e lo sfondo.
             bool isNight = clockHours < 5.5f || clockHours > 19.5f;
-            RenderSettings.fog = isNight;
-            RenderSettings.fogColor = nightFog;
+            RenderSettings.fog = true;
+            RenderSettings.fogColor = isNight ? nightFog : new Color(0.78f, 0.84f, 0.92f);
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.0006f;
+            RenderSettings.fogDensity = isNight ? 0.0012f : 0.0009f;
         }
     }
 }

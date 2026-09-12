@@ -488,14 +488,14 @@ namespace City.OSM
         }
 
         /// <summary>Interpolazione bilineare dell'elevazione sul bbox della tile.
-        /// Coordinate griglia: riga 0 = latMax (nord), colonna lungo lon crescente.
-        /// Fuori dal bbox clampa al bordo piu' vicino.</summary>
+        /// Coordinate griglia: riga 0 = latMin (sud, come scritto da dem.py),
+        /// colonna 0 = lonMin (ovest). Fuori dal bbox clampa al bordo piu' vicino.</summary>
         private static float SampleBilinear(float[] ele, int nrow, int ncol,
             double latMin, double lonMin, double latMax, double lonMax,
             double lat, double lon)
         {
             if (ele == null || nrow <= 1 || ncol <= 1) return 0f;
-            double fy = (latMax - lat) / (latMax - latMin) * (nrow - 1);
+            double fy = (lat - latMin) / (latMax - latMin) * (nrow - 1);
             double fx = (lon - lonMin) / (lonMax - lonMin) * (ncol - 1);
             fy = Clamp(fy, 0, nrow - 1);
             fx = Clamp(fx, 0, ncol - 1);

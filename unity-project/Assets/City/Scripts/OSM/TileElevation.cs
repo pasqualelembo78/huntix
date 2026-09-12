@@ -112,7 +112,7 @@ namespace City.OSM
             double latMin, double lonMin, double latMax, double lonMax,
             double lat, double lon)
         {
-            double fy = (latMax - lat) / (latMax - latMin) * (nrow - 1);
+            double fy = (lat - latMin) / (latMax - latMin) * (nrow - 1);
             double fx = (lon - lonMin) / (lonMax - lonMin) * (ncol - 1);
             fy = fy < 0 ? 0 : (fy > nrow - 1 ? nrow - 1 : fy);
             fx = fx < 0 ? 0 : (fx > ncol - 1 ? ncol - 1 : fx);
