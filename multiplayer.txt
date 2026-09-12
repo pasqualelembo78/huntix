@@ -1,0 +1,1378 @@
+================================================================================
+  MIA CITTÀ MULTIPLAYER — SPECIFICA TECNICA
+  Versione: 1.0
+  Data: Settembre 2026
+================================================================================
+
+STATO IMPLEMENTAZIONE (aggiornato fase per fase):
+
+  [X] FASE 1 — Backend: City Realtime Server ......... COMPLETATA
+  [X] FASE 2 — Unity: MultiplayerManager + RemotePlayer ........ COMPLETATA
+  [X] FASE 3 — Bridge Android↔Unity: token + posizioni ......... COMPLETATA
+  [X] FASE 4 — Auth: JWT nella città (coperta da Fase 3, vedi log) COMPLETATA
+  [X] FASE 5 — NPC vs Remote Player: distinzione ................. COMPLETATA
+  [X] FASE 6 — Wallet server-side (opzionale) ................... COMPLETATA
+
+Indice
+------
+  1. Panoramica dell'architettura attuale
+  2. Obiettivo
+  3. Architettura target
+  4. Fase 1 — Backend: City Realtime Server
+  5. Fase 2 — Unity: MultiplayerManager + RemotePlayer + Filtro vicinanza
+  6. Fase 3 — Bridge Android↔Unity: token + posizioni
+  7. Fase 4 — Auth: JWT nella città
+  8. Fase 5 — NPC vs Remote Player: distinzione
+  9. Fase 6 (opzionale) — Wallet server-side
+  10. Database schema
+  11. Protocollo WebSocket: eventi e payload
+  12. Note di implementazione
+  13. Limiti e metriche
+  14. File da modificare/creare
+
+
+================================================================================
+1. PANORAMICA DELL'ARCHITTETTURA ATTUALE
+================================================================================
+
+Stack attuale:
+  - Unity 2022+ (URP) per il gioco 3D della città
+  - Kotlin/Android per l'app wrapper (CityActivity.kt)
+  - Python 3.11+ / FastAPI per il backend (app.py)
+  - Socket.IO (python-socketio + socketio.AsyncServer) per chat IA
+  - PostgreSQL per persistenza
+  - JWT (HS256) per auth utenti
+
+Flusso attuale (single player):
+  Android → UnityBridge.java → Unity (Game.cs, PlayerController)
+  Unity → TileClient HTTP → Backend tile_server.py (OSM data)
+  Unity → Socket.IO → app_socket.py (chat IA con NPC)
+  Unity → HTTP → VehicleOwnershipApi (veicoli)
+
+Stato attuale:
+  - Player singleton: Game.Instance.player, PlayerController.Instance
+  - Identità: GUID locale in PlayerPrefs (huntix_player_id)
+  - Wallet: PlayerPrefs (city_money)
+  - NPC: spawnati proceduralmente da NPCPopulator con seed deterministico
+  - Nessun real-time networking per posizioni/azioni nel mondo
+  - Nessun concetto di "altri giocatori visibili"
+
+
+================================================================================
+2. OBIETTIVO
+================================================================================
+
+Aggiungere multiplayer real-time nella sezione MiaCittà (Unity City).
+- Più giocatori nello stesso mondo, visibili contemporaneamente
+- Ogni giocatore vede gli altri muoversi in real-time
+- Il mondo resta unico (no istanze/room separate)
+- Le zone (chunk) filtrano: vedi solo i player vicini
+- NPC restano locali (generati da ogni client)
+- Limite concettuale: ~50 player simultanei per zona metropolitana
+  (la griglia OSM è grande, quindi la distribuzione naturale riduce
+  la concorrenza per zona)
+
+
+================================================================================
+3. ARCHITETTURA TARGET
+================================================================================
+
+    +-----------+       WebSocket (Socket.IO)      +------------------+
+    |  Unity    | <===============================> |  Backend Python  |
+    | (Client)  |                                   |  city_realtime.py|
+    +-----------+                                   +------------------+
+         |                                                  |
+         | UnityBridge.java                                 | PostgreSQL
+         |                                                  |
+    +-----------+                                     +------------------+
+    | Android   |                                     |  DB: city_players|
+    | (Kotlin)  |                                     +------------------+
+    +-----------+
+
+Concetti chiave:
+  - Zone: il mondo diviso in griglie (GRID_SIZE = 100m)
+  - Ogni player subscribe alle zone visibili (~9 zone: 3x3 intorno a sé)
+  - Il server relay le posizioni solo agli iscritti della stessa zona
+  - Interpolazione client-side (Lerp) per movimento smooth
+  - Heartbeat: il client manda posizione ogni HEARTBEAT_MS (100ms default)
+
+
+================================================================================
+4. FASE 1 — BACKEND: CITY REALTIME SERVER
+================================================================================
+
+File da creare: backend/city_realtime.py
+
+Responsabilità:
+  - Ricevere posizioni dai client (WebSocket)
+  - Mantenere stato corrente di tutti i player connessi
+  - Relayare le posizioni ai client della stessa zona
+  - Gestire join/leave con notifica agli altri
+  - Cleanup automatico dei player inattivi
+
+4.1 — Struttura dello stato server
+
+city_players = {
+    "user_id_1": {
+        "sid": "socket_session_id",       # Socket.IO session ID
+        "username": "Marco",
+        "level": 5,
+        "skin": "humanMaleA",
+        "lat": 41.123456,
+        "lon": 12.456789,
+        "heading": 90.0,                  # gradi
+        "anim_state": "walk",             # idle/walk/run/drive
+        "vehicle_code": "",               # codice auto se in guida
+        "zone": "397_103",                # chiave zona corrente
+        "last_update": 1693737600.0,      # epoch timestamp
+    },
+    ...
+}
+
+GRID_SIZE = 100.0  # metri per lato della zona
+
+def zone_key(lat, lon):
+    """Converte coordinate geo in chiave zona."""
+    # Proiezione semplice: 1 grado lat ≈ 111km, 1 grado lon ≈ 85km (a lat 41°)
+    x = int((lon - LON_ORIGIN) * 111000 / GRID_SIZE)
+    y = int((lat - LAT_ORIGIN) * 111000 / GRID_SIZE)
+    return f"{x}_{y}"
+
+4.2 — Eventi Socket.IO (namespace /city)
+
+Client → Server:
+  "city:join"       → { token, lat, lon, heading, skin }
+  "city:move"       → { lat, lon, heading, anim_state }
+  "city:vehicle"    → { vehicle_code, action: "enter"|"exit"|"park" }
+  "city:chat"       → { text }  (messaggio globale opzionale)
+  "city:leave"      → {}
+
+Server → Client:
+  "city:welcome"    → { player_id, players: [... zona attuale] }
+  "city:player_join"→ { player_id, username, level, skin, lat, lon, heading }
+  "city:player_move"→ { player_id, lat, lon, heading, anim_state }
+  "city:player_leave"→ { player_id }
+  "city:vehicle_update" → { player_id, vehicle_code, action }
+  "city:chat"       → { player_id, username, text }
+
+4.3 — Logica di zona (subscribe/unsubscribe)
+
+Quando il client si muove e la zona cambia:
+  1. Calcola nuova zona: new_zone = zone_key(new_lat, new_lon)
+  2. Se new_zone != old_zone:
+     a. Unsubscribe dalla vecchia zona
+     b. Subscribe alla nuova zona
+     c. Ricevi tutti i player nella nuova zona (city:welcome con lista)
+     d. Invia city:player_leave ai vecchi vicini
+     e. Invia city:player_join ai nuovi vicini
+
+  Zona visibile = 3x3 attorno alla zona del player (9 zone totali)
+  Perimeter = zone adiacenti che entrano/escono dalla vista
+
+4.4 — Cleanup automatico
+
+  TIMEOUT = 30 secondi senza heartbeat
+  Se last_update > now - TIMEOUT:
+    - Rimuovi il player dallo stato
+    - Invia city:player_leave a tutti gli iscritti alle sue zone
+    - Log "Player {username} timeout - disconnected"
+
+4.5 — Integrazione con app_socket.py
+
+  In app_socket.py, in register_socket_handlers(sio):
+    - Import city_realtime
+    - Registra gli handler /city sullo stesso sio server
+
+  NOTA: il namespace /city è separato dal namespace default (chat IA).
+  Questo evita conflitti e permette di gestire la città in modo isolato.
+
+  Per separare i namespace con python-socketio:
+    sio = socketio.AsyncServer(async_mode="asgi", ...)
+    # In register_socket_handlers:
+    @sio.on("city:join", namespace="/city")
+    async def on_city_join(sid, data):
+        ...
+
+  Lato client Unity: la connessione Socket.IO è già presente per la chat.
+  Basta aprire una seconda connessione con namespace "/city".
+
+4.6 — Endpoint HTTP opzionale
+
+  GET /api/city/players?lat=X&lon=Y&radius=500
+    → lista player visibili (per debug/UI overlay)
+
+  GET /api/city/stats
+    → { total_players: 42, zones_active: 15, uptime: 3600 }
+
+
+================================================================================
+5. FASE 2 — UNITY: MULTIPLAYERMANAGER + REMOTEPLAYER
+================================================================================
+
+5.1 — Nuovo file: Assets/City/Scripts/Multiplayer/MultiplayerManager.cs
+
+Responsabilità:
+  - Gestire la connessione Socket.IO verso il namespace /city
+  - Inviare la posizione locale ogni HEARTBEAT_MS
+  - Ricevere e distribuire le posizioni degli altri player
+  - Mantenere il dizionario dei RemotePlayer
+  - Fornire API per cercare player vicini
+
+Classe:
+
+public class MultiplayerManager : MonoBehaviour
+{
+    public static MultiplayerManager Instance;
+
+    // Configurazione
+    private const float HEARTBEAT_MS = 0.1f;      // 100ms
+    private const float INTERPOLATION_SPEED = 8f;  // Lerp speed
+    private const string NAMESPACE = "/city";
+
+    // Stato
+    private float heartbeatTimer;
+    private string myPlayerId;
+    private bool connected;
+    private Dictionary<string, RemotePlayer> remotePlayers;
+
+    // Riferimenti
+    private CitySocketClient socketClient;  // client Socket.IO Unity
+    private Transform playerTransform;      // Game.Instance.player.transform
+
+    // API pubblica
+    public bool IsConnected => connected;
+    public int PlayerCount => remotePlayers.Count;
+    public IReadOnlyDictionary<string, RemotePlayer> Others => remotePlayers;
+
+    void Awake()
+    {
+        Instance = this;
+        remotePlayers = new Dictionary<string, RemotePlayer>();
+    }
+
+    void Start()
+    {
+        // Trova il player locale
+        playerTransform = Game.Instance.player.transform;
+        // Connetti al namespace /city
+        ConnectToCitySocket();
+    }
+
+    void Update()
+    {
+        if (!connected) return;
+
+        // Heartbeat: manda posizione ogni 100ms
+        heartbeatTimer += Time.deltaTime;
+        if (heartbeatTimer >= HEARTBEAT_MS)
+        {
+            heartbeatTimer = 0f;
+            SendPosition();
+        }
+
+        // Interpola tutti i remote player verso la loro posizione target
+        foreach (var rp in remotePlayers.Values)
+        {
+            rp.Interpolate(INTERPOLATION_SPEED);
+        }
+    }
+
+    void SendPosition()
+    {
+        // Manda lat, lon, heading, anim_state al server
+        Vector3 pos = playerTransform.position;
+        GeoCoord geo = WorldOrigin.ToGeo(pos);
+        float heading = playerTransform.eulerAngles.y;
+        string anim = Game.Instance.player.IsMoving ? "walk" : "idle";
+
+        socketClient.Emit("city:move", new {
+            lat = geo.lat,
+            lon = geo.lng,
+            heading = heading,
+            anim_state = anim
+        });
+    }
+
+    // Callback dal Socket.IO client
+    void OnPlayerJoin(string playerId, string username, int level,
+                      string skin, float lat, float lon, float heading)
+    {
+        if (playerId == myPlayerId) return;  // ignora te stesso
+        if (remotePlayers.ContainsKey(playerId)) return;
+
+        Vector3 worldPos = WorldOrigin.ToWorld(lat, lon);
+        RemotePlayer rp = RemotePlayer.Spawn(
+            playerId, username, level, skin, worldPos, heading);
+        remotePlayers[playerId] = rp;
+    }
+
+    void OnPlayerMove(string playerId, float lat, float lon,
+                      float heading, string animState)
+    {
+        if (!remotePlayers.TryGetValue(playerId, out RemotePlayer rp)) return;
+        Vector3 targetPos = WorldOrigin.ToWorld(lat, lon);
+        rp.SetTarget(targetPos, heading, animState);
+    }
+
+    void OnPlayerLeave(string playerId)
+    {
+        if (remotePlayers.TryGetValue(playerId, out RemotePlayer rp))
+        {
+            rp.Destroy();
+            remotePlayers.Remove(playerId);
+        }
+    }
+
+    void OnWelcome(string myId, List<PlayerState> players)
+    {
+        myPlayerId = myId;
+        foreach (var p in players)
+        {
+            OnPlayerJoin(p.id, p.username, p.level, p.skin,
+                        p.lat, p.lon, p.heading);
+        }
+    }
+}
+
+5.2 — Nuovo file: Assets/City/Scripts/Multiplayer/RemotePlayer.cs
+
+Responsabilità:
+  - Istanciare il modello Kenney con la skin corretta
+  - Interpolare posizione/rotazione verso il target
+  - Mostrare nome tag (nome utente + livello)
+  - Nessun input locale, nessuna fisica
+  - Collisione kinematica (stessa logica NPC)
+
+Classe:
+
+public class RemotePlayer : MonoBehaviour
+{
+    public string PlayerId;
+    public string Username;
+    public int Level;
+    public string Skin;
+
+    // Stato interpolato
+    private Vector3 targetPosition;
+    private float targetHeading;
+    private string animState;
+
+    // Componenti
+    private Animator animator;
+    private CharacterWalker walker;
+    private Transform nameTag;
+    private TextMeshPro nameTagTmp;
+
+    // Template: il prefab del player locale (o characterMedium)
+    private static GameObject prefab;
+
+    public static RemotePlayer Spawn(string id, string username, int level,
+                                     string skin, Vector3 pos, float heading)
+    {
+        if (prefab == null)
+            prefab = Resources.Load<GameObject>("Characters/characterMedium");
+
+        GameObject go = Instantiate(prefab);
+        go.name = "RemotePlayer_" + username;
+        go.tag = "Untagged";  // NON "Player" — importantissimo
+
+        // Rimuovi PlayerController e CharacterController
+        var pc = go.GetComponent<PlayerController>();
+        if (pc != null) Destroy(pc);
+        var cc = go.GetComponent<CharacterController>();
+        if (cc != null) Destroy(cc);
+
+        var rp = go.AddComponent<RemotePlayer>();
+        rp.PlayerId = id;
+        rp.Username = username;
+        rp.Level = level;
+        rp.Skin = skin;
+        rp.targetPosition = pos;
+        rp.targetHeading = heading;
+
+        // Applica skin
+        PlayerAppearance.ApplyTo(go, skin);
+
+        // Setup collider kinematico (come NPC)
+        var capsule = go.AddComponent<CapsuleCollider>();
+        capsule.height = 1.7f;
+        capsule.radius = 0.25f;
+        capsule.center = new Vector3(0f, 0.85f, 0f);
+
+        var rb = go.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.useGravity = false;
+
+        // Setup animazioni
+        go.GetComponentInChildren<Animator>();
+
+        // Setup name tag
+        rp.SetupNameTag();
+
+        go.transform.position = pos;
+        go.transform.rotation = Quaternion.Euler(0, heading, 0);
+
+        return rp;
+    }
+
+    public void SetTarget(Vector3 pos, float heading, string anim)
+    {
+        targetPosition = pos;
+        targetHeading = heading;
+        animState = anim;
+    }
+
+    public void Interpolate(float speed)
+    {
+        // Movimento smooth
+        transform.position = Vector3.Lerp(
+            transform.position, targetPosition,
+            speed * Time.deltaTime);
+
+        // Rotazione smooth
+        Quaternion targetRot = Quaternion.Euler(0, targetHeading, 0);
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation, targetRot,
+            speed * Time.deltaTime);
+
+        // Animazioni
+        bool moving = animState == "walk" || animState == "run";
+        if (animator != null)
+            animator.SetFloat("Speed", moving ? 1f : 0f);
+    }
+
+    void SetupNameTag()
+    {
+        // Stessa logica di NPCController.EnsureNameTag()
+        // ma con nome utente + livello + indicatore "PLAYER"
+        var go = new GameObject("NameTag");
+        nameTag = go.transform;
+        nameTag.SetParent(transform, false);
+        nameTag.localPosition = new Vector3(0f, 2.6f, 0f);
+
+        nameTagTmp = go.AddComponent<TextMeshPro>();
+        nameTagTmp.fontSize = 2.4f;
+        nameTagTmp.alignment = TextAlignmentOptions.Center;
+        nameTagTmp.color = new Color(0.4f, 0.8f, 1f);  // azzurro per player
+        go.SetActive(false);
+    }
+
+    void UpdateNameTag()
+    {
+        // Mostra/nasconde in base alla distanza dalla camera
+        // Stessa logica di NPCController.UpdateNameTag()
+        if (nameTag == null) return;
+        var cam = Camera.main;
+        if (cam == null) { nameTag.gameObject.SetActive(false); return; }
+
+        float distSqr = (cam.transform.position - transform.position).sqrMagnitude;
+        bool show = distSqr < 400f;
+        nameTag.gameObject.SetActive(show);
+        if (!show) return;
+
+        nameTag.rotation = cam.transform.rotation;
+        nameTagTmp.text = "🎮 " + Username +
+            "\n<size=60%>Lv." + Level + "</size>";
+    }
+
+    public void Destroy()
+    {
+        Destroy(gameObject);
+    }
+}
+
+5.3 — Modifiche a Game.cs
+
+In Game.cs aggiungere:
+
+  // Nuovo campo
+  public MultiplayerManager multiplayer;
+
+  // In Start(), dopo trovare player:
+  multiplayer = gameObject.AddComponent<MultiplayerManager>();
+
+5.4 — Asset richiesti
+
+  - Il prefab "characterMedium" è già in Resources/Characters/
+  - Le skin dei player (humanMaleA, humanFemaleA, ecc.) sono già in Resources/Characters/Skins/
+  - Le animazioni (PlayerAnim.controller) sono già in Art/kenney_animated-characters-1/
+  - Nessun nuovo asset necessario per la Fase 2
+
+5.5 — Dipendenza Socket.IO Unity
+
+  Per connettersi al server Socket.IO serve un client Socket.IO per Unity.
+  Opzioni:
+    a) ComunitySockets (open source, su Asset Store)
+    b) Socket.IO Unity client (https://github.com/SocketIO/Socket.IO-Client-Engine.IO)
+    c) Implementazione WebSocket nativa + protocollo Engine.IO manualmente
+
+  Opzione consigliata: a) ComunitySockets — ben mantenuto, supporta namespaces
+
+  Il client Socket.IO deve:
+    - Connettersi allo stesso server di app_socket.py
+    - Supportare namespace separati ("/city")
+    - Gestire reconnect automatico
+
+5.6 — Filtro di vicinanza (MAX_REMOTE_PLAYERS)
+
+  PROBLEMA: se 50 player entrano nella stessa zona, il telefono non puo'
+  renderizzarli tutti (calo frame, memoria, calore).
+
+  SOLUZIONE: il telefono mostra solo i N player piu' vicini. Gli altri
+  esistono nel server ma il telefono li ignora (non li renderizza).
+
+  Costanti:
+
+    MAX_REMOTE_PLAYERS = 20    // massimo player visibili sullo schermo
+    VISIBLE_RANGE = 200f       // metri: distanza massima per essere visibili
+    FILTER_UPDATE_SEC = 0.5f   // ogni 0.5 secondi ricalcola chi mostrare
+
+  Logica in MultiplayerManager.Update():
+
+    void UpdateVisibilityFilter()
+    {
+        // 1. Prendi tutti i remote player conosciuti
+        // 2. Calcola distanza di ciascuno dal player locale
+        // 3. Ordina per distanza (piu' vicini prima)
+        // 4. I primi MAX_REMOTE_PLAYERS →SetActive(true)
+        // 5. Gli altri → SetActive(false)
+        // 6. Tutti quelli fuori da VISIBLE_RANGE → SetActive(false)
+
+        var myPos = playerTransform.position;
+        var sorted = remotePlayers.Values
+            .OrderBy(rp => Vector3.Distance(myPos, rp.transform.position))
+            .ToList();
+
+        int shown = 0;
+        foreach (var rp in sorted)
+        {
+            float dist = Vector3.Distance(myPos, rp.transform.position);
+            bool shouldBeVisible = shown < MAX_REMOTE_PLAYERS
+                                   && dist <= VISIBLE_RANGE;
+            rp.gameObject.SetActive(shouldBeVisible);
+            if (shouldBeVisible) shown++;
+        }
+    }
+
+  Chiamata: ogni FILTER_UPDATE_SEC nel Update() del MultiplayerManager.
+
+  PERCHE' FUNZIONA:
+  - Il server manda I DATI di tutti i 50 player (lat, lon, heading)
+  - Il client li salva tutti nel dictionary remotePlayers
+  - Ma SetActive(false) = il GameObject e' spento → nessuna renderizzazione
+  - Il telefono non spreca memoria GPU per i player lontani
+  - Quando uno si avvicina, rientra nei 20 piu' vicini → SetActive(true)
+  - Il passaggio da visibile a invisibile e' graduale (nessun pop-in bruto)
+
+  ECCEZZIONE: i player in veicolo (anim_state == "drive") possono avere
+  un raggio di visibilita' maggiore (300m) perché sono piu' facili da
+  renderizzare (un solo modello auto, meno poligoni di un personaggio
+  con animazioni).
+
+
+================================================================================
+6. FASE 3 — BRIDGE ANDROID↔UNITY: TOKEN + POSIZIONI
+================================================================================
+
+6.1 — Modifiche a UnityBridge.java
+
+  Aggiungere metodi:
+
+  // Mandato da Android a Unity quando il player si muove
+  public static void SendPlayerPosition(double lat, double lon, double heading) {
+      // Costruisce JSON e lo manda a Unity via SendMessage
+      String json = String.format(
+          "{\"lat\":%.6f,\"lon\":%.6f,\"heading\":%.1f}", lat, lon, heading);
+      unityPlayer.UnitySendMessage("MultiplayerManager", "OnAndroidPosition", json);
+  }
+
+  // Mandato da Unity a Android per ricevere token
+  // (o il token viene passato direttamente al setup in CityActivity)
+
+6.2 — Modifiche a CityActivity.kt
+
+  Quando CityActivity viene creata e passa il token a Unity:
+
+  // Nel metodo che inizializza Unity (setupUnityPlayer o simile):
+  val token = AuthManager.getAccessToken()  // JWT corrente
+  unityPlayer SendMessage "MultiplayerManager" "OnTokenReceived" token
+
+  // Periodicamente (o su evento GPS), mandare posizione a Unity:
+  // UnityBridge.SendPlayerPosition(currentLat, currentLon, currentHeading)
+
+6.3 — Token flow
+
+  1. CityActivity.kt ottiene JWT da AuthManager
+  2. Lo passa a Unity via UnityBridge
+  3. Unity lo salva in memoria (NON in PlayerPrefs — è sensibile)
+  4. MultiplayerManager lo usa per autenticarsi sul WebSocket /city
+  5. Il server lo verifica usando socket_authenticate() (esistente in auth_fastapi.py)
+
+
+================================================================================
+7. FASE 4 — AUTH: JWT NELLA CITTÀ
+================================================================================
+
+7.1 — Verifica token sul server
+
+  In city_realtime.py:
+
+  @sio.on("city:join", namespace="/city")
+  async def on_city_join(sid, data):
+      token = data.get("token", "")
+      payload = socket_authenticate(token)  # funzione esistente in auth_fastapi.py
+      if not payload:
+          await sio.emit("city:error",
+              {"message": "Token non valido"}, room=sid, namespace="/city")
+          return
+
+      user_id = payload["user_id"]
+      username = payload.get("username", "Giocatore")
+      # ... resto della logica join
+
+7.2 — Dati player dal DB
+
+  Quando un player fa city:join, il server legge dal DB:
+    - username
+    - level (dalla tabella utenti o gamification)
+    - skin (dalla tabella profilo)
+    - eventuali info extra (titolo, badge, ecc.)
+
+  Questi dati vengono mandati a tutti nella zona via city:player_join
+
+
+================================================================================
+8. FASE 5 — NPC vs REMOTE PLAYER: DISTINZIONE
+================================================================================
+
+8.1 — Il problema
+
+  NPC e RemotePlayer sono entrambi modelli Kenney che camminano.
+  Il client deve distinguerli per:
+    - Non interagire con un RemotePlayer come se fosse un NPC
+    - Mostrare nome diverso (nome utente vs nome finto)
+    - Non avviare missioni NPC su un RemotePlayer
+
+8.2 — Soluzione
+
+  Tag Unity:
+    - NPC: tag "Untagged" (come ora)
+    - RemotePlayer: tag "RemotePlayer" (nuovo tag da creare in Unity)
+
+  Layer Unity (opzionale ma consigliato):
+    - Layer "NPC" per i pedoni
+    - Layer "RemotePlayer" per gli altri giocatori
+    - Il raycast del TouchInputHandler ignora RemotePlayer per interazione
+
+  In NPCController.cs:
+    - Nessuna modifica necessaria. Il NPC continua a funzionare come prima.
+    - Il raycast di touch rileva solo tag "Untagged" o collider NPC.
+
+  In TouchInputHandler.cs (o dove c'è il raycast per tap):
+    - Aggiungere filtro: se colpisci un oggetto con tag "RemotePlayer",
+      non fare nulla (o apri profilo player opzionale).
+
+8.3 — Name tag differente
+
+  NPC:     nome finto (Marco, Giulia, ecc.) + ruolo IA + livello amicizia
+  Player:  nome utente reale + livello + icona 🎮 + colore azzurro
+
+  La distinzione visiva è immediata.
+
+
+================================================================================
+9. FASE 6 (OPZIONALE) — WALLET SERVER-SIDE
+================================================================================
+
+9.1 — Obiettivo
+
+  I soldi del giocatore sono salvati sul server, non sul telefono.
+  Cambi telefono? Hai i tuoi soldi.
+
+9.2 — Modifiche
+
+  - Nuova tabella: city_wallet(user_id INT PRIMARY KEY, money INT DEFAULT 300)
+  - Nuovi endpoint:
+      GET  /api/city/wallet?token=XXX  → { money: 1250 }
+      POST /api/city/wallet/spend      → { amount: 50 }  → { ok: true, money: 1200 }
+      POST /api/city/wallet/earn       → { amount: 10 }  → { ok: true, money: 1260 }
+
+  - In Unity: Wallet.cs cambiato da PlayerPrefs a HTTP GET/POST
+  - Aggiungere caching lato client (non fare una richiesta HTTP ogni frame)
+  - Sincronizzazione: quando il player spende/guadagna localmente,
+    manda subito al server. Il server è authoritative.
+
+9.3 — Rischio
+
+  Molte modifiche a Wallet.cs e a tutti i punti che chiamano
+  Wallet.Spend / Wallet.Earn. Circa 30-40 punti nel codice.
+  Alta probabilità di bug se fatto male. Meglio farlo per ultimo
+  e con test approfonditi.
+
+
+================================================================================
+10. DATABASE SCHEMA
+================================================================================
+
+-- Tabella player connessi (stato volatile, pulita periodicamente)
+CREATE TABLE city_active_players (
+    user_id     INT PRIMARY KEY REFERENCES users(id),
+    username    VARCHAR(64) NOT NULL,
+    level       INT DEFAULT 1,
+    skin        VARCHAR(32) DEFAULT 'humanMaleA',
+    lat         DOUBLE PRECISION,
+    lon         DOUBLE PRECISION,
+    heading     FLOAT DEFAULT 0,
+    zone        VARCHAR(16),
+    last_update TIMESTAMP DEFAULT NOW(),
+    connected_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_city_zone ON city_active_players(zone);
+CREATE INDEX idx_city_last_update ON city_active_players(last_update);
+
+-- Tabella wallet (per Fase 6)
+CREATE TABLE city_wallet (
+    user_id     INT PRIMARY KEY REFERENCES users(id),
+    money       INT DEFAULT 300,
+    updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Cleanup periodico (ogni 60 secondi, cron o asyncio task)
+DELETE FROM city_active_players
+WHERE last_update < NOW() - INTERVAL '60 seconds';
+
+
+================================================================================
+11. PROTOCOLLO WEBSOCKET: EVENTI E PAYLOAD
+================================================================================
+
+Namespace: /city
+
+--- Client → Server ---
+
+city:join:
+{
+    "token": "eyJhbGci...",          // JWT obbligatorio
+    "lat": 41.123456,                // double
+    "lon": 12.456789,                // double
+    "heading": 90.0,                 // float, gradi
+    "skin": "humanMaleA"             // string, skin scelta
+}
+
+city:move:
+{
+    "lat": 41.123500,                // double
+    "lon": 12.456820,                // double
+    "heading": 95.0,                 // float, gradi
+    "anim_state": "walk"             // "idle" | "walk" | "run" | "drive"
+}
+
+city:vehicle:
+{
+    "vehicle_code": "Fiat500_01",   // string
+    "action": "enter"                // "enter" | "exit" | "park"
+}
+
+city:chat:
+{
+    "text": "Ciao a tutti!"          // string, max 200 char
+}
+
+city:leave:
+{}                                   // body vuoto
+
+--- Server → Client ---
+
+city:welcome:
+{
+    "player_id": "user_123",
+    "players": [
+        {
+            "id": "user_456",
+            "username": "Lucia",
+            "level": 3,
+            "skin": "humanFemaleB",
+            "lat": 41.123600,
+            "lon": 12.456500,
+            "heading": 270.0,
+            "anim_state": "idle"
+        },
+        ...
+    ]
+}
+
+city:player_join:
+{
+    "id": "user_789",
+    "username": "Luca",
+    "level": 7,
+    "skin": "citizenM05",
+    "lat": 41.124000,
+    "lon": 12.457000,
+    "heading": 45.0,
+    "anim_state": "walk"
+}
+
+city:player_move:
+{
+    "id": "user_789",
+    "lat": 41.124100,
+    "lon": 12.457100,
+    "heading": 50.0,
+    "anim_state": "walk"
+}
+
+city:player_leave:
+{
+    "id": "user_456"
+}
+
+city:vehicle_update:
+{
+    "id": "user_789",
+    "vehicle_code": "Fiat500_01",
+    "action": "enter"
+}
+
+city:chat:
+{
+    "id": "user_456",
+    "username": "Lucia",
+    "text": "Bella raga!"
+}
+
+city:error:
+{
+    "message": "Token non valido"
+}
+
+
+================================================================================
+12. NOTE DI IMPLEMENTAZIONE
+================================================================================
+
+12.1 — Interpolazione
+
+  Il movimento dei remote player NON deve scattare.
+  Usare Vector3.Lerp / Quaternion.Slerp con speed ~8f.
+  Il target viene aggiornato dal server ogni ~100ms.
+  Il Lerp lo rende smooth tra un update e l'altro.
+
+  Se il server non manda update per >2 secondi,
+  il remote player si ferma gradualmente (fade out).
+
+12.2 — Orientamento GPS → Unity
+
+  Il server riceve lat/lon (GPS). Il client deve convertirli
+  in coordinate Unity (metri). La funzione WorldOrigin.ToWorld()
+  esiste già e fa esattamente questo.
+
+  Attenzione: la conversione dipende da WorldOrigin.LAT/LON
+  che è il punto di riferimento della mappa (definito in启动).
+  Tutti i client devono avere lo stesso WorldOrigin.
+
+12.3 — Banda
+
+  1 player che manda 10 update/sec × 100 byte = ~1 KB/s in upload
+  50 player nella stessa zona = ~50 KB/s in download per player
+  Questo è accettabile su 4G/5G/WiFi.
+
+12.4 — Sicurezza
+
+  - Il token JWT deve essere verificato ad ogni city:join
+  - Le posizioni possono essere spoofate (il client è authoritative
+    per la posizione locale). Per ora è accettabile (gioco casual).
+  - Anti-cheat futuro: server-side validation della velocità
+    (se un player si muove troppo velocemente, è un cheat).
+
+12.5 — Test
+
+  Per testare il multiplayer localmente:
+    1. Avviare il backend con city_realtime.py
+    2. Aprire 2 emulatori Android (o 1 emulatore + 1 telefono reale)
+    3. Entrambi si connettono al server
+    4. Verificare che si vedono a vicenda
+    5. Muovere uno e verificare che l'altro lo vede muovere
+
+
+================================================================================
+13. LIMITI E METRICHE
+================================================================================
+
+Limite per zona:       ~50 player (server gestisce tranquillamente)
+Player visibili:       MAX_REMOTE_PLAYERS = 20 (filtro client-side)
+Limite totale:         ~200 player simultanei (dipende dal server)
+Player visibili veicolo: 300m raggio (meno costoso da renderizzare)
+Heartbeat rate:      10 Hz (100ms) — compromesso fluidezza/banda
+Interpolazione:      Lerp factor 8f — smooth senza lag percepito
+Timeout disconnessione: 30 secondi senza update
+Zona visibile:       3×3 = 9 zone (270m × 270m)
+Nome tag distanza:   visibile fino a 20 metri (20² = 400 unit²)
+Server minimal:      1 CPU, 512MB RAM per 50 player (Python asyncio)
+
+Metriche da monitorare:
+  - players_connected (gauge)
+  - messages_per_second (counter)
+  - zone_rebalancing_latency_ms (histogram)
+  - player_timeout_total (counter)
+
+
+================================================================================
+14. FILE DA MODIFICARE/CREARE
+================================================================================
+
+CREARE:
+  backend/city_realtime.py                           (Fase 1)
+  unity-project/Assets/City/Scripts/Multiplayer/
+    MultiplayerManager.cs                            (Fase 2)
+    RemotePlayer.cs                                  (Fase 2)
+
+MODIFICARE:
+  backend/app_socket.py                              (Fase 1 — registrare namespace /city)
+  unity-project/Assets/City/Scripts/Game.cs          (Fase 2 — aggiungere MultiplayerManager)
+  app/src/main/java/com/unity3d/player/UnityBridge.java (Fase 3 — posizione + token)
+  app/src/main/java/com/intelligame/huntix/ui/CityActivity.kt (Fase 3 — mandare JWT + GPS)
+  backend/auth_fastapi.py                            (Fase 4 —JWT per city, se necessario)
+  unity-project/Assets/City/Scripts/UI/TouchInputHandler.cs (Fase 5 — ignorare RemotePlayer)
+  unity-project/Assets/City/Scripts/World/Wallet.cs  (Fase 6 — opzionale, server-side)
+
+NON MODIFICARE:
+  NPCController.cs                                   (resta come è)
+  NPCPopulator.cs                                    (resta come è)
+  PlayerController.cs                                (resta come è)
+  PlayerAppearance.cs                                (resta come è)
+  VehicleOwnershipApi.cs                             (resta come è)
+  TileClient.cs                                      (resta come è)
+
+FILES DI SUPPORTO (opzionale):
+  multiplayer.txt                                     (questo file)
+  AGENTS.md                                           (aggiornare con info multiplayer)
+
+================================================================================
+  FINE DOCUMENTO
+================================================================================
+
+================================================================================
+  LOG DI PROGRESSO IMPLEMENTAZIONE — ANALIZZA QUESTO QUANDO RIPRENDIAMO
+================================================================================
+
+QUANDO RICOMINCI (comando utente: "cat multiplayer.txt"):
+  Leggi questo LOG per capire a che punto siamo, poi procedi alla prossima
+  fase non completata o ripara eventuali errori delle fasi marcate [X].
+  Ogni fase completata va segnata [X]+ data qui sotto.
+
+--- DATA: Settembre 2026, server82 ───────────────────────────────────────
+FASE 1 — Backend: City Realtime Server .................. COMPLETATA [X]
+
+FILE CREATI:
+  backend/city_realtime.py                     (nuovo modulo multiplayer)
+
+FILE MODIFICATI:
+  backend/app.py    (registrati handler Socket.IO namespace /city +
+                     router HTTP /api/city/players e /api/city/stats +
+                     init tabella city_active_players)
+
+CONTENUTO imprementato in city_realtime.py:
+  - Zone: griglia 100m, zone_key(lat,lon), visible_zones() 3x3
+  - Stato player in RAM (dict city_players), sessioni sid->uid
+  - Eventi: connect, disconnect, city:join, city:move, city:vehicle,
+    city:chat, city:leave (tutti nel namespace /city)
+  - Relay posizioni solo ai vicini della stessa zona
+  - Gestione cambio zona (subscribe/unsubscribe + notifiche join/leave)
+  - Cleanup automatico player inattivi (>30s)
+  - Persistenza best-effort su tabella city_active_players
+  - Endpoint HTTP di debug: GET /api/city/players, GET /api/city/stats
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) python -c 'import ast; ast.parse(city_realtime.py)'  -> SYNTAX OK
+  2) import city_realtime                                  -> IMPORT OK
+  3) register_city_realtime_handlers(sio) su AsyncServer   -> OK
+     (log "Handlers registrati OK")
+  4) zone_key(41.12,16.87) == '0_0'                        -> OK
+     visible_zones('0_0') = 9 zone                        -> OK
+  5) city_http_router paths: /api/city/players e /api/city/stats -> OK
+  6) import app completo                                   -> OK
+     (log "City Realtime (multiplayer) initialized", "Tabella pronta")
+
+NOTA IMPORTANTE sulla FASE 4 (Auth JWT):
+  La verifica del token JWT e' gia' fatta dentro city_realtime.py via
+  socket_authenticate() nel city:join. Per questo la FASE 4 come modulo
+  separato NON serve piu': si considera COMPLETATA insieme alla FASE 1.
+
+PROSSIMO PASSO: FASE 2 — MultiplayerManager + RemotePlayer (lato Unity)
+================================================================================
+
+--- DATA: Settembre 2026, server82 ───────────────────────────────────────
+FASE 2 — Unity: MultiplayerManager + RemotePlayer ....... COMPLETATA [X]
+
+IMPORTANTE — DECISIONE TECNICA SULLA RETE:
+  La spec originale (5.5) prevedeva un client Socket.IO per Unity. Ma il
+  progetto NON ha un client Socket.IO, e il sistema di check C# (cscheck)
+  compila con mcs contro STUB minimi: aggiungere una libreria esterna di
+  terze parti (o codice WebSocket nativo non stubbato) romperebbe il build.
+  L'intero progetto parla col backend solo via HTTP con UnityWebRequest
+  (TileClient, VehicleOwnershipApi, TrafficClient).
+
+  Soluzione professionale scelta: MULTIPLAYER VIA HTTP POLLING, coerente
+  con il resto del codebase e build-safe. Per questo e' stato aggiunto un
+  endpoint HTTP POST sul backend che fa entrare i client anche SENZA
+  Socket.IO, nello stesso stato condiviso di city_players (cosi' client
+  WebSocket e HTTP convivono nella stessa citta').
+
+FILE CREATI:
+  unity-project/Assets/City/Scripts/Multiplayer/MultiplayerManager.cs  (nuovo)
+  unity-project/Assets/City/Scripts/Multiplayer/RemotePlayer.cs         (nuovo)
+
+FILE MODIFICATI:
+  backend/city_realtime.py   (aggiunto endpoint POST /api/city/heartbeat)
+  unity-project/Assets/City/Scripts/Game.cs   (campo + attivazione multiplayer)
+
+BACKEND (piccola aggiunta rispetto alla Fase 1):
+  - POST /api/city/heartbeat : registra/aggiorna un player via HTTP nel
+    condiviso city_players (zona, DB best-effort, cleanup timeout, throttle).
+    Tiene conto del cambio zona. Consente ai client HTTP di esistere
+    accanto a quelli WebSocket.
+
+UNITY MultiplayerManager.cs:
+  - Heartbeat POST della posizione locale ogni 1s (lat/lon/heading/anim)
+  - Poll GET /api/city/players ogni 1s per i player attivi nelle zone vicine
+  - Id device via PlayerPrefs (stesso GUID di VehicleOwnershipApi)
+  - Dizionario dei RemotePlayer (join/update/remove per diff da niente server)
+  - Filtro di vicinanza: MAX_REMOTE_PLAYERS=20 + VISIBLE_RANGE=200m,
+    ordinati per distanza dal player locale
+  - Interpolazione Lerp/Slerp dei remote verso il target
+
+UNITY RemotePlayer.cs:
+  - Istanzia Resources/Characters/characterMedium senza controllo locale
+    (rimuove PlayerController+CharacterController, tag Untagged)
+  - Applica skin via PlayerAppearance.ApplyTo
+  - Collider kinemantico + Rigidbody isKinematic (come i pedoni NPC)
+  - Animator.SetFloat("Speed", moving?1:0)
+  - Targhetta nome floatante azzurra "Nome\n Lv.X" (stessa logica NPC)
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) backend: import city_realtime + app completi
+  2) backend: endpoint POST /api/city/heartbeat presente nel router
+     (routes: /api/city/players GET, /api/city/heartbeat POST, /api/city/stats GET)
+  3) backend: test unitario heartbeat (2 player HTTP stessa zona -> visibili
+     tra loro, stats.count=2, zone '0_0')
+  4) unity: cscheck.sh — I FILE MULTIPLAYER COMPILANO SENZA ERRORI.
+     NOTA: la run completa di ./check.sh oggi fallisce ANCORA su 8 file
+     PREESISTENTI sotto Vehicle/(AircraftMotor, BoatMotor, SpacecraftMotor,
+     TrainMotor, VehicleController, VehicleInterior, Mechanics/*) perche'
+     usano API Unity non stubbate. NON riguardano il multiplayer e NON li
+     ho toccati (out of scope Fase 2). Da sistemare a parte.
+
+PROSSIMO PASSO: FASE 3 — Bridge Android↔Unity: token + posizioni (login).
+================================================================================
+
+--- DATA: Settembre 2026, server82 ─────────────────────────────────────────────────────────────────
+FASE 3 — Bridge Android↔Unity: token + posizioni (AUTH JWT) ... COMPLETATA [X]
+
+DECISIONE TECNICA (scelta "soluzione professionale"):
+  Autenticazione JWT + identità REALE nel multiplayer della città.
+  Il player loggato (auth via RealLifeAuth) viene riconosciuto dal backend
+  con il SUO user_id/username/livello reali invece del GUID anonimo di
+  device. Il JWT transita come campo "token" nel body dell'heartbeat HTTP
+  (NON come URL/query/header esposto nei log). Lato Unity il token non
+  viene MAI persistito: vive solo in memoria per il tempo della sessione.
+
+FILE MODIFICATI:
+  backend/city_realtime.py          (heartbeat POST ora valida il JWT)
+  app/src/main/java/com/intelligame/huntix/bridge/StoreUnityBridge.kt
+                                    (aggiunto getAccessToken())
+  unity-project/Assets/Scripts/Bridge/UnityBridge.cs
+                                    (aggiunto GetAccessToken())
+  unity-project/Assets/City/Scripts/Multiplayer/MultiplayerManager.cs
+                                    (token + username + livello nell'heartbeat)
+  backend/preprocessing/cscheck/HuntixStubs.cs   (GetAccessToken stub)
+
+BACKEND (city_realtime.py):
+  - POST /api/city/heartbeat : se nel body c'è un campo "token" NON vuoto,
+    il server lo valida con socket_authenticate(). Se valido usa il reale
+    user_id dal payload come chiave dello stato (username + level dal JWT),
+    altrimenti ricade sull'id anonimo. Il token non viene loggato.
+  - La risposta dell'heartbeat ora include "id": il pid EFFICACE (user_id
+    quando autenticato). Il client lo usa per non mostrare SÉ STESSO come
+    remote player.
+
+ANDROID (StoreUnityBridge.kt):
+  - getAccessToken(): restituisce RealLifeAuth.getAccessToken(ctx) oppure ""
+    se non loggato. Esposto come @JvmStatic per il ponte Unity.
+
+UNITY (UnityBridge.cs):
+  - GetAccessToken(): bridge che chiama StoreUnityBridge.getAccessToken,
+    dentro #if UNITY_ANDROID, con fallback "". Pattern identico a GetPlayerName.
+
+UNITY (MultiplayerManager.cs):
+  - LoadIdentityFromAndroid() all'avvio: carica token, nome e livello dal
+    ponte (GetAccessToken/GetPlayerName/GetPlayerLevel).
+  - L'heartbeat POST ora manda username/livello reali e il campo "token".
+  - Se il token è valido, il server risponde con l'user_id efficace che il
+    client memorizza come proprio _myId (filtro antifurto per la vista).
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) backend: import app completo OK ("City Realtime (multiplayer) initialized")
+  2) backend: heartbeat con token valido -> pid reale (user/level dal JWT);
+     senza token -> pid anonimo. Entrambi OK.
+  3) unity: cscheck.sh — PASS con 0 ERRORI (123 warning irrilevanti).
+     NOTA: con l'estensione di UnityStubs.cs in questa sessione sono stati
+     ELIMINATI anche gli errori preesistenti ai file Vehicle() citati nel
+     log della Fase 2: ora il check COMPLETO è totalmente verde.
+  4) android: sintassi verificata (bilancia graffe, import UnityPlayer ok,
+     la firma RealLifeAuth.getAccessToken(Context) esiste).
+
+NOTA FASE 4 (Auth JWT nella città):
+  Già coperta: il JWT è validato in Fase 3 dentro l'heartbeat HTTP (e in
+  Fase 1 già dentro city:join via socket_authenticate). Come modulo
+  separato NON serve più → COMPLETATA insieme alla Fase 3.
+
+PROSSIMO PASSO: FASE 5 — NPC vs Remote Player: distinzione
+================================================================================
+
+--- DATA: Settembre 2026, server82 ─────────────────────────────────────────────────────────────────
+FASE 5 — NPC vs Remote Player: distinzione ................. COMPLETATA [X]
+
+PROBLEMA:
+  NPC e RemotePlayer usano entrambi il modello Kenney (characterMedium).
+  Un tap su un altro giocatore reale non deve attivare chat/missioni IA o
+  il reel di annam "NPC", e il RemotePlayer deve essere riconoscibile come
+  persona reale, non come pedone.
+
+SOLUZIONE IMPLEMENTATA:
+  1) RemotePlayer.Spawn() — tag best-effort "RemotePlayer":
+     try/catch sull'assegnazione. Se il tag esiste in ProjectSettings Tags
+     viene assegnato (cosi' layer/controller possono filtrarlo); se manca,
+     resta "Untagged" ma il discrimine REALE è il componente RemotePlayer.
+     Si evita il crollo a runtime (Unity throwa se il tag non è registrato)
+     mentre si supporta la spec 8.2 quando il designer crea il tag.
+
+  2) TouchInputHandler.TryInteract() — guard:
+     appena ottenuto il RaycastHit, se il colpito (o un suo genitore) ha un
+     componente City.Multiplayer.RemotePlayer si ritorna subito:
+       - niente chat IA, niente missione NPC, niente prop/negozio.
+     Discrimine per COMPONENTE, non per tag stringa: robusto e non dipende
+     da un tag registrato in Unity (importante perche' il build viene
+     verificato con stub mcs che non registrano tag).
+
+  3) Name-tag — gia' distinto dalla Fase 2:
+     nome utente REALE + livello + colore azzurro (RemotePlayer.cs),
+     diverso dal nome finto dei pedoni.
+
+  4) NPC logic: NON toccata. NPCController resta su tag "Untagged" ed e' il
+     player locale ad avere tag "Player". I RemotePlayer ora NON coincidono
+     piu' col tag dei pedoni (quando assegnato), quindi gli OnTrigger di
+     NPCController (che filtrano solo per CompareTag("Player")) non li
+     confondono mai col player locale.
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) cscheck.sh — PASS con 0 ERRORI (i due file modificati compilano).
+  2) Il comportamento a runtime non dipende dalla creazione del tag:
+     la guard usa il componente, quindi funziona anche senza tag.
+
+NOTA PER IL DESIGNER (unico passo manuale rimasto, opzionale):
+  In Unity creare il tag "RemotePlayer" in Edit > Project Settings > Tags
+  and Layers, e opzionalmente un Layer "RemotePlayer" assegnato in
+  RemotePlayer.Spawn() affinche' il raycast di TouchInputHandler possa
+  essere filtrato anche per layer (=0). Senza, la guard funziona comunque
+  via componente.
+
+PROSSIMO PASSO: FASE 6 (opzionale) — Wallet server-side
+================================================================================
+
+--- DATA: Settembre 2026, server82 ─────────────────────────────────────────────────────────────────
+FASE 6 (opzionale) — Wallet server-side .................... COMPLETATA [X]
+
+OBIETTIVO RAGGIUNTO:
+  I soldi della città ora vivono sul SERVER (tabella city_wallet): cambio
+  telefono e ritrovi il tuo saldo. Il server e' AUTHORITATIVE.
+
+DECISIONE TECNICA (soluzione professionale / rischio 9.3 gestito):
+  La spec avvertiva del rischio: ~30-40 call site a Wallet.Spend/Earn.
+  Per non rompere nulla ho mantenuto la SUPERFICIE API di City.World.Wallet
+  IDENTICA (Money / CanAfford / TrySpend / Spend / Earn): TUTTI i punti che
+  la usano continuano a funzionare senza modifiche. Sotto, il saldo e':
+    - cache OTTIMISTICA in memoria (reactivi per la UI),
+    - sincronizzata con il server da un nuovo WalletManager (MonoBehaviour),
+    - se il player NON e' autenticato (niente JWT) si ricade su PlayerPrefs
+      (offline/anonimo, funziona come prima: nessun blocco).
+
+BACKEND (city_realtime.py):
+  - Nuova tabella city_wallet(user_id TEXT PRIMARY KEY, money INT DEFAULT 300,
+    updated_at TIMESTAMP DEFAULT NOW()). NOTA: come city_active_players, la
+    chiave e' TEXT (il progetto usa user_id stringa, non INT come nello
+    schema originale della spec). Inizializzata in register_city_realtime_handlers.
+  - Endpoint (tutti con JWT obbligatorio via socket_authenticate):
+      GET  /api/city/wallet?token=...        -> { ok:true, money }
+      POST /api/city/wallet/spend  {token,amount} -> { ok:true, money }
+      POST /api/city/wallet/earn   {token,amount} -> { ok:true, money }
+    - spend non puo' portare sottozero (clamp a 0), amount <=0 rifiutato,
+      token assente/invalido -> { ok:false }.
+    - Se il player non esiste in city_wallet, al primo accesso si semina 300.
+
+UNITY:
+  - Wallet.cs RISCERRITTO: cache ottimistica + delega sync a WalletManager.
+    Hook interni ApplyServerBalance()/LocalCache per la riconciliazione.
+  - WalletManager.cs (NUOVO): 
+      * al primo avvio, se c'e' JWT, GET del saldo server-authoritative
+        (ecco il vero guadagno: cambia telefono -> ritrovi i soldi);
+      * accumula il delta NETTO dei Spend/Earn e lo invia con DEBOUNCE
+        (mai una richiesta per frame: ~0.2s dopo l'operazione);
+      * adotta il saldo tornato dal server (verita');
+      * su errore di rete riaccoda il delta; su token non riconosciuto passa
+        offline senza errori.
+  - Game.cs: City.World.WalletManager.Ensure() in Start() (persistente).
+
+PROTEGGE IL MULTIPLAYER: il wallet usa S€ il proprio token JWT via
+  UnityBridge.GetAccessToken() (Fase 3), NON l'id anonimo device.
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) backend: import app completo OK ("Tabella city_wallet pronta",
+     "City Realtime (multiplayer) initialized").
+  2) backend: TestClient end-to-end (token JWT reale, utente di test):
+       GET senza token            -> { ok:false }
+       GET con token              -> { ok:true, money:300 }  (seed)
+       spend 50                   -> { ok:true, money:250 }
+       earn 10                    -> { ok:true, money:260 }
+       spend 99999                -> { ok:true, money:0 }    (clamp, mai sotto 0)
+       earn -5                    -> { ok:false }
+       token falso                -> { ok:false }
+     Poi test row pulita dal DB.
+  3) unity: cscheck.sh — PASS con 0 ERRORI (Wallet.cs + WalletManager.cs +
+     Game.cs compilano).
+
+RISCHIO/RIMANECK (consapevole):
+  - L'evento OnChanged ora evita throw (try/catch) e alimenta la UI dalla
+    cache ottimistica: eventuali drift con il server vengono corretti alla
+    riconciliazione successiva (il server e' sempre authoritative).
+  - Se in futuro si vuole evitare del tutto il fallback PlayerPrefs per gli
+    anonimi, basta far dipendere CanAfford/TrySpend dallo stato server: oggi
+    non serve (offline accettato).
+
+TUTTE LE FASI 1-6 COMPLETATE. MULTIPLAYER MIA CITTÀ ATTIVO.
+================================================================================
+
+
+--- DATA: Settembre 2026, server82 ─────────────────────────────────────────────────────────────────
+ENHANCEMENT — CHAT TRA GIOCATORI + TAP-PER-PROFILO ................ AGGIUNTA
+
+Cosa era: dopo la Fase 5 il tap su un altro giocatore (RemotePlayer) era
+volutamente IGNORATO. Con questa aggiunta i due cellulari non solo si vedono,
+ma POSSONO interagire: toccando l'altro giocatore si apre profilo + chat.
+
+FLUSSO P2P:
+  1) Unity: tap su un RemotePlayer in TouchInputHandler.TryInteract() — non
+     piu' "ignora", ora invia ad Android via il ponte:
+        SendMessageToAndroid("PlayerProfileRequest", { toUserId, name, level, skin })
+  2) Android Bridge.onUnityMessage(): nuovo caso "PlayerProfileRequest" ->
+     apre PlayerChatActivity (registrata in AndroidManifest).
+  3) PlayerChatActivity (nuova): mostra profilo (nome + livello + skin) e una
+     chat in stile messaggistica.
+  4) La chat passa SEMPRE dal backend (relay): il server inoltra i testi tra i
+     due utenti. Il mittente e' identificato dal JWT; il destinatario da
+     to_user (l'id che il client ha visto nella lista player).
+
+BACKEND (city_realtime.py):
+  - Nuova tabella city_msgs(id BIGSERIAL PK, from_user, to_user, text, read, created_at)
+    con indice (to_user, read). Inizializzata in register_city_realtime_handlers.
+  - POST /api/city/chat/send   { token, to_user, text }  -> { ok:true }
+      * JWT obbligatorio; mittente dal token; self-talk vietato; text<=500.
+  - GET  /api/city/chat/inbox  ?token=  -> { ok:true, count, messages:[{from,text,ts}] }
+      * pull-and-clear: i messaggi non letti indirizzati a me vengono restituiti
+        e marcati read=TRUE (adatto al polling HTTP).
+
+UNITY (TouchInputHandler.cs):
+  - Tap su RemotePlayer -> PlayerProfileRequest (invece di return).
+  - JSON del profilo inviato ad Android. (Variabile rinominata playerJson per
+    non collidere col json della chat NPC.)
+
+ANDROID:
+  - Bridge.kt: caso "PlayerProfileRequest" + openPlayerChat() (extras
+    TO_USER_ID/NAME/LEVEL/SKIN).
+  - PlayerChatActivity.kt (NUOVA): top bar con nome+lvl+skin, area chat a
+    bolle (destra = io, sinistra = altro), input + invio, e polling inbox
+    ogni ~2.2s per ricevere i messaggi dell'altro in tempo reale.
+  - AndroidManifest.xml: registrata .ui.PlayerChatActivity (portrait,
+    adjustResize).
+  - HTTP via OkHttp + RealLifeAuth.getAccessToken + RealLifeConfig.BASE_URL
+    (coerente con RealLifeChatActivity/RealLifeClient).
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) backend: TestClient end-to-end chat P2P:
+       - A->B e B->A ok; send senza token -> ok:false;
+       - self-talk A->A -> ok:false;
+       - inbox di B riceve solo il msg di A; secondo inbox -> vuoto
+         (pull-and-clear); inbox di A riceve il msg di B.
+     (righe di test poi pulite dal DB)
+  2) unity: cscheck.sh — PASS con 0 ERRORI.
+  3) android: ./gradlew :app:compileDebugKotlin + processDebugResources
+     -> BUILD SUCCESSFUL (PlayerChatActivity + Bridge + manifest compilano).
+
+RISULTATO: due telefoni autenticati che si vedono in MiaCittà possono ora
+  toccarsi e chattare in tempo reale tramite il server di relay.
+
+NOTA: perfetto anche per chi NON e' autenticato? No — serve il login (JWT)
+  per la chat (il mittente e' identificato dal token). Il "vedersi" resta
+  possibile anche da anonimi; la chat richiede l'identita'.
+================================================================================
+
+
+--- DATA: Settembre 2026, server82 ─────────────────────────────────────────────────────────────
+BUG FIXES — DEATH CRASH + CAMERA INDOOR — APPLICATI
+
+1) CRASH ALLA MORTE (RealmSceneManager.TryLoadScene / FamilyHost.BeginAfterlife):
+   PROBLEMA: alla morte il player scatenava un errore nel log:
+     City.Afterlife.RealmSceneManager:TryLoadScene(String)
+     City.NPC.FamilyHost:BeginAfterlife(DeathType)
+     City.UI.ContextActionController:DoDie()
+   Causa: le scene dei regni (InfernoScene/PurgatorioScene/ParadisoScene)
+   non essendo nelle Build Settings dell'APK installato, SceneManager.LoadScene
+   loggava l'errore "scene not in build settings" e poi l'eccezione (seppur
+   caught nel try/catch di TryLoadScene) veniva comunque mostrata nel log.
+   Inoltre BuildRealm (fallback inline) non era protetto: un eventuale errore
+   nella costruzione dell'arena avrebbe fatto crashare il flusso di morte.
+
+   FIX:
+   - Aggiunto Application.CanStreamedLevelBeLoaded(name) in TryLoadScene
+     per evitare del tutto la chiamata a LoadScene se la scena non e'
+     registrata (nessun errore Unity loggato).
+   - Esteso il try/catch in EnterRealm per coprire anche BuildRealm e
+     Camera.main.backgroundColor = RealmColors.Sky(realm).
+   - Rimosso completamente il log "scene not in build settings" alla morte.
+   - Backend UnityStubs.cs esteso con Application.CanStreamedLevelBeLoaded.
+
+   File: backend/city_realtime.py, unity-project/.../Afterlife/RealmSceneManager.cs,
+   backend/preprocessing/cscheck/UnityStubs.cs
+
+2) CAMERA NON SI ABBASSA SOTTO IL TETTO (negozi/case aperti):
+   PROBLEMA: entrando in un negozio o casa (BuildingEntrance) la camera
+   restava alta e il tetto occludeva la vista. I capannoni veicolo
+   (concessionaria/officina/garage) avevano gia' un override interno
+   (VehiclePoiZone) che abbassava la camera.
+
+   FIX:
+   - Refactor CameraRig.SetIndoorOverride a owner-keyed (HashSet<string>):
+     ogni sistema (negozi/case = owner "building", veicoli = owner
+     "vehicle-poi") gestisce il proprio override in modo indipendente.
+     Attivazione/Disattivazione non si annullano a vicenda.
+   - Esteso CameraRig con overload SetIndoorOverride(bool, string owner, ...)
+     + overload backward-compat (owner "default").
+   - VehiclePoiZone aggiornato a usare owner esplicito "vehicle-poi".
+   - BuildingEntrance ora applica l'override (owner "building") quando il
+     player entra nel trigger (OnTriggerEnter/focused) e rimuove all'uscita
+     (OnTriggerExit/OnDisable). Parametri: dist 6.0f, height 2.6f, pitch 20f
+     (leggermente piu' larghi dei capannoni per vedere l'interno).
+   - Guard: non applica se gia' dentro zona veicolo (PlayerInOpenRoomVehicle).
+
+   File: unity-project/.../Player/CameraRig.cs,
+   unity-project/.../Vehicle/VehiclePoiZone.cs,
+   unity-project/.../Interior/BuildingEntrance.cs
+
+VERIFICHE ESEGUITE (tutte OK):
+  1) backend: import app OK ("City Realtime (multiplayer) initialized")
+  2) unity: cscheck.sh — 0 ERRORI
+  3) android: ./gradlew :app:compileDebugKotlin + processDebugResources →
+     BUILD SUCCESSFUL
+
+================================================================================

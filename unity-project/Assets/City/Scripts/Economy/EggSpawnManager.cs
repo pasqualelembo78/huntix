@@ -14,6 +14,12 @@ namespace City.Economy
         private const float EGG_RADIUS = 100f;
 
         private readonly List<GameObject> eggs = new List<GameObject>();
+
+        private float GroundY(Transform root, Vector3 local)
+        {
+            return TileElevation.HeightAtWorld(
+                root.TransformPoint(new Vector3(local.x, 0f, local.z)));
+        }
         private Transform player;
         private Vector3 lastCenter;
         private bool spawned;
@@ -93,9 +99,9 @@ namespace City.Economy
                     if (!tooClose)
                         positions.Add(pos);
 
-                    if (positions.Count >= MAX_EGGS * 2) break;
+                    if (positions.Count >= MAX_EGGS) break;
                 }
-                if (positions.Count >= MAX_EGGS * 2) break;
+                if (positions.Count >= MAX_EGGS) break;
             }
 
             // Shuffle
@@ -182,7 +188,7 @@ namespace City.Economy
                 if (Game.Instance != null && Game.Instance.player != null)
                     player = Game.Instance.player.transform;
 
-            int maxEggs = 5 + (rng.Next() % 2);
+            int maxEggs = 3 + (rng.Next() % 2);
             var candidates = new List<EggCandidate>();
 
             // ── 1) Strade ───────────────────────────────────────
@@ -196,12 +202,16 @@ namespace City.Economy
                     for (int i = 0; i < road.pts.Length; i += 3)
                     {
                         if (rng.NextDouble() > 0.15) continue;
-                        Vector3 local = SafeToLocal(toLocal, road.pts[i]);
-                        if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
-                        local += new Vector3((float)(rng.NextDouble() - 0.5) * 4f, 0f,
-                                             (float)(rng.NextDouble() - 0.5) * 4f);
-                        local.y = 0.3f;
-                        candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Strada });
+                        try
+                        {
+                            Vector3 local = SafeToLocal(toLocal, road.pts[i]);
+                            if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                            local += new Vector3((float)(rng.NextDouble() - 0.5) * 4f, 0f,
+                                                 (float)(rng.NextDouble() - 0.5) * 4f);
+                            local.y = 0.3f + GroundY(root, local);
+                            candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Strada });
+                        }
+                        catch { }
                     }
                 }
             }
@@ -211,15 +221,19 @@ namespace City.Economy
             {
                 foreach (var park in geo.parks)
                 {
-                    if (park == null || park.poly == null || park.poly.Length < 3) continue;
-                    EggController.EggType ptype = KdToEggType(park.kd);
-                    for (int tries = 0; tries < 3; tries++)
+                    try
                     {
-                        Vector3 pt = RandomPointInPolygon(park.poly, toLocal);
-                        if (!bounds.Contains(new Vector2(pt.x, pt.z))) continue;
-                        pt.y = 0.3f;
-                        candidates.Add(new EggCandidate { pos = pt, type = ptype });
+                        if (park == null || park.poly == null || park.poly.Length < 3) continue;
+                        EggController.EggType ptype = KdToEggType(park.kd);
+                        for (int tries = 0; tries < 3; tries++)
+                        {
+                            Vector3 pt = RandomPointInPolygon(park.poly, toLocal);
+                            if (!bounds.Contains(new Vector2(pt.x, pt.z))) continue;
+                            pt.y = 0.3f + GroundY(root, pt);
+                            candidates.Add(new EggCandidate { pos = pt, type = ptype });
+                        }
                     }
+                    catch { }
                 }
             }
 
@@ -228,11 +242,15 @@ namespace City.Economy
             {
                 foreach (var tree in geo.trees)
                 {
-                    if (rng.NextDouble() > 0.2) continue;
-                    Vector3 local = SafeToLocal(toLocal, tree);
-                    if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
-                    local.y = 0.3f;
-                    candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Albero });
+                    try
+                    {
+                        if (rng.NextDouble() > 0.2) continue;
+                        Vector3 local = SafeToLocal(toLocal, tree);
+                        if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                        local.y = 0.3f + GroundY(root, local);
+                        candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Albero });
+                    }
+                    catch { }
                 }
             }
 
@@ -241,15 +259,19 @@ namespace City.Economy
             {
                 foreach (var b in geo.buildings)
                 {
-                    if (b == null || b.c == null || b.c.Length < 2) continue;
-                    if (rng.NextDouble() > 0.1) continue;
-                    var geoPt = new GeoLL { a = b.c[0], o = b.c[1] };
-                    Vector3 local = SafeToLocal(toLocal, geoPt);
-                    if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
-                    local += new Vector3((float)(rng.NextDouble() - 0.5) * 6f, 0f,
-                                         (float)(rng.NextDouble() - 0.5) * 6f);
-                    local.y = 0.3f;
-                    candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Edificio });
+                    try
+                    {
+                        if (b == null || b.c == null || b.c.Length < 2) continue;
+                        if (rng.NextDouble() > 0.1) continue;
+                        var geoPt = new GeoLL { a = b.c[0], o = b.c[1] };
+                        Vector3 local = SafeToLocal(toLocal, geoPt);
+                        if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                        local += new Vector3((float)(rng.NextDouble() - 0.5) * 6f, 0f,
+                                             (float)(rng.NextDouble() - 0.5) * 6f);
+                        local.y = 0.3f + GroundY(root, local);
+                        candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Edificio });
+                    }
+                    catch { }
                 }
             }
 
@@ -265,7 +287,7 @@ namespace City.Economy
                     float x = bounds.xMin + (float)rng.NextDouble() * bounds.width;
                     float z = bounds.yMin + (float)rng.NextDouble() * bounds.height;
                     var t = fallbackTypes[rng.Next(fallbackTypes.Length)];
-                    candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f, z), type = t });
+                    candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f + GroundY(root, new Vector3(x, 0f, z)), z), type = t });
                 }
             }
 
@@ -286,13 +308,14 @@ namespace City.Economy
                 {
                     var go = new GameObject("Egg_" + c.type + "_" + placed);
                     go.transform.SetParent(root, false);
+                    var col = go.AddComponent<SphereCollider>();
+                    col.radius = 0.5f;
+                    col.isTrigger = true;
                     var egg = go.AddComponent<EggController>();
                     egg.Init(root.TransformPoint(c.pos), RollRarity(), c.type);
+                    eggs.Add(go);
                 }
-                catch (System.Exception ex)
-                {
-                    UnityEngine.Debug.LogWarning("[EggSpawnManager] egg create failed: " + ex);
-                }
+                catch { }
                 placed++;
             }
 
@@ -320,7 +343,7 @@ namespace City.Economy
                 return;
 
             int placedPoi = 0;
-            int poiMax = 2;
+            int poiMax = 1;
             foreach (var b in geo.buildings)
             {
                 if (placedPoi >= poiMax) break;
@@ -338,7 +361,7 @@ namespace City.Economy
                 // angolo dell'edificio, appena fuori
                 local += new Vector3((float)(rng.NextDouble() - 0.5) * 9f, 0.3f,
                                      (float)(rng.NextDouble() - 0.5) * 9f);
-                local.y = 0.3f;
+                local.y = 0.3f + GroundY(root, local);
 
                 EggController.Rarity r = rng.NextDouble() < 0.3
                     ? EggController.Rarity.Legendary
@@ -348,14 +371,17 @@ namespace City.Economy
                 {
                     var go = new GameObject("Egg_Poi_" + b.t);
                     go.transform.SetParent(root, false);
+                    var col = go.AddComponent<SphereCollider>();
+                    col.radius = 0.5f;
+                    col.isTrigger = true;
                     var egg = go.AddComponent<EggController>();
                     egg.Init(root.TransformPoint(local), r, EggController.EggType.Edificio);
                     eggs.Add(go);
                     placedPoi++;
                 }
-                catch (System.Exception ex)
+                catch (System.Exception)
                 {
-                    UnityEngine.Debug.LogWarning("[EggSpawnManager] POI egg failed: " + ex);
+                    // egg creation failed (missing collider, etc.) — skip silently
                 }
             }
         }

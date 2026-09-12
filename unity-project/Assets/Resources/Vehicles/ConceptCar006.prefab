@@ -1,0 +1,404 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3874719345870816204
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3621139761214128793}
+  - component: {fileID: 5065870031977825874}
+  - component: {fileID: 205701320849826890}
+  m_Layer: 0
+  m_Name: Trigger
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3621139761214128793
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3874719345870816204}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.8, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 4816414072643760173}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &5065870031977825874
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3874719345870816204}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 3.9, y: 2.5, z: 6.5}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &205701320849826890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3874719345870816204}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67b36867c5e12f892a2180296b3dee31, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controller: {fileID: 3754486974298283778}
+  data: {fileID: 11400000, guid: 13094bcaf1cf3c0e19bccae2254428ab, type: 2}
+  label: ENTRA
+  vehicleCode: CONCEPT006
+--- !u!1001 &4998413299908532166
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.01
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      propertyPath: m_Name
+      value: ConceptCar006
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects:
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3621139761214128793}
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3754486974298283778}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 7362001735951489386}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2538030732135872426}
+  m_SourcePrefab: {fileID: 100100000, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+--- !u!4 &4816414072643760173 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+  m_PrefabInstance: {fileID: 4998413299908532166}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &5304263686447164055 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: ed2c0bce06e1783299b4d7cb1a2218c7, type: 3}
+  m_PrefabInstance: {fileID: 4998413299908532166}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &3754486974298283778
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304263686447164055}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f6ce1216abe1724648adb59c10e227b5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  data: {fileID: 11400000, guid: 13094bcaf1cf3c0e19bccae2254428ab, type: 2}
+  damageSystem:
+    parts:
+    - type: 0
+      partName: Motore
+      localPos: {x: 0, y: 0.6, z: 0.4}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Motore
+      repairCostMultiplier: 1
+    - type: 1
+      partName: Cambio
+      localPos: {x: 0, y: 0.6, z: 0.1}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Cambio
+      repairCostMultiplier: 1
+    - type: 2
+      partName: Giunto/Cardano
+      localPos: {x: 0, y: 0.45, z: 0}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Giunto/Cardano
+      repairCostMultiplier: 1
+    - type: 3
+      partName: Differenziale
+      localPos: {x: 0, y: 0.45, z: -0.2}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Differenziale
+      repairCostMultiplier: 1
+    - type: 4
+      partName: Sospensioni
+      localPos: {x: 0, y: 0.6, z: 0}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Sospensioni
+      repairCostMultiplier: 1
+    - type: 5
+      partName: Ammortizzatori
+      localPos: {x: 0, y: 0.35, z: 0}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Ammortizzatori
+      repairCostMultiplier: 1
+    - type: 8
+      partName: Sterzo
+      localPos: {x: 0, y: 0.5, z: 0.7}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Sterzo
+      repairCostMultiplier: 1
+    - type: 11
+      partName: Batteria
+      localPos: {x: -0.9, y: 0.5, z: 0.3}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Batteria
+      repairCostMultiplier: 1
+    - type: 12
+      partName: Impianto elettrico
+      localPos: {x: 0, y: 0.5, z: 0.2}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Impianto elettrico
+      repairCostMultiplier: 1
+    - type: 13
+      partName: Serbatoio
+      localPos: {x: 0.9, y: 0.5, z: -0.5}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Serbatoio
+      repairCostMultiplier: 1
+    - type: 14
+      partName: Scarico
+      localPos: {x: 0, y: 0.3, z: -0.9}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Scarico
+      repairCostMultiplier: 1
+    - type: 15
+      partName: Radiatore
+      localPos: {x: 0, y: 0.55, z: 0.8}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Radiatore
+      repairCostMultiplier: 1
+    - type: 16
+      partName: Olio motore
+      localPos: {x: 0, y: 0.55, z: 0.5}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Olio motore
+      repairCostMultiplier: 1
+    - type: 17
+      partName: Telaio
+      localPos: {x: 0, y: 0.6, z: 0}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Telaio
+      repairCostMultiplier: 1
+    - type: 9
+      partName: Carrozzeria
+      localPos: {x: 0, y: 0.9, z: 0}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Carrozzeria
+      repairCostMultiplier: 1
+    - type: 10
+      partName: Paraurti anteriore
+      localPos: {x: 0, y: 0.5, z: 0.9}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Paraurti anteriore
+      repairCostMultiplier: 1
+    - type: 7
+      partName: Gomma anteriore destra
+      localPos: {x: 0.9, y: 0.35, z: 0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Gomma anteriore destra
+      repairCostMultiplier: 1
+    - type: 7
+      partName: Gomma anteriore sinistra
+      localPos: {x: -0.9, y: 0.35, z: 0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Gomma anteriore sinistra
+      repairCostMultiplier: 1
+    - type: 7
+      partName: Gomma posteriore destra
+      localPos: {x: 0.9, y: 0.35, z: -0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Gomma posteriore destra
+      repairCostMultiplier: 1
+    - type: 7
+      partName: Gomma posteriore sinistra
+      localPos: {x: -0.9, y: 0.35, z: -0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Gomma posteriore sinistra
+      repairCostMultiplier: 1
+    - type: 6
+      partName: Freno anteriore destro
+      localPos: {x: 0.9, y: 0.35, z: 0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Freno anteriore destro
+      repairCostMultiplier: 1
+    - type: 6
+      partName: Freno anteriore sinistro
+      localPos: {x: -0.9, y: 0.35, z: 0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Freno anteriore sinistro
+      repairCostMultiplier: 1
+    - type: 6
+      partName: Freno posteriore destro
+      localPos: {x: 0.9, y: 0.35, z: -0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Freno posteriore destro
+      repairCostMultiplier: 1
+    - type: 6
+      partName: Freno posteriore sinistro
+      localPos: {x: -0.9, y: 0.35, z: -0.6}
+      integrity: 100
+      degradedThreshold: 50
+      brokenThreshold: 20
+      displayName: Freno posteriore sinistro
+      repairCostMultiplier: 1
+--- !u!114 &7362001735951489386
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304263686447164055}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: adea6b48aa18ac645ae482938172f2de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  wheelRadius: 0.34
+--- !u!65 &2538030732135872426
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5304263686447164055}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1.9, y: 1.3, z: 4.5}
+  m_Center: {x: 0, y: 0.65, z: 0}

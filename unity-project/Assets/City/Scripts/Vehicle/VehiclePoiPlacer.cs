@@ -26,6 +26,37 @@ namespace City.Vehicle
         private static readonly Color SchoolColor = new Color(0.45f, 0.52f, 0.90f);
         private static readonly Color BarColor = new Color(0.92f, 0.40f, 0.60f);
 
+        // Materiali condivisi per colore: prima allocavamo un Material nuovo
+        // per ogni primitiva (centinaia per tile), con relativo costo di
+        // allocazione + draw call non batching. Ora condividiamo un singolo
+        // material per chiave di colore: visivamente identico, ma ogni tile
+        // con N POI passa da ~250 materiali a poche decine e Unity puo'
+        // batching (SRP batcher / static) le primitive che condividono lo
+        // shader, abbassando nettamente il numero di draw call su Roma.
+        private static readonly System.Collections.Generic.Dictionary<int, Material>
+            _shared = new System.Collections.Generic.Dictionary<int, Material>();
+        private static Material SharedLit(Color c)
+        {
+            int key = (ColorFloatToByte(c.r) << 24)
+                | (ColorFloatToByte(c.g) << 16)
+                | (ColorFloatToByte(c.b) << 8)
+                | ColorFloatToByte(c.a);
+            Material m;
+            if (!_shared.TryGetValue(key, out m))
+            {
+                m = new Material(Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard"));
+                m.color = c;
+                _shared[key] = m;
+            }
+            return m;
+        }
+        private static byte ColorFloatToByte(float f)
+        {
+            float v = Mathf.Clamp01(f) * 255f;
+            return (byte)Mathf.RoundToInt(v);
+        }
+
         /// <summary>Posizioni locali dei POI veicoli del chunk (per il dedup edifici).
         /// Effetto collaterale voluto: registra nell'indice di navigazione TUTTI
         /// i POI della tile (la doc e' tile-wide), cosi' bussola/minimappa/
@@ -63,6 +94,7 @@ namespace City.Vehicle
                 {
                     Vector3 local = toLocal(new GeoLL { a = poi.p[0], o = poi.p[1] });
                     if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                    local.y = TileElevation.HeightAt(poi.p[0], poi.p[1]);
                     Build(root.transform, poi, local);
                     placed++;
                 }
@@ -98,7 +130,7 @@ namespace City.Vehicle
                 : new Vector2(18f, 14f);
             var go = new GameObject("Poi_" + poi.t + "_" + poi.id);
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(local.x, 0f, local.z);
+            go.transform.localPosition = new Vector3(local.x, local.y, local.z);
 
             // piazzale
             var pad = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -108,9 +140,7 @@ namespace City.Vehicle
             pad.transform.localScale = new Vector3(padSize.x, PadHeight, padSize.y);
             pad.transform.localPosition = new Vector3(0f, PadHeight * 0.5f - 0.01f, 0f);
             var mr = pad.GetComponent<MeshRenderer>();
-            mr.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit")
-                ?? Shader.Find("Standard"));
-            mr.material.color = new Color(accent.r, accent.g, accent.b, 0.9f);
+            mr.sharedMaterial = SharedLit(new Color(accent.r, accent.g, accent.b, 0.9f));
 
             // insegna su palo (lato strada: verso il centro chunk come approssimazione)
             var sign = new GameObject("Insegna");
@@ -128,8 +158,7 @@ namespace City.Vehicle
             panel.transform.localPosition =
                 new Vector3(sx, 3.6f, -padSize.y * 0.5f + 1.05f);
             var pmr = panel.GetComponent<MeshRenderer>();
-            pmr.sharedMaterial = mr.sharedMaterial;
-            pmr.material.color = accent;
+            pmr.sharedMaterial = SharedLit(accent);
 
             // cartello distanze: nome + POI piu' vicino delle altre categorie
             var post = panel.AddComponent<PoiSignpost>();
@@ -157,6 +186,7 @@ namespace City.Vehicle
             delivery.transform.SetParent(go.transform, false);
             delivery.transform.localPosition =
                 new Vector3(padSize.x * 0.5f - 3f, 0f, -padSize.y * 0.5f + 3f);
+            delivery.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             zone.deliveryPoint = delivery.transform;
 
             // CONCESSIONARIA / OFFICINA / GARAGE = "case aperte": non si
@@ -239,7 +269,7 @@ namespace City.Vehicle
 
             // bancone di vendita/assistenza sul fondo
             var counter = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            Object.Destroy(counter.GetComponent<Collider>());
+            // Fix #5: il bancone resta SOLIDO (il player non ci passa dentro).
             counter.name = "Bancone";
             counter.transform.SetParent(root.transform, false);
             counter.transform.localScale = new Vector3(4f, 0.85f, 1.2f);
@@ -263,7 +293,7 @@ namespace City.Vehicle
             float h, Color c)
         {
             var p = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            Object.Destroy(p.GetComponent<Collider>());
+            // Fix #5: il pilastro resta SOLIDO (il player non ci passa dentro).
             p.transform.SetParent(parent, false);
             p.transform.localScale = new Vector3(0.22f, h, 0.22f);
             p.transform.localPosition = pos;
@@ -285,11 +315,7 @@ namespace City.Vehicle
         {
             var r = go.GetComponent<MeshRenderer>();
             if (r == null) return;
-            var mat = new Material(
-                Shader.Find("Universal Render Pipeline/Lit")
-                    ?? Shader.Find("Standard"));
-            mat.color = c;
-            r.sharedMaterial = mat;
+            r.sharedMaterial = SharedLit(c);
         }
 
         /// <summary>
@@ -302,7 +328,7 @@ namespace City.Vehicle
         {
             var go = new GameObject("Poi_" + poi.t + "_" + poi.id);
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(local.x, 0f, local.z);
+            go.transform.localPosition = new Vector3(local.x, local.y, local.z);
 
             Color accent = kind == VehiclePoiZone.PoiKind.Hospital
                 ? HospitalColor
@@ -318,10 +344,7 @@ namespace City.Vehicle
             pad.transform.localPosition =
                 new Vector3(0f, PadHeight * 0.5f - 0.01f, 0f);
             var mr = pad.GetComponent<MeshRenderer>();
-            mr.sharedMaterial = new Material(
-                Shader.Find("Universal Render Pipeline/Lit")
-                    ?? Shader.Find("Standard"));
-            mr.material.color = accent;
+            mr.sharedMaterial = SharedLit(accent);
 
             // palo con cartello colorato sul bordo del piazzale
             var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -337,8 +360,7 @@ namespace City.Vehicle
             board.transform.localScale = new Vector3(2.8f, 1.3f, 0.14f);
             board.transform.localPosition = new Vector3(-6.2f, 3.8f, -5f);
             var bmr = board.GetComponent<MeshRenderer>();
-            bmr.sharedMaterial = mr.sharedMaterial;
-            bmr.material.color = accent;
+            bmr.sharedMaterial = SharedLit(accent);
 
             if (kind == VehiclePoiZone.PoiKind.Hospital)
             {
@@ -356,8 +378,7 @@ namespace City.Vehicle
                 barH.transform.localScale = new Vector3(1.05f, 0.30f, 0.05f);
                 barH.transform.localPosition = Vector3.zero;
                 var rmr = barV.GetComponent<MeshRenderer>();
-                rmr.sharedMaterial = mr.sharedMaterial;
-                rmr.material.color = new Color(0.85f, 0.10f, 0.10f);
+                rmr.sharedMaterial = SharedLit(new Color(0.85f, 0.10f, 0.10f));
                 barH.GetComponent<MeshRenderer>().sharedMaterial =
                     rmr.sharedMaterial;
             }
@@ -392,7 +413,7 @@ namespace City.Vehicle
         {
             var go = new GameObject("Poi_rampa_" + poi.id);
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(local.x, 0f, local.z);
+            go.transform.localPosition = new Vector3(local.x, local.y, local.z);
 
             var pad = GameObject.CreatePrimitive(PrimitiveType.Cube);
             pad.name = "Piazzale";
@@ -402,10 +423,7 @@ namespace City.Vehicle
             pad.transform.localPosition =
                 new Vector3(0f, PadHeight * 0.5f - 0.01f, 0f);
             var mr = pad.GetComponent<MeshRenderer>();
-            mr.sharedMaterial = new Material(
-                Shader.Find("Universal Render Pipeline/Lit")
-                    ?? Shader.Find("Standard"));
-            mr.material.color = RampColor;
+            mr.sharedMaterial = SharedLit(RampColor);
 
             var tunnel = GameObject.CreatePrimitive(PrimitiveType.Cube);
             Object.Destroy(tunnel.GetComponent<Collider>());
@@ -414,8 +432,7 @@ namespace City.Vehicle
             tunnel.transform.localScale = new Vector3(5f, 0.6f, 8f);
             tunnel.transform.localPosition = new Vector3(0f, 0.15f, 3f);
             var tmr = tunnel.GetComponent<MeshRenderer>();
-            tmr.sharedMaterial = mr.sharedMaterial;
-            tmr.material.color = new Color(0.08f, 0.08f, 0.10f);
+            tmr.sharedMaterial = SharedLit(new Color(0.08f, 0.08f, 0.10f));
 
             var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             Object.Destroy(pole.GetComponent<Collider>());
@@ -430,8 +447,7 @@ namespace City.Vehicle
             sign.transform.localScale = new Vector3(2.4f, 1.4f, 0.12f);
             sign.transform.localPosition = new Vector3(-5.5f, 3.0f, -5f);
             var bmr = sign.GetComponent<MeshRenderer>();
-            bmr.sharedMaterial = mr.sharedMaterial;
-            bmr.material.color = RampColor;
+            bmr.sharedMaterial = SharedLit(RampColor);
 
             var post = sign.AddComponent<PoiSignpost>();
             post.Setup("rampa", poi.id.ToString(), poi.nm);
@@ -465,6 +481,7 @@ namespace City.Vehicle
                 case "school": return VehiclePoiZone.PoiKind.School;
                 case "bar": return VehiclePoiZone.PoiKind.Bar;
                 case "bank": return VehiclePoiZone.PoiKind.Bank;
+                case "fuel": return VehiclePoiZone.PoiKind.Fuel;
                 default: return VehiclePoiZone.PoiKind.Garage;
             }
         }
@@ -481,6 +498,7 @@ namespace City.Vehicle
                 case VehiclePoiZone.PoiKind.School: return "school";
                 case VehiclePoiZone.PoiKind.Bar: return "bar";
                 case VehiclePoiZone.PoiKind.Bank: return "bank";
+                case VehiclePoiZone.PoiKind.Fuel: return "fuel";
                 default: return "garage";
             }
         }

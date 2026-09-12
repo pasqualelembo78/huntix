@@ -56,6 +56,46 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# ── Permessi di esecuzione (self-heal, idempotente) ──────────────
+# Dopo clone/zip/import i bit '+x' possono sparire: ristabiliamoli qui,
+# prima di tutto. Nessun errore: se un file manca, si va avanti; se il
+# permesso è già giusto, non si tocca nulla.
+ensure_exec() {
+    local f="$1"
+    [ -f "$f" ] || return 0
+    if [ ! -x "$f" ]; then
+        chmod +x "$f"
+        echo ">> permesso di esecuzione aggiunto: $f"
+    fi
+}
+echo ">> verifica permessi di esecuzione (idempotente, nessuna modifica se a posto) ..."
+# binari/entrypoint principali
+ensure_exec build_release.sh
+ensure_exec gradlew
+ensure_exec citystyle.sh
+# tutti gli script bash della pipeline (root, backend, preprocessing, scripts, unitylic)
+for f in backend/start_backend.sh backend/backup.sh \
+         backend/preprocessing/aggiorna_mappa.sh \
+         backend/preprocessing/aggiorna_italia.sh \
+         backend/preprocessing/aggiorna_puglia.sh \
+         backend/preprocessing/aggiorna_regione.sh \
+         backend/preprocessing/aggiorna_citta.sh \
+         backend/preprocessing/mondo_tile.sh \
+         backend/preprocessing/mondo_prepara.sh \
+         backend/preprocessing/dem_warm.sh \
+         backend/preprocessing/warmup_foggia.sh \
+         backend/preprocessing/srtm_download.sh \
+         backend/preprocessing/cscheck/check.sh \
+         unitylic/ensure_unity_license.sh \
+         scripts/ricorrenze.sh scripts/add_game.sh scripts/add-store.sh \
+         scripts/debug-runner.sh scripts/deploy_rules.sh; do
+    ensure_exec "$f"
+done
+# tool Python della pipeline lanciabili anche come ./x.py
+ensure_exec backend/preprocessing/osm_italy_processor.py
+ensure_exec backend/preprocessing/tile_builder.py
+ensure_exec backend/preprocessing/dem_warm.py
+
 # ── Scelta autorizzazione ARCore Cloud Anchor ──────────────
 # api     -> API key nel manifest, persistenza max 24h
 # keyless -> OAuth client ID (package + SHA-1), persistenza 30+ giorni
@@ -403,6 +443,10 @@ build_unity_aar() {
     [ -d "$JDKROOT" ] && JDK_ARGS="-jdkRoot $JDKROOT"
     local SDK_ARGS=""
     [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ] && SDK_ARGS="-sdkRoot $ANDROID_HOME"
+    echo ">> [Unity] Passata preliminare di import/compile (crea i .meta mancanti, evita CI flaky)..."
+    "$UNITY_EDITOR_BIN" -batchmode -nographics -quit \
+        -projectPath "$UNITY_PROJECT_DIR" \
+        -logFile "$(dirname "$0")/unitylic/unity-import.log" || true
     "$UNITY_EDITOR_BIN" -batchmode -nographics -quit \
         -projectPath "$UNITY_PROJECT_DIR" \
         $SDK_ARGS $JDK_ARGS \
@@ -433,6 +477,85 @@ build_unity_aar() {
     enable_unity_aar_mode || return 1
     echo ">> AAR Unity aggiornato: $UNITY_AAR_FILE (+ dipendenze Unity in app/libs/)."
 }
+
+# ════════════════════════════════════════════════════════════════
+#  FASE SRTM DOWNLOAD (altitudine offline per il DEM, a richiesta)
+#  Scarica le celle SRTM3 locali per il bake DEM (niente rete a runtime).
+#  Idempotente: se srtm/ e' gia' popolata salta senza chiedere; altrimenti
+#  chiede come per l'aggiornamento mappa. Skip: SKIP_SRTM_DOWNLOAD=1
+# ════════════════════════════════════════════════════════════════
+ask_srtm_download() {
+    if [ "${SKIP_SRTM_DOWNLOAD:-0}" = "1" ]; then
+        echo ">> SKIP_SRTM_DOWNLOAD=1 — fase scaricamento celle SRTM saltata."
+        return 0
+    fi
+    if [ ! -x "backend/preprocessing/srtm_download.sh" ]; then
+        echo ">> srtm_download.sh non trovato — fase SRTM saltata."
+        return 0
+    fi
+    local SRTM_LOCAL="${HUNTIX_SRTM_DIR:-backend/preprocessing/srtm}"
+    if [ -d "$SRTM_LOCAL" ] && [ -n "$(ls -A "$SRTM_LOCAL" 2>/dev/null)" ]; then
+        echo ">> SRTM locale gia' presente in $SRTM_LOCAL"
+        echo "   ($(ls "$SRTM_LOCAL" | wc -l) celle): nessun download."
+        return 0
+    fi
+    echo "============================================================"
+    echo " Scaricamento celle SRTM (altitudine offline per il DEM)"
+    echo "============================================================"
+    printf "Il DEM locale ($SRTM_LOCAL) e' vuoto. Vuoi scaricarlo ora? [s/si = sì | invio = salta] > "
+    local ANS
+    read -r ANS
+    case "${ANS:-}" in
+        s|S|si|Si|SI|sì|sÌ|aggiorna|1|y|Y|yes)
+            echo ">> Avvio scaricamento celle SRTM (Italia)..."
+            ( cd backend/preprocessing && ./srtm_download.sh ) \
+                || echo "!! SRTM download terminato con errori (la build prosegue; il DEM usera' la rete come fallback)."
+            ;;
+        *) echo ">> SRTM NON scaricato: il DEM usera' la rete come fallback." ;;
+    esac
+}
+
+# ════════════════════════════════════════════════════════════════
+#  FASE AGGIORNAMENTO MAPPA (facoltativa, interattiva)
+#  Chiede se aggiornare le tile (Italia: tutta/regione/città — Mondo:
+#  tutto/nazione) PRIMA della creazione AAR. Tutte le operazioni sono
+#  IDEMPOTENTI: se la mappa è già a posto, non rifanno nulla.
+#  Skip per build automatiche: SKIP_MAP_UPDATE=1
+# ════════════════════════════════════════════════════════════════
+ask_map_update() {
+    if [ "${SKIP_MAP_UPDATE:-0}" = "1" ]; then
+        echo ">> SKIP_MAP_UPDATE=1 — fase aggiornamento mappa saltata."
+        return 0
+    fi
+    if [ ! -x "backend/preprocessing/aggiorna_mappa.sh" ]; then
+        echo ">> aggiorna_mappa.sh non trovato — fase aggiornamento mappa saltata."
+        return 0
+    fi
+    echo "============================================================"
+    echo " Aggiornamento mappa (tile: altitudine, strade, vegetazione, POI)"
+    echo "============================================================"
+    printf "Vuoi aggiornare la mappa? [s/si/aggiorna = sì | invio = prosegui] > "
+    read -r ANS
+    case "${ANS:-}" in
+        s|S|si|Si|SI|sì|sÌ|aggiorna|1|y|Y|yes)
+            echo ">> Avvio aggiornamento mappa interattivo..."
+            ( cd backend/preprocessing && ./aggiorna_mappa.sh )
+            # Svuota la cache del tile server: helper condiviso idempotente
+            # (lo stesso usato dai sottoscritti di aggiornamento). Onora la
+            # porta di backend/.env se definita.
+            local PORT
+            PORT=$(grep '^PORT=' backend/.env 2>/dev/null | cut -d= -f2-) || true
+            if [ -n "${PORT:-}" ]; then
+                HUNTIX_TILES_CACHE_PORT="${PORT}" backend/preprocessing/cache_clear.sh
+            else
+                backend/preprocessing/cache_clear.sh
+            fi
+            ;;
+        *) echo ">> Mappa NON aggiornata: proseguo con la build." ;;
+    esac
+}
+ask_srtm_download
+ask_map_update
 
 # ── Prompt AAR (idempotente: niente lavoro se fonti invariate) ──
 AAR_PRESENT=0
@@ -509,11 +632,11 @@ APK_DIR="app/build/outputs/apk/release"
 rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
-./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=plain
+./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 echo ">> Building AAB (bundleRelease)..."
-./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=plain
+./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
 AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
 
 if [ -f "$AAB_FILE" ]; then
@@ -778,15 +901,28 @@ start_huntix_backend() {
     # ── 5) Firewall ──
     ensure_fw_port "$PORT"
 
-    # ── 6) Avvio backend ──
+    # ── 6) Avvio backend (idempotente) ──
+    # Se il tile server (parte integrante del backend huntix) è già attivo
+    # sulla porta $PORT, NON riavviamo nulla. Altrimenti avvia e attende.
+    local TILES_URL="http://localhost:$PORT/api/tiles/ping"
+    local i
+    if curl -s -o /dev/null -m 5 -w "%{http_code}" "$TILES_URL" 2>/dev/null | grep -q 200; then
+        echo ">> Tile server/backend huntix già ATTIVO su porta $PORT (nessun riavvio)."
+        cd ..
+        return 0
+    fi
+
     echo ">> Avvio backend huntix su porta $PORT ..."
     HUNTIX_BACKEND_PORT="$PORT" ./start_backend.sh >/dev/null 2>&1 &
-    sleep 4
-    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/docs" 2>/dev/null | grep -q 200; then
-        echo ">> Backend huntix ATTIVO su http://localhost:$PORT"
-    else
-        echo "!! Backend non raggiungibile subito; controlla /tmp/huntix_backend.log"
-    fi
+    for i in $(seq 1 15); do
+        sleep 2
+        if curl -s -o /dev/null -m 3 -w "%{http_code}" "$TILES_URL" 2>/dev/null | grep -q 200; then
+            echo ">> Backend huntix ATTIVO (tile server OK) su http://localhost:$PORT"
+            cd ..
+            return 0
+        fi
+    done
+    echo "!! Backend non raggiungibile; controlla /tmp/huntix_backend.log"
     cd ..
 }
 start_huntix_backend || echo "!! Fase backend terminata con errori (vedi /tmp/huntix_backend.log)."

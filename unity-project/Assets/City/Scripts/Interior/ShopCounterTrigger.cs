@@ -20,16 +20,17 @@ namespace City.Interior
         {
             if (!other.CompareTag("Player")) return;
             focused = true;
-            if (UIManager.Instance != null && shop != null)
-                UIManager.Instance.ShowInteract(shop.shopName);
+            if (InteriorManager.Instance != null)
+                InteriorManager.Instance.RegisterInteriorAction(Interact,
+                    shop != null ? shop.shopName : "COMPRA");
         }
 
         private void OnTriggerExit(Collider other)
         {
             if (!other.CompareTag("Player")) return;
             focused = false;
-            if (UIManager.Instance != null)
-                UIManager.Instance.HideInteract();
+            if (InteriorManager.Instance != null)
+                InteriorManager.Instance.UnregisterInteriorAction(Interact);
         }
 
         public void Interact()

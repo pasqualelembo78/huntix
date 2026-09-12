@@ -8,6 +8,7 @@
 keystore.properties
 *.jks
 *.keystore
+.env
 
 # Firebase config (contiene chiavi progetto)
 app/google-services.json
@@ -79,16 +80,21 @@ unitylic/unity-export.log
 *.aar
 
 # ── ZIP kit (sorgenti, ma sono grandi) ─────────────────────────
-# car.zip
-# kit/*.zip
+kit/*.zip
+kit/sketchfab/
+kit/quaternius/
+kit/extract/
 
 # ── Preprocessing OSM: dati pesanti rigenerabili (3.6GB) ──────
 backend/preprocessing/data/
 backend/preprocessing/tiles/
 backend/preprocessing/venv/
 backend/preprocessing/work/
+backend/preprocessing/srtm/
+backend/preprocessing/dem_cache/
 __pycache__/
 *.pyc
+*.pid
 
 # ── Stati runtime dei servizi veicoli ─────────────────────────
 backend/traffic/vehicles_state.json

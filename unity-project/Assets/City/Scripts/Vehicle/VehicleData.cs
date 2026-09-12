@@ -34,6 +34,11 @@ namespace City.Vehicle
         Scooter,
         EBike,
         Van,
-        Truck
+        Truck,
+        // Nuovi mezzi (in fasi progressive)
+        Train,        // treno/tram/metropolitana (su rotaie)
+        Boat,         // barca/traghetto/nave (galleggiamento)
+        Aircraft,     // elicottero/aereo/drone (volo)
+        Spacecraft    // shuttle (fisica 6-DOF)
     }
 }

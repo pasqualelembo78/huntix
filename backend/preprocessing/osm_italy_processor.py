@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -32,13 +33,14 @@ import time
 import zlib
 from collections import Counter, defaultdict, OrderedDict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tile_builder import (LAT_STEP, LON_STEP, ORIGIN_LAT, ORIGIN_LON,
-                          ROAD_HIGHWAYS, is_real_junction, local_bearing_deg,
-                          m_per_lon_at, oriented_bbox, path_length_m,
-                          road_width, parse_speed_kmh, simplify_polyline,
+                          ROAD_HIGHWAYS, clip_ring_to_bbox, haversine_m,
+                          is_real_junction, local_bearing_deg, m_per_lon_at,
+                          oriented_bbox, path_length_m, road_width,
+                          parse_speed_kmh, simplify_polyline,
                           shoelace_area_m2, split_way_by_tile, tile_bbox,
                           tile_key)
 
@@ -59,6 +61,67 @@ HOSPITAL_AMENITIES = {"hospital", "clinic"}
 SCHOOL_AMENITIES = {"school", "kindergarten", "college", "university"}
 BAR_AMENITIES = {"bar", "cafe", "pub", "fast_food", "restaurant"}
 BANK_AMENITIES = {"bank", "atm"}
+
+# Filtri OSM (una lista = un osmium tags-filter per PBF "permanente").
+# Ogni cambiamento qui DEVE comportare una ri-estrazione automatica dei
+# filtrati: la firma SHA1 viene salvata in data/filter.sig e confrontata
+# a ogni esecuzione (se cambia, il filtro si rifà da solo, senza --force).
+FILTERS = {
+    "roads": ["w/highway=" + ",".join(sorted(ROAD_HIGHWAYS))],
+    "areas": ["w/building",
+              "w/natural=wood", "w/natural=water", "w/natural=wetland",
+              "w/natural=sand", "w/natural=beach", "w/natural=scrub",
+              "w/natural=grassland",
+              "w/landuse=forest", "w/landuse=farmland", "w/landuse=grass",
+              "w/landuse=meadow", "w/landuse=vineyard", "w/landuse=orchard",
+              "w/landuse=residential", "w/landuse=commercial",
+              "w/landuse=industrial", "w/landuse=retail",
+              "w/landuse=cemetery", "w/landuse=construction",
+              "w/leisure=park", "w/leisure=garden",
+              "w/leisure=golf_course", "w/leisure=playground",
+              "w/aeroway=aerodrome",
+              "w/shop=car", "w/shop=car_repair",
+              "w/amenity=parking AND parking=multi-storey",
+              "w/amenity=parking AND parking=underground",
+              "w/amenity=parking AND parking=shed",
+              "w/amenity=hospital", "w/amenity=clinic",
+              "w/amenity=school", "w/amenity=kindergarten",
+              "w/amenity=college", "w/amenity=university",
+              "w/amenity=bar", "w/amenity=cafe", "w/amenity=pub",
+              "w/amenity=fast_food", "w/amenity=restaurant",
+              "w/amenity=bank", "w/amenity=atm"],
+    "points": ["n/natural=tree", "n/highway=traffic_signals",
+               "n/aeroway=aerodrome",
+               "n/shop=car", "n/shop=car_repair",
+               "n/amenity=parking AND parking=multi-storey",
+               "n/amenity=parking AND parking=underground",
+               "n/amenity=parking AND parking=shed",
+               "n/amenity=hospital", "n/amenity=clinic",
+               "n/amenity=school", "n/amenity=kindergarten",
+               "n/amenity=college", "n/amenity=university",
+               "n/amenity=bar", "n/amenity=cafe", "n/amenity=pub",
+               "n/amenity=fast_food", "n/amenity=restaurant",
+               "n/amenity=bank", "n/amenity=atm"],
+}
+
+# Versione del FORMATO GEOMETRIA/POI scritto nei {key}_geo.json.gz.
+# Incrementa questo numero a mano quando cambia il processore (nuovo POI,
+# nuovo campo, nuova geometria, nuovo bake con elevazione diversa...):
+# alla prossima aggiorna_* le tile esistenti verranno rigenerate SOLO nella
+# parte geo (grafi, dump e PBF filtrati restano intatti). La versione reale
+# incorpora anche la firma dei filtri: se aggiungi un tag ai FILTERS qui
+# sopra, cambia da sola.
+GEO_FORMAT_BASE = 1
+
+
+def _filter_sig() -> str:
+    """Firma SHA1 della configurazione FILTERS (ri-estrazione automatica)."""
+    return hashlib.sha1(json.dumps(FILTERS, sort_keys=True).encode()).hexdigest()
+
+
+def _geo_format_version() -> str:
+    """Versione corrente del formato geo: base del processore + sig filtri."""
+    return f"{GEO_FORMAT_BASE}-{_filter_sig()[:8]}"
 
 
 def _poi_type_for(t) -> Optional[str]:
@@ -204,6 +267,29 @@ class RoadsEmit(osmium.SimpleHandler):
         if self.n_way % 200000 == 0:
             log(f"  roads: {self.n_way} way processate, "
                 f"{sum(self.graph.counts.values())} record")
+
+        # Viadotto/galleria: il deck e' la retta fra i due capisaldi (portali/
+        # impalcature) della WAY INTERA, con frazioni di lunghezza GLOBALI
+        # `s0`/`s1` per ogni tratto: la quota resta continua anche su ponti
+        # lunghi che tagliano piu' tile. Senza dati DEM ai capisaldi la strada
+        # resta classica (drape sul terreno), mai rotta.
+        is_elev = a["tu"] or a["br"]
+        h0 = h1 = None
+        cum = None
+        if is_elev:
+            cum = [0.0]
+            for k in range(1, len(pts)):
+                cum.append(cum[-1] + haversine_m(pts[k - 1], pts[k]))
+            if cum[-1] > 1.0:
+                try:
+                    from dem import point_height
+                    ph0 = point_height(*pts[0])
+                    ph1 = point_height(*pts[-1])
+                    if ph0 is not None and ph1 is not None:
+                        h0, h1 = round(ph0, 1), round(ph1, 1)
+                except Exception:
+                    h0 = h1 = None
+
         for run in split_way_by_tile(pts):
             if len(run) < 2:
                 continue
@@ -212,8 +298,20 @@ class RoadsEmit(osmium.SimpleHandler):
             seg_ids = ids[run[0]:run[-1] + 1]
             self.graph.write(key, {"k": "g", **a, "nids": seg_ids,
                                    "pts": seg_pts})
-            self.geo.write(key, {"k": "r", "nm": a["nm"], "hw": a["hw"],
-                                 "pts": seg_pts})
+            rec = {"k": "r", "nm": a["nm"], "hw": a["hw"], "pts": seg_pts}
+            if a["tu"]:
+                rec["tu"] = True
+            if a["br"]:
+                rec["br"] = True
+            if is_elev and h0 is not None and h1 is not None and \
+                    cum is not None:
+                L = cum[-1]
+                rec["dh"] = True
+                rec["h0"] = h0
+                rec["h1"] = h1
+                rec["s0"] = round(cum[run[0]] / L, 6)
+                rec["s1"] = round(cum[run[-1]] / L, 6)
+            self.geo.write(key, rec)
             self.n_rec += 1
 
 
@@ -357,10 +455,21 @@ class AreasEmit(osmium.SimpleHandler):
                 return
             clat = sum(p[0] for p in simp) / len(simp)
             clon = sum(p[1] for p in simp) / len(simp)
-            if self.slice_ilat is not None and \
-                    tile_idx_lat(clat) != self.slice_ilat:
+            idx = tile_idx_lat(clat)
+            if self.slice_ilat is not None and idx != self.slice_ilat:
                 return
-            self.geo.write(tile_key(clat, clon),
+            key = tile_key(clat, clon)
+            # Taglio al bbox della tile del centroide: i poligoni OSM possono
+            # estendersi ben oltre (foreste/boschi di montagna) e senza clip
+            # generano lastre verdi fuori griglia + duplicati fra tile.
+            t = tile_bbox(key)
+            simp = clip_ring_to_bbox(simp, t[0], t[1], t[2], t[3])
+            # Il taglio crea punti sintetici: ri-semplifica ai bordi.
+            simp = simplify_polyline(simp, PARK_SIMPLIFY_TOL_M) if len(simp) >= 3 else []
+            if len(simp) < 3:
+                self.n_skip += 1
+                return
+            self.geo.write(key,
                            {"k": "p", "id": w.id, "kd": kd, "nm": name,
                             "poly": [list(p) for p in simp]})
             self.n_park += 1
@@ -690,9 +799,18 @@ def merge_geo_tile(spill_files: List[Path], out_dir: Path,
             geo["pois"].append(r)
         elif k == "a":
             geo["airports"].append(r)
+    # I tile con almeno una strada su viadotto/galleria portano il marcatore
+    # `-bt` nella `ver`: il prossimo aggiornamento rigenera SOLO quelli (via
+    # geo-todo), le altre tile (senza bridge/tunnel) restano byte-identiche
+    # e non vengono mai toccate.
+    if any(r.get("tu") or r.get("br") for r in geo["roads"]):
+        geo["ver"] = _geo_format_version() + "-bt"
+    else:
+        geo["ver"] = _geo_format_version()
     if overrides is None:
         overrides = _load_poi_overrides(out_dir.parent / "data")
     _augment_geo(key, geo, overrides or {})
+    _bake_dem(key, geo)
     with gzip.open(out_dir / f"{key}_geo.json.gz", "wt",
                    encoding="utf-8", compresslevel=6) as gz:
         gz.write(json.dumps(geo, separators=(",", ":")))
@@ -701,6 +819,42 @@ def merge_geo_tile(spill_files: List[Path], out_dir: Path,
             "parks": len(geo["parks"]), "trees": len(geo["trees"]),
             "signals": len(geo["signals"]), "airports": len(geo["airports"]),
             "pois": len(geo["pois"])}
+
+
+def _bake_dem(key: str, geo: dict) -> None:
+    """Inietta la griglia DEM ('ele'/'ele_nrow'/'ele_ncol') dentro la geo AL
+    MOMENTO della generazione, cosi' il file su disco HA per sempre
+    l'elevazione e il tile server e' solo un lettore.
+
+    SOLO fonti deterministiche locali (cache `dem_cache` o SRTM HGT):
+    MAI rete qui — i batch `gen-tile` girano in 4 processi paralleli e
+    un accesso all'API OpenTopoData contemporaneo causerebbe 429 a raffica.
+    Le tile senza DEM locale restano senza 'ele': il backfill `dem_warm.py`
+    (pacing serale, rete ammessa) le provvede subito dopo.
+
+    Disattivabile (per bachi che non ne hanno bisogno): HUNTIX_DEM_BAKE=0.
+    """
+    if os.environ.get("HUNTIX_DEM_BAKE", "1") != "1":
+        return
+    if not isinstance(geo, dict) or geo.get("ele") is not None:
+        return
+    bbox = geo.get("bbox")
+    if not bbox or len(bbox) != 4:
+        return
+    try:
+        from dem import bake_offline_grid, grid_shape
+        grid = bake_offline_grid(key, bbox)
+        if not grid:
+            log(f"avviso: DEM offline non disponibile per {key} (cache/HGT mancanti: "
+                f"lo provvedera' dem_warm.py)")
+            return
+        nrow, ncol = grid_shape(bbox)
+        geo["ele_nrow"] = nrow
+        geo["ele_ncol"] = ncol
+        geo["ele"] = [round(float(v), 1) for v in grid]
+        log(f"DEM {key}: {nrow}x{ncol} iniettata (offline)")
+    except Exception as e:  # noqa: BLE001
+        log(f"avviso: DEM bake fallito per {key}: {e}")
 
 
 # ── Comandi ──────────────────────────────────────────────────────
@@ -775,69 +929,91 @@ def cmd_land(ctx: Ctx, with_areas: bool = False) -> None:
     log(f"land keys ({ctx.country}): {len(keys)} tile -> {out.name}")
 
 
-def cmd_filter(ctx: Ctx, src: Path, clean: bool, force: bool) -> None:
+def _min_pbf_bytes(min_pbf_mb: float | None = None) -> int:
+    """Soglia minima (byte) oltre la quale un PBF filtrato è 'vivo'.
+    Un file troncato/corrotto (es. estrazione interrotta o `--overwrite`
+    fallito) resta quasi a zero byte: va rigenerato, non riusato."""
+    if min_pbf_mb is None:
+        min_pbf_mb = float(os.environ.get("HUNTIX_MIN_PBF_MB", "1"))
+    return int(min_pbf_mb * 1_000_000)
+
+
+def cmd_filter(ctx: Ctx, src: Path, clean: bool, force: bool,
+               min_pbf_mb: float | None = None) -> None:
+    if not src.exists() or src.stat().st_size < _min_pbf_bytes(min_pbf_mb):
+        raise SystemExit(
+            f"PBF sorgente non valido o mancante: {src} (dimensione minima "
+            f"{_min_pbf_bytes(min_pbf_mb)/1e6:.0f} MB). Lancia prima 'download'.")
+    minbytes = _min_pbf_bytes(min_pbf_mb)
+
+    # Cambio di configurazione dei filtri (nuovo tag/POI) => ri-estrai da
+    # solo, come se --force, ma idempotente: la firma viene aggiornata alla
+    # fine e le estrazioni successive che la ritrovano identica saltano.
+    # La firma e' PER PAESE: un update di FILTERS deve far ri-estrarre ogni
+    # nazione a modo suo (mondo_*), non solo la prima che riaggancia.
+    sig_path = ctx.data / f"{ctx.country}-filter.sig"
+    sig_now = ""
+    try:
+        sig_now = sig_path.read_text().strip()
+    except OSError:
+        pass
+    sig_cur = _filter_sig()
+    if sig_now != sig_cur:
+        log(f"configurazione filtri cambiata (firma {sig_now or 'assente'} -> "
+            f"{sig_cur[:8]}): ri-estrazione dei filtrati")
+        force = True
+
+    def filtro(name: str, path: Path) -> None:
+        if path.exists() and not force and path.stat().st_size >= minbytes:
+            return
+        tmp = path.with_name(path.name + ".tmp")
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+        try:
+            log(f"filtro {name} ...")
+            run_osmium(["osmium", "tags-filter", str(src)] + FILTERS[name]
+                       + ["-f", "pbf", "-o", str(tmp), "--overwrite"])
+            if not tmp.exists() or tmp.stat().st_size < minbytes:
+                raise SystemExit(f"estrazione {name} troppo piccola ({tmp.stat().st_size} B)")
+            tmp.replace(path)  # atomico: il vecchio PBF buono resta fino a fine estrazione
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        size = path.stat().st_size / 1e6
+        log(f"OK {path.name}: {size:.1f} MB")
+
     targets = {
         "roads": ctx.pbf("roads"),
         "areas": ctx.pbf("areas"),
         "points": ctx.pbf("points"),
     }
-    filters = {
-        "roads": ["w/highway=" + ",".join(sorted(ROAD_HIGHWAYS))],
-        "areas": ["w/building",
-                  "w/natural=wood", "w/natural=water", "w/natural=wetland",
-                  "w/natural=sand", "w/natural=beach", "w/natural=scrub",
-                  "w/natural=grassland",
-                  "w/landuse=forest", "w/landuse=farmland", "w/landuse=grass",
-                  "w/landuse=meadow", "w/landuse=vineyard", "w/landuse=orchard",
-                  "w/landuse=residential", "w/landuse=commercial",
-                  "w/landuse=industrial", "w/landuse=retail",
-                  "w/landuse=cemetery", "w/landuse=construction",
-                  "w/leisure=park", "w/leisure=garden",
-                  "w/leisure=golf_course", "w/leisure=playground",
-                  "w/aeroway=aerodrome",
-                  "w/shop=car", "w/shop=car_repair",
-                  "w/amenity=parking AND parking=multi-storey",
-                  "w/amenity=parking AND parking=underground",
-                  "w/amenity=parking AND parking=shed",
-                  "w/amenity=hospital", "w/amenity=clinic",
-                  "w/amenity=school", "w/amenity=kindergarten",
-                  "w/amenity=college", "w/amenity=university",
-                  "w/amenity=bar", "w/amenity=cafe", "w/amenity=pub",
-                  "w/amenity=fast_food", "w/amenity=restaurant",
-                  "w/amenity=bank", "w/amenity=atm"],
-        "points": ["n/natural=tree", "n/highway=traffic_signals",
-                   "n/aeroway=aerodrome",
-                   "n/shop=car", "n/shop=car_repair",
-                   "n/amenity=parking AND parking=multi-storey",
-                   "n/amenity=parking AND parking=underground",
-                   "n/amenity=parking AND parking=shed",
-                   "n/amenity=hospital", "n/amenity=clinic",
-                   "n/amenity=school", "n/amenity=kindergarten",
-                   "n/amenity=college", "n/amenity=university",
-                   "n/amenity=bar", "n/amenity=cafe", "n/amenity=pub",
-                   "n/amenity=fast_food", "n/amenity=restaurant",
-                   "n/amenity=bank", "n/amenity=atm"],
-    }
-    missing = [t for t in targets.values() if force or not t.exists()]
+
+    missing = [t for t in targets.values() if force or not t.exists()
+               or t.stat().st_size < minbytes]
     if not missing:
         log("estratti gia presenti (usa --force per rifare)")
     else:
         for name, path in targets.items():
-            if path.exists() and not force:
+            if path.exists() and not force and path.stat().st_size >= minbytes:
                 continue
-            log(f"filtro {name} ...")
-            run_osmium(["osmium", "tags-filter", str(src)] + filters[name]
-                       + ["-o", str(path), "--overwrite"])
-            size = path.stat().st_size / 1e6
-            log(f"OK {path.name}: {size:.1f} MB")
+            filtro(name, path)
 
-    if all(t.exists() for t in targets.values()):
+    if all(t.exists() and t.stat().st_size >= minbytes
+           for t in targets.values()):
         total = sum(t.stat().st_size for t in targets.values())
         log(f"estratti completi: {total/1e9:.2f} GB totali")
+        try:
+            ctx.data.mkdir(parents=True, exist_ok=True)
+            sig_path.write_text(sig_cur + "\n")
+        except OSError as e:
+            log(f"avviso: impossibile scrivere {sig_path.name}: {e}")
         if clean and src.exists():
             freed = src.stat().st_size
             src.unlink()
             log(f"PBF originale eliminato: liberati {freed/1e9:.2f} GB")
+    else:
+        raise SystemExit("estrazione incompleta: qualche filtrato mancante "
+                         "o troppo piccolo; aggiornamento interrotto")
 
 
 def cmd_graph(ctx: Ctx) -> None:
@@ -987,6 +1163,8 @@ def cmd_index(ctx: Ctx) -> None:
                               "trees", "signals", "pois"):
                     if field in gd:
                         entry[field] = len(gd[field])
+                if gd.get("ver"):
+                    entry["ver"] = gd["ver"]
         tiles.append(entry)
         tot_bytes += entry["bytes"]
     idx = {
@@ -999,6 +1177,109 @@ def cmd_index(ctx: Ctx) -> None:
     out = ctx.tiles / "index.json"
     out.write_text(json.dumps(idx, separators=(",", ":")), encoding="utf-8")
     log(f"index.json: {len(tiles)} tile, {tot_bytes/1e6:.1f} MB")
+
+
+def _bt_tile_keys(ctx: Ctx) -> Set[str]:
+    """Chiavi tile con almeno una strada bridge/tunnel nei PBF roads del
+    paese attivo. geo-todo le confronta col marcatore `-bt` in `ver`: cosi'
+    il prossimo aggiornamento rigenera SOLO i tile interessati e non tutto
+    il paese. Scansione leggera in una volta sola per contenuto dei PBF
+    (cache data/<paese>-bt.json, invalidata su mtime+size del file)."""
+    roads = ctx.pbf("roads")
+    if not roads.exists():
+        return set()
+    st = roads.stat()
+    sig = f"{st.st_mtime_ns}:{st.st_size}"
+    cache = ctx.data / f"{ctx.country}-bt.json"
+    if cache.exists():
+        try:
+            d = json.loads(cache.read_text(encoding="utf-8"))
+            if d.get("sig") == sig:
+                return set(d.get("keys") or [])
+        except Exception:
+            pass
+    keys: Set[str] = set()
+
+    class _BtScan(osmium.SimpleHandler):
+        def __init__(self):
+            super().__init__()
+            self.keys = keys
+
+        def way(self, w):
+            a = _way_attrs(w.tags)
+            if a is None or not (a["tu"] or a["br"]):
+                return
+            pts = []
+            for nd in w.nodes:
+                loc = nd.location
+                if not loc.valid():
+                    return
+                pts.append((round(loc.lat, 5), round(loc.lon, 5)))
+            if len(pts) < 2:
+                return
+            for run in split_way_by_tile(pts):
+                if len(run) < 2:
+                    continue
+                self.keys.add(tile_key(*pts[run[0]]))
+
+    t0 = time.time()
+    _BtScan().apply_file(str(roads), locations=True, idx="sparse_mem_array")
+    # MAI su stdout: geo-todo lo usa per le chiavi tile (una per riga) e
+    # qualsiasi riga di log qui sopravvive nel flusso -> tile_worker la
+    # tratterebbe come una chiave fasulla e gen-tile esploderebbe.
+    print(f"[{_dt.datetime.now():%H:%M:%S}] scan bridge/tunnel: "
+          f"{len(keys)} tile ({time.time() - t0:.0f}s)", file=sys.stderr, flush=True)
+    try:
+        ctx.data.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"sig": sig, "keys": sorted(keys)}),
+                         encoding="utf-8")
+    except Exception:
+        pass
+    return keys
+
+
+def cmd_geo_todo(ctx: Ctx, refresh: bool) -> None:
+    """Legge chiavi tile da stdin e stampa su stdout quelle la cui GEO va
+    generata o rigenerata: file geo mancante, formato `ver` obsoleto (base
+    oppure base+`-bt` sui tile con viadotti/gallerie), oppure dati sorgente
+    (dump/PBF filtrati) piu' recenti della geo stessa (il dump e' stato
+    riscaricato o i PBF ri-estratti dopo la generazione).
+    Con `--refresh` passa tutte le chiavi (rigenera ogni geo esistente).
+    Il riepilogo va su stderr per non sporcare l'elenco su stdout."""
+    cur = _geo_format_version()
+    # Il marcatore -bt e' per-tile: solo i tile con bridge/tunnel devono
+    # festeggiare il cambio di formato, gli altri restano per sempre. Lo scan
+    # dei PBF e' cacheggiato; con --refresh tutto rigenera e non serve.
+    bt = set() if refresh else _bt_tile_keys(ctx)
+    minbytes = _min_pbf_bytes()
+    srcs = []
+    raw = ctx.pbf("latest.osm")
+    if raw.exists() and raw.stat().st_size >= minbytes:
+        srcs.append(raw)
+    for name in ("roads", "areas", "points"):
+        p = ctx.pbf(name)
+        if p.exists() and p.stat().st_size >= minbytes:
+            srcs.append(p)
+    src_mtime = max((p.stat().st_mtime for p in srcs), default=0.0)
+    keys = sorted({ln.strip() for ln in sys.stdin if ln.strip()})
+    todo = []
+    for k in keys:
+        gp = ctx.tiles / f"{k}_geo.json.gz"
+        if refresh or not gp.exists():
+            todo.append(k)
+            continue
+        try:
+            with gzip.open(gp, "rt", encoding="utf-8") as gz:
+                ver = json.load(gz).get("ver")
+        except Exception:
+            ver = None
+        expected = cur + ("-bt" if k in bt else "")
+        if ver != expected or (src_mtime and gp.stat().st_mtime < src_mtime):
+            todo.append(k)
+    print(f"geo-todo: {len(todo)}/{len(keys)} chiavi "
+          f"({'refresh' if refresh else 'formato ' + cur})", file=sys.stderr)
+    for k in todo:
+        print(k)
 
 
 def cmd_info(path: Path) -> None:
@@ -1022,7 +1303,14 @@ def main() -> None:
     f.add_argument("--input", default=None, help="PBF sorgente (default data/italy-latest.osm.pbf)")
     f.add_argument("--clean", action="store_true", help="elimina il PBF originale al termine")
     f.add_argument("--force", action="store_true")
+    f.add_argument("--min-pbf-mb", type=float, default=None,
+                   help="dimensione minima filtrati in MB (default "
+                        "HUNTIX_MIN_PBF_MB o 1 MB)")
     sub.add_parser("graph")
+    gto = sub.add_parser("geo-todo",
+                         help="chiavi geo da generare/rigenerare (stdin -> stdout; --refresh = tutte)")
+    gto.add_argument("--refresh", action="store_true",
+                     help="passa tutte le chiavi (rigenera le geo esistenti)")
     gt = sub.add_parser("gen-tile")
     gt.add_argument("tile_key")
     gt.add_argument("--skip-graph", action="store_true")
@@ -1036,6 +1324,8 @@ def main() -> None:
     inf.add_argument("file")
     dl = sub.add_parser("download")
     dl.add_argument("--force", action="store_true")
+    sub.add_parser("fmt-version",
+                   help="stampa la versione corrente del formato geo (per gli aggiornamenti incrementali)")
     ap.add_argument("--data-dir", default=None)
     ap.add_argument("--tiles-dir", default=None)
     ap.add_argument("--work-dir", default=None)
@@ -1043,8 +1333,8 @@ def main() -> None:
 
     ctx = Ctx(args)
     if args.cmd == "filter":
-        src = Path(args.input) if args.input else ctx.pbf("latest")
-        cmd_filter(ctx, src, args.clean, args.force)
+        src = Path(args.input) if args.input else ctx.pbf("latest.osm")
+        cmd_filter(ctx, src, args.clean, args.force, args.min_pbf_mb)
     elif args.cmd == "graph":
         cmd_graph(ctx)
         cmd_index(ctx)
@@ -1054,16 +1344,32 @@ def main() -> None:
             cmd_index(ctx)
     elif args.cmd == "index":
         cmd_index(ctx)
+    elif args.cmd == "geo-todo":
+        cmd_geo_todo(ctx, args.refresh)
     elif args.cmd == "land":
         cmd_land(ctx, args.with_areas)
     elif args.cmd == "info":
         cmd_info(Path(args.file))
     elif args.cmd == "download":
-        dst = ctx.pbf("latest")
+        dst = ctx.pbf("latest.osm")
         ctx.data.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["wget", "-c", "-q", "--show-progress",
-                        "https://download.geofabrik.de/europe/italy-latest"
-                        ".osm.pbf", "-O", str(dst)], check=True)
+        url = "https://download.geofabrik.de/europe/italy-latest.osm.pbf"
+        try:
+            subprocess.run(["wget", "-c", "-q", "--show-progress",
+                            url, "-O", str(dst)], check=True)
+        except subprocess.CalledProcessError as e:
+            # il file parziale (eventualmente corrotto) non deve restare:
+            # un futuro `wget -c` lo riprenderebbe come se fosse valido.
+            try:
+                dst.unlink(missing_ok=True)
+            except OSError:
+                pass
+            log(f"ERRORE: scarico {url} fallito (wget uscita {e.returncode}).")
+            log("Nessun dato e' stato toccato; l'aggiornamento e' idempotente, " 
+                "basta rilanciarlo.")
+            raise SystemExit(1)
+    elif args.cmd == "fmt-version":
+        print(_geo_format_version())
 
 
 if __name__ == "__main__":

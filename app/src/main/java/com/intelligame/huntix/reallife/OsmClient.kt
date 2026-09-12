@@ -165,10 +165,31 @@ object OsmClient {
     private fun downloadWithMirrors(requestBody: FormBody): String {
         val now = System.currentTimeMillis()
 
+        // Se tutti i mirror sono in cooldown, aspetta che il prima
+        // disponibile si raffreddi e riprova (max 15 s di attesa).
+        val allSkipped = OVERPASS_MIRRORS.all { m ->
+            val lf = mirrorFailures[m] ?: 0L
+            now - lf < MIRROR_COOLDOWN_MS
+        }
+        if (allSkipped) {
+            val earliestReady = OVERPASS_MIRRORS.minOf { m ->
+                val lf = mirrorFailures[m] ?: 0L
+                lf + MIRROR_COOLDOWN_MS
+            }
+            val waitMs = (earliestReady - System.currentTimeMillis()).coerceIn(1_000L, 15_000L)
+            AppLog.d(TAG, "downloadWithMirrors: tutti i mirror in cooldown, attendo ${waitMs}ms prima del primo disponibile")
+            Thread.sleep(waitMs)
+        }
+
+        return tryMirrors(requestBody)
+    }
+
+    /** Prova tutti i mirror una volta. */
+    private fun tryMirrors(requestBody: FormBody): String {
         for (mirror in OVERPASS_MIRRORS) {
             val lastFailure = mirrorFailures[mirror] ?: 0L
-            if (now - lastFailure < MIRROR_COOLDOWN_MS) {
-                AppLog.d(TAG, "downloadWithMirrors: skipping $mirror (cooldown, failed ${now - lastFailure}ms ago)")
+            if (System.currentTimeMillis() - lastFailure < MIRROR_COOLDOWN_MS) {
+                AppLog.d(TAG, "downloadWithMirrors: skipping $mirror (cooldown, failed ${System.currentTimeMillis() - lastFailure}ms ago)")
                 continue
             }
 

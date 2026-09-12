@@ -54,16 +54,31 @@ namespace City.UI
         private RectTransform root;
 
         private TMP_Text moneyText;
+        private TMP_Text camModeText;
         private TMP_Text eggCountText;
         private TMP_Text missionText;
         private TMP_Text playerText;
         private GameObject interactButton;
         private TMP_Text interactLabel;
+        private GameObject interiorExitButton;
+        private Button interiorExitBt;
 
         private GameObject shopPanel;
         private TMP_Text shopTitle;
         private TMP_Text shopMoney;
         private RectTransform shopListContent;
+
+        // pulsante GUARDA VIDEO +€25: teniamo riferimenti a Button + Image
+        // per disabilitarlo/anelocare quando l'ad non e' pronta e mostrare
+        // sempre uno stato visivo onesto al giocatore.
+        private Button rewardButton;
+        private Image rewardButtonImage;
+        private TMP_Text rewardButtonLabel;
+
+        // pulsante flottante LAVORI accanto al joystick: nascosto durante la
+        // guida per non sovrapporsi ai controlli del veicolo. Salto/Sprint
+        // non hanno piu' un tasto dedicato: vivono nel menu AZIONI.
+        private GameObject jobsButtonGo;
 
         private TMP_Text toast;
         private Coroutine toastRoutine;
@@ -89,6 +104,15 @@ namespace City.UI
         private System.Action<int> dialogCallback;
         private bool dialogActive;
 
+        // auto-chiusura dialog se il player si allontana dall'NPC
+        private Vector3 dialogOriginPos;
+        private bool dialogHasOrigin;
+        private const float DialogAutoCloseDist = 12f;
+
+        // ── Morte: menu scelta modalita' + schermata post-morte ────
+        private GameObject deathMenuRoot;
+        private GameObject postDeathRoot;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -109,6 +133,7 @@ namespace City.UI
             OnMoneyChanged(Wallet.Money);
             HamburgerMenu.Ensure(this);
             ContextActionController.Ensure();
+            City.Death.DeathDirector.Ensure();
             City.NPC.FamilyManager.Ensure();
             City.NPC.FamilyKidHost.Ensure();
             ApplyProfileAgeAndGender();
@@ -178,6 +203,145 @@ namespace City.UI
             interactButton.SetActive(false);
         }
 
+        // ── Morte: menu scelta modalita' + schermata post-morte ────
+
+        public void ShowDeathMenu()
+        {
+            if (deathMenuRoot == null) BuildDeathMenu();
+            deathMenuRoot.SetActive(true);
+        }
+
+        public void CloseDeathMenu()
+        {
+            if (deathMenuRoot != null) deathMenuRoot.SetActive(false);
+        }
+
+        public void ShowPostDeathChoice()
+        {
+            if (postDeathRoot == null) BuildPostDeathMenu();
+            postDeathRoot.SetActive(true);
+        }
+
+        public void ClosePostDeathChoice()
+        {
+            if (postDeathRoot != null) postDeathRoot.SetActive(false);
+        }
+
+        private void BuildDeathMenu()
+        {
+            deathMenuRoot = MakeRect("DeathMenu", root,
+                new Vector2(0f, 0f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero).gameObject;
+            Image bg = deathMenuRoot.AddComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0.6f);
+            bg.raycastTarget = true;
+            var closeBtn = deathMenuRoot.AddComponent<Button>();
+            closeBtn.targetGraphic = bg;
+            closeBtn.onClick.AddListener(() => City.Death.DeathDirector.Instance.Cancel());
+
+            RectTransform panel = MakeRect("Panel", deathMenuRoot.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-340f, -330f), new Vector2(340f, 330f));
+            Image panelBg = panel.gameObject.AddComponent<Image>();
+            panelBg.color = PanelBg;
+            panelBg.raycastTarget = true;
+
+            MakeText(panel, "SCEGLI LA MODALITA' DI MORTE", 28f, Color.white,
+                TextAlignmentOptions.Center,
+                new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(20f, -18f), new Vector2(-20f, -58f));
+
+            string[] labels =
+            {
+                "MORTO INVESTITO", "MORTO SPARATO", "MORTO PESTATO", "CADUTA DAL PALAZZO"
+            };
+            City.Death.DeathMode[] modes =
+            {
+                City.Death.DeathMode.INVESTIMENTO, City.Death.DeathMode.SPARI,
+                City.Death.DeathMode.PESTAGGIO, City.Death.DeathMode.CADUTA
+            };
+            float startY = 40f;
+            float rowH = 64f;
+            for (int i = 0; i < modes.Length; i++)
+            {
+                int idx = i;
+                RectTransform row = MakeRect("Row" + i, panel,
+                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                    new Vector2(-280f, startY + i * rowH), new Vector2(280f, startY + i * rowH + rowH));
+                Image rowImg = row.gameObject.AddComponent<Image>();
+                rowImg.color = ButtonBg;
+                rowImg.raycastTarget = true;
+                var btn = row.gameObject.AddComponent<Button>();
+                btn.targetGraphic = rowImg;
+                btn.onClick.AddListener(() => City.Death.DeathDirector.Instance.ChooseDeath(modes[idx]));
+                MakeText(row, labels[idx], 24f, Color.white, TextAlignmentOptions.Center,
+                    Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            }
+
+            RectTransform cancel = MakeRect("Cancel", panel,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(-160f, -84f), new Vector2(160f, -22f));
+            Image cancelImg = cancel.gameObject.AddComponent<Image>();
+            cancelImg.color = new Color(0.55f, 0.2f, 0.2f, 1f);
+            cancelImg.raycastTarget = true;
+            var cb = cancel.gameObject.AddComponent<Button>();
+            cb.targetGraphic = cancelImg;
+            cb.onClick.AddListener(() => City.Death.DeathDirector.Instance.Cancel());
+            MakeText(cancel, "ANNULLA", 24f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        }
+
+        private void BuildPostDeathMenu()
+        {
+            postDeathRoot = MakeRect("PostDeath", root,
+                new Vector2(0f, 0f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero).gameObject;
+            Image bg = postDeathRoot.AddComponent<Image>();
+            bg.color = new Color(0f, 0f, 0f, 0.75f);
+            bg.raycastTarget = true;
+
+            RectTransform panel = MakeRect("Panel", postDeathRoot.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(-380f, -280f), new Vector2(380f, 280f));
+            Image panelBg = panel.gameObject.AddComponent<Image>();
+            panelBg.color = PanelBg;
+            panelBg.raycastTarget = true;
+
+            MakeText(panel, "SEI MORTO", 34f, new Color(1f, 0.4f, 0.3f, 1f),
+                TextAlignmentOptions.Center,
+                new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(20f, -16f), new Vector2(-20f, -56f));
+
+            var body = MakeText(panel,
+                "Vuoi reincarnarti in qualcun altro oppure iniziare la tua nuova strada verso l'Inferno, il Purgatorio e il Paradiso? (l'Afterlife che abbiamo creato)",
+                24f, Color.white, TextAlignmentOptions.Center,
+                new Vector2(0f, 0.45f), new Vector2(1f, 1f),
+                new Vector2(40f, -70f), new Vector2(-40f, -130f));
+            body.enableWordWrapping = true;
+
+            RectTransform rein = MakeRect("Reincarna", panel,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(-330f, 28f), new Vector2(-12f, 108f));
+            Image reinImg = rein.gameObject.AddComponent<Image>();
+            reinImg.color = Accent;
+            reinImg.raycastTarget = true;
+            var rb = rein.gameObject.AddComponent<Button>();
+            rb.targetGraphic = reinImg;
+            rb.onClick.AddListener(() => City.Death.DeathDirector.Instance.ReincarnateNow());
+            MakeText(rein, "REINCARNA ORA", 24f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            RectTransform after = MakeRect("Afterlife", panel,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(12f, 28f), new Vector2(330f, 108f));
+            Image afterImg = after.gameObject.AddComponent<Image>();
+            afterImg.color = new Color(0.75f, 0.55f, 0.15f, 1f);
+            afterImg.raycastTarget = true;
+            var ab = after.gameObject.AddComponent<Button>();
+            ab.targetGraphic = afterImg;
+            ab.onClick.AddListener(() => City.Death.DeathDirector.Instance.GoToAfterlife());
+            MakeText(after, "INIZIA AFTERLIFE", 24f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        }
+
         public void OpenShop(Shop shop)
         {
             currentShop = shop;
@@ -212,6 +376,47 @@ namespace City.UI
             if (legal != null) legal.Hide();
         }
 
+        // ---- overlay sonno (letto) ----
+
+        private GameObject sleepOverlay;
+        private TMP_Text sleepOverlayText;
+
+        public void SetSleepOverlay(bool on, string msg)
+        {
+            if (sleepOverlay == null)
+            {
+                sleepOverlay = new GameObject("SleepOverlay");
+                var rt = sleepOverlay.AddComponent<RectTransform>();
+                rt.SetParent(root, false);
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+                var img = sleepOverlay.AddComponent<Image>();
+                img.color = new Color(0f, 0f, 0f, 0.62f);
+                img.raycastTarget = false;
+
+                var txtGo = new GameObject("Txt", typeof(RectTransform));
+                var trt = txtGo.GetComponent<RectTransform>();
+                trt.SetParent(rt, false);
+                trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0.5f);
+                trt.sizeDelta = new Vector2(620f, 60f);
+                sleepOverlayText = txtGo.AddComponent<TextMeshProUGUI>();
+                sleepOverlayText.fontSize = 30f;
+                sleepOverlayText.alignment = TextAlignmentOptions.Center;
+                sleepOverlayText.color = Color.white;
+                sleepOverlayText.raycastTarget = false;
+                var font = TMP_Settings.defaultFontAsset;
+                if (font == null)
+                    font = Resources.Load<TMP_FontAsset>(
+                        "Fonts & Materials/LiberationSans SDF");
+                sleepOverlayText.font = font;
+                sleepOverlayText.text = "";
+            }
+            sleepOverlay.SetActive(on);
+            if (sleepOverlayText != null) sleepOverlayText.text = msg;
+        }
+
         // Stato GPS/centro OSM mostrato in basso, aggiornato solo quando il testo
         // cambia (nessuna allocazione a ogni frame). Risponde alla domanda "dove
         // sono e il gioco sta davvero seguendo il GPS?".
@@ -230,6 +435,12 @@ namespace City.UI
 
         private GameObject drivingPanel;
         private TMP_Text speedText;
+        private Image speedGaugeImage;
+        private TMP_Text distanceText;
+        private Image damageBarImage;
+        private TMP_Text damageBarText;
+        private Image fuelBarImage;
+        private TMP_Text fuelBarText;
 
         public void ShowDrivingUI(bool show)
         {
@@ -265,11 +476,105 @@ namespace City.UI
             MakeText(exitRt, "ESCI", 22f, Color.white, TextAlignmentOptions.Center,
                 Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
+            // Pulsanti veicolo in basso a destra: LUCI e CLACSON (Brooke-)
+            // le luci si accendono la sera e il clacson richiama l'attenzione.
+            var lightBt = MakeRect("VehicleLightsBtn", prt, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-300f, 150f), new Vector2(-180f, 210f));
+            Image lightB = lightBt.gameObject.AddComponent<Image>();
+            lightB.color = new Color(1f, 0.85f, 0.3f, 0.9f);
+            lightB.raycastTarget = true;
+            Button lightBtn = lightBt.gameObject.AddComponent<Button>();
+            lightBtn.targetGraphic = lightB;
+            lightBtn.onClick.AddListener(() =>
+            {
+                Vibration.Vibrate(25);
+                var v = Game.Instance != null ? Game.Instance.CurrentVehicle : null;
+                if (v == null) return;
+                v.ToggleHeadlights();
+                ShowToast(v.HeadlightsOn ? "Luci accese" : "Luci spente");
+            });
+            MakeText(lightBt, "LUCI", 20f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            var hornBt = MakeRect("VehicleHornBtn", prt, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-300f, 90f), new Vector2(-180f, 146f));
+            Image hornB = hornBt.gameObject.AddComponent<Image>();
+            hornB.color = new Color(0.45f, 0.68f, 1f, 0.9f);
+            hornB.raycastTarget = true;
+            Button hornBtn = hornBt.gameObject.AddComponent<Button>();
+            hornBtn.targetGraphic = hornB;
+            hornBtn.onClick.AddListener(() =>
+            {
+                Vibration.Vibrate(25);
+                var v = Game.Instance != null ? Game.Instance.CurrentVehicle : null;
+                if (v != null) v.Honk();
+            });
+            MakeText(hornBt, "CLACSON", 16f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
             // Indicatore velocita' in basso al centro
             speedText = MakeText(prt, "0 km/h", 28f, new Color(1f, 1f, 1f, 0.8f),
                 TextAlignmentOptions.Center,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
                 new Vector2(-100f, 90f), new Vector2(100f, 125f));
+
+            // Tacchimetro: barra rettangolare sopra la velocita' che si
+            // riempie in proporzione alla velocita' massima del mezzo e
+            // cambia colore da verde (lento) a rosso (veloce/troppo).
+            var gaugeBg = MakeRect("SpeedGaugeBg", prt,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(-140f, 140f), new Vector2(140f, 152f));
+            var gaugeBgImg = gaugeBg.gameObject.AddComponent<Image>();
+            gaugeBgImg.color = new Color(0f, 0f, 0f, 0.55f);
+            var gaugeFillRect = MakeRect("SpeedGaugeFill", gaugeBg,
+                new Vector2(0f, 0f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero);
+            speedGaugeImage = gaugeFillRect.gameObject.AddComponent<Image>();
+            speedGaugeImage.type = Image.Type.Filled;
+            speedGaugeImage.fillMethod = Image.FillMethod.Horizontal;
+            speedGaugeImage.fillAmount = 0f;
+            speedGaugeImage.color = new Color(0.3f, 0.9f, 0.35f, 0.95f);
+
+            // Distanza percorsa (viaggio attuale / totale del mezzo)
+            distanceText = MakeText(prt, "0 m", 18f, new Color(1f, 1f, 1f, 0.7f),
+                TextAlignmentOptions.Center,
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(-150f, 50f), new Vector2(150f, 72f));
+
+            // Barra dell'integrita' (HP) in alto al centro: mostra la vita
+            // residua del veicolo e passa da verde a rosso man mano che scende.
+            var damageBarBg = MakeRect("DamageBarBg", prt,
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(-150f, -36f), new Vector2(150f, -20f));
+            var bgImg = damageBarBg.gameObject.AddComponent<Image>();
+            bgImg.color = new Color(0f, 0f, 0f, 0.55f);
+            var fillRect = MakeRect("DamageFill", damageBarBg,
+                new Vector2(0f, 0f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero);
+            damageBarImage = fillRect.gameObject.AddComponent<Image>();
+            damageBarImage.type = Image.Type.Filled;
+            damageBarImage.fillMethod = Image.FillMethod.Horizontal;
+            damageBarImage.fillAmount = 1f;
+            damageBarImage.color = new Color(0.2f, 0.85f, 0.35f, 0.95f);
+            damageBarText = MakeText(damageBarBg, "HP 100%",
+                20f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            // Barra carburante (sotto la barra HP)
+            var fuelBarBg = MakeRect("FuelBarBg", prt,
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(-150f, -58f), new Vector2(150f, -42f));
+            var fuelBgImg = fuelBarBg.gameObject.AddComponent<Image>();
+            fuelBgImg.color = new Color(0f, 0f, 0f, 0.55f);
+            var fuelFillRect = MakeRect("FuelFill", fuelBarBg,
+                new Vector2(0f, 0f), new Vector2(1f, 1f),
+                Vector2.zero, Vector2.zero);
+            fuelBarImage = fuelFillRect.gameObject.AddComponent<Image>();
+            fuelBarImage.type = Image.Type.Filled;
+            fuelBarImage.fillMethod = Image.FillMethod.Horizontal;
+            fuelBarImage.fillAmount = 1f;
+            fuelBarImage.color = new Color(0.2f, 0.7f, 1f, 0.95f);
+            fuelBarText = MakeText(fuelBarBg, "BENZINA 100%",
+                18f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // Niente piu' pedali: gas/sterzo dal joystick sinistro (come
             // la camminata), camera ruotabile dalla zona destra
@@ -282,19 +587,94 @@ namespace City.UI
         private void Update()
         {
             UpdateActionLabel();
+
+            // Il dialog di un NPC si chiude se il player si allontana.
+            if (dialogActive && dialogHasOrigin)
+            {
+                PlayerController dp = Game.Instance != null ? Game.Instance.player : null;
+                if (dp != null)
+                {
+                    Vector3 dd = dp.transform.position - dialogOriginPos;
+                    dd.y = 0f;
+                    if (dd.magnitude > DialogAutoCloseDist) HideDialog();
+                }
+            }
+
             if (joystick == null) return;
             PlayerController player = Game.Instance != null ? Game.Instance.player : null;
 
+            // ESCI dall'interno: pulsante fisso sempre visibile dentro un edificio.
+            bool inInterior = Game.Instance != null && Game.Instance.IsInInterior;
+            if (interiorExitButton != null && interiorExitButton.activeSelf != inInterior)
+                interiorExitButton.SetActive(inInterior);
+
+            // LAVORI: in primo piano solo a piedi; durante la guida si nasconde
+            // per non coprire i controlli del veicolo.
+            bool driving = Game.Instance != null && Game.Instance.IsDriving;
+            if (jobsButtonGo != null && jobsButtonGo.activeSelf == driving)
+                jobsButtonGo.SetActive(!driving);
+
             // Blocca input quando il pannello legale e' aperto
             bool legalOpen = legal != null && legal.IsVisible;
+            // il menu delle azioni (radiale in basso) blocca il movimento:
+            // toccando le voci il personaggio non deve scivolare sotto le
+            // dita mentre si sceglie l'azione.
+            bool menuOpen = actionMenuRoot != null && actionMenuRoot.activeSelf;
 
-            if (player != null && !Game.Instance.IsDriving && !Game.Instance.IsInInterior && !legalOpen)
+            if (player != null && !Game.Instance.IsDriving && !Game.Instance.IsInInterior && !legalOpen && !menuOpen)
                 player.SetMoveInput(joystick.Value);
 
             // Aggiorna velocita' se in guida
             if (Game.Instance != null && Game.Instance.IsDriving && speedText != null && Game.Instance.CurrentVehicle != null)
             {
                 speedText.text = Mathf.RoundToInt(Game.Instance.CurrentVehicle.GetCurrentSpeedKmh()) + " km/h";
+                if (speedGaugeImage != null)
+                {
+                    float ratio = Mathf.Clamp01(
+                        Game.Instance.CurrentVehicle.GetCurrentSpeedKmh() /
+                        Mathf.Max(1f, Game.Instance.CurrentVehicle.MaxSpeedMs * 3.6f));
+                    speedGaugeImage.fillAmount = ratio;
+                    speedGaugeImage.color = ratio < 0.5f
+                        ? new Color(0.3f, 0.9f, 0.35f, 0.95f)
+                        : ratio < 0.8f
+                        ? new Color(0.95f, 0.7f, 0.15f, 0.95f)
+                        : new Color(0.9f, 0.2f, 0.2f, 0.95f);
+                }
+                if (distanceText != null)
+                {
+                    float tripKm = Game.Instance.CurrentVehicle.TripMeters / 1000f;
+                    float totalKm = Game.Instance.CurrentVehicle.TotalOdometerM / 1000f;
+                    string tripStr = tripKm >= 1f ? tripKm.ToString("0.0") + " km"
+                                                  : Mathf.RoundToInt(Game.Instance.CurrentVehicle.TripMeters) + " m";
+                    distanceText.text = "Viaggio " + tripStr + "  ·  Totale " + totalKm.ToString("0.0") + " km";
+                }
+                if (damageBarImage != null)
+                {
+                    float hp = Mathf.Clamp(
+                        Game.Instance.CurrentVehicle.Integrity, 0f, 100f);
+                    damageBarImage.fillAmount = hp / 100f;
+                    damageBarImage.color = hp > 60f
+                        ? new Color(0.2f, 0.85f, 0.35f, 0.95f)
+                        : hp > 25f
+                        ? new Color(0.95f, 0.7f, 0.15f, 0.95f)
+                        : new Color(0.9f, 0.2f, 0.2f, 0.95f);
+                    if (damageBarText != null)
+                        damageBarText.text = "HP " + Mathf.RoundToInt(hp) + "%";
+                }
+                // barra carburante
+                if (fuelBarImage != null)
+                {
+                    float fuel = Mathf.Clamp(
+                        Game.Instance.CurrentVehicle.FuelPercent, 0f, 100f);
+                    fuelBarImage.fillAmount = fuel / 100f;
+                    fuelBarImage.color = fuel > 50f
+                        ? new Color(0.2f, 0.7f, 1f, 0.95f)
+                        : fuel > 20f
+                        ? new Color(0.95f, 0.7f, 0.15f, 0.95f)
+                        : new Color(0.9f, 0.2f, 0.2f, 0.95f);
+                    if (fuelBarText != null)
+                        fuelBarText.text = "BENZINA " + Mathf.RoundToInt(fuel) + "%";
+                }
             }
 
             // Aggiorna UI economia ogni 0.5s
@@ -303,7 +683,30 @@ namespace City.UI
             {
                 uiRefreshTimer = 0f;
                 RefreshEconomyUI();
+                RefreshRewardButton();
             }
+        }
+
+        /// <summary>
+        /// Stato del pulsante GUARDA VIDEO +€25: abilitato quando la
+        /// rewarded ad e' pronta (Android), semi-trasparente e non cliccabile
+        /// quando non lo e'. In editor resta sempre abilitato (fallback).
+        /// </summary>
+        private void RefreshRewardButton()
+        {
+            if (rewardButton == null || rewardButtonImage == null) return;
+            if (rewardButtonLabel == null) return;
+            bool ready = RewardedAdHelper.Instance == null ||
+                RewardedAdHelper.Instance.IsAvailable();
+            rewardButtonImage.raycastTarget = ready;
+            Color col = rewardButtonImage.color;
+            col.a = ready ? 0.85f : 0.45f;
+            rewardButtonImage.color = col;
+            rewardButtonLabel.color = ready
+                ? Color.white
+                : new Color(1f, 1f, 1f, 0.5f);
+            if (!ready) rewardButtonLabel.text = "VIDEO NON DISPONIBILE";
+            else rewardButtonLabel.text = "GUARDA VIDEO +€25";
         }
 
         private void RefreshEconomyUI()
@@ -436,6 +839,21 @@ namespace City.UI
             baseRt.gameObject.SetActive(false);
             joystick.Configure(root, baseRt, handleRt);
 
+            // --- pulsante LAVORI: accesso diretto al pannello dei lavori
+            // (Tassista/Corriere/Ronda), una delle funzioni core del gioco.
+            var jobsRt = MakeRect("JobsButton", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f));
+            jobsRt.pivot = new Vector2(0.5f, 0.5f);
+            jobsRt.anchoredPosition = new Vector2(-230f, 130f);
+            jobsRt.sizeDelta = new Vector2(110f, 84f);
+            Image jobsBg = jobsRt.gameObject.AddComponent<Image>();
+            jobsBg.color = new Color(0.15f, 0.65f, 0.45f, 0.85f);
+            jobsBg.raycastTarget = true;
+            Button jobsBtn = jobsRt.gameObject.AddComponent<Button>();
+            jobsBtn.targetGraphic = jobsBg;
+            jobsBtn.onClick.AddListener(OnJobsButtonPressed);
+            jobsButtonGo = jobsRt.gameObject;
+            MakeText(jobsRt, "LAVORI", 26f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
             // --- orbit zone (right 45%)
             Image orbitImg = MakeImage(root, new Color(0f, 0f, 0f, 0.001f), new Vector2(0.55f, 0f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero);
             orbitImg.raycastTarget = true;
@@ -445,15 +863,69 @@ namespace City.UI
                 if (Game.Instance != null) Game.Instance.OnOrbitDelta(dx);
             };
 
+            // --- pulsante SALTO in basso a destra (stile Brookhaven mobile):
+            // il salto e' sempre disponibile con un tap, come in Brookhaven.
+            var jumpRt = MakeRect("JumpButton", root, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f));
+            jumpRt.pivot = new Vector2(0.5f, 0.5f);
+            jumpRt.anchoredPosition = new Vector2(-110f, 180f);
+            jumpRt.sizeDelta = new Vector2(128f, 128f);
+            Image jumpBg = jumpRt.gameObject.AddComponent<Image>();
+            jumpBg.color = new Color(1f, 1f, 1f, 0.22f);
+            jumpBg.raycastTarget = true;
+            Button jumpBtn = jumpRt.gameObject.AddComponent<Button>();
+            jumpBtn.targetGraphic = jumpBg;
+            jumpBtn.onClick.AddListener(() =>
+            {
+                Vibration.Vibrate(25);
+                var pc = City.Player.PlayerController.Instance;
+                if (pc == null)
+                {
+                    City.OSM.OsmDiag.Log("[Brookhaven][UI] Jump button: PlayerController.Instance == null!");
+                    return;
+                }
+                City.OSM.OsmDiag.Log("[Brookhaven][UI] Jump button premuto");
+                pc.DoJump();
+            });
+            MakeText(jumpRt, "SALTA", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            // --- pulsante modalita camera (terza/prima persona), stile
+            // Brookhaven mobile: sotto il pulsante menu in alto a sinistra.
+            var camRt = MakeRect("CamButton", root, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(16f, -172f), new Vector2(104f, -100f));
+            City.OSM.OsmDiag.Log("[Brookhaven][UI] CamButton creata, anchor=(0,1) offsetMin=(16,-172) offsetMax=(104,-100)");
+            Image camBg = camRt.gameObject.AddComponent<Image>();
+            camBg.color = new Color(0f, 0f, 0f, 0.5f);
+            camBg.raycastTarget = true;
+            Button camBtn = camRt.gameObject.AddComponent<Button>();
+            camBtn.targetGraphic = camBg;
+            camModeText = MakeText(camRt, "1A", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            camModeText.raycastTarget = false;
+            camBtn.onClick.AddListener(() =>
+            {
+                Vibration.Vibrate(25);
+                var rig = City.Player.CameraRig.Instance;
+                if (rig == null)
+                {
+                    City.OSM.OsmDiag.Log("[Brookhaven][Camera] CameraRig.Instance == null!");
+                    return;
+                }
+                rig.ToggleFirstPerson();
+                camModeText.text = rig.firstPerson ? "3A" : "1A";
+                City.OSM.OsmDiag.Log("[Brookhaven][Camera] Toggle camera -> " +
+                    (rig.firstPerson ? "PRIMA persona" : "TERZA persona"));
+                ShowToast(rig.firstPerson
+                    ? "Camera: prima persona"
+                    : "Camera: terza persona");
+            });
+
             // --- money HUD
-            moneyText = MakeText(root, "€ 0", 36f, new Color(1f, 1f, 1f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -28f), new Vector2(200f, -72f));
+            moneyText = MakeText(root, "€ 0", 42f, new Color(1f, 0.95f, 0.3f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(122f, -24f), new Vector2(330f, -56f));
 
             // --- unified player identity (nome + livello dal profilo Huntix)
             playerText = MakeText(root, "", 24f, new Color(0.55f, 0.85f, 1f, 1f), TextAlignmentOptions.Right, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-260f, -28f), new Vector2(-24f, -72f));
             playerText.gameObject.SetActive(false);
 
             // --- egg counter (under money)
-            eggCountText = MakeText(root, "", 26f, new Color(1f, 0.95f, 0.5f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -74f), new Vector2(200f, -100f));
+            eggCountText = MakeText(root, "", 26f, new Color(1f, 0.95f, 0.5f, 1f), TextAlignmentOptions.Left, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(122f, -116f), new Vector2(330f, -140f));
             eggCountText.gameObject.SetActive(false);
 
             // --- active mission (under egg counter)
@@ -465,10 +937,11 @@ namespace City.UI
             Image rwBg = rewardRt.gameObject.AddComponent<Image>();
             rwBg.color = new Color(0.9f, 0.7f, 0.1f, 0.85f);
             rwBg.raycastTarget = true;
-            Button rwBtn = rewardRt.gameObject.AddComponent<Button>();
-            rwBtn.targetGraphic = rwBg;
-            rwBtn.onClick.AddListener(OnRewardedAdPressed);
-            MakeText(rewardRt, "GUARDA VIDEO +€25", 18f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            rewardButtonImage = rwBg;
+            rewardButton = rewardRt.gameObject.AddComponent<Button>();
+            rewardButton.targetGraphic = rwBg;
+            rewardButton.onClick.AddListener(OnRewardedAdPressed);
+            rewardButtonLabel = MakeText(rewardRt, "GUARDA VIDEO +€25", 22f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // --- Bestiario uova button (top-right, a sinistra del video)
             var dexRt = MakeRect("DexButton", root, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-300f, -80f), new Vector2(-168f, -118f));
@@ -510,6 +983,23 @@ namespace City.UI
             interactButton.AddComponent<Button>().onClick.AddListener(OnInteractPressed);
             interactLabel = MakeText(interactButton.GetComponent<RectTransform>(), "", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             interactButton.SetActive(false);
+
+            // --- ESCI dall'interno: sempre visibile mentre sei dentro un
+            // edificio (terza persona), così non resti mai bloccato.
+            var interiorExitRt = MakeRect("InteriorExitButton", root,
+                new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-170f, -74f), new Vector2(-40f, -130f));
+            Image ieBg = interiorExitRt.gameObject.AddComponent<Image>();
+            ieBg.color = new Color(0.8f, 0.25f, 0.2f, 0.95f);
+            ieBg.raycastTarget = true;
+            interiorExitBt = interiorExitRt.gameObject.AddComponent<Button>();
+            interiorExitBt.targetGraphic = ieBg;
+            interiorExitBt.onClick.AddListener(OnInteriorExitPressed);
+            MakeText(interiorExitRt, "ESCI", 26f, Color.white,
+                TextAlignmentOptions.Center, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
+            interiorExitButton = interiorExitRt.gameObject;
+            interiorExitButton.SetActive(false);
 
             BuildActionRadial();
 
@@ -574,6 +1064,21 @@ namespace City.UI
         {
             if (Game.Instance == null) return;
             Game.Instance.OnInteractPressed();
+        }
+
+        /// <summary>Apre direttamente il pannello dei lavori dal pulsante.</summary>
+        private void OnJobsButtonPressed()
+        {
+            if (JobManager.Instance != null)
+                JobManager.Instance.OpenPanel();
+            else
+                ShowToast("Lavori non disponibili");
+        }
+
+        private void OnInteriorExitPressed()
+        {
+            if (City.Interior.InteriorManager.Instance != null)
+                City.Interior.InteriorManager.Instance.ExitInterior();
         }
 
         // ── menu' radiale Fai Azione ───────────────────────────
@@ -733,15 +1238,20 @@ namespace City.UI
 
         private void OnRewardedAdPressed()
         {
-            if (RewardedAdHelper.Instance != null)
-            {
-                ShowToast("Caricamento video...");
-                RewardedAdHelper.Instance.ShowRewardedAd(success => { });
-            }
-            else
+            var helper = RewardedAdHelper.Instance;
+            if (helper == null)
             {
                 ShowToast("Video non disponibile");
+                return;
             }
+            if (!helper.IsAvailable())
+            {
+                ShowToast("Video non disponibile in questo momento");
+                RefreshRewardButton();
+                return;
+            }
+            ShowToast("Caricamento video...");
+            helper.ShowRewardedAd(success => { RefreshRewardButton(); });
         }
 
         public void UpdateEggCount(int count)
@@ -781,6 +1291,13 @@ namespace City.UI
         private void OnExitPressed()
         {
             if (exitPanel == null) return;
+            // Difensivo: se una mappa espansa o i documenti legali sono ancora
+            // aperti (canvas overlay 100/10), chiudili PRIMA di mostrare la
+            // conferma: l'ExitPanel dovrebbe sempre risultare visibile in cima.
+            if (MapSelectUI.Instance != null && MapSelectUI.Instance.IsOpen)
+                MapSelectUI.Close();
+            if (_legal != null && _legal.IsVisible) _legal.Hide();
+            exitPanel.transform.SetAsLastSibling();
             exitPanel.SetActive(true);
             Time.timeScale = 0f;
         }
@@ -800,7 +1317,24 @@ namespace City.UI
             // in gara con il teardown dell'engine su Android un accesso al bridge
             // può provocare un crash nativo del processo.
             if (CityOSMWorld.Instance != null) CityOSMWorld.Instance.PrepareExit();
-            // Su Android chiude l'Activity Unity (BridgeActivity) e torna alla
+            // Ferma anche lo streaming dei chunk (tick loop + build in volo +
+            // fetch tile) PRIMA di chiudere l'Activity Unity: in gara con il
+            // teardown dell'engine un thread di build che tocca Unity può
+            // segfaultare il processo (che resta vivo sulla Home nativa).
+            if (CityChunkedWorld.Instance != null &&
+                CityChunkedWorld.Instance.Manager != null)
+            {
+                CityChunkedWorld.Instance.Manager.StopStreaming();
+                // Il teardown dell'engine su Android (mUnityPlayer.destroy con la
+                // scena ancora gigante: 15 chunk, 1200+ veicoli, 5800 edifici/chunk)
+                // ci mette ~10s e crashe in SIGSEGV durante lo smontaggio (log:
+                // Exit -> ~10s -> SIGNALED signal=11). Scarichiamo TUTTO il mondo
+                // qui, PRIMA di chiudere l'Activity: l'engine smonta quasi nulla.
+                // In editor non svuotiamo (il no-op non chiude nulla e si perderebbe
+                // la città visibile): il crash esiste solo su Android.
+                if (!Application.isEditor)
+                    CityChunkedWorld.Instance.Manager.UnloadWorldForExit();
+            }            // Su Android chiude l'Activity Unity (BridgeActivity) e torna alla
             // Home nativa; in editor il metodo è un no-op (si logga soltanto).
             Debug.Log("[UIManager] Exit richiesta: ritorno alla Home");
             UnityBridge.ExitCityToHome();
@@ -947,6 +1481,9 @@ namespace City.UI
             dialogContinueBtn.gameObject.SetActive(true);
             dialogPanel.SetActive(true);
             HideInteract();
+            var dorigin = Game.Instance != null ? Game.Instance.player : null;
+            dialogHasOrigin = dorigin != null;
+            if (dorigin != null) dialogOriginPos = dorigin.transform.position;
         }
 
         /// <summary>Chiede al player con quanti anni iniziare la partita
@@ -991,6 +1528,7 @@ namespace City.UI
             if (dialogPanel == null) return;
             dialogPanel.SetActive(false);
             dialogActive = false;
+            dialogHasOrigin = false;
             dialogLines = null;
             dialogCallback = null;
         }

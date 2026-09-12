@@ -114,6 +114,12 @@ namespace City.OSM
             _label.text = (addrText != null && addrD <= MaxCivicoDist)
                 ? addrText
                 : (roadName ?? "");
+
+            // Altimetro: quota assoluta s.l.m. del giocatore (gia' allineata al
+            // DEM dal snap del terreno), aggiunta sotto l'indirizzo.
+            int quota = Mathf.RoundToInt(t.position.y);
+            if (_label.text.Length > 0) _label.text += "\n";
+            _label.text += quota + " m s.l.m.";
         }
 
         /// <summary>Punti stradali/civici relativi al CENTRO TILE (stabile nel

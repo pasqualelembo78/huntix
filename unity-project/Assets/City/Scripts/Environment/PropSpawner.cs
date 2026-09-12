@@ -22,6 +22,12 @@ namespace City.Environment
         private const float PORTA_RADIUS = 4f;
         private const float PORTA_RADIUS2 = PORTA_RADIUS * PORTA_RADIUS;
 
+        private static float GroundY(ChunkData chunk, Vector3 local)
+        {
+            return TileElevation.HeightAtWorld(
+                chunk.root.transform.position + new Vector3(local.x, 0f, local.z));
+        }
+
         private static readonly HashSet<string> UrbanHw = new HashSet<string>
         {
             "primary", "secondary", "tertiary", "residential",
@@ -95,7 +101,7 @@ namespace City.Environment
                     {
                         Vector3 p = a + dir * t + side * (SIDEWALK_W + 0.55f);
                         if (!FarFromDoors(p, portaPos)) continue;
-                        p.y = Y_SIDEWALK;
+                        p.y = Y_SIDEWALK + GroundY(chunk, p);
                         points.Add(p);
                         dirs.Add(-side);
                     }
@@ -177,7 +183,7 @@ namespace City.Environment
                     Vector3 front = Quaternion.Euler(0f, b.r, 0f) *
                         Vector3.forward * (b.d[1] * 0.5f + 1.5f);
                     Vector3 pos = p + front;
-                    pos.y = 0.05f;
+                    pos.y = 0.05f + GroundY(chunk, pos);
                     Quaternion facing = Quaternion.Euler(0f, b.r + 180f, 0f);
 
                     // Il punto centrale della facciata è dove BuildingPlacer
@@ -295,7 +301,7 @@ namespace City.Environment
             Paint(water, new Color(0.25f, 0.55f, 0.9f, 0.9f));
 
             Tag(go, InteractableProp.Kind.Fountain,
-                "\u26fd Fontanella", "Bevi (+8\u26a1)");
+                "Fontanella", "Bevi (+8 energia)");
             Attach(parent, go);
             return go;
         }
@@ -321,14 +327,14 @@ namespace City.Environment
             if (kind == InteractableProp.Kind.Cafe)
             {
                 c = new Color(0.95f, 0.62f, 0.15f);
-                title = "\u2615 Bar";
+                title = "Bar";
                 action = "Caff\u00e8 2\u20ac \u00b7 Aperitivo 5\u20ac";
             }
             else if (kind == InteractableProp.Kind.Pharmacy)
             {
                 c = new Color(0.85f, 0.2f, 0.25f);
-                title = "\ud83d\udc8a Farmacia";
-                action = "Kit 8\u20ac (+25\u26a1)";
+                title = "Farmacia";
+                action = "Kit 8\u20ac (+25 energia)";
             }
             else
             {

@@ -163,26 +163,67 @@ def _load_addrs() -> list:
 
 
 _enriched_cache = {}
+# TTL per le risposte arricchite SENZA elevazione: se il DEM mancava al primo
+# serve (rate-limit API, geo legacy senza 'ele') NON bisogna servire quella
+# tile piatta per sempre — il prossimo accesso riprova dopo questo tempo.
+_ENRICH_TTL_S = float(os.environ.get("HUNTIX_ENRICH_TTL_S", "60"))
+
+
+def _inject_dem(key: str, doc: dict) -> bool:
+    """Inietta la griglia DEM (elevazione reale) nel documento geo, se assente.
+
+    Aggiunge i campi 'ele' (griglia row-major), 'ele_nrow', 'ele_ncol'.
+    Ritorna True se sono stati aggiunti. Idempotente: salta se 'ele' c'e' gia'
+    (da bake in gen-tile). Le geo con 'ele' gia' presenti non toccano l'API.
+    """
+    if not isinstance(doc, dict) or doc.get("ele") is not None:
+        return False
+    bbox = doc.get("bbox") or []
+    if len(bbox) != 4:
+        return False
+    try:
+        import importlib
+        import sys
+        sys.path.insert(0, str(_PREPROC))
+        dem = importlib.import_module("dem")
+        grid = dem.elevation_grid(key, bbox)
+        nrow, ncol = dem.grid_shape(bbox)
+        doc["ele_nrow"] = nrow
+        doc["ele_ncol"] = ncol
+        doc["ele"] = [round(v, 1) for v in grid]
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[TileServer] DEM non disponibile per la tile %s: %s", key, e)
+        return False
 
 
 def _enrich_geo(key: str, data: bytes) -> bytes:
-    """Aggiunge l'array dei civici dentro il bbox della tile (idempotente)."""
-    if key in _enriched_cache:
-        return _enriched_cache[key]
+    """Aggiunge civici ed elevazione DEM dentro il bbox della tile (idempotente)."""
+    entry = _enriched_cache.get(key)
+    if entry is not None:
+        ts, cached = entry
+        # Senza TTL (ts=None = risposta CON elevazione) vale per sempre;
+        # con TTL (elevazione mancata) riproviamo il DEM dopo _ENRICH_TTL_S.
+        if ts is None or ts + _ENRICH_TTL_S > time.time():
+            return cached
+        _enriched_cache.pop(key, None)
     try:
         doc = json.loads(data)
     except Exception:
         return data
-    if isinstance(doc, dict) and not doc.get("addrs"):
+    if isinstance(doc, dict):
         bbox = doc.get("bbox") or []
-        if len(bbox) == 4:
+        if len(bbox) == 4 and not doc.get("addrs"):
             la, lo, lb, lob = bbox
             sel = [q for q in _load_addrs()
                    if la <= q["a"] <= lb and lo <= q["o"] <= lob]
             if sel:
                 doc["addrs"] = sel
-                data = json.dumps(doc, separators=(",", ":")).encode()
-    _enriched_cache[key] = data
+        _inject_dem(key, doc)
+        data = json.dumps(doc, separators=(",", ":")).encode()
+        # caching positivo (con DEM) per sempre; negativo (senza DEM) a TTL
+        _enriched_cache[key] = (None if doc.get("ele") is not None
+                                else time.time(), data)
     return data
 
 
@@ -243,6 +284,10 @@ async def tiles_cache_clear():
     global _ram, _ram_bytes
     _ram = OrderedDict()
     _ram_bytes = 0
+    # Svuota anche le risposte gia' arricchite con l'elevazione: dopo un
+    # aggiornamento mappa le tile rigenerate vanno ridistribuite con l'ele
+    # fresca, non con quella vecchia registrata in _enriched_cache.
+    _enriched_cache.clear()
     return {"ok": True}
 
 
@@ -336,3 +381,104 @@ def _tile_bbox_from_key(key: str) -> list:
     lonmin = 5.0 + ilon * 0.121
     return [round(latmin, 6), round(lonmin, 6),
             round(latmin + 0.090, 6), round(lonmin + 0.121, 6)]
+
+
+# ── indice vie della mappa (selettore di spawn "in quale via?") ─────────────
+# Le tile GRAPH sono pre-generate per tutta Italia (3451 tile) e ogni arco
+# porta gia' il nome della via ("road_name"): l'indice viene aggregato da
+# questi soli file, nessuna generazione on-demand, quindi e' istantaneo.
+# Il client (aggiornamento mappa / selettore di spawn) usa questo endpoint per
+# scaricare tutte le vie della mappa scelta (lat/lon + raggio).
+
+import math  # noqa: E402
+import unicodedata  # noqa: E402
+
+_GRID_LAT0 = 34.0
+_GRID_LON0 = 5.0
+_GRID_LAT_STEP = 0.090
+_GRID_LON_STEP = 0.121
+
+_STREETS_RADIUS_M_DEFAULT = 15000
+_STREETS_CACHE_MAX = 40
+_streets_cache: "OrderedDict[str, dict]" = OrderedDict()
+
+
+def _street_norm(name: str) -> str:
+    """Normalizza un nome via: minuscole, senza accenti, spazi compatti."""
+    t = unicodedata.normalize("NFD", name)
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return " ".join(t.lower().split())
+
+
+def _streets_tile_keys(lat: float, lon: float, radius_m: int) -> list:
+    """Chiavi tile che coprono la circonferenza attorno a (lat, lon)."""
+    dlat = radius_m / 111111.0
+    dlon = radius_m / (111111.0 * max(0.2, math.cos(math.radians(lat))))
+    i0 = math.floor((lat - dlat - _GRID_LAT0) / _GRID_LAT_STEP)
+    i1 = math.floor((lat + dlat - _GRID_LAT0) / _GRID_LAT_STEP)
+    j0 = math.floor((lon - dlon - _GRID_LON0) / _GRID_LON_STEP)
+    j1 = math.floor((lon + dlon - _GRID_LON0) / _GRID_LON_STEP)
+    keys = []
+    for i in range(i0, i1 + 1):
+        for j in range(j0, j1 + 1):
+            keys.append("IT_%03d_%03d" % (i, j))
+    return keys
+
+
+@router.get("/streets")
+async def tiles_streets(lat: float = 41.9028, lon: float = 12.4964,
+                        radius_m: int = _STREETS_RADIUS_M_DEFAULT):
+    """Vie nominate della mappa attorno a (lat, lon).
+
+    Risposta: {"lat", "lon", "radius_m", "tiles", "count", "streets":
+    [{"s": nome, "la": lat, "lo": lon, "n": archi}]}. Il punto e' il primo
+    waypoint del primo arco con quel nome: sta SULLA via, non al centro.
+    """
+    radius_m = max(500, min(radius_m, 30000))
+    cache_key = "st:%.3f:%.3f:%.0f" % (lat, lon, radius_m / 1000.0)
+    cached = _streets_cache.get(cache_key)
+    if cached is not None:
+        _streets_cache.move_to_end(cache_key)
+        return cached
+
+    agg: dict = {}
+    keys = _streets_tile_keys(lat, lon, radius_m)
+    for key in keys:
+        path = TILES_DIR / f"{key}.json.gz"
+        if not path.exists():
+            continue
+        try:
+            doc = json.loads(_load_gz(path, f"g:{key}"))
+        except Exception:  # noqa: BLE001
+            continue
+        for arc in doc.get("arcs") or []:
+            nm = arc.get("road_name")
+            if not nm:
+                continue
+            norm = _street_norm(nm)
+            if not norm:
+                continue
+            cur = agg.get(norm)
+            if cur is None:
+                wp = arc.get("waypoints") or []
+                if wp:
+                    p = wp[0]
+                else:
+                    p = {}
+                agg[norm] = {"name": nm, "la": p.get("a", lat),
+                             "lo": p.get("o", lon), "n": 1}
+            else:
+                cur["n"] += 1
+
+    streets = sorted(agg.values(), key=lambda s: _street_norm(s["name"]))
+    body = {
+        "lat": lat, "lon": lon, "radius_m": radius_m,
+        "tiles": len(keys), "count": len(streets),
+        "streets": [{"s": s["name"], "la": s["la"], "lo": s["lo"], "n": s["n"]}
+                    for s in streets],
+    }
+    _streets_cache[cache_key] = body
+    _streets_cache.move_to_end(cache_key)
+    while len(_streets_cache) > _STREETS_CACHE_MAX:
+        _streets_cache.popitem(last=False)
+    return body

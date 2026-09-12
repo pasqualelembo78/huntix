@@ -348,6 +348,15 @@ object PlayerProfileManager {
     }
 
     private fun saveProfile(profile: PlayerProfile, onComplete: (() -> Unit)? = null) {
+        // Also save GPS to SharedPreferences for Unity bridge fallback
+        try {
+            val ctx = com.unity3d.player.UnityPlayer.currentActivity
+            ctx?.getSharedPreferences("world_game_prefs", Context.MODE_PRIVATE)?.edit()
+                ?.putFloat("gpsLat", profile.gpsLat.toFloat())
+                ?.putFloat("gpsLng", profile.gpsLng.toFloat())
+                ?.apply()
+        } catch (_: Exception) { }
+
         // Skip Firestore write for local-only profiles (no Firebase Auth UID)
         val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
         if (uid.isNullOrBlank()) {

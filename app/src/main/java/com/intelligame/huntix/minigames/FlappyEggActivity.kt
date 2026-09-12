@@ -3,6 +3,7 @@ package com.intelligame.huntix.minigames
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -10,6 +11,9 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
+import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
@@ -201,7 +205,9 @@ class FlappyEggActivity : MiniGameBase() {
         private val pipePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#43A047") }
         private val pipeRimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2E7D32") }
         private val skyPaint = Paint().apply { color = Color.parseColor("#0D0620") }
-        private val eggPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+        private val eggBitmap: Bitmap? = try {
+            ContextCompat.getDrawable(context, R.drawable.egg_legendary)?.toBitmap(192, 192)
+        } catch (_: Exception) { null }
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -223,13 +229,18 @@ class FlappyEggActivity : MiniGameBase() {
                 c.drawRoundRect(android.graphics.RectF(px - capH, gapBottom, px + pw + capH, gapBottom + capH), 8f, 8f, pipeRimPaint)
             }
 
-            eggPaint.textSize = w * 0.11f
             val ex = 0.3f * w
             val ey = eggY * h
-            c.drawCircle(ex, ey, w * 0.045f * 1.9f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE; alpha = 40
-            })
-            c.drawText("🥚", ex, ey + w * 0.045f, eggPaint)
+            val sz = w * 0.09f
+            if (eggBitmap != null) {
+                val src = android.graphics.Rect(0, 0, eggBitmap.width, eggBitmap.height)
+                val dst = android.graphics.RectF(ex - sz, ey - sz, ex + sz, ey + sz)
+                c.drawBitmap(eggBitmap, src, dst, Paint(Paint.ANTI_ALIAS_FLAG))
+            } else {
+                c.drawCircle(ex, ey, sz * 0.9f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; alpha = 40 })
+                val eggPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; textSize = w * 0.11f }
+                c.drawText("\uD83D\uDDA5", ex, ey + w * 0.045f, eggPaint)
+            }
         }
 
         override fun onTouchEvent(ev: MotionEvent): Boolean {

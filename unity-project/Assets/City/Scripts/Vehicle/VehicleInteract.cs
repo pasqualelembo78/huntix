@@ -60,7 +60,11 @@ namespace City.Vehicle
         {
             if (!other.CompareTag("Player")) return;
             focused = false;
-            Game.Instance.OnVehicleFocusChanged(null);
+            // Passare null NON rilascia mai il focus in Game (che matcha solo
+            // se currentVehicleFocus == questo oggetto): il prompt "ENTRA"
+            // restava incollato sullo schermo. Si passa l'identita' (this)
+            // come fa Unfocus.
+            Game.Instance.OnVehicleFocusChanged(this);
         }
 
         private void RefreshLabel()
@@ -72,9 +76,17 @@ namespace City.Vehicle
                 if (controller != null && controller.Damage == VehicleDamage.Fire)
                     label = "VIGILI DEL FUOCO " + name + " - INCENDIO" + code;
                 else if (controller != null && controller.Damage == VehicleDamage.Wrecked)
-                    label = "CARRO ATTREZZI " + name + " - INCIDENTATA" + code;
-                else if (controller != null && controller.Damage == VehicleDamage.Flat)
-                    label = "CARRO ATTREZZI o ENTRA " + name + " - GOMMA A TERRA" + code;
+                    label = "CARRO ATTREZZI " + name + " - DEVASATA" + code;
+                else if (controller != null &&
+                         (controller.Damage == VehicleDamage.Flat ||
+                          controller.SuspensionDead ||
+                          controller.Integrity <= 0f))
+                    label = "CARRO ATTREZZI o ENTRA " + name + " - DANNI (HP " +
+                        Mathf.RoundToInt(Mathf.Max(0f, controller.Integrity)) +
+                        "%)" + code;
+                else if (controller != null && controller.Integrity < 100f)
+                    label = "ENTRA " + name + " - DANNI (HP " +
+                        Mathf.RoundToInt(controller.Integrity) + "%)" + code;
                 else
                     label = "ENTRA " + name + code;
             }

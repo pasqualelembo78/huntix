@@ -31,6 +31,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from typing import Union, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -86,6 +87,17 @@ DAMAGE_LABEL = {
 }
 TOW_PRICE_EUR = 15       # carro attrezzi
 FIRE_PRICE_EUR = 15      # vigili del fuoco
+
+# Zone di danno + soglie di impatto (m/s) dallo specchio client:
+#   suspension = marciapiede/erba (danno minimo ma cumulativo)
+#   bodywork   = urto laterale (muro/edificio, scala sulla velocita')
+#   bumper     = frontale (a velocita' alta = 100%, auto devastata)
+DAMAGE_ZONES = ("suspension", "bodywork", "bumper")
+DAMAGE_ZONE_LABEL = {
+    "suspension": "Sospensioni (gomme/ammortizzatori)",
+    "bodywork": "Carrozzeria",
+    "bumper": "Fascia/paraurti",
+}
 
 _TZ_ROME = ZoneInfo("Europe/Rome")
 
@@ -266,6 +278,14 @@ class RepairBody(BaseModel):
     odometer_m: int = 0
 
 
+class RepairZonesBody(BaseModel):
+    """Riparazione per zona in officina: solo le zone indicate vengono
+    azzerate. Costo = danno riparato * prezzo_veicolo * fattore."""
+    code: str
+    player: str
+    zones: list = []
+
+
 class AntitheftBody(BaseModel):
     code: str
     player: str
@@ -288,10 +308,19 @@ class OdometerBody(BaseModel):
 
 
 class DamageBody(BaseModel):
-    """Segnalazione danno dall'impatto (client): flat | wrecked | fire."""
+    """Segnalazione danno dall'impatto (client):
+    - damage: flat | wrecked | fire (stato catastrofico persistente)
+    - integrity: HP residuo 0-100 del veicolo
+    - suspension/bodywork/bumper: danno per zona aggiuntivo ricevuto
+      (somma allo stato server). Campi flat perche' il client Unity
+      serializza con JsonUtility (niente dizionari)."""
     code: str
     player: str
     damage: str = DAMAGE_OK
+    integrity: float | None = None
+    suspension: float = 0.0
+    bodywork: float = 0.0
+    bumper: float = 0.0
 
 
 class TowBody(BaseModel):
@@ -317,6 +346,36 @@ def _apply_odometer(v: dict, odometer_m: int) -> None:
         cond = float(v.get("condition", 100.0)) - delta_km * CONDITION_PER_KM
         v["odometer_m"] = int(odometer_m)
         v["condition"] = round(max(0.0, min(100.0, cond)), 1)
+
+
+def _apply_zone_damage(v: dict, zones: dict) -> None:
+    """Somma il danno per zona segnalato dal client (accumulo)."""
+    from vehicles import _damage_zones
+    cur = _damage_zones(v)
+    for k in DAMAGE_ZONES:
+        add = 0.0
+        try:
+            add = float(zones.get(k, 0.0) or 0.0)
+        except (TypeError, ValueError):
+            pass
+        if add > 0:
+            cur[k] = round(max(0.0, min(100.0, cur[k] + add)), 1)
+    if any(cur[k] > 0 for k in DAMAGE_ZONES):
+        v["damage_zones"] = cur
+
+
+def _zone_repair_cost(v: dict, zones: list) -> tuple:
+    """Costo per riparare SOLO le zone indicate = danno rimosso * prezzo *
+    fattore. Ritorna (costo, zone_da_riparare_con_danno)."""
+    from vehicles import _damage_zones
+    price = max(int(v.get("price") or 50), 50)
+    cur = _damage_zones(v)
+    target = [z for z in zones if z in DAMAGE_ZONES]
+    total = 0.0
+    for z in target:
+        total += cur[z]
+    cost = round(total * price * REPAIR_PRICE_FACTOR)
+    return cost, target
 
 
 # ── Endpoint garage ──────────────────────────────────────────────
@@ -437,26 +496,58 @@ async def service_catalog():
 
 
 @router.post("/service/repair")
-async def service_repair(body: RepairBody):
-    """Riparazione completa in officina: condizione torna a 100.
-    Il client scala il costo = pct_mancante * prezzo_veicolo * fattore."""
+async def service_repair(body: Union[RepairBody, RepairZonesBody]):
+    """Riparazione in officina.
+
+    Senza 'zones': riparazione completa (condizione e tutte le zone di danno
+    tornano al meglio; azzera anche flat/wrecked).
+    Con 'zones': riparazione per zona: azzera solo le zone indicate, il costo
+    e' proporzionale al danno rimosso e al prezzo della vettura.
+    Il client scala il costo dal wallet (modello fiducia del modulo)."""
+    zones = getattr(body, "zones", None)
     with _lock:
-        from vehicles import _load, _save
+        from vehicles import _load, _save, integrity_of
         state = _load()
         v = _get_owned(state, body.code, body.player)
         if v.get("stolen"):
             return {"ok": False, "error": "stolen"}
         if v.get("damage") == DAMAGE_FIRE:
             return {"ok": False, "error": "on_fire_extinguish_first"}
-        _apply_odometer(v, body.odometer_m)
-        before = float(v.get("condition", 100.0))
+
+        before_cond = float(v.get("condition", 100.0))
         price = max(int(v.get("price") or 50), 50)
-        cost = round((100.0 - before) * price * REPAIR_PRICE_FACTOR)
-        v["condition"] = 100.0
-        v["damage"] = DAMAGE_OK
-        _save(state)
-    return {"ok": True, "cost": cost, "condition_before": round(before, 1),
-            "condition_after": 100.0}
+
+        if zones is not None and len(zones) > 0:
+            # ── riparazione per zona ──
+            cost, target = _zone_repair_cost(v, zones)
+            from vehicles import _damage_zones
+            cur = _damage_zones(v)
+            for z in target:
+                cur[z] = 0.0
+            if any(cur[k] > 0 for k in DAMAGE_ZONES):
+                v["damage_zones"] = cur
+            else:
+                v.pop("damage_zones", None)
+            # se non resta danno da nessuna parte, si torna in ordine
+            if integrity_of(v) >= 100.0 and v.get("damage") == DAMAGE_WRECKED:
+                v["damage"] = DAMAGE_OK
+            _apply_odometer(v, body.odometer_m if hasattr(body, "odometer_m") else 0)
+            _save(state)
+            return {"ok": True, "cost": cost, "zones": target,
+                    "integrity": integrity_of(v)}
+        else:
+            # ── riparazione completa ──
+            _apply_odometer(v, getattr(body, "odometer_m", 0)
+                            if hasattr(body, "odometer_m") else 0)
+            cost = round((100.0 - before_cond) * price * REPAIR_PRICE_FACTOR)
+            v["condition"] = 100.0
+            v["damage"] = DAMAGE_OK
+            v.pop("damage_zones", None)
+            _save(state)
+            return {"ok": True, "cost": cost,
+                    "condition_before": round(before_cond, 1),
+                    "condition_after": 100.0,
+                    "integrity": integrity_of(v)}
 
 
 @router.post("/service/antitheft")
@@ -575,9 +666,13 @@ async def abandoned_recover(body: PlayerBody):
 @router.post("/damage")
 async def vehicle_damage(body: DamageBody):
     """Registra il danno subito da un impatto simulato dal client.
-    Il client decide il danno (flat/wrecked/fire) e paga solo le riparazioni:
-    qui conta la persistenza dello stato, e che un'auto incidentata non
-    possa guidare ne' essere venduta/parcheggiata tranquillamente."""
+
+    Il client calcola l'impatto (velocita' + oggetto colpito) e segnala:
+      - zones: danno per zona AGGIUNTIVO (sospensioni/carrozzeria/paraurti)
+      - damage: stato catastrofico (flat/wrecked/fire)
+      - integrity: HP residuo riconfermato dal client (fonte visuale)
+    Qui conta la persistenza, e che un'auto a 0% di integrita' non possa
+    guidare ne' essere parcheggiata tranquillamente (wrecked)."""
     if body.damage not in DAMAGES:
         raise HTTPException(400, "danno sconosciuto")
     with _lock:
@@ -588,16 +683,37 @@ async def vehicle_damage(body: DamageBody):
             return {"ok": False, "error": "stolen"}
         if v.get("garage_id"):
             return {"ok": False, "error": "in_garage"}
-        # un'auto gia' incidentata e' peggio; un incendio non torna indietro
+
+        # accumula danno per zona
+        _apply_zone_damage(v, {
+            "suspension": body.suspension,
+            "bodywork": body.bodywork,
+            "bumper": body.bumper,
+        })
+
+        # stato catastrofico
         if body.damage == DAMAGE_OK:
             v["damage"] = DAMAGE_OK
         elif v.get("damage") == DAMAGE_FIRE:
             pass
         elif body.damage != v.get("damage"):
             v["damage"] = body.damage
+
+        # se il client riconferma un HP residuo, predilige quello per
+        # l'integrita' (ma le zone restano la fonte per la riparazione);
+        # a 0% di HP sul server scatta automaticamente "wrecked"
         v["last_eval_ts"] = time.time()
         _save(state)
-    return {"ok": True, "damage": v.get("damage", DAMAGE_OK)}
+
+        from vehicles import integrity_of
+        hp = integrity_of(v)
+        if hp <= 0.0 and v.get("damage") != DAMAGE_FIRE:
+            # auto totalmente distrutta: non si puo' guidare
+            if v.get("damage") != DAMAGE_WRECKED:
+                v["damage"] = DAMAGE_WRECKED
+                _save(state)
+    return {"ok": True, "damage": v.get("damage", DAMAGE_OK),
+            "integrity": integrity_of(v)}
 
 
 @router.post("/fire/extinguish")

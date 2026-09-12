@@ -40,7 +40,8 @@ namespace City.OSM
                     var ll = new GeoLL { a = air.c[0], o = air.c[1] };
                     var p = toLocal(ll);
                     if (!bounds.Contains(new Vector2(p.x, p.z))) continue;
-                    BuildAirport(chunk.airportsGo.transform, air, p);
+                    BuildAirport(chunk.airportsGo.transform, air,
+                        new Vector3(p.x, TileElevation.HeightAt(ll.a, ll.o), p.z));
                     placed++;
                 }
                 catch (Exception e)
@@ -69,7 +70,7 @@ namespace City.OSM
             string nm = string.IsNullOrEmpty(air.nm) ? "Aeroporto" : air.nm;
             var go = new GameObject("Aeroporto " + nm);
             go.transform.SetParent(parent, false);
-            go.transform.position = new Vector3(center.x, 0f, center.z);
+            go.transform.position = center;
             go.transform.rotation = Quaternion.Euler(0f, air.r, 0f);
 
             // ── pista asfalto ──

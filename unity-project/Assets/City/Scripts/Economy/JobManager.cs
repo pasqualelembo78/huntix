@@ -28,7 +28,7 @@ namespace City.Economy
         public static bool NearCargo;
         public static bool CargoStepIsPickup;
 
-        public enum JobType { Taxi, Consegne, Ronda }
+        public enum JobType { Taxi, Consegne, Ronda, Film }
 
         private class JobDef
         {
@@ -42,19 +42,23 @@ namespace City.Economy
 
         private static readonly JobDef[] Defs =
         {
-            new JobDef{ type = JobType.Taxi, title = "Tassista", icon = "\uD83D\uDE96",
+            new JobDef{ type = JobType.Taxi, title = "Tassista", icon = "TAXI",
                 desc = "Prendi il passeggero e portalo a destinazione",
                 payPerStep = 0, steps = 2 },
-            new JobDef{ type = JobType.Consegne, title = "Corriere", icon = "\uD83D\uDCE6",
+            new JobDef{ type = JobType.Consegne, title = "Corriere", icon = "PACCO",
                 desc = "Raccogli il pacco e consegnalo nei punti segnalati",
                 payPerStep = 12, steps = 3 },
-            new JobDef{ type = JobType.Ronda, title = "Ronda", icon = "\uD83D\uDC6E",
+            new JobDef{ type = JobType.Ronda, title = "Ronda", icon = "R",
                 desc = "Tocca i 4 checkpoint della ronda (in auto e meglio)",
                 payPerStep = 10, steps = 4 },
+            new JobDef{ type = JobType.Film, title = "Cineasta", icon = "CAM",
+                desc = "Raggiungi la scena e resta fermo per la ripresa",
+                payPerStep = 16, steps = 4 },
         };
 
         private const float ArriveDistSq = 6f * 6f;
         private const string XpKeyPrefix = "city_job_xp_";
+        private const float FilmHoldSeconds = 2.5f;
 
         private class ActiveJob
         {
@@ -80,6 +84,7 @@ namespace City.Economy
         private VehicleController _jobTaxi;
         private bool _taxiBoarded;
         private VehicleController _jobCar;
+        private float _filmHoldStart = -1f;
 
         private Transform Player
         {
@@ -167,6 +172,25 @@ namespace City.Economy
             // Il corriere non avanza da solo: si agisce col pulsante azioni
             // (RACCOGLI il pacco al deposito, LASCIA alle consegne).
             // Ronda avanza per semplice prossimita al checkpoint.
+            // Il Cineasta deve RESTARE FERMO nella zona ripresa: la scena si
+            // chiude solo dopo qualche secondo di permanenza.
+            if (_job.def.type == JobType.Film)
+            {
+                bool nearScene = (pp - target).sqrMagnitude <= ArriveDistSq;
+                if (nearScene)
+                {
+                    if (_filmHoldStart < 0f) _filmHoldStart = Time.time;
+                    if (Time.time - _filmHoldStart >= FilmHoldSeconds)
+                        AdvanceStep(pp);
+                    else RefreshHud(pp);
+                }
+                else
+                {
+                    _filmHoldStart = -1f;
+                    RefreshHud(pp);
+                }
+                return;
+            }
             if (_job.def.type != JobType.Consegne &&
                 (pp - target).sqrMagnitude <= ArriveDistSq) AdvanceStep(pp);
             else RefreshHud(pp);
@@ -359,6 +383,17 @@ namespace City.Economy
                 }
                 _jobCar = SpawnJobCar(p.position, d.type);
             }
+            else if (d.type == JobType.Film)
+            {
+                j.pts.AddRange(new Vector3[d.steps]);
+                j.labels = new string[d.steps];
+                for (int i = 0; i < d.steps; i++)
+                {
+                    j.pts[i] = RandomPointAround(p.position, 350f, 900f);
+                    j.labels[i] = "SCENA " + (i + 1) + "/" + d.steps;
+                }
+                _jobCar = SpawnJobCar(p.position, d.type);
+            }
             else
             {
                 j.pts.AddRange(new Vector3[d.steps]);
@@ -373,6 +408,7 @@ namespace City.Economy
 
             _job = j;
             _job.step = 0;
+            _filmHoldStart = -1f;
             ShowBeacon();
             HidePanel();
             Toast(d.icon + " " + d.title + ": " + d.desc);
@@ -380,6 +416,8 @@ namespace City.Economy
                 Toast("Ronda: checkpoint lontani, sali sulla auto del lavoro!");
             else if (d.type == JobType.Consegne)
                 Toast("Corriere: raccogli il pacco al deposito col pulsante azioni.");
+            else if (d.type == JobType.Film)
+                Toast("Cineasta: fermati nella zona ripresa e la scena si chiude da sola.");
             if (CompassUI.Instance == null) CompassUI.Create();
             CompassUI.JobTarget = _job.pts[0];
             CompassUI.JobLabel = _job.def.icon + " " + _job.labels[0];
@@ -404,7 +442,11 @@ namespace City.Economy
         private VehicleController SpawnWorkVehicle(Vector3 near,
             VehicleSpawnManager.VehicleDef def, string prefix)
         {
-            Vector3 pos = RandomPointAround(near, 20f, 55f);
+            // il veicolo di lavoro deve comparire SEMPRE sulla rete stradale a
+            // pochi passi dal giocatore, MAI dentro un edificio. Se la rete
+            // stradale e' disponibile la usiamo, altrimenti cadiamo sul punto
+            // casuale con raycast (livellato a terra, niente tetti).
+            Vector3 pos = SpawnPointOnRoad(near);
             float angle = UnityEngine.Random.Range(0f, 360f);
             string code = prefix + "_" + (int)(Time.time * 1000f) + "_" +
                 (int)UnityEngine.Random.Range(0f, 9999f);
@@ -447,9 +489,44 @@ namespace City.Economy
             AdvanceStep(pp);
         }
 
+        /// <summary>
+        /// BUTTA il pacco del Corriere: il corriere si libera del carico
+        /// corrente rinunciando alla paga (il lavoro termina subito senza
+        /// incassare). Serve da alternativa onesta alla consegna: invece di
+        /// simulare la consegna (vecchio bug che faceva avanzare comunque),
+        /// il pacco buttato non viene consegnato e non produce guadagno.
+        /// </summary>
+        public static void TriggerPackageDiscard()
+        {
+            if (Instance != null) Instance.DoContextPackageDiscard();
+        }
+
+        private void DoContextPackageDiscard()
+        {
+            if (_job == null || _job.def.type != JobType.Consegne) return;
+            if (Player == null) return;
+            Vector3 pp = Player.position;
+            Vector3 target = _job.pts[_job.step];
+            if ((pp - target).sqrMagnitude > ArriveDistSq)
+            {
+                Toast("Avvicinati per buttare il pacco");
+                return;
+            }
+            // il pacco viene buttato: niente paga ne' progresso, lavoro finito
+            Toast("⚫ Pacco buttato! Lavoro Corriere annullato senza paga.");
+            EndJobVisuals();
+            _job = null;
+            _jobTaxi = null;
+            _taxiBoarded = false;
+            _jobCar = null;
+            HideHud();
+            HidePanel();
+        }
+
         private void AdvanceStep(Vector3 playerPos)
         {
             _job.step++;
+            _filmHoldStart = -1f;
             City.Environment.EnergySystem.Consume(
                 City.Environment.EnergySystem.JobStepCost);
             int xpGain = _job.def.type == JobType.Taxi ? 12 : 6;
@@ -472,7 +549,7 @@ namespace City.Economy
                     Xp(_job.def.type) + xpGain + 10);
                 PlayerPrefs.Save();
                 Wallet.Earn(paid);
-                Toast("\u2705 " + _job.def.title + " completato! +" + paid +
+                Toast("[OK] " + _job.def.title + " completato! +" + paid +
                     "\u20ac" + (PayMult(_job.def.type) > 1.01f
                         ? " (liv. " + Level(_job.def.type) + ")" : ""));
                 EndJobVisuals();
@@ -523,6 +600,7 @@ namespace City.Economy
 
         private void EndJobVisuals()
         {
+            _filmHoldStart = -1f;
             CompassUI.JobTarget = null;
             CargoActive = false;
             NearCargo = false;
@@ -572,6 +650,15 @@ namespace City.Economy
             _hudText.text = _job.def.icon + " <b>" + _job.def.title + "</b> passo " +
                 (_job.step + 1) + "/" + totalSteps + " " +
                 Mathf.RoundToInt(d) + "m";
+            if (_job.def.type == JobType.Film)
+            {
+                string foot = Mathf.RoundToInt(d) + "m";
+                if (_filmHoldStart >= 0f)
+                    foot = "RIPRESA " + Mathf.RoundToInt(Mathf.Clamp01(
+                        (Time.time - _filmHoldStart) / FilmHoldSeconds) * 100f) + "%";
+                _hudText.text = _job.def.icon + " <b>" + _job.def.title + "</b> " +
+                    _job.labels[_job.step] + " (" + foot + ")";
+            }
         }
 
         private void HideHud()
@@ -649,7 +736,7 @@ namespace City.Economy
             var bg = _panel.AddComponent<Image>();
             bg.color = new Color(0.11f, 0.12f, 0.14f, 0.97f);
 
-            var title = MakeText(prt, "\uD83D\uDCBC LAVORI IN CITT\u00c0", 30f,
+            var title = MakeText(prt, "LAVORI IN CITT\u00c0", 30f,
                 Color.white, TextAlignmentOptions.Left,
                 new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(18f, -14f), new Vector2(-70f, -58f));
@@ -658,7 +745,6 @@ namespace City.Economy
                 new Color(0.28f, 0.30f, 0.34f, 1f),
                 new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(-62f, -56f), new Vector2(-16f, -14f));
-            closeBtn.sizeDelta = Vector2.zero;
 
             var scroll = MakeRect("Scroll", prt,
                 new Vector2(0f, 0f), new Vector2(1f, 1f),
@@ -803,6 +889,33 @@ namespace City.Economy
         }
 
         // utilita
+
+        /// <summary>
+        /// Trova un punto sulla rete stradale vicino al giocatore (a pochi
+        /// passi). Rete stradale PRIMA (TileRoadNetwork): il nodo piu' vicino
+        /// al player sta quasi sempre sulla strada dove si trova. In assenza
+        /// di rete usa un punto casuale livellato a terra ma con raycast,
+        /// che evita i tetti (e quindi gli spawn dentro gli edifici).
+        /// </summary>
+        private static Vector3 SpawnPointOnRoad(Vector3 near)
+        {
+            var net = City.Vehicle.Traffic.TileRoadNetwork.Instance;
+            if (net != null && net.HasTiles)
+            {
+                City.Vehicle.Traffic.RoadNode n =
+                    net.NearestNodeWithOut(near);
+                if (n != null)
+                {
+                    RaycastHit hit;
+                    if (Physics.Raycast(n.position + Vector3.up * 40f,
+                            Vector3.down, out hit, 100f, ~0,
+                            QueryTriggerInteraction.Ignore))
+                        return hit.point;
+                    return n.position;
+                }
+            }
+            return RandomPointAround(near, 20f, 55f);
+        }
 
         private static Vector3 RandomPointAround(Vector3 center, float minD, float maxD)
         {

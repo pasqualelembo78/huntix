@@ -76,6 +76,18 @@ object Bridge {
                     PoiUnityBridge.onPoiSelected(id, lat, lng)
                 }
             }
+            // ── Miacitta: i chunk della citta' sono pronti → chiudi lo splash ──
+            "CityReady" -> StoreUnityBridge.onCityReady()
+            // ── Miacitta: avanzamento splash (fase, %, KB/MB dei chunk) ──
+            "CityProgress" -> StoreUnityBridge.onCityProgress(jsonData)
+            // ── Miacitta: posizione di gioco corrente (Unity) → prefs + Google ──
+            "PlayerPosition" -> {
+                val ctx = UnityPlayer.currentActivity ?: return
+                val j = try { JSONObject(jsonData) } catch (_: Exception) { return }
+                val lat = j.optString("lat").toDoubleOrNull() ?: return
+                val lng = j.optString("lng").toDoubleOrNull() ?: return
+                WorldPosCloud.updateLocalAndCloud(ctx, lat, lng)
+            }
             // ── Indoor store events (Unity → IndoorActivity) ──
             "IndoorSceneReady" -> {
                 val poiId = extractJsonField(jsonData, "poiId") ?: ""
@@ -109,6 +121,15 @@ object Bridge {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 ctx.startActivity(intent)
+            }
+            // ── MiAcitma P2P: tap su un altro giocatore reale → profilo + chat ──
+            "PlayerProfileRequest" -> {
+                val j = try { JSONObject(jsonData) } catch (_: Exception) { JSONObject() }
+                val toId = j.optString("toUserId", "")
+                val name = j.optString("name", "Giocatore")
+                val skin = j.optString("skin", "humanMaleA")
+                val lvl = j.optInt("level", 1)
+                openPlayerChat(toId, name, lvl, skin)
             }
             // ── MiAcitma: uovo catturato nel mini-gioco → inventario uova Huntix
             "EggCapturedInCity" -> handleCityEggCaptured(jsonData)
@@ -223,7 +244,20 @@ object Bridge {
             PoiUnityBridge.sendEvent("CatchResult", res)
         }
     }
-
     private fun extractJsonField(json: String, key: String): String? =
         "\"$key\"\\s*:\\s*\"([^\"]*)\"".toRegex().find(json)?.groupValues?.get(1)
+
+
+    private fun openPlayerChat(toUserId: String, name: String, level: Int, skin: String) {
+        if (toUserId.isBlank()) return
+        val ctx = UnityPlayer.currentActivity ?: return
+        val intent = Intent(ctx, com.intelligame.huntix.ui.PlayerChatActivity::class.java).apply {
+            putExtra("TO_USER_ID", toUserId)
+            putExtra("NAME", name)
+            putExtra("LEVEL", level)
+            putExtra("SKIN", skin)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+    }
 }

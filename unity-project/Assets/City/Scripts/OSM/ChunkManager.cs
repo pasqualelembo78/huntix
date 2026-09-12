@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using UnityEngine;
 using City.Vehicle.Traffic;
 
@@ -15,10 +16,18 @@ namespace City.OSM
     /// </summary>
     public class ChunkManager : MonoBehaviour
     {
-        public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
-        public const int UnloadRadius = 5;
+        public const int LoadRadius = 2;    // chunk in ogni direzione (5x5, default conservativo)
+        public const int UnloadRadius = 3;  // isteresi: un anello oltre il carico
         private const float TickIntervalS = 0.25f;
         private const long BuildBudgetMs = 12;
+
+        /// <summary>Chunk totali dentro il raggio di carico (5x5) a fine load.</summary>
+        public const int ExpectedChunkCount = (2 * LoadRadius + 1) * (2 * LoadRadius + 1);
+
+        /// <summary>Intervallo dei report di avanzamento "CityProgress" allo
+        /// splash Android (Mappa 0-40%, Costruzione 40-95%, Pronto 100%).</summary>
+        private const float ProgressIntervalS = 0.5f;
+        private const float TilePhaseFallbackS = 60f; // se una tile manca davvero, non bloccarsi <40%
 
         public Transform target;
 
@@ -28,6 +37,12 @@ namespace City.OSM
         // al purge dell'origine definitiva (memoria sprecata, rischio
         // LOW_MEMORY su device limitati)
         public bool StreamingEnabled = true;
+
+        /// <summary>True finche' lo splash deve ricevere gli aggiornamenti di
+        /// progresso; CityChunkedWorld lo spegne appena manda CityReady.</summary>
+        public bool ProgressReporting = true;
+        private float _progressStart;
+        private float _nextProgressAt;
 
         public Transform ChunkRootParent => _rootParent;
 
@@ -85,11 +100,20 @@ namespace City.OSM
             }
         }
 
-        private IEnumerator Start()
+        private Coroutine _tickLoop;
+
+        private void Start()
         {
+            // I collider di chunk generati a runtime entrano in PhysX con un
+            // piccolo ritardo di registrazione. autoSyncTransforms=on (come nel
+            // world legacy) fa registrare subito i nuovi MeshCollider al
+            // CharacterController: senza, il player puo' attraversare il terreno
+            // appena costruito e precipitare (mesh one-sided).
+            Physics.autoSyncTransforms = true;
             // persistente: sopravvive ai reload della scena City (il double-load
             // di GameManager distruggeva questo oggetto prima del primo tick)
             DontDestroyOnLoad(gameObject);
+            _progressStart = Time.unscaledTime;
             var rootGo = new GameObject("Chunks");
             rootGo.transform.SetParent(transform, false);
             _rootParent = rootGo.transform;
@@ -105,17 +129,35 @@ namespace City.OSM
             OsmDiag.Log("[ChunkManager] avvio tick (timeScale=" +
                 Time.timeScale + ")");
 
-            // NB: WaitForSecondsRealtime, non scalata: se il gioco blocca
-            // Time.timeScale lo streaming deve continuare comunque
-            var wait = new WaitForSecondsRealtime(TickIntervalS);
-            float heartbeat = 0f;
-            while (true)
+            // lo streaming gira in una coroutine dedicata (TickLoop) cosi' che
+            // UnloadAll() (teletrasporto) puo' fermare le build in volo senza
+            // uccidere definitivamente il loop (il blu-screen dopo CENTRA GPS).
+            EnsureStreamingLoop();
+        }
+
+        /// <summary>Avvia il tick loop se non gia' attivo. Chiamato da Start e
+        /// riavviato da UnloadAll() dopo che StopAllCoroutines lo ha spento.</summary>
+        private void EnsureStreamingLoop()
+        {
+            if (_tickLoop != null || !gameObject.activeInHierarchy) return;
+            _tickLoop = StartCoroutine(TickLoop());
+        }
+
+        private IEnumerator TickLoop()
+        {
+            try
             {
-                try { Tick(); }
-                catch (Exception e)
+                // NB: WaitForSecondsRealtime, non scalata: se il gioco blocca
+                // Time.timeScale lo streaming deve continuare comunque
+                var wait = new WaitForSecondsRealtime(TickIntervalS);
+                float heartbeat = 0f;
+                while (true)
                 {
-                    UnityEngine.Debug.LogError("[ChunkManager] errore tick: " + e);
-                }
+                    try { Tick(); }
+                    catch (Exception e)
+                    {
+                        UnityEngine.Debug.LogError("[ChunkManager] errore tick: " + e);
+                    }
                 heartbeat += TickIntervalS;
                 if (heartbeat >= 4f)
                 {
@@ -150,6 +192,11 @@ namespace City.OSM
                     }
                 }
                 yield return wait;
+                }
+            }
+            finally
+            {
+                _tickLoop = null;
             }
         }
 
@@ -201,6 +248,7 @@ namespace City.OSM
             RetryMissingTiles();
             UpdateLods(cur);
             WorldOrigin.TryRebase(target.position);
+            MaybeReportCityProgress();
         }
 
         /// <summary>Riporta in coda di build i chunk con tile fallita, dopo il
@@ -494,6 +542,8 @@ namespace City.OSM
             bundle.geo = geo;
             if (graph != null)
                 TileRoadNetwork.Ensure().AddTile(tileKey, graph);
+            if (geo != null)
+                TileElevation.Register(geo);
             OsmDiag.Log("[ChunkManager] tile " + tileKey + " caricata (graph=" +
                 (graph != null) + ", geo=" + (geo != null) + ")");
         }
@@ -529,8 +579,245 @@ namespace City.OSM
             if (bundle.refs <= 0)
             {
                 _tiles.Remove(tileKey);
+                TileElevation.Unregister(tileKey);
                 if (TileRoadNetwork.Instance != null)
                     TileRoadNetwork.Instance.RemoveTile(tileKey);
+            }
+        }
+
+        /// <summary>True se il chunk e' stato costruito (terreno e contenuti
+        /// pronti). Usato dal gate di spawn del primo chunk in CityChunkedWorld.</summary>
+        public bool IsChunkBuilt(Vector2Int idx)
+        {
+            ChunkData cd;
+            return _chunks.TryGetValue(idx, out cd) && cd != null && cd.built;
+        }
+
+        /// <summary>
+        /// Diagnostica del terreno sotto un punto mondo: stato del chunk, del GO
+        /// terreno e del SUO MeshCollider (attivo? mesh valida e con bounds
+        /// finiti?), poi un raycast dall'alto che elenca i collider realmente
+        /// registrati nella fisica nella colonna. Serve a capire i "nessun
+        /// terreno sotto il player": se i chunk sono 'built' ma la fisica non
+        /// vede i collider, la frase raccolta qui dice esattamente cosa manca.
+        /// </summary>
+        public bool DiagnoseTerrain(Vector3 worldPos)
+        {
+            try
+            {
+                if (!WorldOrigin.Initialized)
+                {
+                    OsmDiag.Log("[ChunkManager] DiagnoseTerrain: WorldOrigin non inizializzato");
+                    return false;
+                }
+                GeoCoord g = WorldOrigin.ToGeo(worldPos);
+                Vector2Int c = CityGrid.ChunkIndexOf(g.lat, g.lng);
+                ChunkData chunk;
+                bool present = _chunks.TryGetValue(c, out chunk) && chunk != null;
+                OsmDiag.Log("[ChunkManager] DiagnoseTerrain terreno sotto (" +
+                    worldPos.x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) + "," +
+                    worldPos.z.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) +
+                    ",y=" + worldPos.y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) +
+                    ") -> chunk " + c.x + "," + c.y +
+                    " presente=" + present +
+                    (present ? " built=" + chunk.built + " lod=" + chunk.lod : ""));
+
+                if (!present || chunk.terrainGo == null)
+                {
+                    OsmDiag.Log("[ChunkManager] DiagnoseTerrain: terrainGo NULL per il chunk " +
+                        c.x + "," + c.y);
+                }
+                else
+                {
+                    var go = chunk.terrainGo;
+                    var col = go.GetComponent<MeshCollider>();
+                    var mf = go.GetComponent<MeshFilter>();
+                    if (mf == null)
+                        OsmDiag.Log("[ChunkManager] DiagnoseTerrain: NESSUN MeshFilter sul GO terreno");
+                    var sb = new StringBuilder();
+                    sb.Append("[ChunkManager] DiagnoseTerrain terrainGo=" + go.name +
+                        " active=" + go.activeInHierarchy + " layer=" + go.layer);
+                    if (col == null)
+                    {
+                        sb.Append(" NO-MeshCollider");
+                    }
+                    else
+                    {
+                        var mesh = col.sharedMesh;
+                        sb.Append(" collider.enabled=" + col.enabled +
+                            " convex=" + col.convex);
+                        if (mesh == null)
+                        {
+                            sb.Append(" sharedMesh=NULL");
+                        }
+                        else
+                        {
+                            Vector3 bmin = mesh.bounds.min;
+                            Vector3 bmax = mesh.bounds.max;
+                            bool finito = !float.IsNaN(bmax.y) && !float.IsInfinity(bmax.y);
+                            sb.Append(" sharedMeshVerts=" + mesh.vertexCount +
+                                " tris=" + (mesh.triangles.Length / 3) +
+                                " boundsValide=" + finito +
+                                " worldBoundsMin=" + bmin +
+                                " worldBoundsMax=" + bmax + " posY=" +
+                                go.transform.position.y.ToString("F2",
+                                    System.Globalization.CultureInfo.InvariantCulture));
+                        }
+                    }
+                    OsmDiag.Log(sb.ToString());
+                }
+
+                // quali collider ESISTONO davvero nella colonna sopra il punto?
+                // Se il terreno e' SOTTO il player i raycast verso il basso dal
+                // player lo vedono; se manca anche dall'alto, la fisica non lo
+                // contiene e il problema e' il collider, non la quota
+                var seen = new System.Collections.Generic.HashSet<string>();
+                // Origine ancorata alla superficie DEM (zone di montagna): il
+                // terreno assoluto sta anche a 1200+ m, oltre i 600 fissi.
+                Vector3 probeFrom = worldPos + Vector3.up * 600f;
+                float probeDem = TileElevation.HeightAtWorld(worldPos);
+                if (probeDem + 700f > probeFrom.y) probeFrom.y = probeDem + 700f;
+                RaycastHit[] above = Physics.RaycastAll(
+                    probeFrom, Vector3.down, 1400f);
+                for (int i = 0; i < above.Length &&
+                    i < ChunkManager.DiagnosticsMaxHits; i++)
+                    seen.Add(above[i].collider.name + "@y" +
+                        above[i].point.y.ToString("F1",
+                            System.Globalization.CultureInfo.InvariantCulture));
+                var hitList = new StringBuilder();
+                hitList.Append("[ChunkManager] DiagnoseTerrain colonna (ancorata DEM) 1400m: " +
+                    above.Length + " hit [");
+                int n = 0;
+                foreach (var s in seen)
+                {
+                    if (n++ > 0) hitList.Append(", ");
+                    hitList.Append(s);
+                }
+                hitList.Append("]");
+                OsmDiag.Log(hitList.ToString());
+                return above.Length > 0;
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[ChunkManager] DiagnoseTerrain errore: " + e.Message);
+                return false;
+            }
+        }
+
+        
+        /// <summary>Restituisce true se il terreno di questo chunk e' pronto
+        /// per la fisica: collider attivo, mesh valida con bounds finiti.
+        /// Il chiamante (CityChunkedWorld) puo' usarlo prima di aprire lo spawn:
+        /// se false, il ponte di sicurezza va mantenuto e il player non deve
+        /// cadere nel vuoto.</summary>
+
+
+        /// <summary>Restituisce true se il terreno di questo chunk e' pronto
+        /// per la fisica: collider attivo, mesh valida con bounds finiti.
+        /// Il chiamante (CityChunkedWorld) puo' usarlo prima di aprire lo spawn:
+        /// se false, il ponte di sicurezza va mantenuto e il player non deve
+        /// cadere nel vuoto.</summary>
+        public bool VerifyTerrainReady(Vector3 worldPos)
+        {
+            try
+            {
+                if (!WorldOrigin.Initialized) return false;
+                GeoCoord g = WorldOrigin.ToGeo(worldPos);
+                Vector2Int c = CityGrid.ChunkIndexOf(g.lat, g.lng);
+                ChunkData chunk;
+                if (!_chunks.TryGetValue(c, out chunk) || chunk == null || !chunk.built)
+                    return false;
+                if (chunk.terrainGo == null) return false;
+                var go = chunk.terrainGo;
+                if (!go.activeInHierarchy) return false;
+                var col = go.GetComponent<MeshCollider>();
+                if (col == null) return false;
+                if (!col.enabled) return false;
+                var mesh = col.sharedMesh;
+                if (mesh == null) return false;
+                if (mesh.vertexCount == 0) return false;
+                Vector3 b = mesh.bounds.size;
+                return !float.IsNaN(b.y) && !float.IsInfinity(b.y) && b.x > 0f && b.z > 0f;
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[ChunkManager] VerifyTerrainReady errore: " + e.Message);
+                return false;
+            }
+        }
+
+private const int DiagnosticsMaxHits = 8;
+
+        /// <summary>Ferma i report di avanzamento (dopo CityReady lo splash
+        /// non ha piu' bisogno di essere aggiornato).</summary>
+        public void StopProgressReporting()
+        {
+            ProgressReporting = false;
+        }
+
+        // ── progresso caricamento città (splash Miacitta) ─────────────
+        // Invia a Bridge ("CityProgress") un JSON con fase, percentuale e
+        // byte letti. Fasi: Mappa (tile graph+geo) 0-40%, Costruzione
+        // (chunk buildati) 40-95%; CityChunkedWorld chiude con il CityReady.
+        private void MaybeReportCityProgress()
+        {
+            if (!ProgressReporting) return;
+            if (Time.unscaledTime < _nextProgressAt) return;
+            _nextProgressAt = Time.unscaledTime + ProgressIntervalS;
+
+            try
+            {
+                GeoCoord g = WorldOrigin.ToGeo(target.position);
+                Vector2Int cur = CityGrid.ChunkIndexOf(g.lat, g.lng);
+
+                // tile attese: chiavi uniche dei chunk nel raggio di carico (5x5)
+                var seen = new HashSet<string>();
+                for (int dx = -LoadRadius; dx <= LoadRadius; dx++)
+                    for (int dz = -LoadRadius; dz <= LoadRadius; dz++)
+                        seen.Add(CityGrid.TileKeyOfChunk(
+                            new Vector2Int(cur.x + dx, cur.y + dz)));
+                int expectedTiles = Mathf.Max(1, seen.Count);
+
+                // avanzamento tile: ogni tile pesa 1.5 (graph 0.5 + geo 1.0)
+                double tileP = 0.0;
+                foreach (var kv in _tiles)
+                {
+                    var b = kv.Value;
+                    if (b.graph != null) tileP += 0.5;
+                    if (b.geo != null) tileP += 1.0;
+                }
+                tileP = Math.Min(1.0, tileP / (expectedTiles * 1.5));
+                // se una tile manca davvero (offline/server giu') il progresso
+                // non deve restare bloccato per sempre sotto il 40%
+                if (tileP < 1.0 && Time.unscaledTime - _progressStart > TilePhaseFallbackS)
+                    tileP = 0.99;
+
+                double buildP = Math.Min(1.0, (double)BuiltCount / ExpectedChunkCount);
+                double raw = tileP < 1.0
+                    ? tileP * 40.0
+                    : 40.0 + buildP * 55.0;
+                int percent = Mathf.Clamp((int)Math.Round(raw, MidpointRounding.AwayFromZero), 0, 95);
+
+                string phase = tileP < 1.0 ? "Mappa"
+                    : buildP < 1.0 ? "Costruzione"
+                    : "Quasi pronto";
+                string section = ChunkBuilder.CurrentBuildSection;
+                long bytes = TileClient.TotalBytes;
+
+                string json = "{\"phase\":\"" + phase + "\",\"percent\":" + percent +
+                    ",\"bytes\":" + bytes + ",\"section\":\"" + section + "\"}";
+                try
+                {
+                    Huntix.Bridge.UnityBridge.SendMessageToAndroid("CityProgress", json);
+                }
+                catch (Exception e)
+                {
+                    UnityEngine.Debug.LogWarning("[ChunkManager] CityProgress: " + e.Message);
+                }
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[ChunkManager] report progresso: " + e.Message);
             }
         }
 
@@ -558,18 +845,52 @@ namespace City.OSM
             }
             if (target != null)
             {
+                // Muovere direttamente un CharacterController abilitato senza
+                // ri-registrarlo desincronizza la sweep interna dal transform
+                // (il player puo' passare attraverso i collider appena
+                // ri-ribasato). Spegni-trasloca-riaccendi + sync esplicito.
+                var cc = target.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
                 target.position -= delta;
                 var rb = target.GetComponentInParent<Rigidbody>();
                 if (rb == null) rb = target.GetComponentInChildren<Rigidbody>();
                 if (rb != null) rb.position -= delta;
+                Physics.SyncTransforms();
+                if (cc != null) cc.enabled = true;
             }
         }
 
         // ── API pubbliche ───────────────────────────────────────
 
+        /// <summary>Ferma lo streaming in vista della chiusura dell'Activity Unity
+        /// (uscita alla Home). Disattiva lo streaming, ferma il tick loop e le
+        /// coroutine di build in volo PRIMA che il teardown dell'engine distrugga
+        /// il runtime: in gara con lo smontaggio un TileClient/thread di build che
+        /// richiama Unity puo' provocare un crash nativo (SIGSEGV) del processo,
+        /// che pero' resta vivo per mostrare la Home nativa.</summary>
+        public void StopStreaming()
+        {
+            StreamingEnabled = false;
+            try
+            {
+                StopAllCoroutines();
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[ChunkManager] StopStreaming coroutine: " + e.Message);
+            }
+            _tickLoop = null;
+            OsmDiag.Log("[ChunkManager] streaming fermato (uscita Activity Unity)");
+        }
+
         public void UnloadAll()
         {
+            // StopAllCoroutines ferma le build in volo E il tick loop dedicato.
+            // Il tick loop viene subito riavviato (EnsureStreamingLoop) per la
+            // nuova origine: senza questo il teletrasporto (CENTRA GPS) lasciava
+            // il mondo blu e vuoto all'infinito (chunks=0 costruiti=0).
             StopAllCoroutines();
+            _tickLoop = null;
             _pending.Clear();
             _inFlight.Clear();
             _retryAt.Clear();
@@ -579,6 +900,41 @@ namespace City.OSM
             foreach (var kv in _chunks) kv.Value.Destroy();
             _chunks.Clear();
             _tiles.Clear();
+            TileElevation.Reset();
+            EnsureStreamingLoop();
+        }
+
+        /// <summary>Scarica l'INTERO mondo di gioco (chunk, veicoli, NPC,
+        /// edifici, materiali) SENZA riavviare lo streaming: serve UNA SOLA volta
+        /// prima di chiudere l'Activity Unity da Android. Il teardown dell'engine
+        /// (mUnityPlayer.destroy) con una scena ancora gigante (15 chunk, 1200+
+        /// veicoli, 5800 edifici/chunk) ci mette ~10s e durante lo smontaggio un
+        /// sistema in distruzione crashe in SIGSEGV (log: Exit -> ~10s -> SIGNALED
+        /// signal=11, trace nullo). Svuotando la scena qui l'engine smonta quasi
+        /// nulla e il processo resta vivo pulito sulla Home nativa. NON chiama
+        /// EnsureStreamingLoop (il tick loop non deve ripartire in uscita).</summary>
+        public void UnloadWorldForExit()
+        {
+            try
+            {
+                StopAllCoroutines();
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogWarning("[ChunkManager] UnloadWorldForExit coroutine: " + e.Message);
+            }
+            _tickLoop = null;
+            _pending.Clear();
+            _inFlight.Clear();
+            _retryAt.Clear();
+            _retryCount.Clear();
+            _tileCooldownAt.Clear();
+            _loading.Clear();
+            foreach (var kv in _chunks) kv.Value.Destroy();
+            _chunks.Clear();
+            _tiles.Clear();
+            TileElevation.Reset();
+            OsmDiag.Log("[ChunkManager] mondo scaricato prima del teardown (uscita Activity Unity)");
         }
 
         public int LoadedCount => _chunks.Count;

@@ -370,6 +370,24 @@ namespace Huntix.Bridge
             return "Giocatore";
         }
 
+        /// <summary>JWT di accesso corrente (Fase 3 multiplayer): identita'
+        /// autentica del player ricavata da Android (RealLifeAuth). Vuoto se
+        /// l'utente non e' loggato. NON persistirlo mai in PlayerPrefs.</summary>
+        public static string GetAccessToken()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("getAccessToken") ?? "";
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetAccessToken: " + e.Message); }
+            #endif
+            return "";
+        }
+
         /// <summary>XP totale cumulata del player Huntix.</summary>
         public static long GetPlayerXp()
         {

@@ -51,10 +51,19 @@ namespace City.OSM
             if (buildingsGo != null)
             {
                 buildingsGo.SetActive(level <= 1);
-                if (level == 0)
-                    SetBuildingColliders(buildingsGo, true);
-                else
+                // Collider SEMPRE attivi finche' l'edificio e' visibile (LOD0 e
+                // LOD1). Spegnerli a LOD1 creava muri "fantasma" (visibili ma
+                // attraversabili) e al passaggio LOD1->LOD0 le pareti si
+                // abilitavano SOTTO il player, spingendo il CharacterController
+                // fuori dal muro piu' vicino: ne derivava il classico
+                // comportamento unidirezionale ("non entro dalla porta, ma esco
+                // attraverso i muri"). Fisica simmetrica e stabile a ogni LOD
+                // visibile; i collider si spengono solo quando l'edificio e'
+                // davvero invisibile (LOD2+, setActive false).
+                if (level >= 2)
                     SetBuildingColliders(buildingsGo, false);
+                else
+                    SetBuildingColliders(buildingsGo, true);
             }
             if (airportsGo != null) airportsGo.SetActive(level <= 1);
         }
@@ -69,7 +78,14 @@ namespace City.OSM
         {
             var cols = buildingsGo.GetComponentsInChildren<BoxCollider>(true);
             for (int i = 0; i < cols.Length; i++)
+            {
+                // I trigger porta degli edifici in-place restano SEMPRE attivi:
+                // spegnerli ai LOD>0 "mura" fisicamente l'ingresso (muri
+                // attraversabili + porta che non risponde). Il giocatore li
+                // attraversa lo stesso, quindi il ping-pong collider non serve.
+                if (cols[i].isTrigger) continue;
                 cols[i].enabled = on;
+            }
         }
 
         public void Destroy()

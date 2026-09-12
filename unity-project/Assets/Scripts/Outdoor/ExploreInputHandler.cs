@@ -59,14 +59,47 @@ namespace Huntix.Outdoor
                 }
             }
 
-            // 2) Terreno vuoto: piano orizzontale dei marker (z = altitudine 0).
-            var plane = new Plane(Vector3.forward, Vector3.zero);
-            if (plane.Raycast(ray, out float enter))
+            // 2) Terreno vuoto: raycast contro il terreno se disponibile,
+            //    altrimenti piano orizzontale a y=0.
+            float terrainY = GetTerrainYAtRaycast(ray);
+            Vector3 point;
+            if (terrainY >= 0f)
             {
-                var point = ray.GetPoint(enter);
-                if (ExploreManager.Instance != null)
-                    ExploreManager.Instance.OnGroundTapped(point);
+                // Usa l'altezza del terreno reale raycastata
+                point = new Vector3(ray.GetPoint(terrainY).x, terrainY, ray.GetPoint(terrainY).z);
             }
+            else
+            {
+                // Piano orizzontale dei marker (z = altitudine 0).
+                var plane = new Plane(Vector3.forward, Vector3.zero);
+                if (plane.Raycast(ray, out float enter))
+                {
+                    point = ray.GetPoint(enter);
+                }
+                else
+                {
+                    return;
+                }
+            }
+            if (ExploreManager.Instance != null)
+                ExploreManager.Instance.OnGroundTapped(point);
+        }
+
+        private float GetTerrainYAtRaycast(Ray ray)
+        {
+            // Controlla se c'è un Terrain Unity nella scena
+            Terrain terrain = Terrain.activeTerrain;
+            if (terrain != null)
+            {
+                // Raycast contro il terreno, escludendo i edifici (layer 8)
+                if (Physics.Raycast(ray, out RaycastHit hit, 10000f,
+                    ~(1 << 8)))
+                {
+                    return hit.point.y;
+                }
+            }
+            // Nessun Terrain Unity: restituire -1 per usare il piano piatto
+            return -1f;
         }
     }
 }

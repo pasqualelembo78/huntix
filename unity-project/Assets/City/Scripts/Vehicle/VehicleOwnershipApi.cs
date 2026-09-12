@@ -37,6 +37,10 @@ namespace City.Vehicle
             public float condition;
             public long odometer_m;
             public string damage;
+            public float integrity;
+            public float suspension;
+            public float bodywork;
+            public float bumper;
             public string[] anti_theft;
             public bool in_garage;
             public bool stolen;
@@ -107,6 +111,8 @@ namespace City.Vehicle
         private class DamageReq
         {
             public string code; public string player; public string damage;
+            public float integrity;
+            public float suspension; public float bodywork; public float bumper;
         }
         [Serializable]
         private class OkResp { public bool ok; public string error; }
@@ -120,6 +126,10 @@ namespace City.Vehicle
             public float condition = 100f;
             public long odometer_m;
             public string damage = "";
+            public float integrity = 100f;
+            public float suspension;
+            public float bodywork;
+            public float bumper;
             public string[] anti_theft;
             public bool in_garage;
             public bool stolen;
@@ -180,6 +190,17 @@ namespace City.Vehicle
 
         public static VehicleOwnershipApi Instance { get; private set; }
 
+        /// <summary>Il VehicleController del veicolo del giocatore attualmente
+        /// materializzato (uscita garage, consegna concessionaria, ecc.).
+        /// Serve all'officina per la diagnostica locale delle parti meccaniche.</summary>
+        public VehicleController LocalPlayerVehicle { get; private set; }
+
+        /// <summary>Registra il veicolo locale del giocatore.</summary>
+        public void RegisterLocalVehicle(VehicleController vc)
+        {
+            LocalPlayerVehicle = vc;
+        }
+
         /// <summary>Vero dopo il primo Refresh completato (anche senza rete):
         /// i chunk possono popolare i parcheggi con lo stato noto reale,
         /// evitando di generare l'auto "in vendita" dell'utente all'avvio.</summary>
@@ -209,6 +230,10 @@ namespace City.Vehicle
             public float condition = 100f;
             public long odometer_m;
             public string damage = "";
+            public float integrity = 100f;
+            public float suspension;
+            public float bodywork;
+            public float bumper;
             public string[] anti_theft;
         }
 
@@ -271,6 +296,9 @@ namespace City.Vehicle
         {
             return !string.IsNullOrEmpty(code) && owned.Contains(code);
         }
+
+        /// <summary>Quanti veicoli possiedo in totale (menu profilo Sim).</summary>
+        public int OwnedCount { get { return owned.Count; } }
 
         public void MarkOwned(string code, double lat, double lon, double heading)
         {
@@ -386,11 +414,26 @@ namespace City.Vehicle
             var vc = vehicleGo.GetComponent<VehicleController>();
             if (vc == null) vc = vehicleGo.GetComponentInChildren<VehicleController>();
             if (vc == null) return;
+            RegisterLocalVehicle(vc);
             if (myState.TryGetValue(code, out var mv))
+            {
                 vc.SetServiceState(mv.condition, mv.odometer_m,
                     ParseDamage(mv.damage));
+                vc.SetDamageState(mv.integrity, new[]
+                {
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "suspension", mv.suspension),
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "bodywork", mv.bodywork),
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "bumper", mv.bumper),
+                });
+            }
             else
+            {
                 vc.SetServiceState(100f, 0L);
+                vc.SetDamageState(100f, null);
+            }
         }
 
         /// <summary>All'ingresso in guida: se conosciamo lo stato server del
@@ -399,10 +442,22 @@ namespace City.Vehicle
         {
             if (vc == null || string.IsNullOrEmpty(code)) return;
             if (myState.TryGetValue(code, out var mv))
+            {
                 vc.SetServiceState(mv.condition,
                     System.Math.Max(mv.odometer_m,
                         VehicleController.StoredOdometer(code)),
                     ParseDamage(mv.damage));
+                vc.SetDamageState(mv.integrity, new[]
+                {
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "suspension", mv.suspension),
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "bodywork", mv.bodywork),
+                    new System.Collections.Generic.KeyValuePair<string, float>(
+                        "bumper", mv.bumper),
+                });
+            }
+            else vc.SetDamageState(100f, null);
         }
 
         // ── refresh stato + motore eventi furto ─────────────────────
@@ -466,6 +521,10 @@ namespace City.Vehicle
                 pv.odometer_m = v.odometer_m;
                 pv.damage = string.IsNullOrEmpty(v.damage)
                     ? "" : v.damage;
+                pv.integrity = v.integrity;
+                pv.suspension = v.suspension;
+                pv.bodywork = v.bodywork;
+                pv.bumper = v.bumper;
                 pv.anti_theft = v.anti_theft;
 
                 if (v.lost_forever)
@@ -473,7 +532,7 @@ namespace City.Vehicle
                     // persa per sempre: esce dal registro locale (toast una
                     // volta sola, non a ogni poll)
                     if (lostNotified.Add(v.code))
-                        Toast("\uD83D\uDEA8 La tua " + v.model +
+                        Toast("La tua " + v.model +
                               " \u00e8 scomparsa nel nulla. Non torner\u00e0.");
                     MarkSold(v.code);
                     continue;
@@ -496,6 +555,10 @@ namespace City.Vehicle
                     odometer_m = v.odometer_m,
                     damage = string.IsNullOrEmpty(v.damage)
                         ? "" : v.damage,
+                    integrity = v.integrity,
+                    suspension = v.suspension,
+                    bodywork = v.bodywork,
+                    bumper = v.bumper,
                     anti_theft = v.anti_theft,
                     in_garage = v.in_garage,
                     stolen = v.stolen,
@@ -596,12 +659,32 @@ namespace City.Vehicle
 
         // ── officina ────────────────────────────────────────────────
 
+        [Serializable]
+        private class RepairZonesReq
+        {
+            public string code; public string player; public string[] zones;
+        }
+
         public void Repair(string code, Action<bool> done)
         {
             StartCoroutine(PostOk("/service/repair", new DeviceReq
             {
                 code = code, player = PlayerId
             }, done));
+        }
+
+        /// <summary>Riparazione di SOLO le zone indicate (riparazione per zona
+        /// in officina).</summary>
+        public void RepairZones(string code, string[] zones, Action<bool> done)
+        {
+            StartCoroutine(PostOk("/service/repair", new RepairZonesReq
+            {
+                code = code, player = PlayerId, zones = zones,
+            }, ok =>
+            {
+                if (ok) Refresh(null);   // aggiorna subito integrita'/zone
+                done?.Invoke(ok);
+            }));
         }
 
         public void InstallAntitheft(string code, string device, Action<bool> done)
@@ -635,26 +718,67 @@ namespace City.Vehicle
         public void MarkRepaired(string code)
         {
             if (myState.TryGetValue(code, out var mv))
+            {
                 mv.damage = "";
+                mv.integrity = 100f;
+                mv.suspension = 0f; mv.bodywork = 0f; mv.bumper = 0f;
+            }
             if (sold.TryGetValue(code, out var pv))
+            {
                 pv.damage = "";
+                pv.integrity = 100f;
+                pv.suspension = 0f; pv.bodywork = 0f; pv.bumper = 0f;
+            }
         }
 
-        /// <summary>Segnala il danno subito per impatto (persistito sul server).</summary>
+        /// <summary>Segnala il danno subito per impatto (persistito sul server):
+        /// zona colpita, HP residuo e stato catastrofico.</summary>
         public void ReportDamage(string code, VehicleDamage damage,
-            Action<bool> done)
+            float integrity,
+            System.Collections.Generic.IEnumerable<System.Collections.Generic.
+                KeyValuePair<string, float>> zones, Action<bool> done)
         {
             string d = damage == VehicleDamage.Flat ? "flat"
                 : damage == VehicleDamage.Wrecked ? "wrecked"
                 : damage == VehicleDamage.Fire ? "fire" : "";
-            StartCoroutine(PostOk("/damage", new DamageReq
+            var req = new DamageReq
             {
                 code = code, player = PlayerId, damage = d,
-            }, done));
+                integrity = integrity,
+            };
+            if (zones != null)
+                foreach (var kv in zones)
+                {
+                    float v = Mathf.Max(0f, kv.Value);
+                    if (kv.Key == "suspension") req.suspension = v;
+                    else if (kv.Key == "bodywork") req.bodywork = v;
+                    else if (kv.Key == "bumper") req.bumper = v;
+                }
+            StartCoroutine(PostOk("/damage", req, done));
             if (myState.TryGetValue(code, out var mv))
+            {
                 mv.damage = d;
+                mv.integrity = integrity;
+                if (zones != null)
+                    foreach (var kv in zones)
+                    {
+                        if (kv.Key == "suspension") mv.suspension = Mathf.Max(mv.suspension, kv.Value);
+                        else if (kv.Key == "bodywork") mv.bodywork = Mathf.Max(mv.bodywork, kv.Value);
+                        else if (kv.Key == "bumper") mv.bumper = Mathf.Max(mv.bumper, kv.Value);
+                    }
+            }
             if (sold.TryGetValue(code, out var pv))
+            {
                 pv.damage = d;
+                pv.integrity = integrity;
+                if (zones != null)
+                    foreach (var kv in zones)
+                    {
+                        if (kv.Key == "suspension") pv.suspension = Mathf.Max(pv.suspension, kv.Value);
+                        else if (kv.Key == "bodywork") pv.bodywork = Mathf.Max(pv.bodywork, kv.Value);
+                        else if (kv.Key == "bumper") pv.bumper = Mathf.Max(pv.bumper, kv.Value);
+                    }
+            }
         }
 
         /// <summary>Chiama il carro attrezzi: l'auto viene consegnata

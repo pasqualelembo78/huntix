@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using City.Player;
 using City.NPC;
+using City.OSM;
 
 namespace City.Vehicle.Traffic
 {
@@ -49,6 +50,9 @@ namespace City.Vehicle.Traffic
         private int _grantedNode = -1;                    // incrocio concesso
         private bool _waiting;                            // fermo alla linea
         private Vector3 _stopTarget;
+        private float _waitStart;                         // quando ho iniziato ad attendere
+        private bool _stuckLogged;                        // gia' segnalato fermo all'incrocio
+        private float _nextOffRoadLog;                    // soglia audit fuori corsia
 
         private static readonly string[] CarPrefabs = new string[]
         {
@@ -128,6 +132,52 @@ namespace City.Vehicle.Traffic
             CheckCurb();
             CheckObstacle();
             Drive();
+            AuditGateStall();
+            AuditRoadBounds();
+        }
+
+        // ── audit ────────────────────────────────────────────────
+
+        // Auto ferma al gate per piu' di 15s senza permesso: possibile
+        // incrocio bloccato (JunctionControl mai rilasciato). Normale per un
+        // semaforo rosso lungo, quindi soglia alta + throttle di 60s.
+        private void AuditGateStall()
+        {
+            if (!_waiting || _stuckLogged || _grantedNode >= 0) return;
+            if (Time.time - _waitStart < 15f) return;
+            _stuckLogged = true;
+            if (_gates == null || _gateScan >= _gates.Length) return;
+            OsmDiag.Log("[Audit] Auto ferma all'incrocio " + _gates[_gateScan].nodeId +
+                " da " + (Time.time - _waitStart).ToString("F0") + "s " + name +
+                " @" + transform.position.x.ToString("F1") + "," +
+                transform.position.z.ToString("F1"));
+        }
+
+        // Auto oltre ~8 m dalla linea di waypoint corrente: il percorso sta
+        // "tagliando" fuori strada (marciapiede/erba/attraverso i blocchi).
+        // La stringa si costruisce solo quando scatta la soglia (15s).
+        private void AuditRoadBounds()
+        {
+            if (state != CarAgentState.Driving) return;
+            if (Time.time < _nextOffRoadLog) return;
+            if (_waypoints == null || _wpIndex < 1 || _wpIndex >= _waypoints.Length)
+                return;
+            Vector3 a = _waypoints[_wpIndex - 1]; a.y = 0f;
+            Vector3 b = _waypoints[_wpIndex]; b.y = 0f;
+            Vector3 ab = b - a;
+            float len = ab.magnitude;
+            if (len < 0.001f) return;
+            Vector3 dir = ab / len;
+            Vector3 p = transform.position; p.y = 0f;
+            float t = Mathf.Clamp01(Vector3.Dot(p - a, dir) / len);
+            float dist = Vector3.Distance(p, a + dir * (t * len));
+            if (dist <= 8f) return;
+            if (_waiting) return;
+            _nextOffRoadLog = Time.time + 15f;
+            OsmDiag.Log("[Audit] Auto fuori corsia: " + name +
+                " dist=" + dist.ToString("F1") + "m wp=" + _wpIndex +
+                " @" + transform.position.x.ToString("F1") + "," +
+                transform.position.z.ToString("F1"));
         }
 
         // Limite effettivo: min tra cap dell'agente e limite della strada
@@ -171,6 +221,11 @@ namespace City.Vehicle.Traffic
             }
             else
             {
+                if (!_waiting)
+                {
+                    _waitStart = Time.time;
+                    _stuckLogged = false;
+                }
                 _waiting = true;
                 Vector3 dir = g.approachDir;
                 if (dir.sqrMagnitude < 0.0001f) dir = transform.forward;
@@ -390,6 +445,16 @@ namespace City.Vehicle.Traffic
 
             float step = currentSpeed * Time.deltaTime;
             transform.position += moveDir * Mathf.Min(step, remaining);
+            SnapToElevation();
+        }
+
+        // Aggancia la base alla quota DEM del terreno: le auto seguono i
+        // dislivelli delle strade invece di restare a quota fissa.
+        private void SnapToElevation()
+        {
+            Vector3 p = transform.position;
+            float h = TileElevation.HeightAtWorld(p);
+            transform.position = new Vector3(p.x, h, p.z);
         }
 
         private void BuildModel(int seed)

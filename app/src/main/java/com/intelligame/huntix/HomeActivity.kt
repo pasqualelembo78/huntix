@@ -186,6 +186,8 @@ class HomeActivity : BaseNavActivity() {
             settings.apply {
                 javaScriptEnabled = true; domStorageEnabled = true
                 allowFileAccess = true; allowContentAccess = true
+                allowFileAccessFromFileURLs = true
+                allowUniversalAccessFromFileURLs = true
             }
             setBackgroundColor(Color.TRANSPARENT)
             webChromeClient = WebChromeClient()
@@ -193,18 +195,51 @@ class HomeActivity : BaseNavActivity() {
                 "file:///android_asset/",
                 """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
-<style>*{margin:0;padding:0}body{background:transparent;overflow:hidden}model-viewer{width:100%;height:100%;background:transparent;--poster-color:transparent}model-viewer::part(default-progress-bar){display:none}</style>
-</head><body><model-viewer src="$glbPath" alt="Character" auto-rotate camera-orbit="0deg 75deg 2.5m" min-camera-orbit="auto auto 1.5m" max-camera-orbit="auto auto 5m" field-of-view="30deg" autoplay shadow-intensity="1" exposure="1.2" environment-image="neutral" style="width:100%;height:100%;"></model-viewer><script>
+<style>*{margin:0;padding:0}body{background:transparent;overflow:hidden}
+model-viewer{width:100%;height:100%;background:transparent;--poster-color:transparent}
+model-viewer::part(default-progress-bar){display:none}
+#ld{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;transition:opacity .4s}
+#ld .s{width:28px;height:28px;border:3px solid rgba(167,139,250,.25);border-top-color:#A78BFA;border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#fb{display:none;position:absolute;top:0;left:0;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;color:#A78BFA;font-family:sans-serif}
+</style>
+</head><body>
+<model-viewer src="$glbPath" alt="Character" auto-rotate camera-orbit="0deg 75deg 2.5m" min-camera-orbit="auto auto 1.5m" max-camera-orbit="auto auto 5m" field-of-view="30deg" autoplay shadow-intensity="1" exposure="1.2" environment-image="neutral" style="width:100%;height:100%;"></model-viewer>
+<div id="ld"><div class="s"></div></div>
+<div id="fb"><span style="font-size:40px;">\u{1F464}</span><div style="margin-top:2px;font-size:13px;">Avatar offline</div></div>
+<script>
 try {
-  function showAvatarFallback(){ if (document.getElementById("fb")) return; document.body.innerHTML = "<div id=\"fb\" style=\"width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#A78BFA;font-family:sans-serif;\"><span style=\"font-size:40px;\">\u{1F464}</span><div style=\"margin-top:2px;font-size:13px;\">Avatar offline</div></div>"; }
-  var mv = document.querySelector("model-viewer");
-  if (mv) mv.addEventListener("error", showAvatarFallback);
+  var loaded = false, retries = 0, maxRetries = 2;
+  function onLoad() { loaded = true; var ld = document.getElementById('ld'); if (ld) ld.style.opacity = '0'; setTimeout(function(){ if (ld) ld.remove(); }, 500); }
+  function showFallback() {
+    var ld = document.getElementById('ld'); if (ld) ld.style.opacity = '0';
+    var fb = document.getElementById('fb'); if (fb) fb.style.display = 'flex';
+  }
+  function retryLoad() {
+    if (retries >= maxRetries) { showFallback(); return; }
+    retries++;
+    var mv = document.querySelector('model-viewer');
+    if (mv) {
+      mv.style.display = 'none';
+      setTimeout(function(){ mv.style.display = ''; mv.setAttribute('src', mv.getAttribute('src')); }, 100);
+    }
+    setupTimeout();
+  }
+  function setupTimeout() {
+    setTimeout(function(){ if (!loaded) retryLoad(); }, 5000);
+  }
+  var mv = document.querySelector('model-viewer');
+  if (mv) {
+    mv.addEventListener('load', onLoad);
+    mv.addEventListener('error', function(){ if (!loaded) retryLoad(); });
+  }
   if (window.customElements) {
-    var loadedFlag = false;
-    window.customElements.whenDefined("model-viewer").then(function(){ loadedFlag = true; }).catch(showAvatarFallback);
-    setTimeout(function(){ if (!loadedFlag) showAvatarFallback(); }, 2500);
-  } else showAvatarFallback();
-} catch (e) {}
+    window.customElements.whenDefined('model-viewer').then(function(){
+      if (!loaded) setupTimeout();
+    }).catch(function(){ if (!loaded) retryLoad(); });
+  } else setupTimeout();
+  setTimeout(function(){ if (!loaded) showFallback(); }, 12000);
+} catch (e) { var fb = document.getElementById('fb'); if (fb) fb.style.display = 'flex'; }
 </script>
 </body></html>""".trimIndent(),
                 "text/html", "UTF-8", null
@@ -427,12 +462,7 @@ try {
         quickRow2.addView(quickChip("\uD83C\uDFC6", "Classifica", "#FF3366") { startActivity(Intent(this, GamifiedLeaderboardActivity::class.java)) })
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\uD83C\uDFD9\uFE0F", "Miacitta", "#7E57C2") {
-            AppLog.risorse(this@HomeActivity, "pre-miacitta")
-            Bridge.openUnityActivity(
-                this@HomeActivity,
-                BridgeActivity.MODE_MIACITTA,
-                "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
-            )
+            launchMiacittaWithLoading()
         })
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
@@ -554,6 +584,165 @@ try {
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    // ═══ Avvio Miacitta con pre-caricamento tile (barra di loading) ═══
+
+    /** Serve per evitare doppia apertura dell'overlay di caricamento. */
+    private var miacittaLoading = false
+
+    /**
+     * Prima di lanciare l'Activity Unity di Miacitta scarica in background le
+     * tile della ZONA 3x3 attorno alla posizione di spawn (se non in cache),
+     * mostrando una barra di avanzamento. Cosi' la maggior parte dei chunk e'
+     * gia' su disco quando Unity parte: l'attesa residua (build dei chunk in
+     * Unity) e' coperta dall'overlay di caricamento che BridgeActivity mostra
+     * finché Unity non segnala i chunk pronti (CityReady).
+     */
+    private fun launchMiacittaWithLoading() {
+        AppLog.risorse(this, "pre-miacitta")
+        if (miacittaLoading) return
+        miacittaLoading = true
+
+        // Scelta di spawn: citta' italiana o ultima posizione salvata su Google.
+        // Il GPS del dispositivo NON viene mai usato come posizione di partenza.
+        com.intelligame.huntix.bridge.CitySpawnChooser.show(
+            this,
+            onChosen = { _, _, lat, lng ->
+                runMiacittaPreload(lat, lng)
+            },
+            onCanceled = { miacittaLoading = false }
+        )
+    }
+
+    /** Prima di lanciare l'Activity Unity di Miacitta scarica in background le
+     * tile della ZONA 3x3 attorno alla posizione di spawn scelta, mostrando una
+     * barra di avanzamento. Cosi' la maggior parte dei chunk e' gia' su disco
+     * quando Unity parte: l'attesa residua (build dei chunk in Unity) e' coperta
+     * dall'overlay di caricamento che BridgeActivity mostra finche' Unity non
+     * segnala i chunk pronti (CityReady). */
+    private fun runMiacittaPreload(spawnLat: Double, spawnLng: Double) {
+        // Splash screen: immagine di sfondo con scrim scuro in basso e barra
+        // di progresso sovrapposta. center-crop cosi' si adatta sia a schermi
+        // verticali che orizzontali.
+        val splash = ImageView(this).apply {
+            setImageResource(R.drawable.splashscreen)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            layoutParams = FrameLayout.LayoutParams(LP_MW, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 2
+            isIndeterminate = false
+            layoutParams = LinearLayout.LayoutParams(LP_MW, dp(8))
+        }
+        val status = TextView(this).apply {
+            text = "Caricamento città…"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        }
+        val bytesText = TextView(this).apply {
+            text = ""
+            textSize = 12f
+            setTextColor(0xFFB0B0B0.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
+        }
+        val scrim = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(18), dp(24), dp(16))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0x00000000.toInt(), 0xCC000000.toInt())
+            ).apply { cornerRadius = dp(16).toFloat() }
+            addView(bar)
+            addView(status)
+            addView(bytesText)
+        }
+        val overlay = FrameLayout(this).apply {
+            addView(splash)
+            addView(scrim, FrameLayout.LayoutParams(LP_MW, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM))
+        }
+        val dialog = android.app.Dialog(this)
+        dialog.apply {
+            setCancelable(false)
+            setContentView(overlay)
+            window?.let { w ->
+                w.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
+                w.setLayout(LP_MW, ViewGroup.LayoutParams.MATCH_PARENT)
+            }
+        }
+        dialog.show()
+
+        val startTimeNs = System.nanoTime()
+        Thread {
+            // Preload sincrono della zona 3x3 attorno allo spawn scelto:
+            // notifica la fase + la tile corrente per aggiornare barra/messaggio.
+            val ok = com.intelligame.huntix.bridge.CityTilePreloader.preloadSync(
+                this,
+                center = Pair(spawnLat, spawnLng),
+                onPhase = { phase, current, total, bytes ->
+                    runOnUiThread {
+                        val perTile = 100 / total
+                        val progress = when (phase) {
+                            "cache", "tile" -> ((current - 1) * perTile).coerceIn(2, 100)
+                            "graph" -> (((current - 1) * perTile) + perTile / 3).coerceIn(2, 100)
+                            "geo" -> ((current) * perTile).coerceIn(2, 100)
+                            "done" -> 100
+                            else -> bar.progress
+                        }
+                        bar.progress = progress
+                        status.text = when (phase) {
+                            "cache" -> "Tile $current/$total già in cache"
+                            "graph" -> "Tile $current/$total: strade…"
+                            "geo" -> "Tile $current/$total: edifici (la prima volta richiede qualche minuto)…"
+                            "done" -> "Città pronta ✓"
+                            else -> "Tile $current/$total"
+                        }
+                        if (bytes > 0) {
+                            val elapsedSec = (System.nanoTime() - startTimeNs) / 1_000_000_000.0
+                            val speed = if (elapsedSec > 0.5) bytes / elapsedSec else 0.0
+                            val sb = StringBuilder(formatBytes(bytes) + " caricati")
+                            if (speed > 0) sb.append(" · ").append(formatSpeed(speed))
+                            bytesText.text = sb.toString()
+                        }
+                    }
+                }
+            )
+            runOnUiThread {
+                if (ok) { bar.progress = 100; status.text = "Città pronta ✓" }
+                dialog.dismiss()
+                miacittaLoading = false
+                Bridge.openUnityActivity(
+                    this@HomeActivity,
+                    BridgeActivity.MODE_MIACITTA,
+                    "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
+                )
+            }
+        }.start()
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes >= 1024L * 1024L) {
+            return String.format(java.util.Locale.ITALY, "%.1f MB", bytes / (1024.0 * 1024.0))
+        }
+        if (bytes >= 1024L) {
+            return String.format(java.util.Locale.ITALY, "%.0f KB", bytes / 1024.0)
+        }
+        return "$bytes B"
+    }
+
+    private fun formatSpeed(bytesPerSec: Double): String {
+        if (bytesPerSec >= 1024.0 * 1024.0) {
+            return String.format(java.util.Locale.ITALY, "%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
+        }
+        if (bytesPerSec >= 1024.0) {
+            return String.format(java.util.Locale.ITALY, "%.0f KB/s", bytesPerSec / 1024.0)
+        }
+        return String.format(java.util.Locale.ITALY, "%.0f B/s", bytesPerSec)
+    }
 
     companion object {
         private const val LP_MW = LinearLayout.LayoutParams.MATCH_PARENT

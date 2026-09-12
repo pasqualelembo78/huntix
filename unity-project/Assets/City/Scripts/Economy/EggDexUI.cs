@@ -20,10 +20,10 @@ namespace City.Economy
         private static readonly System.Collections.Generic.Dictionary<string, Color> RarityColors =
             new System.Collections.Generic.Dictionary<string, Color>
             {
-                { "Common", new Color(1f, 0.95f, 0.7f) },
-                { "Uncommon", new Color(0.4f, 0.9f, 0.4f) },
-                { "Rare", new Color(0.3f, 0.5f, 1f) },
-                { "Legendary", new Color(1f, 0.6f, 0.1f) },
+                { "Common", new Color(0f, 0.8f, 0.53f) },
+                { "Uncommon", new Color(0f, 0.71f, 1f) },
+                { "Rare", new Color(0.66f, 0.33f, 0.97f) },
+                { "Legendary", new Color(1f, 0.84f, 0f) },
             };
 
         public static void Toggle()

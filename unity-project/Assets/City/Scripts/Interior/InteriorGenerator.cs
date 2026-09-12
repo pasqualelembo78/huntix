@@ -15,9 +15,19 @@ namespace City.Interior
     public class InteriorGenerator : MonoBehaviour
     {
         private const float WALL_THICK = 0.2f;
+        // Shell in-place: altezze di porta/finestre (mondo, metro)
+        private const float SHELL_DOOR_H = 2.2f;
+        private const float SHELL_DOOR_W = 2.4f;
+        private const float SHELL_WIN_BASE = 0.85f;  // davanzale
+        private const float SHELL_WIN_TOP = 1.95f;   // architrave
 
-        private Dictionary<string, GameObject> _furnitureMap;
-        private bool _furnitureLoaded;
+        // Vero se l'interno e' costruito IN-PLACE dentro l'edificio reale
+        // (muri perimetrali del guscio gia' presenti). Sopprime i muri
+        // perimetrali per-piano e la porta piena (il varco e' reale nel guscio).
+        private bool _inPlace;
+
+        private static Dictionary<string, GameObject> _furnitureMap;
+        private static bool _furnitureLoaded;
 
         private static readonly Dictionary<string, string> FBX_NAME = new Dictionary<string, string>
         {
@@ -40,15 +50,103 @@ namespace City.Interior
         };
 
         // Materiali (colori semplici, nessuna dipendenza esterna)
-        private Material _wallMat;
-        private Material _floorMat;
-        private Material _ceilingMat;
-        private Material _woodMat;
-        private Material _darkMat;
-        private Material _glassMat;
-        private Material _tileMat;
-        private Material _shelfMat;
-        private Material _doorMat;
+        private static Material _wallMat;
+        private static Material _floorMat;
+        private static Material _ceilingMat;
+        private static Material _woodMat;
+        private static Material _darkMat;
+        private static Material _glassMat;
+        private static Material _tileMat;
+        private static Material _shelfMat;
+        private static Material _doorMat;
+
+        // Soffitto EMISSIVO degli interni in-place: brilla con costo zero così
+        // l'interno si intravede acceso anche da lontano (attraverso finestre/
+        // porta) senza richiedere luci reali sempre accese.
+        private static Material _glowMat;
+
+        /// <summary>True se il punto è ancora chiaramente DENTRO l'edificio (privo di
+        /// margini: nel footprint reale). World-space.</summary>
+        public bool DeepInside(Vector3 worldPos)
+        {
+            Vector3 local = transform.InverseTransformPoint(worldPos);
+            if (local.y < -0.5f || local.y > ShellH + 1f) return false;
+            return Mathf.Abs(local.x) < ShellW * 0.5f && Mathf.Abs(local.z) < ShellD * 0.5f;
+        }
+
+        // ── COSTRUZIONE LAZY (interni on-demand) ─────────────────────
+        // A build-time viene creato SOLO il guscio esterno (shell) con porta e
+        // finestre reali. L'interno (arredi, pavimenti, muri divisori) viene
+        // costruito quando il giocatore si avvicina all'edificio (ticker unico
+        // in InteriorManager). Così il chunk build è immediato e si paga solo
+        // gli interni che vengono davvero visitati.
+        private string _lazyType;
+        private float _lazyW, _lazyD, _lazyH;
+        private Shop _lazyShop;
+
+        /// <summary>True quando l'interno è già stato costruito.</summary>
+        public bool InteriorBuilt { get; private set; }
+
+        // ── GEOMETRIA GUSCIO (per l'entrata/uscita geometrica) ─────────
+        // InteriorManager usa contenimento XZ + quota per sapere SE il player
+        // è dentro l'edificio, senza dipendere dagli eventi dei trigger porta.
+        public float ShellW { get; private set; }
+        public float ShellD { get; private set; }
+        public float ShellH { get; private set; }
+
+        // ── Modalita' PREFAB (esterno Quaternius + interno reale) ──
+        // L'edificio e' un prefab pieno (kit Quaternius/Kenney): l'interno
+        // (pavimento, muri, arredi, luci) viene generato lazy DENTRO l'impronta
+        // e mostrato solo quando il player e' dentro; durante l'interno il
+        // prefab esterno viene nascosto. L'ingresso avviene con il fade dalla
+        // porta (BuildingEntrance), l'uscita dal trigger interno "USCITA".
+        private bool _prefabExterior;
+        private Transform _interiorRoot;
+        private Collider _prefabCollider;
+
+        /// <summary>Ingresso canonico dell'edificio (in-place, quello "dentro").
+        /// Impostato da BuildingPlacer dopo la creazione dei trigger porta.</summary>
+        public BuildingEntrance Entrance { get; private set; }
+        public void SetEntrance(BuildingEntrance e) { Entrance = e; }
+
+        /// <summary>Ancora in world-space sul lato della PORTA (+Z locale):
+        /// il ticker lazy misura la distanza da qui invece che dal centro, così
+        /// per gli edifici grandi l'interno viene costruito appena il player si
+        /// avvicina alla soglia (un edificio 60 m sarebbe a >30 m dal centro
+        /// anche stando sulla porta).</summary>
+        public Vector3 DoorAnchorWorld
+        {
+            get
+            {
+                Vector3 f = transform.forward;
+                return transform.position + f * (ShellD * 0.5f + 0.5f);
+            }
+        }
+
+        /// <summary>True se il punto gioca è dentro il volume del guscio
+        /// (XZ entro l'impronta, quota entro [0, shellH]). World-space.</summary>
+        public bool Contains(Vector3 worldPos)
+        {
+            if (ShellW <= 0f || ShellD <= 0f) return false;
+            Vector3 local = transform.InverseTransformPoint(worldPos);
+            if (local.y < -0.5f || local.y > ShellH + 1f) return false;
+            return Mathf.Abs(local.x) <= ShellW * 0.5f &&
+                   Mathf.Abs(local.z) <= ShellD * 0.5f;
+        }
+
+        /// <summary>Luce interna point dell'edificio (creata da BuildingPlacer).
+        /// Il ticker unico di InteriorManager la mantiene SEMPRE ACCESA
+        /// (niente toggle distanza → nessun cambiamento improvviso di
+        /// luminosità), sostituendo l'Update() per-edificio (costo N× per frame).</summary>
+        private Light _interiorLight;
+
+        public void AttachLight(Light l) { _interiorLight = l; }
+
+        public void SetLight(bool on)
+        {
+            if (_interiorLight != null && _interiorLight.enabled != on)
+                _interiorLight.enabled = on;
+        }
 
         private void EnsureMaterials()
         {
@@ -62,6 +160,7 @@ namespace City.Interior
             _tileMat = Lit(new Color(0.85f, 0.85f, 0.82f));
             _shelfMat = Lit(new Color(0.6f, 0.4f, 0.25f));
             _doorMat = Lit(new Color(0.18f, 0.14f, 0.10f));
+            _glowMat = LitEmissive(new Color(1f, 0.96f, 0.86f), new Color(0.75f, 0.7f, 0.6f));
         }
 
         private Material Lit(Color c)
@@ -81,6 +180,25 @@ namespace City.Interior
             return m;
         }
 
+        private Material LitEmissive(Color baseColor, Color emission)
+        {
+            var m = Lit(baseColor);
+            var shader = m.shader;
+            // URP: emissione tramite _EmissionColor + keyword _EMISSION;
+            // Standard: sola _EmissionColor (keyword gestita da GI).
+            if (shader != null && shader.name.StartsWith("Universal Render Pipeline"))
+            {
+                m.EnableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", emission);
+            }
+            else
+            {
+                m.SetColor("_EmissionColor", emission);
+                m.EnableKeyword("_EMISSION");
+            }
+            return m;
+        }
+
         /// <summary>
         /// Costruisce l'intero interno come figli di parent.
         /// Ogni piano è un GameObject "Floor_N" attivabile/disattivabile.
@@ -91,8 +209,11 @@ namespace City.Interior
             Log("BuildInterior: type=" + type + " size=" + extW + "x" + extD + "x" + extH + " floors=" + floors);
             EnsureMaterials();
 
-            float w = Mathf.Clamp(extW, 4f, 14f);
-            float d = Mathf.Clamp(extD, 4f, 14f);
+            // Impronta condivisa con il guscio: la dimensione REALE dell'edificio
+            // (minimo 4 m), così pavimento e arredi coprono l'intera impronta
+            // anche per i gusci grandi (fino a 60 m di lato).
+            float w = Mathf.Max(4f, extW);
+            float d = Mathf.Max(4f, extD);
             float floorH = 3f;
 
             switch (type)
@@ -114,6 +235,7 @@ namespace City.Interior
                     break;
                 case "repair":
                 case "garage":
+                case "fuel":
                     BuildWorkshop(parent, w, d, floorH, floors);
                     break;
                 case "bank":
@@ -132,7 +254,358 @@ namespace City.Interior
             Log("BuildInterior DONE");
         }
 
-        // ── Stair position (used by InteriorManager for floor transitions) ──
+        // ── GUSCIO IN-PLACE (edifici enterabili reali) ────────────────
+        // Costruisce l'edificio vero e proprio (muri perimetrali a tutta
+        // altezza con porta e finestre REALI) direttamente nella posizione
+        // del mondo, da cui il nome "in-place". L'interno (arredi) viene poi
+        // generato nello stesso vuoto. Niente teletrasporto: si entra
+        // attraversando la soglia della porta.
+
+        public void BuildInPlace(Transform parent, string type,
+            float w, float d, float extH, Shop shop)
+        {
+            EnsureMaterials();
+            _inPlace = true;
+            try
+            {
+                // Il guscio e l'interno devono condividere la stessa impronta:
+                // BuildInterior usa la dimensione reale (minimo 4 m), quindi qui
+                // facciamo lo stesso così il pavimento interno arriva fino ai
+                // muri del guscio (nessun vuoto sotto il perimetro).
+                w = Mathf.Max(4f, w);
+                d = Mathf.Max(4f, d);
+                float shellH = Mathf.Clamp(extH, 2.8f, 4.2f);
+                BuildShell(parent, w, d, shellH);
+                // Edificio in-place a PIANO UNICO (l'ingresso reale è a terra);
+                // i piani multipli restano per la vecchia modalità on-demand.
+                BuildInterior(parent, type, w, d, shellH, 1, shop);
+            }
+            finally
+            {
+                _inPlace = false;
+            }
+            InteriorBuilt = true;
+        }
+
+        /// <summary>Costruisce SOLO il guscio esterno (muri perimetrali, porta e
+        /// finestre reali, tetto). A differenza di BuildInPlace non genera gli
+        /// arredi: l'interno sarà costruito al primo avvicinamento del player.
+        /// Ritorna l'altezza del guscio effettivamente usata (clampata).</summary>
+        public float BuildShellOnly(Transform parent, float w, float d, float extH)
+        {
+            EnsureMaterials();
+            _inPlace = true;
+            try
+            {
+                // Impronta REALE dell'edificio (minimo 4 m, nessun cap: gli
+                // edifici fino a 60 m di lato sono enterabili in-place).
+                ShellW = Mathf.Max(4f, w);
+                ShellD = Mathf.Max(4f, d);
+                float shellH = Mathf.Clamp(extH, 2.8f, 4.2f);
+                ShellH = shellH;
+                BuildShell(parent, ShellW, ShellD, shellH);
+                return shellH;
+            }
+            finally
+            {
+                _inPlace = false;
+            }
+        }
+
+        /// <summary>Memorizza i parametri per la costruzione lazy dell'interno.
+        /// Deve essere chiamato dopo BuildShellOnly, sul genitore del guscio.</summary>
+        public void PrepareLazy(string type, float w, float d, float shellH, Shop shop)
+        {
+            _lazyType = type;
+            _lazyW = Mathf.Max(4f, w);
+            _lazyD = Mathf.Max(4f, d);
+            _lazyH = shellH;
+            _lazyShop = shop;
+        }
+
+        /// <summary>Costruisce l'interno lazy (arredi) ora, se non già fatto.
+        /// Invocato dal ticker di InteriorManager quando il player è vicino.</summary>
+        public void BuildInteriorNow()
+        {
+            if (InteriorBuilt) return;
+            InteriorBuilt = true;
+            // Modalita' PREFAB: l'interno genera i SUOI muri perimetrali e il
+            // trigger "USCITA" (via _inPlace=false). I gusci in-place invece
+            // non duplicano i muri (il guscio esterno e' gia' la struttura).
+            // Con i prefab l'arredo vive in un figlio contro-scalato
+            // (_interiorRoot) cosi' la scala non uniforme del prefab (che e'
+            // scalato sull'impronta OSM) non deforma pareti e arredi.
+            _inPlace = !_prefabExterior;
+            try
+            {
+                Transform dest = _prefabExterior && _interiorRoot != null ? _interiorRoot : transform;
+                BuildInterior(dest, _lazyType, _lazyW, _lazyD, _lazyH, 1, _lazyShop);
+                if (_prefabExterior)
+                    SetInteriorRootActive(false); // nascosto fin quando non si entra
+            }
+            finally
+            {
+                _inPlace = false;
+            }
+        }
+
+        /// <summary>Imposta questo generatore per un edificio PREFAB (esterno
+        /// Quaternius pieno, interno reale generato lazy dentro l'impronta).
+        /// Deve essere chiamato una sola volta, subito dopo il posizionamento
+        /// del prefab, con l'impronta OSM in metri reali.</summary>
+        public void PreparePrefabExterior(string type, float w, float d,
+            float shellH, Shop shop, Collider buildingCollider)
+        {
+            _prefabExterior = true;
+            ShellW = Mathf.Max(4f, w);
+            ShellD = Mathf.Max(4f, d);
+            ShellH = Mathf.Max(2.8f, shellH);
+            _lazyType = type;
+            _lazyW = ShellW;
+            _lazyD = ShellD;
+            _lazyH = ShellH;
+            _lazyShop = shop;
+            _prefabCollider = buildingCollider;
+
+            // Figlio contro-scalato: neutralizza la scala non uniforme del
+            // prefab. I builder interni ragionano gia' in metri reali, quindi
+            // _interiorRoot deve avere localToWorld = identita' (scala 1).
+            var inv = new GameObject("Interno");
+            inv.transform.SetParent(transform, false);
+            Vector3 lossy = transform.lossyScale;
+            inv.transform.localScale = new Vector3(
+                lossy.x != 0f ? 1f / lossy.x : 1f,
+                lossy.y != 0f ? 1f / lossy.y : 1f,
+                lossy.z != 0f ? 1f / lossy.z : 1f);
+            _interiorRoot = inv.transform;
+
+            // Luce interna: sotto _interiorRoot cosi' resta spenta/nascosta
+            // con l'interno (nessuna luce che filtra in strada col prefab).
+            var lightGo = new GameObject("LuceInterna");
+            lightGo.transform.SetParent(_interiorRoot, false);
+            lightGo.transform.localPosition = new Vector3(0f, Mathf.Max(1.8f, ShellH - 0.6f), 0f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.96f, 0.85f);
+            light.intensity = 0.9f;
+            light.range = Mathf.Max(ShellW, ShellD) * 0.7f;
+            light.enabled = false;
+            AttachLight(light);
+        }
+
+        public bool IsPrefabExterior
+        {
+            get { return _prefabExterior; }
+        }
+
+        /// <summary>Punto interno della soglia: poco dentro la porta.</summary>
+        public Vector3 PrefabEnterLocal
+        {
+            get { return new Vector3(0f, 1f, ShellD * 0.5f - 1.3f); }
+        }
+
+        /// <summary>Punto esterno di uscita: poco oltre la porta (fuori).</summary>
+        public Vector3 PrefabExitLocal
+        {
+            get { return new Vector3(0f, 1f, ShellD * 0.5f + 1.6f); }
+        }
+
+        /// <summary>Mostra l'esterno (prefab + segnaposto porta) e nasconde
+        /// l'interno, oppure (show=false) nasconde l'esterno e mostra l'interno
+        /// (utile mentre il player e' dentro l'edificio).</summary>
+        public void SetPrefabExteriorVisible(bool show)
+        {
+            SetInteriorRootActive(!show);
+            var rends = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rends.Length; i++)
+            {
+                if (_interiorRoot != null && rends[i].transform.IsChildOf(_interiorRoot)) continue;
+                rends[i].enabled = show;
+            }
+            if (_prefabCollider != null) _prefabCollider.enabled = show;
+        }
+
+        private void SetInteriorRootActive(bool on)
+        {
+            if (_interiorRoot != null && _interiorRoot.gameObject.activeSelf != on)
+                _interiorRoot.gameObject.SetActive(on);
+        }
+
+        /// <summary>Radice dell'interno in-place (oggetto Interno), usata
+        /// per rilevare gli arredi interattivi (letti, divani...).</summary>
+        public Transform InteriorRoot { get { return _interiorRoot; } }
+
+        // Registrazione/rimozione dalla coda lazy di InteriorManager. OnEnable
+        // registra, OnDisable rimuove (chunk scaricato → edificio distrutto →
+        // si pulisce da solo, niente riferimenti pendenti).
+        private void OnEnable()
+        {
+            var m = InteriorManager.Instance;
+            if (m != null) m.RegisterInterior(this);
+        }
+
+        private void OnDisable()
+        {
+            var m = InteriorManager.Instance;
+            if (m != null) m.UnregisterInterior(this);
+        }
+
+        /// <summary>Costruisce il guscio perimetrale: 4 muri a tutta altezza
+        /// con aperture reali (porta frontale + finestre sui 4 lati) e tetto.
+        /// Coordinate locali centrate sull'impronta w×d.</summary>
+        private void BuildShell(Transform parent, float w, float d, float shellH)
+        {
+            float halfW = w * 0.5f;
+            float halfD = d * 0.5f;
+            float thick = WALL_THICK;
+
+            // Muro posteriore (z = -halfD), lunga w, 2 finestre
+            BuildWindowedWall(parent, w, new Vector3(0f, 0f, -halfD),
+                Vector3.forward, thick, shellH, windows: 2, needDoor: false);
+            // Muro frontale (z = +halfD), lunga w, porta centrale + 2 finestre
+            BuildWindowedWall(parent, w, new Vector3(0f, 0f, halfD),
+                Vector3.forward, thick, shellH, windows: 2, needDoor: true);
+            // Muro sinistro (x = -halfW), lunga d, 1 finestra
+            BuildWindowedWall(parent, d, new Vector3(-halfW, 0f, 0f),
+                Vector3.right, thick, shellH, windows: 1, needDoor: false);
+            // Muro destro (x = +halfW), lunga d, 1 finestra
+            BuildWindowedWall(parent, d, new Vector3(halfW, 0f, 0f),
+                Vector3.right, thick, shellH, windows: 1, needDoor: false);
+
+            // Tetto (lastricato opaco, conserva collider per nome "Soffitto").
+            // In URP il materiale EMISSIVO fa brillare il volume interno anche
+            // senza luci: visibile dall'esterno attraverso finestre/porta.
+            // Lastra a tutta impronta con un piccolo aggetto (eave): da strada
+            // e dall'alto l'edificio si legge come COPERTO (tetto vero) e non
+            // come scatola scavata aperta.
+            float roofOver = Mathf.Min(0.40f, Mathf.Max(0.15f, (w + d) * 0.03f));
+            Box(parent, "Soffitto", new Vector3(0f, shellH + 0.05f, 0f),
+                new Vector3(w + thick + roofOver * 2f, 0.30f,
+                    d + thick + roofOver * 2f), _ceilingMat);
+
+            // Pannello soffitto EMISSIVO appena sotto il tetto: illumina l'area
+            // interna (respiro visivo) a costo quasi zero.
+            Box(parent, "GlowCeiling", new Vector3(0f, shellH - 0.25f, 0f),
+                new Vector3(w * 0.9f, 0.05f, d * 0.9f), _glowMat);
+        }
+
+        /// <summary>
+        /// Costruisce un muro perimetrale pieno con aperture rettangolari reali.
+        /// axis: verso in cui si estende la lunghezza del muro (forward per i
+        /// muri a ±Z, right per quelli a ±X). needDoor: apre un varco centrale
+        /// a terra largo quanto una porta. Le finestre sono varchi a mezza
+        /// altezza (fra davanzale e architrave) delimitati da pilastri pieni
+        /// laterali; la porta è un varco completo a terra con architrave sopra.
+        /// I varchi restano APERTI (niente collider) così dall'esterno si vede
+        /// l'interno e viceversa.
+        /// </summary>
+        private void BuildWindowedWall(Transform parent, float length,
+            Vector3 center, Vector3 axis, float thick, float shellH,
+            int windows, bool needDoor)
+        {
+            bool alongX = Mathf.Abs(axis.x) > 0.5f;
+            float half = length * 0.5f;
+            float winW = Mathf.Min(1.8f, length * 0.22f);
+
+            // Varchi lungo l'asse: (lo, hi, isDoor). Serve per poi costruire
+            // pilastri pieni tra i varchi e davanzale/architrave per ogni varco.
+            var gaps = new List<(float, float, bool)>();
+            if (needDoor)
+            {
+                float doorHalf = SHELL_DOOR_W * 0.5f;
+                gaps.Add((-doorHalf, doorHalf, true));
+            }
+            float winHalf = winW * 0.5f;
+            for (int i = 0; i < windows; i++)
+            {
+                float c = (i + 1) * length / (windows + 1f) - half;
+                if (needDoor && Mathf.Abs(c) < SHELL_DOOR_W) continue;
+                gaps.Add((c - winHalf, c + winHalf, false));
+            }
+
+            gaps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+
+            // Pilastri pieni (a tutta altezza) tra i varchi e ai bordi.
+            float start = -half;
+            for (int g = 0; g < gaps.Count; g++)
+            {
+                float lo = gaps[g].Item1;
+                if (lo > start + 0.05f)
+                {
+                    float segLen = lo - start;
+                    float segCenter = (start + lo) * 0.5f;
+                    AddSolidWall(parent, alongX, center, segCenter, segLen,
+                        thick, shellH);
+                }
+                start = gaps[g].Item2 > start ? gaps[g].Item2 : start;
+            }
+            if (start < half - 0.05f)
+            {
+                float segLen = half - start;
+                float segCenter = (start + half) * 0.5f;
+                AddSolidWall(parent, alongX, center, segCenter, segLen,
+                    thick, shellH);
+            }
+
+            // Per ogni varco: davanzale + architrave (finestre) oppure solo
+            // architrave (porta, aperto a terra).
+            foreach (var gap in gaps)
+            {
+                float lo = gap.Item1;
+                float hi = gap.Item2;
+                float mid = (lo + hi) * 0.5f;
+                float w2 = (hi - lo) * 0.5f;
+
+                if (gap.Item3) // porta: architrave sopra SHELL_DOOR_H
+                {
+                    float above = shellH - SHELL_DOOR_H;
+                    if (above > 0.05f)
+                        AddSolidWallBand(parent, alongX, center, mid, w2,
+                            SHELL_DOOR_H + above * 0.5f, above, thick);
+                }
+                else // finestra: davanzale sopra e architrave sotto, varco a metà
+                {
+                    float sillH = SHELL_WIN_BASE;
+                    if (sillH > 0.05f)
+                        AddSolidWallBand(parent, alongX, center, mid, w2,
+                            sillH * 0.5f, sillH, thick);
+                    float topThick = shellH - SHELL_WIN_TOP;
+                    if (topThick > 0.05f)
+                        AddSolidWallBand(parent, alongX, center, mid, w2,
+                            SHELL_WIN_TOP + topThick * 0.5f, topThick, thick);
+                }
+            }
+        }
+
+        /// <summary>Segmento di muro a tutta altezza (pilastro / bordo).</summary>
+        private void AddSolidWall(Transform parent, bool alongX, Vector3 center,
+            float segCenter, float segLen, float thick, float shellH)
+        {
+            if (segLen <= 0.01f) return;
+            Vector3 pos = alongX
+                ? new Vector3(center.x + segCenter, shellH * 0.5f, center.z)
+                : new Vector3(center.x, shellH * 0.5f, center.z + segCenter);
+            Vector3 scale = alongX
+                ? new Vector3(segLen, shellH, thick)
+                : new Vector3(thick, shellH, segLen);
+            Box(parent, "MuroShell", pos, scale, _wallMat);
+        }
+
+        /// <summary>Fascia di muro piena con altezza bandH centrata su bandY
+        /// (davanzali e architravi sopra/sotto i varchi).</summary>
+        private void AddSolidWallBand(Transform parent, bool alongX, Vector3 center,
+            float segCenter, float halfLen, float bandY, float bandH, float thick)
+        {
+            if (bandH <= 0.01f) return;
+            Vector3 pos = alongX
+                ? new Vector3(center.x + segCenter, bandY, center.z)
+                : new Vector3(center.x, bandY, center.z + segCenter);
+            Vector3 scale = alongX
+                ? new Vector3(halfLen * 2f, bandH, thick)
+                : new Vector3(thick, bandH, halfLen * 2f);
+            Box(parent, "MuroShell", pos, scale, _wallMat);
+        }
+
 
         public Vector3 GetStairPosition(Transform interiorRoot, int floor)
         {
@@ -1003,6 +1476,11 @@ namespace City.Interior
 
         private void BuildWalls(Transform floorGo, float w, float d, float floorH, float yBase, bool withDoorGap)
         {
+            // In-place: i muri perimetrali sono gia' costruiti dal guscio
+            // (BuildShell), completo di porte e finestre reali. Niente muri
+            // per-piano, altrimenti chiuderebbero le viste.
+            if (_inPlace) return;
+
             float ht = floorH * 0.5f;
             float wallY = yBase + ht;
             float halfW = w * 0.5f;
@@ -1025,12 +1503,15 @@ namespace City.Interior
             if (withDoorGap)
             {
                 // Lato sinistro del muro frontale
-                Box(floorGo, "MuroS1", new Vector3(-halfW * 0.55f, wallY, halfD),
-                    new Vector3(halfW * 0.85f, floorH, thick), _wallMat);
+                // Larghezza muro ridotta e baricentro spostato verso gli
+                // spigoli: il varco della porta passa da 0.25*halfW a 0.60*halfW
+                // (0.30*w) per lasciar passare la capsula del player (r=0.5).
+                Box(floorGo, "MuroS1", new Vector3(-halfW * 0.65f, wallY, halfD),
+                    new Vector3(halfW * 0.70f, floorH, thick), _wallMat);
 
                 // Lato destro del muro frontale
-                Box(floorGo, "MuroS2", new Vector3(halfW * 0.55f, wallY, halfD),
-                    new Vector3(halfW * 0.85f, floorH, thick), _wallMat);
+                Box(floorGo, "MuroS2", new Vector3(halfW * 0.65f, wallY, halfD),
+                    new Vector3(halfW * 0.70f, floorH, thick), _wallMat);
 
                 // Finestra sopra la porta
                 Box(floorGo, "Finestra", new Vector3(0f, yBase + floorH * 0.75f, halfD),
@@ -1090,13 +1571,18 @@ namespace City.Interior
 
         private void BuildExitTrigger(Transform floorGo, float w, float d, float yBase)
         {
+            // In-place: l'uscita è gestita fisicamente dal varco della porta
+            // (BuildingEntrance.PortaFuori) e dal pulsante ESCI. L'ExitTrigger
+            // "USCITA" sarebbe ridondante proprio sulla soglia, quindi si omette.
+            if (_inPlace) return;
+
             var exitGo = new GameObject("ExitTrigger");
             exitGo.transform.SetParent(floorGo.transform, false);
-            exitGo.transform.localPosition = new Vector3(0f, yBase + 1f, d * 0.5f + 0.5f);
+            exitGo.transform.localPosition = new Vector3(0f, yBase + 1f, d * 0.5f);
 
             var col = exitGo.AddComponent<BoxCollider>();
             col.isTrigger = true;
-            col.size = new Vector3(2f, 2.5f, 1f);
+            col.size = new Vector3(2f, 2.5f, 2f);
 
             exitGo.AddComponent<ExitTrigger>();
         }
@@ -1105,6 +1591,18 @@ namespace City.Interior
 
         private void Box(Transform parent, string name, Vector3 center, Vector3 scale, Material mat)
         {
+            // In-place: la porta d'ingresso e' un varco REALE nel guscio
+            // (aperto), quindi non deve essere riempita dal parallelepipedo
+            // pieno che i builder interni piazzavano sulla soglia.
+            if (_inPlace && name.StartsWith("PortaIngresso"))
+                return;
+            // In-place: la "Vetrina" del negozio è un pannello a tutta larghezza
+            // posto esattamente sulla soglia della porta reale (z=d*0.49): il
+            // suo collider (glass) bloccherebbe l'ingresso. Il guscio ha già le
+            // aperture reali, quindi la vetrina interna è ridondante e va tolta.
+            if (_inPlace && name == "Vetrina")
+                return;
+
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
             go.transform.SetParent(parent, false);

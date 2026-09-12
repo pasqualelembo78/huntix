@@ -52,8 +52,7 @@ namespace City.Vehicle.Traffic
                 var wp = graph.BuildWaypointsForArc(arcId, reverse);
 
                 float offset = Mathf.Min(arc.width * LANE_OFFSET_FACTOR, MAX_OFFSET);
-                bool italianTraffic = !reverse;
-                var offsetWp = ApplyLaneOffset(wp, offset, italianTraffic);
+                var offsetWp = ApplyLaneOffset(wp, offset);
 
                 offsetWp = ClampToRoadEdges(offsetWp, arc.width);
 
@@ -168,8 +167,16 @@ namespace City.Vehicle.Traffic
             return gates.ToArray();
         }
 
-        private static Vector3[] ApplyLaneOffset(Vector3[] waypoints, float offset,
-            bool rightHandTraffic)
+        /// <summary>
+        /// Sposta i waypoint della corsia di marcia: in Unity il lato destro
+        /// di una direzione di viaggio e' Cross(up, dir), quindi offsettare
+        /// SEMPRE di +right*offset mette ogni corrente sulla propria corsia
+        /// destra (guida a destra) indipendentemente dal verso dell'arco.
+        /// Il vecchio sign legato a reverse (=Cross(up,-D0)*sign con segno
+        /// flip) portava ENTRAMBE le correnti sullo stesso lato della strada
+        /// (corsie sovrapposte): la doppia negazione si elideva.
+        /// </summary>
+        private static Vector3[] ApplyLaneOffset(Vector3[] waypoints, float offset)
         {
             if (waypoints.Length < 2) return waypoints;
 
@@ -190,8 +197,7 @@ namespace City.Vehicle.Traffic
 
                 Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
 
-                float sign = rightHandTraffic ? -1f : 1f;
-                result[i] = waypoints[i] + right * (offset * sign);
+                result[i] = waypoints[i] + right * offset;
             }
             return result;
         }

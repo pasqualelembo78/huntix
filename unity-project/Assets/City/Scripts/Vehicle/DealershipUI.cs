@@ -220,8 +220,40 @@ namespace City.Vehicle
                         .ToString("X") + seq.ToString("X");
             }
 
-            GeoCoord g = WorldOrigin.ToGeo(zone.deliveryPoint.position);
-            float heading = zone.deliveryPoint.eulerAngles.y;
+            // Trova il nodo stradale piu' vicino alla concessionaria per
+            // far spawnare l'auto SULLA STRADA (non nel piazzale).
+            var roadNet = City.Vehicle.Traffic.TileRoadNetwork.Instance;
+            Vector3 spawnPos;
+            float spawnHeading;
+            if (roadNet != null && roadNet.Graph != null && roadNet.Graph.nodes.Count > 0)
+            {
+                int nodeId = roadNet.Graph.FindClosestNode(zone.transform.position);
+                var node = roadNet.Graph.nodeMap[nodeId];
+                spawnPos = node.position;
+                // orienta l'auto lungo l'arco uscente (o entrante se non ce n'e')
+                int arcId = node.arcIds.Count > 0 ? node.arcIds[0] : -1;
+                if (arcId >= 0 && roadNet.Graph.arcMap.TryGetValue(arcId, out var arc)
+                    && arc.waypoints.Length >= 2)
+                {
+                    Vector3 dir = arc.waypoints[1] - arc.waypoints[0];
+                    spawnHeading = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+                }
+                else
+                {
+                    spawnHeading = zone.transform.eulerAngles.y;
+                }
+                // usiamo il deliveryPoint solo come riferimento per l'offset Y
+                // (il nodo stradale e' gia' a quota terra)
+            }
+            else
+            {
+                // fallback: usa il deliveryPoint
+                spawnPos = zone.deliveryPoint != null ? zone.deliveryPoint.position : zone.transform.position;
+                spawnHeading = zone.deliveryPoint != null ? zone.deliveryPoint.eulerAngles.y : zone.transform.eulerAngles.y;
+            }
+
+            GeoCoord g = WorldOrigin.ToGeo(spawnPos);
+            float heading = spawnHeading;
 
             var api = VehicleOwnershipApi.Ensure();
             api.Buy(code, (ok, err) =>
@@ -237,16 +269,26 @@ namespace City.Vehicle
                 api.MarkOwned(code, g.lat, g.lng, heading);
                 api.SetLocalState(code, def.name, def.price);
 
-                // consegna: l'auto nasce sul piazzale
+                // consegna: l'auto nasce SULLA STRADA davanti alla concessionaria
                 var delivered = VehicleSpawnManager.BuildVehicle(
-                    zone.deliveryPoint, def, Vector3.zero, heading, code);
+                    null, def, spawnPos, heading, code);
                 api.ApplyOwnedState(delivered, code);
+                // Blocca il doppione: il popolatore a chunk salta i veicoli
+                // gia' materializzati, ma la consegna non lo registrava ->
+                // copia doppia sul piazzale al rebuild del chunk.
+                VehicleSpawnManager.RegisterActiveOwned(code, delivered);
+
+                // Indicatore visivo: segnalino arancione lampeggiante sopra l'auto
+                // cosi' il giocatore vede subito dove e' finita la macchina.
+                if (delivered != null)
+                {
+                    SpawnDeliveryMarker(delivered.transform, def.name);
+                }
 
                 buyPending = false;
                 Close();
 
                 // freccia rossa della bussola verso l'auto appena consegnata:
-                // il piazzale e' grande, si capisce subito dove sta
                 var vi = delivered != null
                     ? delivered.GetComponentInChildren<VehicleInteract>() : null;
                 if (vi != null) vi.NotifyStateChanged();
@@ -267,6 +309,38 @@ namespace City.Vehicle
         {
             if (City.UI.UIManager.Instance != null)
                 City.UI.UIManager.Instance.ShowToast(msg);
+        }
+
+        /// <summary>Crea un indicatore visivo (sfera arancione pulsante)
+        /// sopra il veicolo appena consegnato, per aiutare il giocatore
+        /// a trovarlo sulla strada. Dura 15 secondi.</summary>
+        private void SpawnDeliveryMarker(Transform vehicleRoot, string vehicleName)
+        {
+            var marker = new GameObject("DeliveryMarker_" + vehicleName);
+            marker.transform.SetParent(vehicleRoot, false);
+            marker.transform.localPosition = new Vector3(0f, 3.5f, 0f);
+
+            // Sfera arancione come segnalino (solo API stubbed)
+            var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            sphere.transform.SetParent(marker.transform, false);
+            sphere.transform.localScale = Vector3.one * 0.6f;
+            var mr = sphere.GetComponent<MeshRenderer>();
+            if (mr != null)
+            {
+                var mat = new Material(Shader.Find("Sprites/Default"));
+                mat.color = new Color(1f, 0.55f, 0f, 0.9f); // arancione
+                mr.material = mat;
+            }
+            // Rimuovi collider della primitiva
+            var col = sphere.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+
+            // Animazione: pulsa e ruota
+            var anim = marker.AddComponent<DeliveryMarkerAnimator>();
+            anim.vehicleName = vehicleName;
+
+            // Auto-distruzione dopo 15 secondi
+            Destroy(marker, 15f);
         }
 
         // ── costruzione pannello runtime ───────────────────────────
@@ -382,5 +456,28 @@ namespace City.Vehicle
             text.raycastTarget = false;
             return text;
         }
+
+    /// <summary>Animatore per il marker di consegna: pulsa, ruota,
+    /// e mostra il nome del veicolo via click.</summary>
+    private class DeliveryMarkerAnimator : MonoBehaviour
+    {
+        public string vehicleName;
+        private float _pulseT;
+
+        private void Update()
+        {
+            _pulseT += Time.unscaledDeltaTime * 3f;
+            float scale = 1f + Mathf.Sin(_pulseT) * 0.15f;
+            transform.localScale = Vector3.one * scale;
+            transform.Rotate(0f, Time.unscaledDeltaTime * 60f, 0f);
+        }
+
+        private void OnMouseDown()
+        {
+            if (City.UI.UIManager.Instance != null)
+                City.UI.UIManager.Instance.ShowToast(
+                    "La tua " + vehicleName + " e' qui!");
+        }
     }
+}
 }

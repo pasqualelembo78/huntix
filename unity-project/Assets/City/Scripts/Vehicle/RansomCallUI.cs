@@ -52,7 +52,7 @@ namespace City.Vehicle
             if (Instance == null) return;   // solo toast, senza pannello
             if (City.UI.UIManager.Instance != null)
                 City.UI.UIManager.Instance.ShowToast(
-                    "\uD83D\uDC8C POLIZIA: la tua " + model +
+                    "POLIZIA: la tua " + model +
                     " \u00e8 stata ritrovata abbandonata! Vai a riprenderla.");
         }
 
@@ -65,7 +65,7 @@ namespace City.Vehicle
         private void ShowCall(string model, int ransom, double deadlineEpoch)
         {
             if (panel == null) BuildPanel();
-            titleText.text = "\uD83D\uDCDE CHIAMATA IN ARRIVO";
+            titleText.text = "CHIAMATA IN ARRIVO";
             double hoursLeft = System.Math.Max(0.0,
                 (deadlineEpoch - UtilityNow()) / 3600.0);
             bodyText.text =

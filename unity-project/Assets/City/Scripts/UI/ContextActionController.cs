@@ -28,6 +28,17 @@ namespace City.UI
 
         private const float ProbeRadius = 3.5f;
 
+        /// <summary>
+        /// "CENTRA GPS" e' un residuo del vecchio flusso: ri-centra l'origine del
+        /// mondo chunked sul GPS del dispositivo (CityChunkedWorld.Teleport),
+        /// violando la regola "il GPS non si usa MAI". In gioco si e' tradotto in
+        /// un ritorno automatico al punto di partenza: il giocatore viene portato
+        /// a (0,0,0) = origine mondo coincidente col GPS/spawn. La voce resta
+        /// quindi nascosta in produzione; riattivabile SOLO nei build DEV per le
+        /// prove di allineamento della mappa.
+        /// </summary>
+        private const bool ShowCenterGpsInMenu = false;
+
         /// <summary>Assicura che il controller esista in scena.</summary>
         public static void Ensure()
         {
@@ -100,6 +111,8 @@ namespace City.UI
         public string PrimaryLabel()
         {
             Game g = Game.Instance;
+            // In guida il pulsante centrale diventa l'uscita dall'auto.
+            if (g != null && g.IsDriving) return "ESCI";
             bool interior = g != null && g.IsInInterior;
             if (!interior && g != null && g.CurrentMissionNPC != null)
                 return "PARLA";
@@ -120,6 +133,25 @@ namespace City.UI
                 return "APRI PORTA";
             if (NearPackage())
                 return CurrentJobAction();
+            if (g != null && g.IsInInterior)
+            {
+                if (City.Environment.FurnitureInteract.NearBedTransform != null)
+                    return "DORMI";
+                if (City.Environment.FurnitureInteract.NearSitTransform != null)
+                    return "SEDUTI";
+            }
+            if (g != null && g.CurrentEntrance != null &&
+                g.CurrentEntrance.buildingType == "house")
+            {
+                Vector3 doorPos = g.CurrentEntrance.transform.position;
+                if (City.Environment.HomeSystem.IsThisHome(doorPos))
+                {
+                    if (City.Environment.HomeSystem.HasCarParked)
+                        return "RITIRA AUTO";
+                    return "VENDI CASA";
+                }
+                return "COMPRA CASA";
+            }
             return "AZIONI";
         }
 
@@ -129,6 +161,16 @@ namespace City.UI
             outList.Clear();
             Game g = Game.Instance;
             bool interior = g != null && g.IsInInterior;
+
+            // In guida l'UNICA azione contestuale e' uscire dall'auto: evita
+            // anche che compaia "SALI IN AUTO" (il focus del veicolo resta
+            // attivo) che, toccato mentre si guida, causava una
+            // NullReferenceException su CurrentVehicleFocus.controller.
+            if (g != null && g.IsDriving)
+            {
+                outList.Add(Make("ESCI DALL'AUTO", () => g.ExitVehicle()));
+                return;
+            }
 
             if (interior)
             {
@@ -163,9 +205,15 @@ namespace City.UI
                     () => DoBeFostered()));
 
             if (g != null && g.CurrentVehicleFocus != null &&
-                g.CurrentVehicleFocus.IsOwned())
+                g.CurrentVehicleFocus.IsOwned() &&
+                g.CurrentVehicleFocus.controller != null)
+            {
+                // cattura un riferimento stabile (non ri-leggere CurrentVehicleFocus
+                // a tap avvenuto: poteva essere diventato null e causare NRE)
+                var enteredVc = g.CurrentVehicleFocus.controller;
                 outList.Add(Make("SALI IN AUTO",
-                    () => g.EnterVehicle(g.CurrentVehicleFocus.controller)));
+                    () => g.EnterVehicle(enteredVc)));
+            }
 
             if (g != null && g.CurrentPoiZone != null)
                 outList.Add(Make("NEGOZIO", () => g.CurrentPoiZone.Interact()));
@@ -176,15 +224,44 @@ namespace City.UI
                 outList.Add(Make("BUSSA", () => KnockDoor()));
             }
 
+            // Casa propria / compravendita + garage personale (livello 4)
+            if (g != null && g.CurrentEntrance != null &&
+                g.CurrentEntrance.buildingType == "house")
+            {
+                Vector3 doorPos = g.CurrentEntrance.transform.position;
+                string doorName = g.CurrentEntrance.buildingName;
+                if (City.Environment.HomeSystem.IsThisHome(doorPos))
+                {
+                    if (City.Environment.HomeSystem.HasCarParked)
+                        outList.Add(Make("RITIRA AUTO",
+                            () => City.Environment.HomeSystem.Retrieve(doorPos)));
+                    outList.Add(Make("VENDI CASA",
+                        () => City.Environment.HomeSystem.Sell(doorPos)));
+                    var vf = g.CurrentVehicleFocus;
+                    if (vf != null && vf.IsOwned() && vf.controller != null &&
+                        !vf.controller.IsJobVehicle)
+                        outList.Add(Make("PARCHEGGIA IN GARAGE",
+                            () => City.Environment.HomeSystem.Park(vf.controller, vf.vehicleCode)));
+                }
+                else
+                {
+                    outList.Add(Make("COMPRA CASA",
+                        () => City.Environment.HomeSystem.Buy(doorName, doorPos)));
+                }
+            }
+
             if (NearPackage())
             {
                 outList.Add(Make(CurrentJobAction(), () => DoPackageAction()));
-                outList.Add(Make("BUTTA", () => DoPackageAction()));
+                outList.Add(Make("⚫ BUTTA", () => City.Economy.JobManager.TriggerPackageDiscard()));
                 outList.Add(Make("SBIRCIA", () => PeekPackage()));
             }
 
             if (outList.Count == 0)
             {
+                // nascosto in produzione: vedi ShowCenterGpsInMenu
+                if (ShowCenterGpsInMenu)
+                    outList.Add(Make("CENTRA GPS", () => DoCenterGps()));
                 outList.Add(Make("\ud83d\udc80 MORI", () => DoDie()));
                 outList.Add(Make("SALTO", () => DoJump()));
                 outList.Add(Make("FISCHIO", WhistleTaxi));
@@ -246,6 +323,12 @@ namespace City.UI
 
         private void AddInteriorActions(List<Action> outList)
         {
+            if (City.Environment.FurnitureInteract.NearBedTransform != null)
+                outList.Add(Make("DORMI",
+                    () => City.Environment.FurnitureInteract.StartSleep()));
+            else if (City.Environment.FurnitureInteract.NearSitTransform != null)
+                outList.Add(Make("SEDUTI",
+                    () => City.Environment.FurnitureInteract.SitOnNearest()));
             outList.Add(Make("FISCHIO", WhistleTaxi));
             outList.Add(Make("SALTO", () => DoJump()));
         }
@@ -523,12 +606,45 @@ namespace City.UI
                 g.ui.ShowToast("Scatole impilate. Non si vede cosa c e dentro.");
         }
 
-        private void DoDie()
+        private void ShowToast(string msg)
         {
             Game g = Game.Instance;
-            City.NPC.FamilyManager.Die(City.NPC.FamilyManager.DeathType.INCIDENTE);
-            if (g != null && g.ui != null)
-                g.ui.ShowToast("\ud83d\udc80 Scegli di morire. Fine di questa vita...");
+            if (g != null && g.ui != null) g.ui.ShowToast(msg);
+        }
+
+        private void DoCenterGps()
+        {
+            var mgr = City.OSM.CityChunkedWorld.Instance;
+            if (mgr == null) { ShowToast("Mappa non disponibile"); return; }
+            var loc = Huntix.Bridge.UnityBridge.GetCurrentLocation();
+            if (string.IsNullOrEmpty(loc)) { ShowToast("GPS non disponibile"); return; }
+            try
+            {
+                var json = loc;
+                var latMatch = System.Text.RegularExpressions.Regex.Match(json, @"""lat""\s*:\s*(-?[0-9.eE+-]+)");
+                var lngMatch = System.Text.RegularExpressions.Regex.Match(json, @"""lng""\s*:\s*(-?[0-9.eE+-]+)");
+                if (latMatch.Success && lngMatch.Success &&
+                    double.TryParse(latMatch.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double lat) &&
+                    double.TryParse(lngMatch.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double lng))
+                {
+                    mgr.Teleport(lat, lng);
+                    ShowToast("Mappa centrata sulla tua posizione GPS");
+                }
+                else ShowToast("Coordinate GPS non valide");
+            }
+            catch { ShowToast("Errore lettura GPS"); }
+        }
+
+        private void DoDie()
+        {
+            // Nuovo flusso di morte: si mostra il menu di scelta della
+            // modalita' (investito, sparato, pestato, caduta), si esegue la
+            // morte scenica e infine la schermata "reincarnati o Afterlife".
+            if (City.Death.DeathDirector.Instance == null)
+                return;
+            City.Death.DeathDirector.Instance.Begin();
         }
 
         private void ReincarnateNow()

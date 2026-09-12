@@ -1,4 +1,6 @@
 using UnityEngine;
+using City.Vehicle.Mechanics;
+using City.OSM;
 
 namespace City.Vehicle
 {
@@ -38,6 +40,44 @@ namespace City.Vehicle
         public bool IsDriving { get; private set; }
         public VehicleDamage Damage { get; private set; }
 
+        /// <summary>HP del veicolo 0-100 (integrita'): scende coi danni da
+        /// impatto (per zona). A 0% l'auto e' devastata e non parte piu',
+        /// serve il carro attrezzi (officina o recupero).</summary>
+        public float Integrity { get; private set; } = 100f;
+
+        /// <summary>Danno percentuale per zona della carrozzeria/meccanica
+        /// (sospensioni/carrozzeria/paraurti). Sorgente della riparazione
+        /// per zona in officina.</summary>
+        public readonly System.Collections.Generic.Dictionary<string, float>
+            ZoneDamage = new System.Collections.Generic.Dictionary<string, float>
+            { { "suspension", 0f }, { "bodywork", 0f }, { "bumper", 0f } };
+
+        /// <summary>
+        /// Strato FINE di danno: singole parti meccaniche (motore, cambio,
+        /// giunto/cardano, differenziale, sospensioni, ammortizzatori, freni,
+        /// gomme, sterzo, serbatoio, radiatori, olio, telaio, carrozzeria,
+        /// paraurti, batteria, elettrico, scarico). Integra il danno per zona:
+        /// un urto colpisce LA parte esatta nel punto d'impatto oltre alla zona.
+        /// Se null, il veicolo è trattato col vecchio sistema a sole zone.
+        /// </summary>
+        [Tooltip("Sistema di danno per singola parte meccanica")]
+        public VehiclePartDamageSystem damageSystem;
+
+        public bool HasPartDamage { get { return damageSystem != null; } }
+
+        /// <summary>Effetto (0..1) di una parte sul comportamento di guida.</summary>
+        public float PartEffect(VehiclePartType type)
+        {
+            return damageSystem != null ? damageSystem.GetEffectFactor(type) : 1f;
+        }
+
+        /// <summary>Inizializza il sistema di parti con lo schema standard auto.</summary>
+        public void SetupStandardPartDamage(string label = "Auto")
+        {
+            if (damageSystem == null) damageSystem = new VehiclePartDamageSystem();
+            damageSystem.SetupStandardCar(label);
+        }
+
         /// <summary>Auto temporanea di un lavoro (es. taxi del Tassista):
         /// non e di proprieta, ma si puo salire e guidare per il lavoro.</summary>
         public bool IsJobVehicle { get; private set; }
@@ -50,13 +90,55 @@ namespace City.Vehicle
         /// <summary>Comodita' per il codice esistente: gomma a terra.</summary>
         public bool FlatTire { get { return Damage == VehicleDamage.Flat; } }
 
-        // Soglie di impatto (m/s di velocita' relativa): cordolo/muro delicato
-        // buca la gomma, piu' forte = auto incidentata, violentissimo = fuoco.
-        private const float FlatImpact = 4.5f;
-        private const float WreckImpact = 6.5f;
-        private const float FireImpact = 9.5f;
-        // con la gomma a terra si puo' solo zoppicare fino all'officina
-        private const float FlatTireMaxSpeed = 2.5f;
+        // ── guidabilita' dello sterzo ──────────────────────────────
+        // Velocita' minima (m/s) perché l'auto cominci a girare: a ferma
+        // non sterza in place, ha bisogno di un po' di avanzamento.
+        private const float SteeringMinSpeed = 0.8f;
+        // Riduzione dell'angolo di sterzo con la velocita': a velocita'
+        // elevata le ruote sterzano meno, cosi' l'auto resta stabile in
+        // curva invece di strapparsi. Valore testato sull'asse XZ amatoriale.
+        private const float SteeringHighSpeedDamp = 0.045f;
+        // Limite assoluto della velocita' di imbardata (deg/s) per tutti i
+        // mezzi: evita che un turnSpeed alto (70-130) trasformi la guida
+        // in una trottola. ~55 deg/s = curva stretta ma controllabile.
+        private const float MaxYawPerSec = 55f;
+        // ── stabilita' / anti-ribaltamento ─────────────────────────
+        // Sospensione virtuale degli ammortizzatori: l'auto NON deve
+        // accappottarsi nemmeno su un marciapiede a bassa velocita'.
+        // StabilizeStrengthSoft agisce quando l'auto e' quasi dritta
+        // (effetto ammortizzatore morbido: piccoli su/giu' lisci), mentre
+        // StabilizeStrengthStrong si attiva quando il telaio si inclina
+        // parecchio per riportarlo su con decisione senza ribaltarsi.
+        private const float StabilizeStrengthSoft = 4f;
+        private const float StabilizeStrengthStrong = 14f;
+        // smorzamento del rollio/pitch fisico residuo (1/s)
+        private const float SuspensionDamping = 1.8f;
+        // Inclinazione massima (gradi) del telaio per effetto della pendenza
+        // DEM (sospensioni su un dosso/collina): le ruote seguono il terreno,
+        // il corpo si sbilancia ma non accappotta.
+        private const float MaxInclineDeg = 20f;
+
+        /// <summary>Sospensioni completamente a terra: l'auto zoppica anche
+        /// se le altre zone sono a posto.</summary>
+        public bool SuspensionDead
+        {
+            get { return ZoneDamage != null &&
+                        ZoneDamage.ContainsKey("suspension") &&
+                        ZoneDamage["suspension"] >= 100f; }
+        }
+
+        // ── danni da impatto: velocita' relativa (m/s) → danno per zona ──
+        // Il marciapiede/erba e' un rialzo leggero: consuma solo le
+        // sospensioni con un danno piccolissimo e cumulativo, NON buca
+        // subito la gomma (come prima rimediava il modello discreto).
+        private const float CurbDamagePerMs = 0.25f;    // marciapiede/erba
+        private const float BodyDamagePerMs = 0.7f;     // urto laterale (muro)
+        private const float FrontDamagePerMs = 1.4f;    // frontale: alto = 100%
+        private const float MinImpactSpeed = 1.5f;      // sotto: trascurabile
+        // incendio solo su impatti davvero violenti (speed m/s) e non scontati
+        private const float FireImpactSpeed = 18f;
+        private const float FireChance = 0.35f;
+        private const float LimpSpeed = 2.5f;           // con sospensioni a terra
 
         // ── condizione / odometro ──────────────────────────────────
         // mirror di vehicle_services.py: CONDITION_PER_KM = 100/150
@@ -69,7 +151,26 @@ namespace City.Vehicle
         private long storedOdometer;
         private float sessionMeters;
         private float nextPing;
+        private float _nextGroundAudit;
         private string vehicleCode = "";
+
+        // ── carburante (Brookhaven-style) ──
+        // Livello benzina 0-100: scende quando si guida, si ricarica ai
+        // distributori (POI tipo "fuel"). A 0 il motore si spegne.
+        public const float FuelMax = 100f;
+        private const float FuelConsumptionPerKm = 0.8f;  // ~125 km con un pieno
+        private const string FuelKeyPrefix = "vfuel_";
+        private float _fuel = FuelMax;
+        private float _fuelSessionMeters;
+
+        // ── clacson / luci / sirene ──────────────────────────────
+        private static AudioClip honkClip;
+        private GameObject beaconRoot;
+        private Light beacon1, beacon2;
+        private bool beaconPhase;
+        private float beaconTimer;
+        private const float BeaconBlinkInterval = 0.28f;
+        public bool HeadlightsOn { get; private set; }
 
         // ── ruote ─────────────────────────────────────────────────
         private WheelSpinner spinner;
@@ -95,14 +196,59 @@ namespace City.Vehicle
             get { return storedOdometer + (long)sessionMeters; }
         }
 
+        /// <summary>Metri percorsi in QUESTO viaggio (dall'ingresso in guida).</summary>
+        public float TripMeters
+        {
+            get { return sessionMeters; }
+        }
+
+        /// <summary>Velocita' massima del mezzo (m/s), per la tacchimetro.</summary>
+        public float MaxSpeedMs
+        {
+            get { return data != null ? data.maxSpeed : 14f; }
+        }
+
+        public float FuelPercent
+        {
+            get { return Mathf.Clamp01(_fuel / FuelMax) * 100f; }
+        }
+
+        /// <summary>Salva il livello carburante su PlayerPrefs.</summary>
+        private void SaveFuel()
+        {
+            if (!string.IsNullOrEmpty(vehicleCode))
+                PlayerPrefs.SetFloat(FuelKeyPrefix + vehicleCode, _fuel);
+        }
+
+        /// <summary>Carica il livello carburante da PlayerPrefs.</summary>
+        public static float StoredFuel(string code)
+        {
+            if (string.IsNullOrEmpty(code)) return FuelMax;
+            return PlayerPrefs.GetFloat(FuelKeyPrefix + code, FuelMax);
+        }
+
+        /// <summary>Riempie il serbatoio (ai distributori o con toolkit).</summary>
+        public void Refuel(float amount)
+        {
+            _fuel = Mathf.Min(_fuel + amount, FuelMax);
+            SaveFuel();
+            OsmDiag.Log("[Vehicle] Refuel +" + amount.ToString("F0") +
+                "L -> " + _fuel.ToString("F0") + "/" + FuelMax);
+        }
+
+        /// <summary>Il serbatoio e' vuoto.</summary>
+        public bool IsOutOfFuel { get { return _fuel <= 0f; } }
+
         /// <summary>
-        /// L'auto parte solo con un filo di vita e SENZA danno grave:
-        /// incidentata o in fiamme non si guida proprio.
+        /// L'auto parte solo con un filo di vita, SENZA danno grave e CON
+        /// almeno un filo di benzina.
         /// </summary>
         public bool CanStart()
         {
             if (Damage == VehicleDamage.Wrecked) return false;
             if (Damage == VehicleDamage.Fire) return false;
+            if (Integrity <= 0f) return false;
+            if (_fuel <= 0f) return false;
             return ConditionPercent > 0.5f;
         }
 
@@ -130,6 +276,26 @@ namespace City.Vehicle
             long v = 0L;
             long.TryParse(PlayerPrefs.GetString(OdoKeyPrefix + code, ""), out v);
             return v;
+        }
+
+        /// <summary>
+        /// Applica HP + danno per zona (dal server o dopo una riparazione).
+        /// </summary>
+        public void SetDamageState(float integrity,
+            System.Collections.Generic.IEnumerable<System.Collections.Generic.
+                KeyValuePair<string, float>> zones)
+        {
+            Integrity = Mathf.Clamp(integrity, 0f, 100f);
+            var keys = new System.Collections.Generic.List<string>(ZoneDamage.Keys);
+            foreach (var k in keys) ZoneDamage[k] = 0f;
+            if (zones != null)
+                foreach (var kv in zones)
+                    if (ZoneDamage.ContainsKey(kv.Key))
+                        ZoneDamage[kv.Key] = Mathf.Clamp(kv.Value, 0f, 100f);
+            if (Integrity <= 0f && Damage != VehicleDamage.Fire &&
+                Damage != VehicleDamage.Wrecked)
+                Damage = VehicleDamage.Wrecked;
+            ApplyDamageVisual();
         }
 
         private void Awake()
@@ -163,27 +329,167 @@ namespace City.Vehicle
             rb.isKinematic = false;
             currentSpeed = 0f;
             sessionMeters = 0f;
+            _fuelSessionMeters = 0f;
             nextPing = PingIntervalSec;
+            City.Environment.EventBus.Publish(new City.Environment.VehicleEnteredEvent(true));
+
 
             var vi = GetComponentInChildren<VehicleInteract>();
             vehicleCode = vi != null ? vi.vehicleCode : "";
+            // carburante persistito per veicolo
+            _fuel = StoredFuel(vehicleCode);
+            // carburante persistito per veicolo
             storedOdometer = StoredOdometer(vehicleCode);
             baseOdometer = storedOdometer;
             if (myStateApi != null)
                 myStateApi.SyncBaseState(vehicleCode, this);
+            OsmDiag.Log("[Audit] Inizio guida: " + (data != null ? data.vehicleName : name) +
+                " @" + transform.position.x.ToString("F1") + "," +
+                transform.position.z.ToString("F1") + " y=" +
+                transform.position.y.ToString("F2") + " dem=" +
+                TileElevation.HeightAtWorld(transform.position).ToString("F2"));
+
+            if (IsEmergency) EnsureBeacons();
             return true;
         }
 
         public void StopDriving()
         {
-            IsDriving = false;
             FlushOdometer();
+            IsDriving = false;
+            SaveFuel();
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
             rb.isKinematic = true;
             currentSpeed = 0f;
             throttleInput = 0f;
             steerInput = 0f;
+            DestroyBeacons();
+            City.Environment.EventBus.Publish(new City.Environment.VehicleEnteredEvent(false));
+            OsmDiag.Log("[Audit] Fine guida: " + (data != null ? data.vehicleName : name) +
+                " carburante=" + _fuel.ToString("F0") + "/" + FuelMax +
+                " @" + transform.position.x.ToString("F1") + "," +
+                transform.position.z.ToString("F1") + " y=" +
+                transform.position.y.ToString("F2") + " dem=" +
+                TileElevation.HeightAtWorld(transform.position).ToString("F2"));
+        }
+
+        // ── clacson, luci e lampeggianti emergenza ────────────────
+
+        /// <summary>Veicolo di servizio (polizia/ambulanza/vigili del fuoco):
+        /// attiva i lampeggianti durante la guida (soprattutto nei lavori).</summary>
+        public bool IsEmergency
+        {
+            get
+            {
+                return vehicleCode == "police" || vehicleCode == "ambulance" ||
+                       vehicleCode == "firetruck";
+            }
+        }
+
+        public void ToggleHeadlights()
+        {
+            HeadlightsOn = !HeadlightsOn;
+            ApplyHeadlights();
+        }
+
+        public void Honk()
+        {
+            var src = GetComponent<AudioSource>();
+            if (src == null)
+            {
+                src = gameObject.AddComponent<AudioSource>();
+                src.playOnAwake = false;
+                src.spatialBlend = 1f;
+                src.volume = 0.4f;
+                src.maxDistance = 40f;
+            }
+            if (honkClip == null) honkClip = BuildHonkClip();
+            src.PlayOneShot(honkClip, 1f);
+        }
+
+        private static AudioClip BuildHonkClip()
+        {
+            const int sr = 22050;
+            const float dur = 0.28f;
+            int n = Mathf.Max(1, Mathf.RoundToInt(sr * dur));
+            var samples = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)sr;
+                float env = Mathf.Clamp01(1f - Mathf.Abs(t - dur * 0.5f) * (4f / dur));
+                float sig = Mathf.Sign(Mathf.Sin(Mathf.PI * 2f * 430f * t));
+                samples[i] = sig * env * 0.5f;
+            }
+            var clip = AudioClip.Create("Honk", n, 1, sr, false);
+            clip.SetData(samples, 0);
+            return clip;
+        }
+
+        private void ApplyHeadlights()
+        {
+            var head = FindChildByName(transform, "headlight");
+            var tail = FindChildByName(transform, "taillight");
+            if (head != null) head.gameObject.SetActive(HeadlightsOn);
+            if (tail != null) tail.gameObject.SetActive(HeadlightsOn);
+        }
+
+        private static Transform FindChildByName(Transform root, string namePart)
+        {
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform c = root.GetChild(i);
+                if (c.name.IndexOf(namePart, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    return c;
+                Transform deep = FindChildByName(c, namePart);
+                if (deep != null) return deep;
+            }
+            return null;
+        }
+
+        private void EnsureBeacons()
+        {
+            if (beaconRoot != null) return;
+            beaconRoot = new GameObject("EmergencyBeacons");
+            beaconRoot.transform.SetParent(transform, false);
+            beacon1 = MakeBeacon("BeaconRosso",
+                new Vector3(-0.9f, 3.2f, 0.5f), new Color(1f, 0.1f, 0.1f));
+            beacon2 = MakeBeacon("BeaconBlu",
+                new Vector3(0.9f, 3.2f, 0.5f), new Color(0.15f, 0.35f, 1f));
+        }
+
+        private Light MakeBeacon(string name, Vector3 localPos, Color color)
+        {
+            var o = new GameObject(name);
+            o.transform.SetParent(beaconRoot.transform, false);
+            o.transform.localPosition = localPos;
+            var l = o.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = color;
+            l.range = 14f;
+            l.intensity = 0f;
+            return l;
+        }
+
+        private void DestroyBeacons()
+        {
+            if (beaconRoot != null)
+            {
+                Destroy(beaconRoot);
+                beaconRoot = null;
+                beacon1 = beacon2 = null;
+            }
+        }
+
+        private void UpdateBeacons()
+        {
+            if (beaconRoot == null || !IsDriving) return;
+            beaconTimer += Time.fixedDeltaTime;
+            if (beaconTimer < BeaconBlinkInterval) return;
+            beaconTimer = 0f;
+            beaconPhase = !beaconPhase;
+            if (beacon1 != null) beacon1.intensity = beaconPhase ? 5f : 0f;
+            if (beacon2 != null) beacon2.intensity = beaconPhase ? 0f : 5f;
         }
 
         private VehicleOwnershipApi myStateApi
@@ -218,11 +524,34 @@ namespace City.Vehicle
         private void FixedUpdate()
         {
             if (!IsDriving || data == null) return;
+            UpdateBeacons();
 
             float condFactor = 0.55f + 0.45f * (ConditionPercent / 100f);
-            float accel = data.acceleration * condFactor;
-            float maxSpd = FlatTire ? Mathf.Min(FlatTireMaxSpeed, data.maxSpeed)
-                                    : data.maxSpeed * condFactor;
+
+            // ── effetti meccanici per singola parte ──
+            // motore rotto → potenza quasi nulla; cambio rotto → niente marcia;
+            // giunto/diff rotti → perdita trazione; gomma scoppiata → limpa.
+            bool engineBroken = damageSystem != null &&
+                (damageSystem.HasBrokenPart(VehiclePartType.Engine) ||
+                 damageSystem.HasBrokenPart(VehiclePartType.Gearbox));
+            float engEff = PartEffect(VehiclePartType.Engine)
+                         * PartEffect(VehiclePartType.Gearbox)
+                         * PartEffect(VehiclePartType.Driveshaft)
+                         * PartEffect(VehiclePartType.Differential);
+            if (damageSystem != null && damageSystem.HasBrokenPart(VehiclePartType.Gearbox))
+                engEff = 0f;
+            float tireFactor = 0.5f * (EffectiveGripFront() + EffectiveGripRear());
+
+            float accel = data.acceleration * condFactor * engEff;
+            float baseMax = data.maxSpeed * condFactor * Mathf.Clamp01(engEff + 0.2f);
+            // il tenore di velocita' massima scala anche con l'aderenza (gonfia)
+            baseMax *= Mathf.Clamp01(tireFactor * 0.9f + 0.3f);
+            bool limpByPart = damageSystem != null &&
+                (damageSystem.HasBrokenPart(VehiclePartType.Tire) ||
+                 damageSystem.HasBrokenPart(VehiclePartType.Suspension));
+            float maxSpd = (FlatTire || SuspensionDead || limpByPart)
+                            ? Mathf.Min(LimpSpeed, baseMax)
+                            : baseMax;
 
             // Incidentata / in fiamme: motore spento, auto ferma (di norma
             // siamo gia' stati staccati dall'urto con un prompt)
@@ -235,7 +564,17 @@ namespace City.Vehicle
 
             if (braking)
             {
-                currentSpeed = Mathf.MoveTowards(currentSpeed, 0f, data.brakeForce * Time.fixedDeltaTime);
+                // frenata scalata dagli eventuali freni rotti (asiimmetrica → sbanda)
+                float brakeEff = PartEffect(VehiclePartType.Brake);
+                float brakeVal = data.brakeForce * brakeEff * Time.fixedDeltaTime;
+                if (brakeEff < 1f && currentSpeed > 0.3f)
+                {
+                    // freni asimmetrici: tende a sbandare sul lato con freno rotto
+                    float pull = (1f - brakeEff) * 10f * Time.fixedDeltaTime;
+                    if (HasBrokenBrakeLeft()) pull = -pull; // raw
+                    transform.Rotate(0f, pull * 30f, 0f);
+                }
+                currentSpeed = Mathf.MoveTowards(currentSpeed, 0f, brakeVal);
             }
             else
             {
@@ -243,10 +582,37 @@ namespace City.Vehicle
                 currentSpeed = Mathf.MoveTowards(currentSpeed, target, accel * Time.fixedDeltaTime);
             }
 
-            float turnFactor = Mathf.Clamp01(Mathf.Abs(currentSpeed) / 3f);
-            float turn = steerInput * data.turnSpeed * turnFactor * Time.fixedDeltaTime;
-            if (FlatTire && Mathf.Abs(currentSpeed) > 0.5f)
+            // ── sterzo sensibile alla velocita' (guidabilita') ──
+            // Prima l'angolo raggiungeva il massimo a soli 3 m/s e usava il
+            // valore pieno di turnSpeed (70-130 deg/s): a velocita' l'auto
+            // si strappava e diventava difficilissima da tenere in strada.
+            // Ora:
+            //   • serve un po' di velocita' per iniziare a girare (parking)
+            //   • piu' si va forte, piu' l'angolo di sterzo si restringe
+            //   • il tutto e' comunque limitato (MaxYawPerSec) per stabilita'
+            float speedAbs = Mathf.Abs(currentSpeed);
+            float highSpeedFactor = 1f /
+                (1f + speedAbs * SteeringHighSpeedDamp);
+            float speedFactor = Mathf.Clamp01(speedAbs / SteeringMinSpeed)
+                                * highSpeedFactor;
+            float yawRate = steerInput * data.turnSpeed * speedFactor
+                            * PartEffect(VehiclePartType.Steering);
+            // sospensioni/ammortizzatori a terra → scarsa tenuta in curva
+            float gripEff = 0.5f * (PartEffect(VehiclePartType.Suspension) +
+                                    PartEffect(VehiclePartType.ShockAbsorber));
+            yawRate *= Mathf.Clamp01(gripEff * 0.8f + 0.2f);
+            yawRate = Mathf.Clamp(yawRate, -MaxYawPerSec, MaxYawPerSec);
+            float turn = yawRate * Time.fixedDeltaTime;
+            if (FlatTire && speedAbs > 0.5f)
                 turn += 12f * Time.fixedDeltaTime;
+            // gomma scoppiata per parte: trazione in un verso
+            if (HasWeakTire() && speedAbs > 0.5f)
+                turn += 6f * Time.fixedDeltaTime;
+            // Specchia lo sterzo in retromarcia: andando all'indietro il
+            // muso ruota in un verso ma chi guida guarda dove va la coda.
+            // Senza il segno inverso il joystick a destra = curva a sinistra
+            // quando si va in R (come trattare lo sterzo avanti all'indietro).
+            if (currentSpeed < 0f) turn = -turn;
             transform.Rotate(0f, turn, 0f);
 
             Vector3 vel = transform.forward * currentSpeed;
@@ -254,13 +620,56 @@ namespace City.Vehicle
             rb.velocity = vel;
             rb.velocity *= (1f - data.drag * Time.fixedDeltaTime);
 
+            // mantiene l'auto allineata all'up (niente accappottamento)
+            StabilizeAgainstFlip();
+
             if (spinner != null) spinner.Spin(currentSpeed);
 
             sessionMeters += Mathf.Abs(currentSpeed) * Time.fixedDeltaTime;
+            _fuelSessionMeters += Mathf.Abs(currentSpeed) * Time.fixedDeltaTime;
+
+            // ── consumo carburante ──
+            // Ogni km percorso consuma FuelConsumptionPerKm litri.
+            // A 0 il motore si spegne (velocita -> 0).
+            if (_fuel > 0f && _fuelSessionMeters >= 1000f)
+            {
+                float km = _fuelSessionMeters / 1000f;
+                _fuel -= km * FuelConsumptionPerKm;
+                _fuelSessionMeters %= 1000f;
+                if (_fuel <= 0f)
+                {
+                    _fuel = 0f;
+                    currentSpeed = 0f;
+                    rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+                    OsmDiag.Log("[Vehicle] SERBATOIO VUOTO: " +
+                        (data != null ? data.vehicleName : name));
+                    City.Environment.EventBus.Publish(new City.Environment.FuelLowEvent(0f));
+                    if (Game.Instance != null && Game.Instance.ui != null)
+                        Game.Instance.ui.ShowToast("Serbatoio vuoto! Vai al distributore.");
+                }
+                SaveFuel();
+            }
             if (Time.time >= nextPing)
             {
                 nextPing = Time.time + PingIntervalSec;
                 FlushOdometer();
+            }
+
+            // Audit quota: un veicolo in guida NON deve affondare sotto la
+            // superficie reale. La mesh stradale sta a DEM+0.03/+0.12, quindi
+            // y < DEM - 0.6 e' un'anomalia (asfalto sparito o auto sotto la
+            // collina). I viadotti sono SOPRA il DEM: solo la sottoquota conta.
+            if (Time.time >= _nextGroundAudit)
+            {
+                _nextGroundAudit = Time.time + 15f;
+                float h = TileElevation.HeightAtWorld(transform.position);
+                if (transform.position.y < h - 0.6f)
+                    OsmDiag.Log("[Audit] Veicolo sotto la quota DEM: " +
+                        (data != null ? data.vehicleName : name) +
+                        " y=" + transform.position.y.ToString("F2") +
+                        " dem=" + h.ToString("F2") + " @" +
+                        transform.position.x.ToString("F1") + "," +
+                        transform.position.z.ToString("F1"));
             }
         }
 
@@ -276,40 +685,174 @@ namespace City.Vehicle
             if (!collision.collider.enabled) return;
 
             float speed = collision.relativeVelocity.magnitude;
-            VehicleDamage hit;
-            if (speed >= FireImpact) hit = VehicleDamage.Fire;
-            else if (speed >= WreckImpact) hit = VehicleDamage.Wrecked;
-            else if (speed >= FlatImpact) hit = VehicleDamage.Flat;
-            else return;
+            if (speed < MinImpactSpeed) return;   // niente danno per i contatti
+            if (Damage == VehicleDamage.Wrecked) return;
+            if (Damage == VehicleDamage.Fire) return;
 
-            if ((int)Damage >= (int)hit) return;
-            SetDamage(hit);
+            string zone = PickDamageZone(collision);
+            float damage = ZoneDamagePerMs(zone) * speed;
+            if (damage <= 0f) return;
 
-            if (Damage == VehicleDamage.Wrecked)
+            // incendio solo su impatti violentissimi e non scontati
+            if (speed >= FireImpactSpeed &&
+                UnityEngine.Random.Range(0f, 1f) < FireChance)
             {
-                StopCarHard();
-                if (City.UI.UIManager.Instance != null)
-                    City.UI.UIManager.Instance.ShowToast(
-                        "Botta violenta! L'auto e' incidentata: non parte piu'. Serve il carro attrezzi.");
-            }
-            else if (Damage == VehicleDamage.Fire)
-            {
+                SetDamage(VehicleDamage.Fire);
                 StopCarHard();
                 if (City.UI.UIManager.Instance != null)
                     City.UI.UIManager.Instance.ShowToast(
                         "INCENDIO! Scendi subito e chiama i vigili del fuoco!");
                 if (City.Game.Instance != null)
                     City.Game.Instance.OnVehicleCaughtFire(this);
+                ReportDamageState();
+                return;
             }
-            else
+
+            // danno per singola PARTE meccanica nel punto d'impatto:
+            // un urto al paraurti anteriore danneggia paraurti→radiatore→motore,
+            // NON il serbatoio posteriore. Fornisce anche il messaggio "parte rotta".
+            string brokenPartMsg = "";
+            if (damageSystem != null)
+            {
+                Vector3 hitLocal = transform.InverseTransformPoint(
+                    collision.contacts.Length > 0
+                        ? collision.contacts[0].point
+                        : transform.position);
+                damageSystem.DamageAtLocalPoint(hitLocal, speed, 1.4f, 100f);
+                var broken = damageSystem.GetBrokenPartNearest(hitLocal);
+                if (broken != null && Damage == VehicleDamage.None &&
+                    Integrity > 0f && speed >= 3f)
+                    brokenPartMsg = broken.partName;
+            }
+
+            // danno graduale per zona + calo HP
+            ZoneDamage[zone] = Mathf.Clamp(ZoneDamage[zone] + damage, 0f, 100f);
+            float missing = 0f;
+            foreach (var kv in ZoneDamage) missing += kv.Value;
+            Integrity = Mathf.Clamp(100f - missing, 0f, 100f);
+
+            if (Integrity <= 0f)
+            {
+                // devastata: non partira' piu', serve il carro attrezzi
+                SetDamage(VehicleDamage.Wrecked);
+                StopCarHard();
+                if (City.UI.UIManager.Instance != null)
+                    City.UI.UIManager.Instance.ShowToast(
+                        "Botta violenta! L'auto e' devastata: non parte piu'. Serve il carro attrezzi.");
+            }
+            else if (brokenPartMsg.Length > 0)
             {
                 if (City.UI.UIManager.Instance != null)
                     City.UI.UIManager.Instance.ShowToast(
-                        "Gomma a terra! Vai piano fino all'officina, o chiama il carro attrezzi.");
+                        "Danno meccanico: si e' rotto il " + brokenPartMsg +
+                        " (HP " + Mathf.RoundToInt(Integrity) + "%). Fatto controllare in officina.");
             }
+            else if (InspireLimp(zone))
+            {
+                if (City.UI.UIManager.Instance != null)
+                    City.UI.UIManager.Instance.ShowToast(
+                        "Sospensioni a terra: l'auto zoppica. Vai piano fino all'officina, o chiama il carro attrezzi.");
+            }
+            else if (damage >= 8f)
+            {
+                if (City.UI.UIManager.Instance != null)
+                    City.UI.UIManager.Instance.ShowToast(
+                        "Impatto: danno alla " + ZoneLabel(zone) + " (HP " +
+                        Mathf.RoundToInt(Integrity) + "%).");
+            }
+            // rende visibile il danno graduale (alone sui pannelli)
+            if (Damage == VehicleDamage.None && fxRoot == null)
+                ApplyDamageVisual();
+            ReportDamageState();
+        }
 
+        private static string ZoneLabel(string zone)
+        {
+            if (zone == "suspension") return "sospensioni";
+            if (zone == "bodywork") return "carrozzeria";
+            if (zone == "bumper") return "fascia/paraurti";
+            return "carrozzeria";
+        }
+
+        private bool InspireLimp(string zone)
+        {
+            return zone == "suspension" && SuspensionDead &&
+                   Damage != VehicleDamage.Flat;
+        }
+
+        /// <summary>Determina la zona di danno in base all'oggetto colpito e
+        /// alla direzione dell'urto. Marciapiede/erba = sospensioni (danno
+        /// minimo ma cumulativo); frontale ad alta velocita' = paraurti;
+        /// qualsiasi altro impatto laterale = carrozzeria.</summary>
+        private string PickDamageZone(Collision collision)
+        {
+            GameObject go = collision.collider.gameObject;
+            string name = go != null ? go.name : "";
+            // superfici morbide/rialzi del suolo → sospensioni
+            if (name.IndexOf("Terreno", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Marciapiedi", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Natura", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Erba", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Pavim", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                name.IndexOf("Parcheggio", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return "suspension";
+            // urto frontale se la velocita' relativa e' proiettata in avanti
+            Vector3 rel = collision.relativeVelocity;
+            if (rel.sqrMagnitude > 0.01f &&
+                Vector3.Dot(rel.normalized, transform.forward) >= 0.5f)
+                return "bumper";
+            return "bodywork";
+        }
+
+        private static float ZoneDamagePerMs(string zone)
+        {
+            if (zone == "suspension") return CurbDamagePerMs;
+            if (zone == "bumper") return FrontDamagePerMs;
+            return BodyDamagePerMs;
+        }
+
+        private void ReportDamageState()
+        {
             if (vehicleCode.Length > 0 && myStateApi != null)
-                myStateApi.ReportDamage(vehicleCode, Damage, null);
+                myStateApi.ReportDamage(vehicleCode, Damage, Integrity, ZoneDamage, null);
+        }
+
+        /// <summary>
+        /// Riequilibra il telaio verso la verticale conservando la
+        /// direzione di marcia (yaw). Un ammortizzatore virtuale che:
+        ///   • a telaio quasi dritto interviene dolcemente (effetto
+        ///     ammortizzatori reali: si sente, non ribalta);
+        ///   • a telaio molto inclinato riporta su con decisione, così
+        ///     urtare un marciapiede NON accappotta l'auto.
+        /// Smorza inoltre il rollio/pitch fisico residuo lasciato dal
+        /// Rigidbody nelle collisioni.
+        /// </summary>
+        private void StabilizeAgainstFlip()
+        {
+            if (rb == null) return;
+            float dot = Vector3.Dot(transform.up, Vector3.up);
+            // forza piu' decisa quanto piu' l'auto e' inclinata
+            float t = Mathf.Lerp(1f, 0f, Mathf.Clamp01((dot + 1f) * 0.5f));
+            float strength = Mathf.Lerp(StabilizeStrengthSoft,
+                                        StabilizeStrengthStrong, t);
+            Vector3 forward = transform.forward;
+            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
+            // Up di appoggio = pendenza DEM limitata (sospensioni reali):
+            // l'auto si inclina seguendo il dosso, ma al massimo di MaxInclineDeg.
+            Vector3 groundUp = TileElevation.SlopeUpAtWorld(
+                transform.position, MaxInclineDeg);
+            Quaternion target = Quaternion.LookRotation(forward, groundUp);
+            transform.rotation = Quaternion.Slerp(transform.rotation, target,
+                Mathf.Clamp01(strength * Time.fixedDeltaTime));
+
+            // smorza roll/pitch residuo lasciato dalle collisioni fisiche
+            Vector3 av = rb.angularVelocity;
+            if (av.sqrMagnitude > 0.0001f)
+            {
+                av.x *= 1f - SuspensionDamping * Time.fixedDeltaTime;
+                av.z *= 1f - SuspensionDamping * Time.fixedDeltaTime;
+                rb.angularVelocity = av;
+            }
         }
 
         private void StopCarHard()
@@ -352,12 +895,101 @@ namespace City.Vehicle
             return Mathf.Abs(currentSpeed) * 3.6f;
         }
 
+        // ── helper per gli effetti delle parti meccaniche ─────────
+
+        /// <summary>Aderenza media delle 2 gomme anteriori (0..1).</summary>
+        private float EffectiveGripFront()
+        {
+            if (damageSystem == null) return 1f;
+            var tires = damageSystem.GetParts(VehiclePartType.Tire);
+            int n = 0; float sum = 0f;
+            for (int i = 0; i < tires.Count && i < 2; i++) { sum += tires[i].IntegrityFactor; n++; }
+            return n > 0 ? sum / n : 1f;
+        }
+
+        /// <summary>Aderenza media delle gomme posteriori (0..1).</summary>
+        private float EffectiveGripRear()
+        {
+            if (damageSystem == null) return 1f;
+            var tires = damageSystem.GetParts(VehiclePartType.Tire);
+            int n = 0; float sum = 0f;
+            for (int i = 2; i < tires.Count; i++) { sum += tires[i].IntegrityFactor; n++; }
+            return n > 0 ? sum / n : 1f;
+        }
+
+        /// <summary>True se una gomma posteriore sinistra è rotta (per il
+        /// tiro del freno asimmetrico semplificato).</summary>
+        private bool HasBrokenBrakeLeft()
+        {
+            if (damageSystem == null) return false;
+            var brakes = damageSystem.GetParts(VehiclePartType.Brake);
+            return brakes.Count >= 2 && brakes[1].IsBroken;
+        }
+
+        /// <summary>True se almeno una gomma è rotta (scoppio per parte).</summary>
+        private bool HasWeakTire()
+        {
+            if (damageSystem == null) return false;
+            return damageSystem.HasBrokenPart(VehiclePartType.Tire);
+        }
+
+        /// <summary>La parte meccanica rotta più vicina a un punto (per
+        /// messaggi d'urto tipo "S'è rotto il motore!").</summary>
+        public string NearestBrokenPartName(Vector3 hitLocal)
+        {
+            if (damageSystem == null) return "";
+            var p = damageSystem.GetBrokenPartNearest(hitLocal);
+            return p != null ? p.partName : "";
+        }
+
+        /// <summary>Ripara completamente la parte di un dato tipo e indice.</summary>
+        public void RepairPartAt(VehiclePartType type, int index)
+        {
+            if (damageSystem != null) damageSystem.RepairPart(type, index, 100f);
+        }
+
+        /// <summary>Ripara tutte le parti meccaniche locali.</summary>
+        public void RepairAllParts()
+        {
+            if (damageSystem != null) damageSystem.RepairAll();
+        }
+
+        /// <summary>Ripara le parti meccaniche corrispondenti a una zona
+        /// riparata dall'officina (mantiene coerente lo strato fine).</summary>
+        public void RepairPartsForZone(string zone)
+        {
+            if (damageSystem == null) return;
+            // mappa zona ufficina → gruppi di parti: ripara SOLO questi tipi
+            if (zone == "suspension")
+                RepairTypes(new[] { VehiclePartType.Suspension,
+                    VehiclePartType.ShockAbsorber, VehiclePartType.Tire });
+            else if (zone == "bumper")
+                RepairTypes(new[] { VehiclePartType.Bumper,
+                    VehiclePartType.Radiator, VehiclePartType.Engine,
+                    VehiclePartType.Fuel });
+            else if (zone == "bodywork")
+                RepairTypes(new[] { VehiclePartType.Bodywork,
+                    VehiclePartType.Chassis });
+        }
+
+        private void RepairTypes(VehiclePartType[] types)
+        {
+            for (int t = 0; t < types.Length; t++)
+            {
+                var list = damageSystem.GetParts(types[t]);
+                for (int i = 0; i < list.Count; i++)
+                    damageSystem.RepairPart(types[t], i, 100f);
+            }
+        }
+
+
         // ── effetti visivi danni ───────────────────────────────────
 
         private void ApplyDamageVisual()
         {
             RemoveDamageFx();
-            if (Damage == VehicleDamage.None) return;
+            bool anyDamage = Damage != VehicleDamage.None || Integrity < 100f;
+            if (!anyDamage) return;
 
             fxRoot = new GameObject("DamageFx");
             fxRoot.transform.SetParent(transform, false);
@@ -450,9 +1082,18 @@ namespace City.Vehicle
             if (damageMat != null)
             {
                 Color c = damageMat.color;
-                c.a = Damage == VehicleDamage.Fire
-                    ? 0.55f + flick * 0.2f
-                    : 0.4f + flick * 0.25f;
+                if (Damage == VehicleDamage.Fire)
+                {
+                    c.a = 0.55f + flick * 0.2f;
+                }
+                else
+                {
+                    // l'alone scuro scala col danno subito (HP mancante),
+                    // cosi' il danno graduale si vede senza stati discreti
+                    float missing = Mathf.Clamp01((100f - Integrity) / 100f);
+                    float baseA = Damage == VehicleDamage.None ? 0.16f : 0.30f;
+                    c.a = Mathf.Clamp01(baseA * missing + flick * 0.12f);
+                }
                 damageMat.color = c;
             }
             if (flameMat != null)

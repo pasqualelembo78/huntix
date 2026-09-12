@@ -58,6 +58,12 @@ namespace City.Vehicle
         }
 
         /// <summary>Seed stabile da coordinate chunk (indipendente da piattaforma).</summary>
+        private static float GroundY(ChunkData chunk, Vector3 local)
+        {
+            return TileElevation.HeightAtWorld(
+                chunk.root.transform.position + new Vector3(local.x, 0f, local.z));
+        }
+
         public static int SeedFor(Vector2Int c)
         {
             unchecked
@@ -183,7 +189,7 @@ namespace City.Vehicle
                                 bool leftSide = rng.Next(2) == 0;
                                 Vector3 pos = prev + seg * t +
                                     right * LaneOffset * (leftSide ? -1f : 1f);
-                                pos.y = 0.02f;
+                                pos.y = 0.02f + GroundY(chunk, pos);
                                 if (bounds.Contains(new Vector2(pos.x, pos.z)))
                                 {
                                     float angle = Mathf.Atan2(dir.x, dir.z) *
@@ -273,7 +279,7 @@ namespace City.Vehicle
                 if (VehicleSpawnManager.IsActiveOwned(kv.Key)) continue;
 
                 Vector3 p = toLocal(new GeoLL { a = kv.Value.lat, o = kv.Value.lon });
-                p.y = 0.02f;
+                p.y = 0.02f + GroundY(chunk, p);
                 if (!bounds.Contains(new Vector2(p.x, p.z))) continue;
 
                 // modello: prima il nome salvato dal server, poi il vecchio
@@ -360,7 +366,7 @@ namespace City.Vehicle
                     if (d2 < r2) near++;
                     if (d2 < 250000f) entro500++;
                 }
-                var v0 = tracked[0];
+                var v0 = best != null ? best : tracked[0];
                 OsmDiag.Log("[ChunkVehiclePopulator] cull#" + _cullTicks +
                     ": tracked=" + tracked.Count + " accese=" + on +
                     " vicinoRaggio=" + near +

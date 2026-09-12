@@ -57,6 +57,7 @@ namespace City.OSM
         private bool _showSchool = true;
         private bool _showBar = true;
         private bool _showRamp = true;
+        private bool _showFuel = true;
         private Text _lblDealer, _lblRepair, _lblGarage, _lblHospital;
         private Text _lblSchool, _lblBar, _lblRamp;
 
@@ -78,6 +79,9 @@ namespace City.OSM
         private static readonly Color ColPlayer = new Color(0.95f, 0.15f, 0.12f);
         private static readonly Color ColRing = new Color(1f, 1f, 1f);
         private static readonly Color ColCar = new Color(0.20f, 0.85f, 0.95f);
+        private static readonly Color ColMission = new Color(0.95f, 0.72f, 0.10f);
+        private static readonly Color ColEgg = new Color(1f, 0.45f, 0.10f);
+        private static readonly Color ColHome = new Color(0.95f, 0.82f, 0.15f);
 
         public static void Create()
         {
@@ -500,6 +504,9 @@ namespace City.OSM
             Vector3 p = t.position;
 
             DrawPois(p, half, mPerPx);
+            DrawMissionNpc(p, half, mPerPx);
+            DrawEggs(p, half, mPerPx);
+            DrawHome(p, half, mPerPx);
             DrawOwnedVehicles(p, half, mPerPx);
             DrawDestination(p, half, mPerPx);
             DrawPlayer(t);
@@ -637,6 +644,8 @@ namespace City.OSM
                 pWorld, half, mPerPx);
             DrawPoiKind("rampa", _showRamp, CompassUI.KindColor("rampa"),
                 pWorld, half, mPerPx);
+            DrawPoiKind("fuel", _showFuel, CompassUI.KindColor("fuel"),
+                pWorld, half, mPerPx);
         }
 
         private void DrawPoiKind(string kind, bool visible, Color col,
@@ -652,6 +661,54 @@ namespace City.OSM
                 Plot(_buf, x, y, new Color(0f, 0f, 0f, 0.9f), 6); // bordo
                 Plot(_buf, x, y, col, 4);                         // punto
             }
+        }
+
+        /// <summary>NPC della missione in corso: rombo giallo sempre visibile
+        /// nello span, cosi sai a chi consegnare/chi inseguire.</summary>
+        private void DrawMissionNpc(Vector3 pWorld, float half, float mPerPx)
+        {
+            Game g = Game.Instance;
+            var n = g != null ? g.CurrentMissionNPC : null;
+            if (n == null) return;
+            int x, y;
+            var gc = WorldOrigin.ToGeo(n.transform.position);
+            if (!ToPx(new GeoLL { a = gc.lat, o = gc.lng },
+                    pWorld, half, mPerPx, out x, out y)) return;
+            Plot(_buf, x, y, new Color(0f, 0f, 0f, 0.9f), 8);
+            Plot(_buf, x, y, ColMission, 5);
+        }
+
+        /// <summary>Uova pasquali attive: puntini arancioni.</summary>
+        private void DrawEggs(Vector3 pWorld, float half, float mPerPx)
+        {
+            var mgr = City.Economy.EggSpawnManager.Instance;
+            if (mgr == null) return;
+            var eggs = mgr.ActiveEggs;
+            for (int i = 0; i < eggs.Count; i++)
+            {
+                var e = eggs[i];
+                if (e == null) continue;
+                int x, y;
+                var gc = WorldOrigin.ToGeo(e.transform.position);
+                if (!ToPx(new GeoLL { a = gc.lat, o = gc.lng },
+                        pWorld, half, mPerPx, out x, out y)) continue;
+                Plot(_buf, x, y, ColEgg, 4);
+            }
+        }
+
+        /// <summary>La tua casa (se ne possiedi una): diamante dorato.</summary>
+        private void DrawHome(Vector3 pWorld, float half, float mPerPx)
+        {
+            if (!City.Environment.HomeSystem.OwnsHome) return;
+            int x, y;
+            Vector3 w = WorldOrigin.ToWorld(
+                PlayerPrefs.GetFloat(City.Environment.HomeSystem.KeyLat, 0f),
+                PlayerPrefs.GetFloat(City.Environment.HomeSystem.KeyLng, 0f));
+            var gc = WorldOrigin.ToGeo(w);
+            if (!ToPx(new GeoLL { a = gc.lat, o = gc.lng }, pWorld, half, mPerPx, out x, out y))
+                return;
+            Plot(_buf, x, y, new Color(0f, 0f, 0f, 0.9f), 8);
+            Plot(_buf, x, y, ColHome, 5);
         }
 
         /// <summary>Auto parcheggiate di mia proprieta (non in garage e non

@@ -56,6 +56,14 @@ namespace City.Vehicle
             var car = Game.Instance.CurrentVehicle;
             float now = Time.time;
 
+            if (pickedUp && hostCar == null)
+            {
+                pickedUp = false;
+                hostCar = null;
+                if (ped != null) { Destroy(ped); ped = null; }
+                cooldownUntil = now + 15f;
+            }
+
             // passeggero a bordo: naviga verso la destinazione / timeout
             if (pickedUp && hostCar != null)
             {
@@ -79,6 +87,7 @@ namespace City.Vehicle
                     pickedUp = false;
                     hostCar = null;
                     dest = null;
+                    if (ped != null) { Destroy(ped); ped = null; }
                 }
                 return;
             }

@@ -24,6 +24,50 @@ namespace City.NPC
         private float pauseTimer;
         private NPCMission mission;
 
+        // vita quotidiana: ogni pedone ha una personalita (shopper o no);
+        // chi e shopper nelle fasce orarie di punta fa una tappa verso il
+        // negozio piu vicino e si trattiene a guardare le vetrine prima di
+        // riprendere la passeggiata. Di notte tutti camminano piu piano.
+        private bool _shopper;
+        private float _dailyNextAt;
+        private int _poiStopIdx = -1;
+
+        // ── routine giornaliera Brookhaven ──
+        // Ogni NPC ha una schedule fissa: mattina va al lavoro, pomeriggio
+        // shopping/passeggiata, sera torna a casa, notte riposa.
+        // Il workspace e' un POI vicino spawnato all'init; la casa e' lo
+        // spawn point iniziale.
+        private Vector3 _homePos;
+        private Vector3 _workPos;
+        private bool _hasWork;
+        private enum DailyPhase { Morning, Afternoon, Evening, Night }
+        private DailyPhase _phase = DailyPhase.Morning;
+        private bool _headingHome;
+        private bool _atWork;
+
+        // ── bisogni NPC (pattern LifeVerse + ECS-Starter) ──
+        // Fame, sete, energia, socialita' calano col tempo. Quando uno
+        // scende sotto soglia il NPC cambia comportamento (va a mangiare,
+        // si siede, parla con altri). Il bisogno piu' urgente ha priorita'.
+        public NPCNeeds Needs { get; private set; } = new NPCNeeds();
+        private float _needsTickAt;
+
+        // ── culling per distanza ──
+        // Ogni chunk popola fino a 50 pedoni e il mondo porta 49 chunk:
+        // senza culling si avrebbero ~2450 NPC animati/fisica/render sempre
+        // attivi. Qui invece oltre la soglia disattiviamo renderer + targhetta
+        // (il costo dominante): il pedone continua a camminare (logica idle)
+        // ma non si disegna ne' pesa sulla fisica grafica.
+        private const float CullDistSqr = 280f * 280f;   // ~280 m
+        // Inclinazione massima (gradi) del busto sulla pendenza DEM: i pedoni
+        // seguono il dislivello senza mai sbilanciarsi del tutto (piedi a terra).
+        private const float MaxPedInclineDeg = 22f;
+        private Renderer[] _renderers;
+        private bool _culled = true;
+        private Camera _camCache;
+        private float _camRefreshAt;
+        private static readonly int MaxActiveNpc = 180;
+
         /// <summary>Pedoni attualmente in scena (per il rilevatore di travol-
         /// gimenti): aggiunti/rimossi con OnEnable/OnDisable.</summary>
         public static readonly List<NPCController> Active =
@@ -64,12 +108,31 @@ namespace City.NPC
             currentTarget = startIndex;
             walking = false;
             pauseTimer = Random.Range(0.5f, 2f);
+            _shopper = rng != null && rng.NextDouble() < 0.45;
+            _dailyNextAt = Time.time + Random.Range(4f, 12f);
             NpcId = npcId;
             DisplayName = Names[rng.Next(Names.Length)];
 
+            // casa = punto di spawn (torna a dormire la sera)
+            _homePos = (waypoints != null && waypoints.Length > 0)
+                ? waypoints[startIndex % waypoints.Length]
+                : transform.localPosition;
+
+            // lavoro = POI piu vicino (se esiste, altrimenti gira senza meta)
+            _hasWork = false;
+            _workPos = Vector3.zero;
+
             SetupModel(rng);
             if (waypoints.Length > 0)
-                transform.position = waypoints[startIndex % waypoints.Length];
+            {
+                // I waypoint dei chunk sono coordinate LOCALI al root del chunk
+                // (NPCPopulator li genera con ToLocal): se li scrivessimo su
+                // transform.position (world) i pedoni di ogni chunk non-origine
+                // nascerebbero spostati di -root.position e dopo un rebase
+                // resterebbero appesi nel vuoto. Comunque locali, per gli
+                // spawner legacy/taxi (radice a origine) local == world.
+                transform.localPosition = waypoints[startIndex % waypoints.Length];
+            }
 
             // Targhetta col nome anche per i cittadini senza personaggio
             // RealLife: rende evidente chi si puo' toccare per parlare.
@@ -104,6 +167,50 @@ namespace City.NPC
                 triggerCol.center = new Vector3(0f, 1f, 0f);
                 triggerCol.isTrigger = true;
             }
+
+            CacheRenderers();
+            UpdateCull(true);
+        }
+
+        /// <summary>Prepara renderer e camera per il culling per distanza.
+        /// Vanno inclusi i renderer SKINNED e la targhetta TMP (figli).</summary>
+        private void CacheRenderers()
+        {
+            _renderers = GetComponentsInChildren<Renderer>(true);
+            _camCache = Camera.main;
+            _camRefreshAt = 0f;
+        }
+
+        /// <summary>
+        /// Abilita/disabilita renderer + targhetta in base alla distanza dalla
+        /// camera (o alla richiesta forzata). Il pedone resta "vivo" (Update,
+        /// fisica, missioni) ma non si disegna da lontano.
+        /// </summary>
+        private void UpdateCull(bool force = false)
+        {
+            if (_renderers == null || _renderers.Length == 0) return;
+            bool shouldCull = true;
+            float now = force ? -1f : Time.unscaledTime;
+            if (now >= _camRefreshAt)
+            {
+                if (_camCache == null) _camCache = Camera.main;
+                _camRefreshAt = now + 1f;
+            }
+            if (_camCache != null)
+            {
+                float dsqr = (_camCache.transform.position - transform.position).sqrMagnitude;
+                shouldCull = dsqr > CullDistSqr;
+            }
+            if (shouldCull == _culled && !force) return;
+            _culled = shouldCull;
+            for (int i = 0; i < _renderers.Length; i++)
+                if (_renderers[i] != null) _renderers[i].enabled = !shouldCull;
+            if (_nameTag != null && _nameTagTmp != null)
+            {
+                bool show = !shouldCull;
+                if (_nameTag.gameObject.activeSelf != show)
+                    _nameTag.gameObject.SetActive(show);
+            }
         }
 
         /// <summary>Applica l'identita' del personaggio RealLife (roleplay).</summary>
@@ -130,7 +237,7 @@ namespace City.NPC
                 g.lat, g.lng, 1500);
             if (poi == null) return;
             Vector3 wp = WorldOrigin.ToWorld(poi.lat, poi.lng);
-            wp.y = 0.12f;
+            wp.y = TileElevation.HeightAtWorld(wp) + 0.12f;
 
             // tappa subito dopo quella corrente (non a meta' percorso)
             var list = new List<Vector3>(waypoints);
@@ -144,7 +251,7 @@ namespace City.NPC
             if (def == null || string.IsNullOrEmpty(def.id)) return;
             CharacterId = def.id;
             CharacterRole = def.role ?? "";
-            CharacterAvatar = string.IsNullOrEmpty(def.avatar) ? "\uD83D\uDE42" : def.avatar;
+            CharacterAvatar = string.IsNullOrEmpty(def.avatar) ? "*" : def.avatar;
             if (!string.IsNullOrEmpty(def.name))
                 DisplayName = def.name;
             EnsureNameTag();
@@ -189,6 +296,11 @@ namespace City.NPC
                 Toast("Hai fatto cadere un pedone!");
             }
             City.Environment.ChaosTracker.AddChaos(1);
+            OsmDiag.Log("[Audit] Pedone travolto: " + DisplayName + " @" +
+                transform.position.x.ToString("F1") + "," +
+                transform.position.z.ToString("F1") + " y=" +
+                transform.position.y.ToString("F2") + " dem=" +
+                TileElevation.HeightAtWorld(transform.position).ToString("F2"));
 
             if (_fallCo != null) StopCoroutine(_fallCo);
             _fallCo = StartCoroutine(FallAndFlee(pushDir));
@@ -324,7 +436,8 @@ namespace City.NPC
                 float best = -1f;
                 for (int i = 0; i < waypoints.Length; i++)
                 {
-                    float d = (waypoints[i] - transform.position).sqrMagnitude;
+                    // waypoint in coordinate locali -> confronto col localPosition
+                    float d = (waypoints[i] - transform.localPosition).sqrMagnitude;
                     if (d > best) { best = d; far = i; }
                 }
                 currentTarget = far;
@@ -359,7 +472,12 @@ namespace City.NPC
         private void UpdateNameTag()
         {
             if (_nameTag == null || _nameTagTmp == null) return;
-            var cam = Camera.main;
+            if (_culled)
+            {
+                if (_nameTag.gameObject.activeSelf) _nameTag.gameObject.SetActive(false);
+                return;
+            }
+            var cam = _camCache != null ? _camCache : Camera.main;
             if (cam == null)
             {
                 if (_nameTag.gameObject.activeSelf) _nameTag.gameObject.SetActive(false);
@@ -383,6 +501,14 @@ namespace City.NPC
                 string lvl = RelationshipManager.LevelLabel(
                     RelationshipManager.LevelIndex(CharacterId));
                 txt += "\n<size=50%><color=#9fdcae>" + lvl + "</color></size>";
+            }
+            // indicatore bisogni critici (rosso se fame/sete/energia, giallo se social basso)
+            string needLabel = Needs.StatusLabel();
+            if (!string.IsNullOrEmpty(needLabel))
+            {
+                bool crit = Needs.HungerCritical || Needs.ThirstCritical || Needs.EnergyCritical;
+                string col = crit ? "#ff4444" : "#ffcc44";
+                txt += "\n<size=50%><color=" + col + ">" + needLabel + "</color></size>";
             }
             _nameTagTmp.text = txt;
         }
@@ -409,8 +535,299 @@ namespace City.NPC
                 Game.Instance.OnMissionNPCFocusChanged(mission, false);
         }
 
+        /// <summary>Di notte i pedoni camminano a velocita ridotta.</summary>
+        private bool NightNow()
+        {
+            var dnm = City.Environment.DayNightManager.Instance;
+            if (dnm == null) return false;
+            float h = dnm.ClockHours;
+            return h < 7f || h >= 22f;
+        }
+
+        /// <summary>Routine quotidiana Brookhaven-style: ogni NPC ha una
+        /// schedule fissa in 4 fasi (mattina=lavoro, pomeriggio=shopping/
+        /// passeggiata, sera=torna a casa, notte=riposa).
+        /// I bisogni NPC (fame/sete/energia/socialita') sovrascrivono la
+        /// schedule quando uno scende sotto soglia critica.</summary>
+        private void MaybeDailyLife()
+        {
+            float now = Time.time;
+            if (now < _dailyNextAt) return;
+            _dailyNextAt = now + Random.Range(10f, 24f);
+
+            // ── priorita' ai bisogni (pattern ECS-Starter) ──
+            // se fame/sete/energia sono critici, interrompi la routine
+            // normale e soddisfa il bisogno prima.
+            var urgent = Needs.MostUrgent;
+            if (urgent != NPCNeeds.Urgency.None)
+            {
+                HandleUrgentNeed(urgent);
+                return;
+            }
+
+            var dnm = City.Environment.DayNightManager.Instance;
+            if (dnm == null) return;
+            float h = dnm.ClockHours;
+
+            // ── determina la fase corrente ──
+            DailyPhase newPhase;
+            if (h >= 7f && h < 12f)
+                newPhase = DailyPhase.Morning;     // 7-12: lavoro
+            else if (h >= 12f && h < 18f)
+                newPhase = DailyPhase.Afternoon;   // 12-18: shopping/passeggiata
+            else if (h >= 18f && h < 22f)
+                newPhase = DailyPhase.Evening;     // 18-22: torna a casa
+            else
+                newPhase = DailyPhase.Night;       // 22-7: riposo a casa
+
+            // ── cambio di fase: esegui l'azione di transizione ──
+            if (newPhase != _phase)
+            {
+                OnPhaseChange(_phase, newPhase);
+                _phase = newPhase;
+            }
+
+            // ── azione continua durante la fase ──
+            switch (_phase)
+            {
+                case DailyPhase.Morning:
+                    // al lavoro: se non ci sei ancora, cammina verso il POI
+                    if (!_atWork && _hasWork && Random.value > 0.3f)
+                        InsertWorkStop();
+                    break;
+
+                case DailyPhase.Afternoon:
+                    // shopping/passeggiata: tappa casuale verso negozio
+                    if (_shopper && Random.value > 0.4f)
+                        InsertDailyPoiStop();
+                    break;
+
+                case DailyPhase.Evening:
+                    // torna a casa se sei lontano
+                    if (!_headingHome && Random.value > 0.2f)
+                        InsertHomeStop();
+                    break;
+
+                case DailyPhase.Night:
+                    // fermi a casa (velocita ridotta se cammini ancora)
+                    break;
+            }
+        }
+
+        /// <summary>Gestisce il cambio di fase: ferma il NPC quando serve,
+        /// cambia velocita', resetta le bandiere.</summary>
+        private void OnPhaseChange(DailyPhase from, DailyPhase to)
+        {
+            _atWork = false;
+            _headingHome = false;
+
+            switch (to)
+            {
+                case DailyPhase.Morning:
+                    // mattina: riprendi a camminare verso il lavoro
+                    walking = true;
+                    break;
+
+                case DailyPhase.Afternoon:
+                    // pomeriggio: libera, cammina verso i negozi
+                    walking = true;
+                    break;
+
+                case DailyPhase.Evening:
+                    // sera: cammina verso casa
+                    walking = true;
+                    break;
+
+                case DailyPhase.Night:
+                    // notte: ferma il NPC (simula riposo)
+                    walking = false;
+                    pauseTimer = 999f;  // resta fermo fino alla mattina
+                    SetAnimSpeed(0f);
+                    break;
+            }
+        }
+
+        /// <summary>Gestisce un bisogno urgente: interrompe la routine e
+        /// soddisfa il bisogno (va al bar, si siede, ecc.).
+        /// Usa POI specifici: bar per fame/sete, panchina per energia.</summary>
+        private void HandleUrgentNeed(NPCNeeds.Urgency urgent)
+        {
+            switch (urgent)
+            {
+                case NPCNeeds.Urgency.Hunger:
+                case NPCNeeds.Urgency.Thirst:
+                    // cerca il bar piu vicino come waypoint
+                    InsertBarStop();
+                    if (urgent == NPCNeeds.Urgency.Hunger)
+                        Needs.Feed(40f);
+                    else
+                        Needs.Drink(50f);
+                    OsmDiag.Log("[NPC] " + DisplayName +
+                        (urgent == NPCNeeds.Urgency.Hunger ? " ha fame -> bar" : " ha sete -> bar"));
+                    break;
+
+                case NPCNeeds.Urgency.Energy:
+                    // si siede a riposare (come sedersi su panchina)
+                    walking = false;
+                    pauseTimer = Random.Range(8f, 15f);
+                    Needs.Rest(35f);
+                    SetAnimSpeed(0f);
+                    OsmDiag.Log("[NPC] " + DisplayName + " e' stanco -> riposa");
+                    break;
+
+                case NPCNeeds.Urgency.Social:
+                    // cerca un altro NPC vicino per parlare
+                    TryTalkToNearby();
+                    break;
+            }
+        }
+
+        /// <summary>Cerca un NPC vicino e scambia due chiacchiere
+        /// (soddisfa il bisogno social per entrambi).</summary>
+        private void TryTalkToNearby()
+        {
+            float range = 5f;
+            var all = Active;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var other = all[i];
+                if (other == null || other == this) continue;
+                float d = Vector3.Distance(transform.position, other.transform.position);
+                if (d > range) continue;
+                // trovato: entrambi socializzano
+                Needs.Talk(30f);
+                other.Needs.Talk(30f);
+                // pausa brevemente per "parlare"
+                walking = false;
+                pauseTimer = Random.Range(3f, 6f);
+                SetAnimSpeed(0f);
+                return;
+            }
+        }
+
+        /// <summary>Social interaction periodica: se un altro NPC e' vicino
+        /// e entrambi hanno il social basso, scambiano due parole.</summary>
+        private void MaybeSocialInteraction()
+        {
+            if (!Needs.SocialLow) return;
+            if (Random.value > 0.15f) return; // raro, non ogni tick
+            TryTalkToNearby();
+        }
+
+        /// <summary>Quando il player dorme, tutti gli NPC vicini (50m)
+        /// recuperano energia. Chiamato da SleepSystem.Restore.</summary>
+        public static void RestAllNearby(Vector3 playerPos, float radius, float amount)
+        {
+            float r2 = radius * radius;
+            for (int i = 0; i < Active.Count; i++)
+            {
+                var npc = Active[i];
+                if (npc == null) continue;
+                if ((npc.transform.position - playerPos).sqrMagnitude > r2) continue;
+                npc.Needs.Rest(amount);
+            }
+        }
+
+        /// <summary>Inserisce nel percorso una tappa verso il luogo di lavoro
+        // (POI vicino, tipo office/shop). Coordinate locali chunk.</summary>
+        private void InsertWorkStop()
+        {
+            if (waypoints == null || waypoints.Length < 2) return;
+            if (_poiStopIdx >= 0) return;
+
+            // prima volta: cerca il POI piu vicino e lo salva
+            if (!_hasWork)
+            {
+                GeoCoord g = WorldOrigin.ToGeo(transform.position);
+                var poi = City.Vehicle.VehiclePoiRegistry.NearestAny(
+                    g.lat, g.lng, 2000);
+                if (poi == null) return;
+                Vector3 wp = WorldOrigin.ToWorld(poi.lat, poi.lng);
+                wp.y = TileElevation.HeightAtWorld(wp) + 0.12f;
+                Transform rootT = transform.root;
+                if (rootT != transform)
+                    wp -= new Vector3(rootT.position.x, 0f, rootT.position.z);
+                _workPos = wp;
+                _hasWork = true;
+            }
+
+            // aggiungi work come waypoint temporaneo
+            var list = new List<Vector3>(waypoints);
+            int at = (currentTarget + 1) % list.Count;
+            list.Insert(at, _workPos);
+            waypoints = list.ToArray();
+            _poiStopIdx = at;
+            _atWork = true;
+        }
+
+        /// <summary>Inserisce nel percorso una tappa verso casa (spawn
+        // point iniziale). Coordinate locali chunk.</summary>
+        private void InsertHomeStop()
+        {
+            if (waypoints == null || waypoints.Length < 2) return;
+            if (_poiStopIdx >= 0) return;
+            if (Vector3.Distance(transform.localPosition, _homePos) < 1f)
+            {
+                _headingHome = true;
+                return;
+            }
+
+            var list = new List<Vector3>(waypoints);
+            int at = (currentTarget + 1) % list.Count;
+            list.Insert(at, _homePos);
+            waypoints = list.ToArray();
+            _poiStopIdx = at;
+            _headingHome = true;
+        }
+
+        /// <summary>Aggiunge al percorso una tappa verso il POI piu vicino
+        /// (negozio/parco/bancomat), convertita nel frame LOCALE del chunk
+        /// cosi funziona anche per i pedoni dei chunk (i loro waypoint sono
+        /// locali). Una sola tappa per volta (bandiera _poiStopIdx).</summary>
+        private void InsertDailyPoiStop()
+        {
+            if (waypoints == null || waypoints.Length < 2) return;
+            if (_poiStopIdx >= 0 || Random.value > 0.6f) return;
+            GeoCoord g = WorldOrigin.ToGeo(transform.position);
+            var poi = City.Vehicle.VehiclePoiRegistry.NearestAny(
+                g.lat, g.lng, 1500);
+            if (poi == null) return;
+            Vector3 wp = WorldOrigin.ToWorld(poi.lat, poi.lng);
+            wp.y = TileElevation.HeightAtWorld(wp) + 0.12f;
+            Transform rootT = transform.root;
+            if (rootT != transform)
+                wp -= new Vector3(rootT.position.x, 0f, rootT.position.z);
+            var list = new List<Vector3>(waypoints);
+            int at = (currentTarget + 1) % list.Count;
+            list.Insert(at, wp);
+            waypoints = list.ToArray();
+            _poiStopIdx = at;
+        }
+
+        /// <summary>Inserisce nel percorso una tappa verso il bar piu vicino
+        /// (POI di tipo bar), convertita nel frame LOCALE del chunk.</summary>
+        private void InsertBarStop()
+        {
+            if (waypoints == null || waypoints.Length < 2) return;
+            if (_poiStopIdx >= 0) return;
+            GeoCoord g = WorldOrigin.ToGeo(transform.position);
+            var poi = City.Vehicle.VehiclePoiRegistry.Nearest("bar", g.lat, g.lng);
+            if (poi == null) return;
+            Vector3 wp = WorldOrigin.ToWorld(poi.lat, poi.lng);
+            wp.y = TileElevation.HeightAtWorld(wp) + 0.12f;
+            Transform rootT = transform.root;
+            if (rootT != transform)
+                wp -= new Vector3(rootT.position.x, 0f, rootT.position.z);
+            var list = new List<Vector3>(waypoints);
+            int at = (currentTarget + 1) % list.Count;
+            list.Insert(at, wp);
+            waypoints = list.ToArray();
+            _poiStopIdx = at;
+        }
+
         private void Update()
         {
+            UpdateCull();
             UpdateNameTag();
             if (_down) return;
             if (_fleeUntil > 0f && Time.unscaledTime >= _fleeUntil)
@@ -418,7 +835,21 @@ namespace City.NPC
                 walkSpeed = _baseSpeed > 0f ? _baseSpeed : walkSpeed * 0.5f;
                 _fleeUntil = 0f;
             }
+
+            // tick bisogni NPC ogni 0.5s (non ogni frame per performance)
+            if (Time.time >= _needsTickAt)
+            {
+                _needsTickAt = Time.time + 0.5f;
+                Needs.Tick(0.5f);
+                MaybeSocialInteraction();
+            }
+
             if (waypoints == null || waypoints.Length < 2) return;
+            MaybeDailyLife();
+
+            // Elevazione: sempre aggiornata (anche da fermo), cosi' i pedoni
+            // non restano appesi a y=0.12 quando si fermano sul marciapiede.
+            SnapToGround();
 
             if (!walking)
             {
@@ -433,24 +864,87 @@ namespace City.NPC
             }
 
             Vector3 target = waypoints[currentTarget];
-            Vector3 dir = target - transform.position;
+            Vector3 npcLocal = transform.localPosition;
+            Vector3 dir = target - npcLocal;
             dir.y = 0f;
             float dist = dir.magnitude;
 
             if (dist < 0.3f)
             {
                 walking = false;
-                pauseTimer = Random.Range(pauseMin, pauseMax);
+                bool atPoi = _poiStopIdx >= 0 && currentTarget == _poiStopIdx;
+                pauseTimer = atPoi
+                    ? Random.Range(8f, 14f)
+                    : Random.Range(pauseMin, pauseMax);
+                if (atPoi) _poiStopIdx = -1;
                 return;
             }
 
-            Vector3 move = dir.normalized * walkSpeed * Time.deltaTime;
-            transform.position += move;
+            float nightMul = _phase == DailyPhase.Night ? 0.3f
+                : _phase == DailyPhase.Evening ? 0.7f : 1f;
+            float effSpeed = walkSpeed * nightMul;
+            Vector3 move = dir.normalized * effSpeed * Time.deltaTime;
+            npcLocal += move;
+            transform.localPosition = npcLocal;
 
-            Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            Quaternion look = Quaternion.LookRotation(dir.normalized,
+                TileElevation.SlopeUpAtWorld(transform.position, MaxPedInclineDeg));
             transform.rotation = Quaternion.Slerp(transform.rotation, look, 8f * Time.deltaTime);
 
-            SetAnimSpeed(walking ? walkSpeed : 0f);
+            SetAnimSpeed(walking ? effSpeed : 0f);
+        }
+
+        /// <summary>Quota del terreno sotto il pedone: prima prova la
+        /// superficie fisica (raycast verso il basso sui collider) ignorando
+        /// se stesso, gli altri NPC, i trigger e il layer 8 (edifici/props,
+        /// cosi' non finisce su un tetto); se la colonna non trova nulla usa
+        /// l'altimetria DEM (TileElevation). L'origine e' ancorata alla quota
+        /// DEM come nello spawn del player: se la superficie sta SOPRA di noi
+        /// (pedone sotto un dosso del terreno proxy) la colonna la raggiunge
+        /// comunque e il pedone risale, non passa attraverso.</summary>
+        private float GroundHeightAt(Vector3 pos)
+        {
+            float elev = TileElevation.HeightAtWorld(pos);
+            const int GroundMask = ~(1 << 8);
+            if (!_culled)
+            {
+                Vector3 from = pos + Vector3.up * 220f;
+                float demProbe = elev + 150f;
+                if (demProbe > from.y) from.y = demProbe;
+                RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down,
+                    700f, GroundMask, QueryTriggerInteraction.Ignore);
+                int best = -1;
+                float bestSqr = float.PositiveInfinity;
+                for (int i = 0; i < hits.Length; i++)
+                {
+                    var h = hits[i];
+                    if (h.collider == null) continue;
+                    var t = h.collider.transform;
+                    if (t == transform || t.IsChildOf(transform)) continue;
+                    if (h.collider.GetComponentInParent<NPCController>() != null)
+                        continue;
+                    float dsqr = h.distance * h.distance;
+                    if (dsqr < bestSqr) { bestSqr = dsqr; best = i; }
+                }
+                if (best >= 0) return hits[best].point.y;
+            }
+            return elev;
+        }
+
+        /// <summary>Aggiorna la quota del pedone sulla superficie del terreno.
+        /// Chiamato OGNI frame (anche quando il pedone e' fermo), cosi' non
+        /// resta appeso a y=0.12 se il terreno e' a quota DEM.</summary>
+        private void SnapToGround()
+        {
+            Transform rootT = transform.root;
+            bool rootLevel = rootT == transform;
+            Vector3 npcLocal = transform.localPosition;
+            Vector3 npcWorld = rootLevel
+                ? npcLocal
+                : npcLocal + new Vector3(rootT.position.x, 0f, rootT.position.z);
+            npcWorld.y = GroundHeightAt(npcWorld) + 0.12f;
+            npcLocal.y = rootLevel ? npcWorld.y : npcWorld.y - rootT.position.y;
+            transform.localPosition = npcLocal;
         }
 
         private CharacterWalker walker;

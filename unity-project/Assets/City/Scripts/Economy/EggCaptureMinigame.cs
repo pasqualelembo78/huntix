@@ -197,7 +197,10 @@ namespace City.Economy
             _successWait = 0.9f;   // breve pausa per far leggere il risultato
 
             if (target != null)
+            {
+                target.captureMultiplier = mult;
                 target.OnCaptured();
+            }
         }
 
         private void Fail()

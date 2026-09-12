@@ -22,6 +22,13 @@ namespace City.OSM
         private const int BuildingsPerStep = 40;
         private const int TreesPerStep = 120;
 
+        /// <summary>Sezione (italiano) attualmente in costruzione nell'ultimo
+        /// chunk processato: alimenta lo splash "Sto caricando: X". Letto da
+        /// ChunkManager per il report CityProgress; vuota se nessuna build.</summary>
+        public static string CurrentBuildSection = "";
+
+        private static void Section(string name) { CurrentBuildSection = name; }
+
         public static IEnumerator Build(ChunkManager mgr, ChunkData chunk,
             TileGeoDoc geo, Stopwatch clock, long budgetMs)
         {
@@ -105,9 +112,20 @@ namespace City.OSM
                 cornerNE.x - cornerSW.x, cornerNE.z - cornerSW.z);
 
             // ── terreno ──
+            Section("Terreno");
+            Dictionary<Vector2, float> terrainHeights = null;
             try
             {
-                chunk.terrainGo = TerrainChunk.Create(chunk.root.transform, "Terreno", bounds);
+                // NB: demLattice=true solo se le altezze vengono dalla griglia
+                // DEM regolare (~15 m). Col proxy edifici (sparso) il terreno
+                // resta sul nearest-bucket. La bilineare fa combaciare il
+                // terreno con le strade (stessa griglia ele) anche sui pendii.
+                bool dem = geo != null && geo.ele != null && geo.ele.Length > 0 &&
+                    geo.ele_nrow > 1 && geo.ele_ncol > 1 &&
+                    geo.bbox != null && geo.bbox.Length >= 4;
+                terrainHeights = CollectTerrainHeights(geo, ToLocal, bounds, originWorld);
+                chunk.terrainGo = TerrainChunk.Create(chunk.root.transform, "Terreno",
+                    bounds, terrainHeights, dem);
             }
             catch (System.Exception e)
             {
@@ -125,6 +143,7 @@ namespace City.OSM
                     ? terrMat.shader.name : "NULL"));
 
             // ── strade (una mesh sola) + targhette col nome delle vie ──
+            Section("Strade");
             bool stradeOk = false;
             if (geo.roads != null && geo.roads.Length > 0)
             {
@@ -165,6 +184,16 @@ namespace City.OSM
                         " matStrada=" + (mgr.SharedRoadMaterial != null &&
                             mgr.SharedRoadMaterial.shader != null
                             ? mgr.SharedRoadMaterial.shader.name : "NULL"));
+                    // stradeVerts=-1 NON e' un errore: RoadRenderer.Build ritorna
+                    // una mesh nulla quando nessuna way OSM del tile cade dentro
+                    // i bounds del chunk (cella di campagna/mare/agricolo senza
+                    // strade). Distinguiamo esplicitamente il caso benigno da un
+                    // eventuale errore di geometria (che viene loggato qui sopra
+                    // come LogError dal catch).
+                    if (roadMesh == null)
+                        OsmDiag.Log("[Builder] " + chunk.key +
+                            " stradeIn=" + geo.roads.Length +
+                            " ma 0 geometria nei bounds: cella SENZA strade (OK, edifici si)");
                 }
                 catch (System.Exception e)
                 {
@@ -179,6 +208,7 @@ namespace City.OSM
             }
 
             // ── edifici (placement record -> prefab Kenney) ──
+            Section("Edifici");
             chunk.buildingsGo = new GameObject("Edifici");
             chunk.buildingsGo.transform.SetParent(chunk.root.transform, false);
             BuildingPlacer.ResetChunkBudget();
@@ -225,7 +255,7 @@ namespace City.OSM
                         if (!bounds.Contains(new Vector2(p.x, p.z))) continue;
                         if (poiSpots != null && poiSpots.Count > 0 &&
                             IsNearPoi(poiSpots, p)) continue;
-                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p))
+                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p, terrainHeights))
                             placed++;
                     }
                     catch (System.Exception e)
@@ -246,6 +276,7 @@ namespace City.OSM
             }
 
             // ── aeroporti: piste + velivoli (dati OSM aeroway=aerodrome) ──
+            Section("Aeroporti");
             try
             {
                 int airCount = AirportRenderer.Build(chunk, geo, ToLocal, bounds);
@@ -260,6 +291,7 @@ namespace City.OSM
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── natura e arredo ──
+            Section("Alberi e verde");
             chunk.natureGo = new GameObject("Natura");
             chunk.natureGo.transform.SetParent(chunk.root.transform, false);
             try
@@ -277,6 +309,7 @@ namespace City.OSM
             yield return null;
 
             // ── veicoli: parcheggi deterministici + traffico AI ──
+            Section("Veicoli");
             try
             {
                 Vehicle.ChunkVehiclePopulator.Populate(chunk, ToLocal, bounds);
@@ -288,6 +321,7 @@ namespace City.OSM
             }
 
             // ── pedoni sui marciapiedi (deterministici, animati, parlanti) ──
+            Section("Pedoni");
             try
             {
                 NPC.NPCPopulator.Populate(chunk, ToLocal, bounds);
@@ -299,6 +333,7 @@ namespace City.OSM
             }
 
             // ── uova raccoglibili (missioni CollectEggs) ──
+            Section("Uova");
             try
             {
                 City.Economy.EggSpawnManager.Instance?.SpawnEggsInChunk(
@@ -312,6 +347,7 @@ namespace City.OSM
             }
 
             // ── POI veicoli: concessionarie / officine / garage da OSM ──
+            Section("Concessionarie");
             try
             {
                 int poiCount = Vehicle.VehiclePoiPlacer.Populate(chunk, ToLocal, bounds);
@@ -325,6 +361,7 @@ namespace City.OSM
             }
 
             // ── segnali stradali con distanze POI ──
+            Section("Segnali");
             try
             {
                 Vehicle.RoadSignSpawner.Populate(chunk, ToLocal, bounds);
@@ -336,6 +373,7 @@ namespace City.OSM
             }
 
             // ── arredo urbano interattivo + POI dagli edifici OSM ──
+            Section("Arredo urbano");
             try
             {
                 City.Environment.PropSpawner.Populate(chunk, ToLocal, bounds);
@@ -349,12 +387,135 @@ namespace City.OSM
             chunk.built = true;
             chunk.lod = -1;
             chunk.SetLod(0);
+            // I collider creati a runtime in questo chunk (terreno, strade,
+            // edifici) non sono ancora registrati in PhysX: con
+            // Physics.autoSyncTransforms off, il CharacterController puo'
+            // attraversarli per qualche frame e il player precipita sotto il
+            // terreno (mesh one-sided: da sotto non collide piu'). Un sync
+            // esplicito rende i collider subito visibili alla fisica.
+            Physics.SyncTransforms();
+            Section("");
             OsmDiag.Log("[Builder] === BUILD DONE === " + chunk.key + " totalMs=" + totalClock.ElapsedMilliseconds + "ms");
 
             // telemetria: utile per capire tempi/contenuti dei chunk grandi
             if (!stradeOk && geo.roads != null && geo.roads.Length > 0)
                 UnityEngine.Debug.LogWarning("[ChunkBuilder] " + chunk.key +
                     " completato SENZA strade (sezione in errore)");
+        }
+
+        /// <summary>
+        /// Racoglie le altezze degli edifici dal geo-document del chunk e le
+        /// restituisce come dizionario {Vector2 (posizione locale XZ) -> altezza
+        /// in metri}. Usato per generare il terreno con altezza realistica invece
+        /// di y=0 piatto. NB: va chiamato DURANTE l'elaborazione del geo, PRIMA
+        /// che gli edifici vengano istanziati (gli istanziati vengono dopo il
+        /// terreno).
+        /// </summary>
+        private static Dictionary<Vector2, float> CollectTerrainHeights(
+            TileGeoDoc geo, System.Func<GeoLL, Vector3> toLocal,
+            Rect bounds, Vector3 originWorld)
+        {
+            // Elevazione REALE (DEM/SRTM) se il server l'ha iniettata nella geo:
+            // griglia 'ele' row-major sul bbox della tile. Usa la bilineare.
+            if (geo != null && geo.ele != null && geo.ele.Length > 0 &&
+                geo.ele_nrow > 1 && geo.ele_ncol > 1 &&
+                geo.bbox != null && geo.bbox.Length >= 4)
+            {
+                return CollectDemHeights(geo, bounds, originWorld);
+            }
+
+            // Fallback (nessun DEM): proxy altimetrico dalle altezze edifici.
+            var heights = new Dictionary<Vector2, float>();
+            if (geo == null || geo.buildings == null) return heights;
+
+            var buildings = geo.buildings;
+            for (int i = 0; i < buildings.Length; i++)
+            {
+                var b = buildings[i];
+                if (b == null || b.c == null || b.c.Length < 2) continue;
+
+                float h;
+                BuildingPlacer.PickPrefabName(b, out h, 0);
+
+                var ll = new GeoLL { a = b.c[0], o = b.c[1] };
+                var p = toLocal(ll);
+                if (p.x < bounds.xMin || p.x > bounds.xMax ||
+                    p.z < bounds.yMin || p.z > bounds.yMax) continue;
+
+                int gx = Mathf.RoundToInt(p.x / 10f) * 10;
+                int gz = Mathf.RoundToInt(p.z / 10f) * 10;
+                var key = new Vector2(gx, gz);
+                float cur;
+                if (!heights.TryGetValue(key, out cur) || h > cur)
+                    heights[key] = h;
+            }
+            return heights;
+        }
+
+        /// <summary>Risolve l'elevazione reale (s.l.m.) su una griglia fine dentro
+        /// il chunk, bilineando la griglia DEM fornita dal server. Ritorna un
+        /// dizionario {(x,z) locali -> quote metri} consumabile da TerrainChunk.</summary>
+        private static Dictionary<Vector2, float> CollectDemHeights(
+            TileGeoDoc geo, Rect bounds, Vector3 originWorld)
+        {
+            var heights = new Dictionary<Vector2, float>();
+            int nrow = geo.ele_nrow;
+            int ncol = geo.ele_ncol;
+            double latMin = geo.bbox[0], lonMin = geo.bbox[1];
+            double latMax = geo.bbox[2], lonMax = geo.bbox[3];
+            float[] ele = geo.ele;
+
+            // Griglia di campionamento ~ ogni 15 m per avere un vertice near per
+            // ogni vertice del terreno (33x33 su ~1000 m) -> interpolazione pulita.
+            const float step = 15f;
+            int nx = Mathf.Max(2, Mathf.CeilToInt(bounds.width / step));
+            int nz = Mathf.Max(2, Mathf.CeilToInt(bounds.height / step));
+            for (int i = 0; i <= nx; i++)
+            {
+                float x = bounds.xMin + bounds.width * i / nx;
+                for (int j = 0; j <= nz; j++)
+                {
+                    float z = bounds.yMin + bounds.height * j / nz;
+                    // locali -> mondo -> lat/lon (world y=0 non influisce)
+                    var w = new Vector3(originWorld.x + x, 0f, originWorld.z + z);
+                    var g = WorldOrigin.ToGeo(w);
+                    float h = SampleBilinear(ele, nrow, ncol,
+                        latMin, lonMin, latMax, lonMax, g.lat, g.lng);
+                    heights[new Vector2(x, z)] = h;
+                }
+            }
+            return heights;
+        }
+
+        /// <summary>Interpolazione bilineare dell'elevazione sul bbox della tile.
+        /// Coordinate griglia: riga 0 = latMax (nord), colonna lungo lon crescente.
+        /// Fuori dal bbox clampa al bordo piu' vicino.</summary>
+        private static float SampleBilinear(float[] ele, int nrow, int ncol,
+            double latMin, double lonMin, double latMax, double lonMax,
+            double lat, double lon)
+        {
+            if (ele == null || nrow <= 1 || ncol <= 1) return 0f;
+            double fy = (latMax - lat) / (latMax - latMin) * (nrow - 1);
+            double fx = (lon - lonMin) / (lonMax - lonMin) * (ncol - 1);
+            fy = Clamp(fy, 0, nrow - 1);
+            fx = Clamp(fx, 0, ncol - 1);
+            int y0 = (int)fy, x0 = (int)fx;
+            int y1 = Mathf.Min(y0 + 1, nrow - 1);
+            int x1 = Mathf.Min(x0 + 1, ncol - 1);
+            float dy = (float)(fy - y0);
+            float dx = (float)(fx - x0);
+
+            float v00 = ele[y0 * ncol + x0];
+            float v10 = ele[y1 * ncol + x0];
+            float v01 = ele[y0 * ncol + x1];
+            float v11 = ele[y1 * ncol + x1];
+            return Mathf.Lerp(Mathf.Lerp(v00, v01, dx),
+                             Mathf.Lerp(v10, v11, dx), dy);
+        }
+
+        private static double Clamp(double v, double lo, double hi)
+        {
+            return v < lo ? lo : (v > hi ? hi : v);
         }
 
         /// <summary>Vero se la posizione cade nel lotto libero di un POI

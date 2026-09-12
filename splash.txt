@@ -1,0 +1,18 @@
+PROMPT SPLASH SCREEN — MIACITTA'
+Strumento: generico (Midjourney / DALL-E / Stable Diffusion)
+Formato: soggetto centrato con respiro ai lati, adattabile a crop verticale 9:16 e orizzontale 16:9
+
+=== MAIN PROMPT ===
+
+A breathtaking cinematic splash screen artwork of a magical Italian city at dusk, stylized low-poly 3D render. Panoramic view over a grand plaza with a glowing fountain, surrounded by cozy piazzas, terracotta rooftops and pastel Mediterranean buildings with warm lit windows. A gentle floating skyline of domes, bell towers and arched bridges rises into a starry twilight sky full of soft clouds and floating lanterns. In the distance, a big radiant crescent moon with subtle halo, volumetric purple-violet light beams and cyan-teal rim lighting. A small lone silhouette of a traveler standing in the foreground on a cobbled edge, looking at the city, conveying wonder and scale. Rich color palette of deep purple #7E57C2, vibrant cyan #00E5FF, warm golden amber and magenta accents. Soft bokeh particles and fireflies in the air. Ultra-detailed, dramatic lighting, ethereal atmosphere, dreamlike and epic. Centered composition with generous breathing space around the main subject so it adapts perfectly to both vertical portrait (9:16) and horizontal landscape (16:9) crops. No text, no letters, no watermark, no UI.
+
+=== NEGATIVE PROMPT (Stable Diffusion / DALL-E negative) ===
+
+text, letters, watermark, logo, UI, frame, border, low quality, blurry, deformed buildings, oversaturated, cartoon flat, photorealistic people, cluttered composition
+
+=== NOTE ===
+
+- La frase "Centered composition with generous breathing space..." e' ciò che garantisce l'adattabilita' ai due formati: soggetto al centro, dettagli ai lati. Per il crop perfetto genera in quadrato e ritaglia.
+- "No text, no letters, no watermark" evita testo/logo generato dall'IA (il logo si sovrappone in Unity/Android).
+- Palette viola #7E57C2 e ciano #00E5FF coerenti con i colori dell'app.
+- Midjourney: aggiungere --ar 1:1 --no text, watermark --style raw --v 6

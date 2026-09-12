@@ -70,6 +70,18 @@ namespace City.OSM
         public string nm;
         public string hw;
         public GeoLL[] pts;
+
+        // Strada su viadotto (br) / in galleria (tu). Sulla retta di impalcato
+        // reale fra i capisaldi della way: `dh` attivo = sezione elevata con
+        // h0/h1 (quote s.l.m. ai portali) e s0/s1 (frazioni globali di
+        // lunghezza della way). Se `dh` manca la strada resta classica.
+        public bool br;
+        public bool tu;
+        public bool dh;
+        public float h0;
+        public float h1;
+        public float s0;
+        public float s1;
     }
 
     [Serializable]
@@ -140,6 +152,12 @@ namespace City.OSM
         public TileAirportRec[] airports;
         public TileAddrRec[] addrs;   // civici (iniezione lato server)
         public TilePoiRec[] pois;     // concessionarie/officine/garage
+
+        // Elevazione reale (DEM/SRTM) iniettata lato server: griglia row-major
+        // di altitudini in metri sul bbox della tile (ncol lungo lon).
+        public float[] ele;
+        public int ele_nrow;
+        public int ele_ncol;
 
         public GeoCoord Center()
         {

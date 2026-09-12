@@ -46,13 +46,24 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
     })
 
     // Info card
+    val curYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+    val charAge = ((curYear - (p?.birthYear ?: curYear))).coerceAtLeast(0)
     root.addView(sectionCard("#0D1030", "#5C35CC") {
         addView(rowText("🆔 ID Giocatore", p?.playerId?.take(12) ?: "—", "#C4B5FD", "#CCBBFF"))
+        addView(rowText("👤 Età reale",    "${p?.realAge ?: "—"}",        "#C4B5FD", "#FFFFFF"))
+        addView(rowText("🎮 Età personaggio", "${charAge} anni",          "#C4B5FD", "#FFFFFF"))
         addView(rowText("⭐ Livello",       "${p?.level ?: 1}",            "#C4B5FD", "#FFFFFF"))
         addView(rowText("💪 Forza",         "${p?.strength ?: 0}",         "#C4B5FD", "#FFFFFF"))
         addView(rowText("⚡ Energia",       "${p?.energy ?: 100} / 100",   "#C4B5FD", "#FFFFFF"))
         addView(rowText("🏋️ Allenamenti",   "${p?.gymTrainings ?: 0}",     "#C4B5FD", "#CCBBFF"))
         addView(rowText("📅 Giorni login",  "${p?.totalLoginDays ?: 0}",   "#C4B5FD", "#CCBBFF"))
+    })
+
+    // Nota età fittizia
+    root.addView(sectionCard("#1A1A2E", "#5C35CC") {
+        addView(tv("ℹ️ Nota sull'età", 14f, Color.parseColor("#C4B5FD"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(6)) })
+        addView(tv("L'età del personaggio è fittizia e serve per le meccaniche di gioco (crescita, famiglia, adozioni). Non corrisponde all'età reale del giocatore.", 11f, Color.parseColor("#8A8AD0"), Gravity.START))
     })
 
     // Personalizzazione
@@ -204,6 +215,28 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
                 }
             })
         }
+    })
+
+    // ── Posizione GPS ──
+    val hasGps = p != null && (Math.abs(p.gpsLat) > 0.001 || Math.abs(p.gpsLng) > 0.001)
+    root.addView(sectionCard("#1A0A00", "#FF9800") {
+        addView(tv("📍 Posizione GPS", 15f, Color.parseColor("#FFB74D"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        if (hasGps) {
+            addView(rowText("Latitudine",  String.format("%.5f", p?.gpsLat ?: 0.0), "#FF9800", "#FFFFFF"))
+            addView(rowText("Longitudine", String.format("%.5f", p?.gpsLng ?: 0.0), "#FF9800", "#FFFFFF"))
+        } else {
+            addView(tv("Nessuna posizione GPS impostata", 12f, Color.parseColor("#9999CC"), Gravity.START))
+        }
+        addView(Button(this@buildProfileTab).apply {
+            text = "📍 Modifica posizione GPS"; textSize = 13f; setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE; cornerRadius = dp(20).toFloat()
+                setColor(Color.parseColor("#E65100"))
+            }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).also { it.topMargin = dp(8) }
+            setOnClickListener { showGpsEditDialog() }
+        })
     })
 
     // Team
@@ -534,6 +567,48 @@ internal fun PlayerProfileActivity.buildBadgesTab(root: LinearLayout) {
                 com.intelligame.huntix.MiniGamesHubActivity::class.java))
         }
     })
+}
+
+private fun PlayerProfileActivity.showGpsEditDialog() {
+    val p = PlayerProfileManager.myProfile ?: return
+    val ctx = this
+    val currentLat = if (Math.abs(p.gpsLat) > 0.001) String.format("%.5f", p.gpsLat) else ""
+    val currentLng = if (Math.abs(p.gpsLng) > 0.001) String.format("%.5f", p.gpsLng) else ""
+
+    val latInput = EditText(ctx).apply {
+        setText(currentLat); setHint("Latitudine (es. 41.9028)"); setHintTextColor(Color.parseColor("#555577"))
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        setTextColor(Color.WHITE); textSize = 15f
+    }
+    val lngInput = EditText(ctx).apply {
+        setText(currentLng); setHint("Longitudine (es. 12.4964)"); setHintTextColor(Color.parseColor("#555577"))
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+        setTextColor(Color.WHITE); textSize = 15f
+    }
+    val container = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(16), dp(24), 0)
+        addView(tv("Inserisci le nuove coordinate GPS:", 14f, Color.WHITE, Gravity.START)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        addView(latInput)
+        addView(lngInput)
+    }
+    android.app.AlertDialog.Builder(ctx)
+        .setTitle("Modifica Posizione GPS")
+        .setView(container)
+        .setPositiveButton("Salva") { _, _ ->
+            val lat = latInput.text.toString().toDoubleOrNull()
+            val lng = lngInput.text.toString().toDoubleOrNull()
+            if (lat != null && lng != null && Math.abs(lat) > 0.001 && Math.abs(lng) > 0.001) {
+                p.gpsLat = lat; p.gpsLng = lng
+                PlayerProfileManager.persistMyProfile()
+                Toast.makeText(ctx, "GPS aggiornato: $lat, $lng", Toast.LENGTH_SHORT).show()
+                recreate()
+            } else {
+                Toast.makeText(ctx, "Coordinate non valide!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        .setNegativeButton("Annulla", null)
+        .show()
 }
 
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")

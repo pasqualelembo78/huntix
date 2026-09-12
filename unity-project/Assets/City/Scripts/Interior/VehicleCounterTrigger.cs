@@ -24,16 +24,18 @@ namespace City.Interior
             if (!other.CompareTag("Player")) return;
             focused = true;
             var zone = PoiZone;
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowInteract(zone != null ? zone.Label : "NEGOZIO");
+            InteriorManager mgr = InteriorManager.Instance;
+            if (mgr != null)
+                mgr.RegisterInteriorAction(Interact,
+                    zone != null ? zone.Label : "NEGOZIO");
         }
 
         private void OnTriggerExit(Collider other)
         {
             if (!other.CompareTag("Player")) return;
             focused = false;
-            if (UIManager.Instance != null)
-                UIManager.Instance.HideInteract();
+            if (InteriorManager.Instance != null)
+                InteriorManager.Instance.UnregisterInteriorAction(Interact);
         }
 
         public void Interact()

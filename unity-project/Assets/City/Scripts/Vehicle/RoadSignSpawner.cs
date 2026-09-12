@@ -14,7 +14,13 @@ namespace City.Vehicle
         private const float SampleEveryMeters = 140f;
         private const int MaxPerChunk = 4;
         private static readonly string[] SignKinds =
-            { "dealer", "repair", "garage", "hospital" };
+            { "dealer", "repair", "garage", "hospital", "fuel" };
+
+        private static float GroundY(Transform parent, Vector3 local)
+        {
+            return TileElevation.HeightAtWorld(
+                parent.position + new Vector3(local.x, 0f, local.z));
+        }
 
         public static void Populate(ChunkData chunk,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds)
@@ -64,7 +70,7 @@ namespace City.Vehicle
             bool big = roadClass == "primary";
             var go = new GameObject("Segnale_" + kindStr);
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(local.x, 0f, local.z);
+            go.transform.localPosition = new Vector3(local.x, GroundY(parent, local), local.z);
 
             var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             Object.Destroy(pole.GetComponent<Collider>());

@@ -1403,6 +1403,17 @@ override fun onPause() {
                 osmLoading = false
                 osmDownloadFailed = false
 
+                // Aggiornamento mappa: aggiorna anche l'indice delle vie della
+                // zona (per il selettore di spawn "in quale via?").
+                try {
+                    Thread {
+                        com.intelligame.huntix.bridge.StreetIndexer.ensureArea(
+                            this@CityActivity, targetLat, targetLon, force = true)
+                    }.start()
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "indice vie aggiornamento mappa: " + e.message)
+                }
+
                 // Rebuild city with full OSM data on GL thread
                 withContext(Dispatchers.Main) {
                     if (!destroyed) {

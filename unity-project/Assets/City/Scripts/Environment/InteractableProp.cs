@@ -56,7 +56,7 @@ namespace City.Environment
             if (Kicked) return;
             if (kind == Kind.Fountain)
             {
-                Toast("\u26fd Salda come una roccia: la fontanella non si muove");
+                Toast("Salda come una roccia: la fontanella non si muove");
                 return;
             }
             Kicked = true;
@@ -162,30 +162,30 @@ namespace City.Environment
 
                 case Kind.Fountain:
                     EnergySystem.Restore(8);
-                    Toast("\u26fd Bevi alla fontanella: +8 energia");
+                    Toast("Bevi alla fontanella: +8 energia");
                     break;
 
                 case Kind.Bin:
                     int n = PlayerPrefs.GetInt("city_clean_count", 0) + 1;
                     PlayerPrefs.SetInt("city_clean_count", n);
                     PlayerPrefs.Save();
-                    Toast("\ud83d\uddd1\ufe0f Citta' piu' pulita! (" + n + " rifiuti smaltiti)");
+                    Toast("Citta' piu' pulita! (" + n + " rifiuti smaltiti)");
                     break;
 
                 case Kind.Cafe:
                     ChoicePanel.Show(title, new ChoicePanel.Option[]
                     {
-                        new ChoicePanel.Option("\u2615 Caff\u00e8 \u2014 2\u20ac (+15\u26a1)", () =>
+                        new ChoicePanel.Option("Caff\u00e8 \u2014 2\u20ac (+15 energia)", () =>
                         {
                             if (!Wallet.TrySpend(2)) { Toast("Soldi insufficienti"); return; }
                             EnergySystem.Restore(15);
-                            Toast("\u2615 Che botta di caffe': +15 energia");
+                            Toast("Che botta di caffe': +15 energia");
                         }),
-                        new ChoicePanel.Option("\ud83c\udf79 Aperitivo \u2014 5\u20ac (+30\u26a1)", () =>
+                        new ChoicePanel.Option("Aperitivo \u2014 5\u20ac (+30 energia)", () =>
                         {
                             if (!Wallet.TrySpend(5)) { Toast("Soldi insufficienti"); return; }
                             EnergySystem.Restore(30);
-                            Toast("\ud83c\udf79 Aperitivo riuscito: +30 energia");
+                            Toast("Aperitivo riuscito: +30 energia");
                         }),
                     });
                     break;
@@ -193,11 +193,11 @@ namespace City.Environment
                 case Kind.Pharmacy:
                     ChoicePanel.Show(title, new ChoicePanel.Option[]
                     {
-                        new ChoicePanel.Option("\ud83d\udc8a Kit pronto soccorso \u2014 8\u20ac (+25\u26a1)", () =>
+                        new ChoicePanel.Option("Kit pronto soccorso \u2014 8\u20ac (+25 energia)", () =>
                         {
                             if (!Wallet.TrySpend(8)) { Toast("Soldi insufficienti"); return; }
                             EnergySystem.Restore(25);
-                            Toast("\ud83d\udc8a Kit comprato: +25 energia");
+                            Toast("Kit comprato: +25 energia");
                         }),
                     });
                     break;
@@ -212,15 +212,16 @@ namespace City.Environment
         // Tasso variabile: 1 MVC ≈ CurrentRate() €, fluttua nel tempo in modo
         // deterministico (formula col tempo reale). Spread: vendere rende un
         // po' meno, comprare costa un po' di piu', cosi non c'e' arbitraggio
-        // infinito fra le due direzioni.
-        private const double AtmBuySpread = 1.10; // comprare MVC costa +10%
+        // Lo spread supera l'ampiezza dell'oscillazione: acquistare non e'
+        // mai profittevole rivendendolo subito (niente arbitraggio).
+        private const double AtmBuySpread = 1.18; // comprare MVC costa +18%
         private const int AtmExchangeLot = 10;    // lotti da 10 MVC
 
         private static double AtmCurrentRate()
         {
             double t = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             const double baseRate = 20.0;
-            const double amplitude = 0.30;        // 20 € ± 30% → 14..26 €
+            const double amplitude = 0.06;        // 20 € ± 6% → 18.8..21.2
             const double periodSeconds = 300.0;   // ciclo completo in 5'
             double f = Math.Sin((t % periodSeconds) / periodSeconds
                 * 2.0 * Math.PI);

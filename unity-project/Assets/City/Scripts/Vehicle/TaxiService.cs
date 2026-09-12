@@ -184,6 +184,11 @@ namespace City.Vehicle
                 game.player.transform.position, wp);
             fare = FareBase +
                 Mathf.CeilToInt(dist / 100f) * FarePerHundred;
+            if (!Wallet.CanAfford(Mathf.Max(1, (int)fare)))
+            {
+                game.ui?.ShowToast("Non hai abbastanza soldi per prendere il taxi.");
+                return false;
+            }
             StartCoroutine(BoardRoutine(game, wp));
             return true;
         }
@@ -193,7 +198,13 @@ namespace City.Vehicle
         {
             boarding = true;
             promptActive = false;
+            VehiclePoiZone.ReleaseFocusedZone();
             RefreshPrompt();
+            // Salire sul taxi da dentro un interno in-place: esci dall'edificio
+            // (no-op se non si è dentro) così la camera indoor non resta attiva
+            // durante la corsa in taxi.
+            if (City.Interior.InteriorManager.Instance != null)
+                City.Interior.InteriorManager.Instance.ExitInterior();
             var fader = game.fader;
             try
             {
@@ -257,8 +268,9 @@ namespace City.Vehicle
                     pl.gameObject.SetActive(true);
                     pl.transform.SetParent(null, true);
 
-                    Vector3 beside = taxi.transform.position;
-                    beside.y = 0.12f;
+                    Vector3 beside = taxi.transform.position
+                        + taxi.transform.right * 2.2f;
+                    beside.y = TileElevation.HeightAtWorld(beside) + 0.12f;
                     pl.transform.position = beside;
                     pl.transform.localScale = Vector3.one;
                     pl.transform.rotation = Quaternion.identity;

@@ -1,7 +1,9 @@
 package com.intelligame.huntix.minigames
 
 import android.graphics.*
+import android.graphics.drawable.Drawable
 import android.os.Bundle
+import androidx.core.graphics.drawable.toBitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -10,6 +12,8 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
+import com.intelligame.huntix.R
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.managers.MiniGameManager
 import io.sentry.Sentry
@@ -138,8 +142,6 @@ class CatchEggActivity : MiniGameBase() {
 
     private fun updateEggs() {
         val iter = eggs.iterator()
-        val dm = resources.displayMetrics
-        val h = dm.heightPixels.toFloat()
         while (iter.hasNext()) {
             val e = iter.next()
             e.y += e.speed
@@ -240,11 +242,19 @@ class CatchEggActivity : MiniGameBase() {
     }
 
     inner class GameCanvasView(context: android.content.Context) : View(context) {
-        private val eggEmojis = arrayOf("\uD83E\uDD5A", "\uD83E\uDD5A\u2728", "\uD83D\uDCA3")
+        private val eggBitmaps: Array<Bitmap?> = arrayOf(
+            loadEggBitmap(R.drawable.egg_common),
+            loadEggBitmap(R.drawable.egg_rare),
+            loadEggBitmap(R.drawable.egg_epic)
+        )
         private val eggColors = intArrayOf(Color.WHITE, Color.parseColor("#FFD700"), Color.parseColor("#FF4444"))
         private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textAlign = Paint.Align.CENTER
         }
+
+        private fun loadEggBitmap(resId: Int): Bitmap? = try {
+            ContextCompat.getDrawable(context, resId)?.toBitmap(128, 128)
+        } catch (_: Exception) { null }
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
@@ -265,15 +275,20 @@ class CatchEggActivity : MiniGameBase() {
             val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#A0522D") }
             c.drawRoundRect(RectF(bx - bw * 0.55f, by - bh * 0.3f, bx + bw * 0.55f, by + bh * 0.15f), 10f, 10f, rimPaint)
 
-            val eTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                textAlign = Paint.Align.CENTER; textSize = w * 0.065f
-            }
             for (e in eggs) {
                 val ex = e.x * w
                 val ey = e.y * h
-                val gPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = eggColors[e.type]; alpha = 60 }
-                c.drawCircle(ex, ey, w * EGG_R * 1.8f, gPaint)
-                c.drawText(eggEmojis[e.type], ex, ey + w * 0.025f, eTextPaint)
+                val bmp = eggBitmaps[e.type]
+                if (bmp != null) {
+                    val sz = (w * EGG_R * 3).toInt()
+                    val src = Rect(0, 0, bmp.width, bmp.height)
+                    val dst = RectF(ex - sz / 2f, ey - sz / 2f, ex + sz / 2f, ey + sz / 2f)
+                    c.drawBitmap(bmp, src, dst, Paint(Paint.ANTI_ALIAS_FLAG))
+                } else {
+                    val gPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = eggColors[e.type]; alpha = 60 }
+                    c.drawCircle(ex, ey, w * EGG_R * 1.8f, gPaint)
+                    c.drawText("\uD83E\uDD5A", ex, ey + w * 0.025f, textPaint)
+                }
             }
         }
 

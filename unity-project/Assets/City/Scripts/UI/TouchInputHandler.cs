@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using City.Player;
 using City.OSM;
 using Huntix.Bridge;
@@ -12,11 +13,14 @@ namespace City.UI
         private const float LongPressDuration = 2f;
         private const float MoveThreshold = 40f;
         private const float TapMaxDuration = 0.35f;
+        private const float DoubleTapWindow = 0.3f;
 
         private float pressTimer;
         private Vector2 pressStartScreen;
         private bool tracking;
         private Camera mainCam;
+        private float lastTapTime = -100f;
+        private Vector2 lastTapPos;
 
         private void Awake()
         {
@@ -41,6 +45,17 @@ namespace City.UI
             if (City.Game.Instance != null && City.Game.Instance.IsDriving) { ResetTracking(); return; }
 
             Touch t = Input.GetTouch(0);
+
+            // Tocco sopra un elemento UI (minimap, pannelli, joystick): il tap
+            // e' per l'interfaccia, non per il mondo. Senza questo guard un tap
+            // su un bottone generava salti/teleport/interazioni fantasma sotto
+            // l'UI (il raycast del mondo partiva comunque).
+            if (EventSystem.current != null &&
+                EventSystem.current.IsPointerOverGameObject(t.fingerId))
+            {
+                ResetTracking();
+                return;
+            }
 
             switch (t.phase)
             {
@@ -68,10 +83,37 @@ namespace City.UI
 
                 case TouchPhase.Ended:
                 case TouchPhase.Canceled:
-                    // tap breve = parla con il pedone toccato (se c'e' un NPC)
                     if (tracking && pressTimer < TapMaxDuration &&
                         Vector2.Distance(t.position, pressStartScreen) <= MoveThreshold)
-                        TryInteract(t.position);
+                    {
+                        // DOPPIO TAP ovunque sullo schermo = salto, come
+                        // Brookhaven: due tocchi brevi e vicini nello spazio.
+                        bool doubleTap = Time.time - lastTapTime < DoubleTapWindow &&
+                            Vector2.Distance(t.position, lastTapPos) <= MoveThreshold;
+                        if (doubleTap)
+                        {
+                            OsmDiag.Log("[Brookhaven][TouchInput] Doppio tap -> salto");
+                            if (City.Environment.SitController.IsSitting)
+                                City.Environment.SitController.StandUp();
+                            TryJump();
+                            lastTapTime = -100f;
+                        }
+                        else
+                        {
+                            lastTapTime = Time.time;
+                            lastTapPos = t.position;
+                            // seduto su una panchina? qualunque tap ti fa alzare
+                            if (City.Environment.SitController.IsSitting)
+                            {
+                                City.Environment.SitController.StandUp();
+                            }
+                            else
+                            {
+                                // tap breve = interagisci con gli oggetti/pedoni
+                                TryInteract(t.position);
+                            }
+                        }
+                    }
                     ResetTracking();
                     break;
             }
@@ -81,6 +123,12 @@ namespace City.UI
         {
             tracking = false;
             pressTimer = 0f;
+        }
+
+        private void TryJump()
+        {
+            var pc = City.Player.PlayerController.Instance;
+            if (pc != null) pc.DoJump();
         }
 
         private void TryTeleport(Vector2 screenPos)
@@ -121,6 +169,23 @@ namespace City.UI
             Ray ray = mainCam.ScreenPointToRay(screenPos);
             if (!Physics.Raycast(ray, out RaycastHit hit, 40f,
                     ~0, QueryTriggerInteraction.Collide)) return;
+
+            // Player-to-player: un RemotePlayer NON e' un NPC. Tap su un altro
+            // giocatore reale -> apre profilo + chat sul telefono (Android via
+            // il ponte). Rilevato per componente, non per tag (no dipendenza
+            // da un tag registrato).
+            var remote = hit.collider.GetComponentInParent<City.Multiplayer.RemotePlayer>();
+            if (remote != null)
+            {
+                string playerJson = "{\"toUserId\":\"" + remote.PlayerId +
+                              "\",\"name\":\"" + remote.Username +
+                              "\",\"level\":" + remote.Level +
+                              ",\"skin\":\"" + remote.Skin + "\"}";
+                UnityBridge.LogToAndroid("TouchInputHandler",
+                    "Tap su giocatore " + remote.Username);
+                UnityBridge.SendMessageToAndroid("PlayerProfileRequest", playerJson);
+                return;
+            }
 
             // uovo: se il player e' nella zona, avvia il mini-gioco di cattura
             var egg = hit.collider.GetComponentInParent<City.Economy.EggController>();

@@ -58,6 +58,7 @@ namespace City.Vehicle
                 case "bar": return ColBar;
                 case "bank": return ColBank;
                 case "rampa": return new Color(0.18f, 0.22f, 0.28f);
+                case "fuel": return new Color(0.9f, 0.6f, 0.1f); // arancio benzina
                 default: return ColGarage;
             }
         }
@@ -245,8 +246,13 @@ namespace City.Vehicle
             // Durante un lavoro attivo la freccia ciano dedicata ha priorita.
             UpdateDest(inInterior, jobActive);
             UpdateJob(inInterior);
-            ringRoot.gameObject.SetActive(
-                destArrow != null && destArrow.gameObject.activeSelf);
+            // l'anello va tenuto acceso se mostra la freccia di destinazione O
+            // quella di lavoro (durante un lavoro jobActive spegne destArrow,
+            // quindi senza jobArrow incluso l'intero anello restava nascosto
+            // e la freccia ciano per raggiungere il taxi non compariva mai)
+            bool destOn = destArrow != null && destArrow.gameObject.activeSelf;
+            bool jobOn = jobArrow != null && jobArrow.gameObject.activeSelf;
+            ringRoot.gameObject.SetActive(destOn || jobOn);
         }
 
         /// <summary>

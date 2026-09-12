@@ -28,6 +28,30 @@ _STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "vehicles_state.json")
 _lock = threading.Lock()
 
+# Zone di danno di un veicolo (danno per impatto): ogni zona accumula
+# percentuale di danno 0-100. L'integrita' (HP 0-100) riconvertita dal totale.
+DAMAGE_ZONES = ("suspension", "bodywork", "bumper")
+
+
+def _damage_zones(v: dict) -> dict:
+    """Dizionario (sempre completo) delle zone di danno correnti."""
+    z = {k: 0.0 for k in DAMAGE_ZONES}
+    if isinstance(v.get("damage_zones"), dict):
+        for k in DAMAGE_ZONES:
+            try:
+                z[k] = round(max(0.0, min(100.0, float(
+                    v["damage_zones"].get(k, 0.0)))), 1)
+            except (TypeError, ValueError):
+                pass
+    return z
+
+
+def integrity_of(v: dict) -> float:
+    """HP del veicolo 0-100: 100 meno il danno totale (somma zone, cap 100)."""
+    zones = _damage_zones(v)
+    total = sum(zones.values())
+    return round(max(0.0, min(100.0, 100.0 - total)), 1)
+
 
 def _load() -> dict:
     try:
@@ -104,6 +128,10 @@ async def vehicles_state(player: str = ""):
                 "condition": round(float(v.get("condition", 100.0)), 1),
                 "odometer_m": int(v.get("odometer_m") or 0),
                 "damage": v.get("damage", ""),
+                "integrity": integrity_of(v),
+                "suspension": _damage_zones(v)["suspension"],
+                "bodywork": _damage_zones(v)["bodywork"],
+                "bumper": _damage_zones(v)["bumper"],
                 "anti_theft": v.get("anti_theft") or [],
                 "in_garage": bool(v.get("garage_id")),
                 "garage_id": v.get("garage_id") or "",

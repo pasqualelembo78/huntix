@@ -54,6 +54,7 @@ namespace City.Vehicle
         private static GameObject prefabAmbulance;
         private static GameObject prefabFiretruck;
         private static GameObject prefabGarbage;
+        private static GameObject prefabSketchfabKit;
 
         // Catalogo veicoli: nome, prezzo, vel max (m/s), accel, turn, prefab key.
         // Riferimento personaggio: camminata 4 m/s, corsa 7.5 m/s. Alcuni
@@ -74,6 +75,14 @@ namespace City.Vehicle
             new VehicleDef("Ambulanza",     95,  13f, 6f,  85f,  "ambulance",  2.2f, 5.5f),
             new VehicleDef("Vigili",        110, 10f, 5f,  75f,  "firetruck",  2.5f, 7.0f),
             new VehicleDef("Spazzaneve",    85,  6f,  4f,  60f,  "garbage",    2.5f, 6.0f),
+            // Sketchfab car kit (7 veicoli) - prefabKey = Sketchfab/<groupName>
+            new VehicleDef("Cadillac ATS",      90,  16f, 9f,  120f, "Sketchfab/CadillacAts1",     1.9f, 4.7f),
+            new VehicleDef("Audi RS7",          110, 20f, 10f, 130f, "Sketchfab/AudiRs71",        2.0f, 4.9f),
+            new VehicleDef("Toyota Prius",      55,  12f, 8f,  105f, "Sketchfab/ToyotaPriusAqua1", 1.8f, 4.5f),
+            new VehicleDef("Hyundai Santa Fe",  85,  13f, 7f,  100f, "Sketchfab/HyundaiSanta1",    2.1f, 4.7f),
+            new VehicleDef("Mercedes S600",     130, 18f, 9f,  115f, "Sketchfab/MercedesbenzS6001", 2.0f, 5.1f),
+            new VehicleDef("GMC Sierra",        100, 11f, 5f,  80f,  "Sketchfab/GmcSeirra1",      2.3f, 5.8f),
+            new VehicleDef("Yellow Minivan",    70,  10f, 5f,  85f,  "Sketchfab/YellowMinivan1",   2.2f, 5.0f),
             new VehicleDef("Moto",          25,  20f, 12f, 150f, null,         0.8f, 2.0f),
             new VehicleDef("Scooter",       20,  7f,  10f, 130f, null,         0.7f, 1.7f),
             new VehicleDef("Bici Elettrica",15,  3.5f, 10f, 140f, null,        0.5f, 1.6f),
@@ -101,6 +110,7 @@ namespace City.Vehicle
 
         private void LoadPrefabs()
         {
+            if (prefabSedan != null) return;
             prefabSedan     = Resources.Load<GameObject>("Vehicles/sedan");
             prefabSUV       = Resources.Load<GameObject>("Vehicles/suv");
             prefabVan       = Resources.Load<GameObject>("Vehicles/van");
@@ -113,6 +123,7 @@ namespace City.Vehicle
             prefabAmbulance = Resources.Load<GameObject>("Vehicles/ambulance");
             prefabFiretruck = Resources.Load<GameObject>("Vehicles/firetruck");
             prefabGarbage   = Resources.Load<GameObject>("Vehicles/garbage-truck");
+            prefabSketchfabKit = Resources.Load<GameObject>("Vehicles/Sketchfab/cars kit pack");
 
             int loaded = 0;
             if (prefabSedan != null) loaded++;
@@ -146,6 +157,15 @@ namespace City.Vehicle
                 case "ambulance":  return prefabAmbulance;
                 case "firetruck":  return prefabFiretruck;
                 case "garbage":    return prefabGarbage;
+                // Sketchfab kit (unico asset OBJ con 7 mesh figli)
+                case "Sketchfab/CadillacAts1":
+                case "Sketchfab/AudiRs71":
+                case "Sketchfab/ToyotaPriusAqua1":
+                case "Sketchfab/HyundaiSanta1":
+                case "Sketchfab/MercedesbenzS6001":
+                case "Sketchfab/GmcSeirra1":
+                case "Sketchfab/YellowMinivan1":
+                    return prefabSketchfabKit;
                 default:           return null;
             }
         }
@@ -204,6 +224,7 @@ namespace City.Vehicle
                         Vector3 pos = a + (b - a) * t;
                         float side = (rng.Next(2) == 0) ? 1f : -1f;
                         pos += right * SIDE_OFFSET * side;
+                        pos.y = TileElevation.HeightAtWorld(pos);
 
                         float angle = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
                         if (side < 0) angle += 180f;
@@ -275,6 +296,12 @@ namespace City.Vehicle
             go.AddComponent<WheelSpinner>();
             var vc = go.AddComponent<VehicleController>();
             vc.data = CreateVehicleData(def);
+            // Attiva il danno per singola parte meccanica (motore, cambio,
+            // giunto, gomme, freni, sospensioni, ecc.)
+            vc.SetupStandardPartDamage(def.name);
+            // Abitacolo visibile (sedili, cruscotto, volante, specchietto)
+            var interior = go.AddComponent<VehicleInterior>();
+            interior.BuildIfNeeded();
 
             // Trigger interazione (avvolge il veicolo)
             var triggerGo = new GameObject("Trigger");

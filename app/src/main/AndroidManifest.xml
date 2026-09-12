@@ -261,6 +261,7 @@
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
         <activity android:name=".ui.RealLifeChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
+        <activity android:name=".ui.PlayerChatActivity" android:screenOrientation="portrait" android:exported="false" android:windowSoftInputMode="adjustResize"/>
         
         
         

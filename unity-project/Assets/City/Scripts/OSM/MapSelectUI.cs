@@ -73,7 +73,7 @@ namespace City.OSM
 
         // ── menu POI a categorie + ricerca testuale ──
         private readonly string[] _categories =
-            { "hospital", "rampa", "repair", "school", "bar", "dealer", "bank" };
+            { "hospital", "rampa", "repair", "school", "bar", "dealer", "bank", "fuel" };
         private GameObject _backBtn;
         private RectTransform _resultContent;
         private ScrollRect _resultScroll;
@@ -461,15 +461,42 @@ namespace City.OSM
                 _resultItems.Add(item);
             }
 
-            // voci di sistema in fondo al menu (dopo le categorie POI)
+            // voci di sistema in fondo al menu (dopo le categorie POI).
+            // NB: "Esci dal gioco" e' separato da "Note legali" da una riga
+            // divisoria non cliccabile: erano adiacenti a 66px e un tap
+            // sfiorato apriva i Termini e Condizioni invece dell'uscita.
             int baseIdx = n;
             AddMenuActionRow("Chiudi mappa", new Color(0.9f, 0.93f, 0.95f),
                 baseIdx++, itemH, Close);
             AddMenuActionRow("Note legali", new Color(0.9f, 0.93f, 0.95f),
                 baseIdx++, itemH, () => { Hide(); ShowLegalIfAny(); });
+            AddMenuSeparator(baseIdx++, itemH);
             AddMenuActionRow("Esci dal gioco", new Color(0.85f, 0.45f, 0.40f),
                 baseIdx, itemH, () => { Hide(); ShowExitIfAny(); });
             _resultContent.sizeDelta = new Vector2(0f, 8f + (baseIdx + 1) * itemH);
+        }
+
+        /// <summary>Divisoria fissa tra le voci di sistema del menu: occupa una
+        /// riga intera (gap) ma non e' cliccabile.</summary>
+        private void AddMenuSeparator(int i, float itemH)
+        {
+            var sep = new GameObject("Sep_" + i, typeof(Image));
+            sep.transform.SetParent(_resultContent, false);
+            var srt = sep.GetComponent<RectTransform>();
+            srt.anchorMin = new Vector2(0f, 1f);
+            srt.anchorMax = new Vector2(1f, 1f);
+            srt.pivot = new Vector2(0f, 1f);
+            srt.anchoredPosition = new Vector2(4f, -i * itemH);
+            srt.sizeDelta = new Vector2(-8f, 8f);
+            var img = sep.GetComponent<Image>();
+            img.color = ColResult;
+            img.raycastTarget = false;
+            var line = NewText(sep.transform, "L", 20, new Color(1f, 1f, 1f, 0.25f));
+            line.text = "――";
+            line.alignment = TextAnchor.MiddleCenter;
+            Stretch(line.rectTransform);
+            line.rectTransform.offsetMin = new Vector2(0f, 0f);
+            _resultItems.Add(sep);
         }
 
         /// <summary>Riga di voce di sistema del menu hamburger.</summary>
@@ -712,7 +739,8 @@ namespace City.OSM
             var game = Game.Instance;
             if (game == null) { NavigateTo(d); return; }
             Vector3 pos = WorldOrigin.ToWorld(d.lat, d.lng);
-            pos.y = 0f;
+            float dem = TileElevation.HeightAtWorld(pos);
+            pos.y = dem > 0f ? dem + 1.2f : 1.2f;
             Quaternion rot = Quaternion.identity;
             if (Camera.main != null)
                 rot = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);

@@ -65,8 +65,12 @@ namespace City.Interior
             if (cc.isGrounded && velocity.y < 0f) velocity.y = -2f;
             velocity.y += gravity * Time.deltaTime;
 
-            Vector3 motion = move + velocity * Time.deltaTime;
-            cc.Move(motion * Time.deltaTime);
+            // move e' gia' una velocita' (m/s): lo spostamento per-frame e'
+            // (move + velocity) * dt. Prima si faceva motion * dt con motion
+            // contenente gia' move non scalato -> move*dt^2 (praticamente
+            // fermo) e gravita'*dt^2 (quasi assente).
+            Vector3 motion = (move + velocity) * Time.deltaTime;
+            cc.Move(motion);
 
             // Traccia la distanza camminata anche negli interni: il
             // PlayerController esterno e' disattivato dentro i locali, quindi

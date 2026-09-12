@@ -57,6 +57,8 @@ namespace City.Economy
             SaveStats();
         }
 
+        private float _walkSaveNext = -1f;
+
         public void OnPlayerWalked(float meters)
         {
             walkDistance += meters;
@@ -66,6 +68,7 @@ namespace City.Economy
                 if (m != null && m.type == NPCMission.MissionType.WalkDistance)
                     m.OnPlayerWalked(meters);
             }
+            if (Time.time >= _walkSaveNext) { _walkSaveNext = Time.time + 2f; SaveStats(); }
         }
 
         public List<NPCMission> GetActiveMissions()
@@ -127,10 +130,16 @@ namespace City.Economy
                     reward = int.Parse(p[4]),
                     description = p[5],
                 };
+                bool dup = false;
+                for (int k = 0; k < activeMissions.Count; k++)
+                    if (activeMissions[k] != null &&
+                        activeMissions[k].missionId == data.missionId) { dup = true; break; }
+                if (dup) continue;
                 var go = new GameObject("Mission_" + data.missionId);
                 var nm = go.AddComponent<NPCMission>();
                 nm.ApplyData(data);
                 nm.currentCount = data.currentCount;
+                nm.state = NPCMission.MissionState.Active;
                 activeMissions.Add(nm);
             }
         }

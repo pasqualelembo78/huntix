@@ -48,6 +48,7 @@ namespace UnityEngine
         public static Vector3 operator -(Vector3 a, Vector3 b) => a;
         public static Vector3 operator -(Vector3 a) => a;
         public static Vector3 operator *(Vector3 a, float d) => a;
+        public static Vector3 operator *(float d, Vector3 a) => a;
         public static Vector3 operator /(Vector3 a, float d) => a;
         public static bool operator ==(Vector3 a, Vector3 b) => true;
         public static bool operator !=(Vector3 a, Vector3 b) => false;
@@ -133,6 +134,8 @@ namespace UnityEngine
         public static float Acos(float f) => 0f; public static float Atan(float f) => 0f;
         public static float Floor(float f) => f; public static float Ceil(float f) => f; }
     public class HeaderAttribute : Attribute { public HeaderAttribute(string h) {} }
+    public class SerializeField : Attribute {}
+    public class RangeAttribute : Attribute { public RangeAttribute(float min, float max) {} }
 
     public struct Color32 { public byte r, g, b, a;
         public Color32(byte r, byte g, byte b, byte a)
@@ -185,8 +188,10 @@ namespace UnityEngine
         public Quaternion rotation { get; set; }
         public Vector3 eulerAngles { get; set; }
         public Transform parent { get; set; }
+        public Transform root { get => null; }
         public string name { get; set; }
         public Vector3 forward => Vector3.forward;
+        public Vector3 up => Vector3.up;
         public Vector3 right => Vector3.right;
         public Matrix4x4 worldToLocalMatrix => new Matrix4x4();
         public Vector3 lossyScale => default(Vector3);
@@ -198,9 +203,15 @@ namespace UnityEngine
         public void Rotate(float x, float y, float z) {}
         public void Rotate(Vector3 axis, float angle) {}
         public void Translate(Vector3 d) {}
+        public Vector3 TransformDirection(Vector3 v) => v;
+        public Vector3 InverseTransformDirection(Vector3 v) => v;
+        public Vector3 TransformPoint(Vector3 p) => p;
+        public Vector3 InverseTransformPoint(Vector3 p) => p;
         public void LookAt(Transform t) {}
         public Transform Find(string n) => null;
         public bool IsChildOf(Transform p) => false;
+        public Transform GetChild(int index) => null;
+        public int childCount => 0;
         public T GetComponentInParent<T>() where T : Component => default(T);
         public T GetComponentInChildren<T>() where T : Component => default(T);
         public T GetComponent<T>() where T : Component => default(T);
@@ -220,10 +231,15 @@ namespace UnityEngine
         public Vector3 velocity { get; set; }
         public Vector3 angularVelocity { get; set; }
         public void AddForce(Vector3 f) {}
+        public void AddForce(Vector3 f, ForceMode m) {}
         public void AddForceAtPosition(Vector3 f, Vector3 p) {}
+        public void AddForceAtPosition(Vector3 f, Vector3 p, ForceMode m) {}
+        public void AddTorque(Vector3 t) {}
+        public void AddTorque(Vector3 t, ForceMode m) {}
         public void MovePosition(Vector3 p) {}
     }
 
+    public enum ForceMode { Force, Acceleration, Impulse, VelocityChange }
     public enum RigidbodyInterpolation { None, Interpolate, Extrapolate }
     public enum CollisionDetectionMode { Discrete, Continuous, ContinuousDynamic }
 
@@ -248,6 +264,7 @@ namespace UnityEngine
 
     public static class Random { public static float Range(float a, float b) => a;
         public static int Range(int a, int b) => a;
+        public static float value => 0f;
         public static Quaternion rotation => Quaternion.identity;
         public static Vector3 insideUnitSphere => Vector3.zero;
         public static Vector2 insideUnitCircle => Vector2.zero; }
@@ -270,6 +287,7 @@ namespace UnityEngine
     public class Mesh : Object { public int vertexCount => 0;
         public Vector3[] vertices { get; set; }
         public Vector2[] uv { get; set; } public int[] triangles { get; set; }
+        public Bounds bounds => new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
         public void SetVertices(List<Vector3> v) {} public void SetUVs(int i, List<Vector2> u) {}
         public void SetTriangles(List<int> t, int sub) {}
         public void RecalculateNormals() {} public void RecalculateBounds() {} }
@@ -284,7 +302,9 @@ namespace UnityEngine
         public void EnableKeyword(string k) {} public void DisableKeyword(string k) {}
         public void SetTexture(string n, Texture t) {}
         public Texture GetTexture(string n) => null;
-        public void SetMainTexture(Texture t) {} }
+        public void SetMainTexture(Texture t) {}
+        public void SetOverrideTag(string k, string v) {}
+        public int renderQueue { get; set; } }
 
     public class Shader { public string name => ""; public static Shader Find(string n) => null; }
 
@@ -295,7 +315,24 @@ namespace UnityEngine
         public Transform[] bones => new Transform[0]; }
     public class RuntimeAnimatorController : Object { }
     public class Animator : Behaviour { public RuntimeAnimatorController runtimeAnimatorController { get; set; }
-        public void SetFloat(string n, float v) {} public void SetBool(string n, bool v) {} public void SetTrigger(string n) {} }
+        public bool applyRootMotion { get; set; }
+        public void SetFloat(string n, float v) {} public void SetBool(string n, bool v) {} public void SetTrigger(string n) {}
+        public Transform GetBoneTransform(HumanBodyBones humanBoneId) => null;
+        public void SetIKPosition(AvatarIKGoal goal, Vector3 pos) {}
+        public void SetIKRotation(AvatarIKGoal goal, Quaternion rot) {}
+        public void SetIKPositionWeight(AvatarIKGoal goal, float w) {}
+        public void SetIKRotationWeight(AvatarIKGoal goal, float w) {} }
+
+    public enum AvatarIKGoal { LeftFoot, RightFoot, LeftHand, RightHand }
+    public enum HumanBodyBones { Hips, LeftFoot, RightFoot, LeftHand, RightHand, Spine, Chest, UpperChest, Head }
+
+    public struct LayerMask
+    {
+        public int value;
+        public static implicit operator int(LayerMask m) => m.value;
+        public static implicit operator LayerMask(int v) => new LayerMask { value = v };
+        public static LayerMask operator ~(LayerMask m) => new LayerMask { value = ~m.value };
+    }
 
     public enum WrapMode { Default, Once, Loop, PingPong, ClampForever }
     public struct Keyframe { public Keyframe(float time, float value) {} }
@@ -312,6 +349,11 @@ namespace UnityEngine
         public bool empty => false;
         public void SetCurve(string relativePath, Type type, string propertyName, AnimationCurve curve) {}
         public void SampleAnimation(GameObject go, float time) {}
+    }
+    public class AudioClip : Object
+    {
+        public static AudioClip Create(string name, int lengthSamples, int channels, int frequency, bool stream) => null;
+        public void SetData(float[] data, int offsetSamples) {}
     }
     public class AnimationState : Behaviour
     {
@@ -345,9 +387,35 @@ namespace UnityEngine
     public class Light : Behaviour { public LightType type { get; set; }
         public float intensity { get; set; } public Color color { get; set; }
         public float range { get; set; }
+        public LightShadows shadows { get; set; }
+        public float shadowStrength { get; set; }
         public Transform transform => null; }
     public enum LightType { Spot, Directional, Point, Area }
+    public enum LightShadows { None, Hard, Soft }
+    public static class RenderSettings
+    {
+        public static Light sun { get; set; }
+        public static Material skybox { get; set; }
+        public static UnityEngine.Rendering.AmbientMode ambientMode { get; set; }
+        public static Color ambientLight { get; set; }
+        public static Color ambientSkyColor { get; set; }
+        public static float ambientIntensity { get; set; }
+        public static bool fog { get; set; }
+        public static Color fogColor { get; set; }
+        public static FogMode fogMode { get; set; }
+        public static float fogDensity { get; set; }
+        public static float fogStartDistance { get; set; }
+        public static float fogEndDistance { get; set; }
+    }
+    public enum FogMode { Linear, Exponential, ExponentialSquared }
+    public static class Vibration
+    {
+        public static void Vibrate(long milliseconds) {}
+        public static void Vibrate(long milliseconds, int amplitude) {}
+        public static void Cancel() {}
+    }
     public class Renderer : Component { public Bounds bounds => default(Bounds);
+        public bool enabled { get; set; }
         public Material material { get; set; }
         public Material sharedMaterial { get; set; }
         public Material[] sharedMaterials { get; set; } }
@@ -364,7 +432,7 @@ namespace UnityEngine
         public string menuName;
     }
     public class BoxCollider : Collider { public Vector3 size { get; set; } public Vector3 center { get; set; } }
-    public class MeshCollider : Collider { public Mesh sharedMesh { get; set; } }
+    public class MeshCollider : Collider { public Mesh sharedMesh { get; set; } public bool convex { get; set; } }
     public class CapsuleCollider : Collider { public float height { get; set; } public float radius { get; set; } public Vector3 center { get; set; } }
     public class SphereCollider : Collider { public float radius { get; set; } public Vector3 center { get; set; } }
     public class CharacterController : Collider
@@ -394,11 +462,15 @@ namespace UnityEngine
         public Ray ScreenPointToRay(Vector2 p) => new Ray(Vector3.zero, Vector3.forward); }
 
     public static class Application { public static string persistentDataPath => "/tmp"; public static bool isMobilePlatform => false;
-        public static RuntimePlatform platform => RuntimePlatform.WindowsEditor; }
+        public static bool isEditor => true;
+        public static RuntimePlatform platform => RuntimePlatform.WindowsEditor;
+        public static bool CanStreamedLevelBeLoaded(string levelName) => false; }
     public enum RuntimePlatform { WindowsEditor, Android, IOS, LinuxEditor, WindowsPlayer }
     public enum QueryTriggerInteraction { UseGlobal, Ignore, Collide }
 
     public static class Physics { public static bool autoSyncTransforms { get; set; }
+        public static Vector3 gravity => new Vector3(0f, -9.81f, 0f);
+        public static void SyncTransforms() {}
         public static bool Raycast(Vector3 origin, Vector3 dir, out RaycastHit hit, float maxDist) { hit = default(RaycastHit); return false; }
         public static bool Raycast(Vector3 origin, Vector3 dir, out RaycastHit hit) { hit = default(RaycastHit); return false; }
         public static bool Raycast(Vector3 origin, Vector3 dir, out RaycastHit hit, float maxDist, int mask) { hit = default(RaycastHit); return false; }
@@ -407,7 +479,13 @@ namespace UnityEngine
         public static bool Raycast(Ray ray, out RaycastHit hit, float maxDist, int mask) { hit = default(RaycastHit); return false; }
         public static bool Raycast(Ray ray, out RaycastHit hit, float maxDist, int mask, QueryTriggerInteraction q) { hit = default(RaycastHit); return false; }
         public static int OverlapSphereNonAlloc(Vector3 center, float radius, Collider[] results) => 0;
-        public static int OverlapSphereNonAlloc(Vector3 center, float radius, Collider[] results, int mask, QueryTriggerInteraction q) => 0; }
+        public static int OverlapSphereNonAlloc(Vector3 center, float radius, Collider[] results, int mask, QueryTriggerInteraction q) => 0;
+        public static Collider[] OverlapSphere(Vector3 center, float radius) => new Collider[0];
+        public static Collider[] OverlapSphere(Vector3 center, float radius, int mask, QueryTriggerInteraction q) => new Collider[0];
+        public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist) => new RaycastHit[0];
+        public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask) => new RaycastHit[0];
+        public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask, QueryTriggerInteraction q) => new RaycastHit[0];
+        public static RaycastHit[] RaycastAll(Ray ray, float maxDist) => new RaycastHit[0]; }
 
     public struct RaycastHit { public Vector3 point; public Vector3 normal; public Collider collider;
         public Transform transform => null; public float distance => 0f; }
@@ -476,10 +554,26 @@ namespace UnityEngine
     {
         public static int GetInt(string k, int def = 0) => def;
         public static void SetInt(string k, int v) {}
+        public static float GetFloat(string k, float def = 0f) => def;
+        public static void SetFloat(string k, float v) {}
         public static string GetString(string k, string def = "") => def;
         public static void SetString(string k, string v) {}
+        public static bool HasKey(string k) => false;
         public static void DeleteKey(string k) {}
         public static void Save() {}
+    }
+
+    public class AudioSource : Behaviour
+    {
+        public AudioClip clip { get; set; }
+        public bool playOnAwake { get; set; }
+        public bool loop { get; set; }
+        public float volume { get; set; }
+        public float spatialBlend { get; set; }
+        public float maxDistance { get; set; }
+        public void Play() {}
+        public void Stop() {}
+        public void PlayOneShot(AudioClip clip, float volumeScale) {}
     }
 
     public class MonoBehaviour : Behaviour
@@ -651,6 +745,7 @@ namespace UnityEngine.UI
 namespace UnityEngine.Rendering
 {
     public enum CullMode { Off }
+    public enum AmbientMode { Skybox, Trilight, Flat, Custom }
 }
 
 namespace UnityEngine.Events
@@ -726,6 +821,7 @@ namespace UnityEngine.EventSystems
         public static EventSystem current => null;
         public void RaycastAll(PointerEventData ped,
             System.Collections.Generic.List<RaycastResult> r) {}
+        public bool IsPointerOverGameObject(int pointerId) => false;
     }
     public class StandaloneInputModule : Behaviour {}
     public class PointerEventData
@@ -755,6 +851,11 @@ namespace UnityEngine.EventSystems
     {
         public GameObject gameObject;
     }
+}
+
+namespace UnityEngine.Rendering
+{
+    public enum BlendMode { SrcAlpha, OneMinusSrcAlpha, One, Zero }
 }
 
 namespace TMPro

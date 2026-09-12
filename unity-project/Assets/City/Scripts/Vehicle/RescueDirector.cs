@@ -236,10 +236,34 @@ namespace City.Vehicle
             if (vc != null) OfferTow(vc);
         }
 
+        private static VehiclePoiZone LiveRepairZone(string poiId)
+        {
+            var zones = UnityEngine.Object.FindObjectsOfType<VehiclePoiZone>();
+            for (int i = 0; i < zones.Length; i++)
+            {
+                if (zones[i] == null) continue;
+                if (zones[i].poiId == poiId &&
+                    zones[i].kind == VehiclePoiZone.PoiKind.Repair)
+                    return zones[i];
+            }
+            return null;
+        }
+
         private IEnumerator TowRoutine(VehicleController vc, string code,
             VehiclePoiRegistry.PoiInfo off)
         {
             Vector3 offWorld = WorldOrigin.ToWorld(off.lat, off.lng);
+            offWorld.y = TileElevation.HeightAt(off.lat, off.lng) + 0.05f;
+            // Consegnare al punto "Consegna" dell'officina (angolo libero
+            // davanti all'insegna), non al centro del piazzale dove l'auto
+            // finirebbe sopra le auto esposte (jolt e auto impossibile da
+            // raggiungere).
+            VehiclePoiZone zone = LiveRepairZone(off.id);
+            if (zone != null && zone.deliveryPoint != null)
+            {
+                offWorld = zone.deliveryPoint.position;
+                offWorld.y = TileElevation.HeightAtWorld(offWorld) + 0.05f;
+            }
             var rb = vc != null ? vc.GetComponent<Rigidbody>() : null;
             if (rb != null) rb.isKinematic = true;
 
@@ -279,8 +303,7 @@ namespace City.Vehicle
                 bt += Time.deltaTime;
                 float k = Mathf.SmoothStep(0f, 1f, bt / 3.2f);
                 truck.root.position = Vector3.Lerp(spawnPos, hookPos, k);
-                truck.root.position = new Vector3(
-                    truck.root.position.x, 0.05f, truck.root.position.z);
+                truck.root.position = Grounded(truck.root.position);
                 truck.root.rotation = Quaternion.LookRotation(carFwd, Vector3.up);
                 if (truck.spinner != null) truck.spinner.Spin(2.2f);
                 truck.Blink();
@@ -297,8 +320,7 @@ namespace City.Vehicle
             bool followable = HorizontalDist(vc.transform.position, offWorld)
                 <= MaxFollowDistance;
             Vector3 target = followable ? offWorld
-                : vc.transform.position + carFwd * 320f;
-            target.y = 0.05f;
+                : Grounded(vc.transform.position + carFwd * 320f);
 
             float speed = 12f;
             float arriveDist = followable ? 9f : 3f;
@@ -320,8 +342,7 @@ namespace City.Vehicle
                         truck.root.rotation, want, 2.4f * Time.deltaTime);
                 }
                 truck.root.position += truck.root.forward * speed * Time.deltaTime;
-                truck.root.position = new Vector3(
-                    truck.root.position.x, 0.05f, truck.root.position.z);
+                truck.root.position = Grounded(truck.root.position);
 
                 if (truck.spinner != null) truck.spinner.Spin(speed);
                 truck.Blink();
@@ -329,11 +350,8 @@ namespace City.Vehicle
                 // l'auto segue agganciata al cavo (ruote che girano)
                 if (vc != null)
                 {
-                    vc.transform.position = truck.root.position
-                        - truck.root.forward * 8.6f;
-                    vc.transform.position = new Vector3(
-                        vc.transform.position.x, 0.05f,
-                        vc.transform.position.z);
+                    vc.transform.position = Grounded(
+                        truck.root.position - truck.root.forward * 8.6f);
                     vc.transform.rotation = Quaternion.Slerp(
                         vc.transform.rotation, truck.root.rotation,
                         4f * Time.deltaTime);
@@ -381,6 +399,14 @@ namespace City.Vehicle
         }
 
         // ── utilita' ──────────────────────────────────────────────
+
+        /// <summary>Appoggia un punto alla quota DEM reale (+5 cm), cosi'
+        /// truck e auto rimorchiate non viaggiano sotto/sopra il terreno.</summary>
+        private static Vector3 Grounded(Vector3 p)
+        {
+            p.y = TileElevation.HeightAtWorld(p) + 0.05f;
+            return p;
+        }
 
         public static VehiclePoiRegistry.PoiInfo NearestRepair(Vector3 worldPos)
         {

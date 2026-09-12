@@ -8,7 +8,7 @@
 #
 # Suggerito:  nohup ./aggiorna_regione.sh molise > /tmp/aggiorna_regione.log 2>&1 &
 #             tail -f /tmp/aggiorna_regione.log
-set -u
+set -euo pipefail
 cd "$(dirname "$0")" || exit 1
 START=$(date +%s)
 REG="${1:-}"
@@ -46,21 +46,24 @@ print(f"  -> {len(land)} tile di terra")
 open("/tmp/regione_keys.txt", "w").write("\n".join(sorted(land)) + "\n")
 PYEOF
 
+echo "[$(date +%H:%M:%S)] estrazione PBF filtrati (auto se config. filtri cambiata) ..."
+./venv/bin/python osm_italy_processor.py filter
+
 TODO="/tmp/regione_todo_$$.txt"
-: > "$TODO"
-for k in $(cat /tmp/regione_keys.txt); do
-  [ -f "tiles/${k}_geo.json.gz" ] || echo "$k" >> "$TODO"
-done
+./venv/bin/python osm_italy_processor.py geo-todo \
+  < /tmp/regione_keys.txt > "$TODO"
 N=$(wc -l < "$TODO")
 echo "[$(date +%H:%M:%S)] tile geo da generare per $REG: $N"
 if [ "$N" -gt 0 ]; then
-  xargs -a "$TODO" -P 4 -I{} sh -c \
-    './venv/bin/python osm_italy_processor.py gen-tile {} --skip-graph --no-index >> regione_gen.log 2>&1'
+  HUNTIX_LOG_FILE="regione_gen.log" "$PY" tile_worker.py --skip-graph --no-index < "$TODO"
 fi
 
 echo "[$(date +%H:%M:%S)] ricostruisco index.json ..."
 ./venv/bin/python osm_italy_processor.py index
 
+echo "[$(date +%H:%M:%S)] backfill DEM sulle geo senza elevazione (idempotente) ..."
+./dem_warm.sh ${HUNTIX_DEM_WARM_TILES:+"--limit" "$HUNTIX_DEM_WARM_TILES"} || true
+
 DUR=$(( $(date +%s) - START ))
 echo "[$(date +%H:%M:%S)] FATTO in ${DUR}s ($((DUR/60))min)"
-echo "Poi svuota la cache del server: curl -X POST http://<HOST>:<PORTA>/api/tiles/cache/clear"
+./cache_clear.sh

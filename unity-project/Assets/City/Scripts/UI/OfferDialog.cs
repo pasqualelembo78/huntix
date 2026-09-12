@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using City.Player;
 
 namespace City.UI
 {
@@ -24,6 +25,11 @@ namespace City.UI
         private System.Action onNavigate;
         private System.Action onTeleport;
         private System.Action onCancel;
+
+        // auto-chiusura se il player si allontana dal punto di apertura
+        private Vector3 originPos;
+        private bool hasOrigin;
+        private const float AutoCloseDistance = 12f;
 
         public static void Ensure()
         {
@@ -70,6 +76,7 @@ namespace City.UI
             onYes = yes;
             onNo = no;
             panel.SetActive(true);
+            RecordOrigin();
         }
 
         private void ShowTravel(string title, string body,
@@ -85,6 +92,43 @@ namespace City.UI
             onTeleport = teleport;
             onCancel = cancel;
             travelPanel.SetActive(true);
+            RecordOrigin();
+        }
+
+        private void RecordOrigin()
+        {
+            hasOrigin = true;
+            originPos = (PlayerController.Instance != null)
+                ? PlayerController.Instance.transform.position
+                : Vector3.zero;
+        }
+
+        /// <summary>Chiude TUTTI i pannelli e azzera le callback: garantisce che
+        /// dopo qualsiasi scelta (o allontanamento) il popup sparisca subito.</summary>
+        private void CloseAll()
+        {
+            if (panel != null) panel.SetActive(false);
+            if (travelPanel != null) travelPanel.SetActive(false);
+            onYes = onNo = onNavigate = onTeleport = onCancel = null;
+            hasOrigin = false;
+        }
+
+        /// <summary>Auto-chiusura: se il player si allontana in modo notevole dal
+        /// punto in cui è comparso il popup, il dialog si chiude da solo.</summary>
+        private void Update()
+        {
+            if (!hasOrigin || !IsAnyOpen()) return;
+            var pc = PlayerController.Instance;
+            if (pc == null) return;
+            Vector3 d = pc.transform.position - originPos;
+            d.y = 0f;
+            if (d.magnitude > AutoCloseDistance) CloseAll();
+        }
+
+        private bool IsAnyOpen()
+        {
+            return (panel != null && panel.activeSelf) ||
+                   (travelPanel != null && travelPanel.activeSelf);
         }
 
         private void Build()
@@ -136,16 +180,13 @@ namespace City.UI
             MakeButtonOn(panel.transform, "SI'", new Vector2(-160f, 26f),
                 new Color(0.20f, 0.55f, 0.25f), () =>
                 {
-                    panel.SetActive(false);
-                    var cb = onYes; onYes = null;
+                    var cb = onYes; CloseAll();
                     cb?.Invoke();
                 });
             MakeButtonOn(panel.transform, "NO", new Vector2(160f, 26f),
                 new Color(0.55f, 0.22f, 0.20f), () =>
                 {
-                    panel.SetActive(false);
-                    var cb = onNo; onNo = null;
-                    onYes = null;
+                    var cb = onNo; CloseAll();
                     cb?.Invoke();
                 });
 
@@ -188,24 +229,21 @@ namespace City.UI
                     new Vector2(-160f, -170f),
                     new Color(0.85f, 0.62f, 0.10f), () =>
                     {
-                        travelPanel.SetActive(false);
-                        var cb = onNavigate; onNavigate = null;
+                        var cb = onNavigate; CloseAll();
                         cb?.Invoke();
                     });
                 MakeButtonOn(tgo.transform, "TELEPORTA",
                     new Vector2(160f, -170f),
                     new Color(0.16f, 0.48f, 0.30f), () =>
                     {
-                        travelPanel.SetActive(false);
-                        var cb = onTeleport; onTeleport = null;
+                        var cb = onTeleport; CloseAll();
                         cb?.Invoke();
                     });
                 MakeButtonOn(tgo.transform, "ESCI",
                     new Vector2(0f, -230f),
                     new Color(0.55f, 0.22f, 0.20f), () =>
                     {
-                        travelPanel.SetActive(false);
-                        var cb = onCancel; onCancel = null;
+                        var cb = onCancel; CloseAll();
                         cb?.Invoke();
                     });
             }

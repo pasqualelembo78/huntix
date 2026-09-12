@@ -59,6 +59,7 @@ namespace City.Vehicle
                 : kind == VehiclePoiZone.PoiKind.School ? "school"
                 : kind == VehiclePoiZone.PoiKind.Bar ? "bar"
                 : kind == VehiclePoiZone.PoiKind.Bank ? "bank"
+                : kind == VehiclePoiZone.PoiKind.Fuel ? "fuel"
                 : "garage";
         }
 

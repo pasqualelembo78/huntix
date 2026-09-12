@@ -5,14 +5,18 @@ package com.intelligame.huntix.ui
 import android.animation.*
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.os.*
 import android.view.*
 import android.view.animation.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.intelligame.huntix.EggRarity
+import com.intelligame.huntix.R
 import com.intelligame.huntix.SoundManager
 import com.intelligame.huntix.gamification.UpgradeChanceManager
 import com.intelligame.huntix.BaseNavActivity
@@ -59,6 +63,7 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var overlayView: View
     private lateinit var eggEmoji: TextView
+    private lateinit var eggImageView: ImageView
     private lateinit var glowRing: View
     private lateinit var rarityLabel: TextView
     private lateinit var xpLabel: TextView
@@ -67,6 +72,20 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
     private lateinit var upgradeBtn: Button
     private lateinit var upgradeChanceLabel: TextView
     private lateinit var skipBtn: TextView
+
+    private val eggBitmaps by lazy {
+        mapOf(
+            "common"    to loadEggBitmap(R.drawable.egg_open_common),
+            "uncommon"  to loadEggBitmap(R.drawable.egg_open_uncommon),
+            "rare"      to loadEggBitmap(R.drawable.egg_open_rare),
+            "epic"      to loadEggBitmap(R.drawable.egg_open_epic),
+            "legendary" to loadEggBitmap(R.drawable.egg_open_legendary)
+        )
+    }
+
+    private fun loadEggBitmap(resId: Int): Bitmap? = try {
+        ContextCompat.getDrawable(this, resId)?.toBitmap(256, 256)
+    } catch (_: Exception) { null }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,11 +132,26 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         }
         center.addView(glowRing)
 
-        // Emoji uovo
+        // ImageView uovo (sprite PNG)
+        eggImageView = ImageView(this).apply {
+            val size = dp(160)
+            layoutParams = LinearLayout.LayoutParams(size, size).also {
+                it.gravity = Gravity.CENTER_HORIZONTAL
+            }
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            // Imposta bitmap iniziale dalla rarità corrente
+            val bmp = eggBitmaps[rarity.id]
+            if (bmp != null) setImageBitmap(bmp)
+            else setImageDrawable(ContextCompat.getDrawable(this@EggOpeningAnimationActivity, R.drawable.egg_open_common))
+        }
+        center.addView(eggImageView)
+
+        // Emoji nascosta (usata solo come fallback per le animazioni)
         eggEmoji = TextView(this).apply {
             text = rarity.emoji
             textSize = 96f
             gravity = Gravity.CENTER
+            alpha = 0f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
                 it.gravity = Gravity.CENTER_HORIZONTAL
@@ -222,12 +256,12 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
             duration = 600; start()
         })
 
-        // Pulse animation on egg
-        val pulseAnim = ObjectAnimator.ofFloat(eggEmoji, "scaleX", 1f, 1.15f, 1f).apply {
+        // Pulse animation on egg sprite
+        val pulseAnim = ObjectAnimator.ofFloat(eggImageView, "scaleX", 1f, 1.15f, 1f).apply {
             duration = 800; repeatCount = ObjectAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
-        val pulseAnimY = ObjectAnimator.ofFloat(eggEmoji, "scaleY", 1f, 1.15f, 1f).apply {
+        val pulseAnimY = ObjectAnimator.ofFloat(eggImageView, "scaleY", 1f, 1.15f, 1f).apply {
             duration = 800; repeatCount = ObjectAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
         }
@@ -250,8 +284,8 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
         hapticMedium()
         SoundManager.playEggFound()
 
-        // Shake animation
-        val shakeAnim = trackAnimator(ObjectAnimator.ofFloat(eggEmoji, "translationX",
+        // Shake animation on egg sprite
+        val shakeAnim = trackAnimator(ObjectAnimator.ofFloat(eggImageView, "translationX",
             0f, -20f, 20f, -15f, 15f, -10f, 10f, 0f).apply {
             duration = 600; interpolator = LinearInterpolator()
         })
@@ -259,8 +293,8 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
             override fun onAnimationEnd(animation: Animator) {
                 // Burst scale
                 val burstSet = AnimatorSet()
-                val scaleX = ObjectAnimator.ofFloat(eggEmoji, "scaleX", 1f, 2.5f, 1.8f).apply { duration = 400 }
-                val scaleY = ObjectAnimator.ofFloat(eggEmoji, "scaleY", 1f, 2.5f, 1.8f).apply { duration = 400 }
+                val scaleX = ObjectAnimator.ofFloat(eggImageView, "scaleX", 1f, 2.5f, 1.8f).apply { duration = 400 }
+                val scaleY = ObjectAnimator.ofFloat(eggImageView, "scaleY", 1f, 2.5f, 1.8f).apply { duration = 400 }
                 burstSet.playTogether(scaleX, scaleY)
                 burstSet.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) { showRarityReveal() }
@@ -321,8 +355,11 @@ class EggOpeningAnimationActivity : BaseNavActivity() {
                 hapticHeavy()
                 SoundManager.playVictory()
                 rarity = result.newRarity
+                // Aggiorna sprite dopo upgrade
+                val newBmp = eggBitmaps[rarity.id]
+                if (newBmp != null) eggImageView.setImageBitmap(newBmp)
                 eggEmoji.text = rarity.emoji
-                rarityLabel.text = "${rarity.emoji} ${rarity.displayName.uppercase()} ✨ UPGRADE!"
+                rarityLabel.text = "${rarity.emoji} ${rarity.displayName.uppercase()} UPGRADE!"
                 rarityLabel.setTextColor(Color.parseColor(rarity.colorHex))
                 upgradeBtn.isEnabled = false
                 upgradeBtn.text = "🎉 Potenziato!"

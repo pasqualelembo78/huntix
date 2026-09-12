@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 using City.World;
+using City.Vehicle.Mechanics;
 
 namespace City.Vehicle
 {
@@ -83,41 +84,73 @@ namespace City.Vehicle
                     return;
                 }
 
-                float missing = Mathf.Max(0f, 100f - my.condition);
-                long costL = (long)(missing * my.price * RepairPriceFactor);
-                int repairCost = costL >= int.MaxValue
-                    ? int.MaxValue : Mathf.Max(0, (int)costL);
+                float integrity = my.integrity;
+                if (integrity <= 0f) integrity = 0f;
 
                 // ── stato del veicolo ──
                 MakeRow("Veicolo", my.model ?? my.code);
                 MakeRow("Condizione", my.condition.ToString("F1") + "%");
                 MakeRow("Stato", DamageCaption(my.damage));
+                MakeRow("HP / integrità", Mathf.RoundToInt(
+                    Mathf.Clamp(integrity, 0f, 100f)) + "%");
                 MakeRow("Km percorsi",
                     (my.odometer_m / 1000f).ToString("F1") + " km");
                 if (my.damage == "fire")
                     MakeNote("AUTO IN FIAMME: chiama prima i vigili del fuoco (fuori dall'officina).");
                 else if (my.damage == "wrecked")
-                    MakeNote("Auto incidentata: riparazione disponibile.");
+                    MakeNote("Auto devastata: riparazione disponibile.");
 
-                bool needsRepair = my.condition < 100f - 0.05f;
-                bool canPay = Wallet.CanAfford(repairCost);
+                // ── riparazione per zona ──
+                float suspension = ClampZone(my.suspension);
+                float bodywork = ClampZone(my.bodywork);
+                float bumper = ClampZone(my.bumper);
+                float totalZone = Mathf.Clamp(suspension + bodywork + bumper, 0f, 100f);
+
+                if (my.damage != "fire" && totalZone > 0.05f)
+                {
+                    MakeNote("DANNI PER ZONA — ripara solo la parte danneggiata:");
+                    ZoneRepairRow("Sospensioni (gomme)", "suspension",
+                        suspension, my.code, my.price);
+                    ZoneRepairRow("Carrozzeria", "bodywork",
+                        bodywork, my.code, my.price);
+                    ZoneRepairRow("Fascia / paraurti", "bumper",
+                        bumper, my.code, my.price);
+                }
+
+                // ── diagnostica fine: single parti meccaniche ──
+                LocalPartRepairSection(my.code);
+
+                bool needsRepair = my.condition < 100f - 0.05f ||
+                                   totalZone > 0.05f;
+                // la riparazione completa azzera usura (condizione) E danni
+                // da impatto (zone = HP mancante)
+                int missingHp = (int)(100f - Mathf.Clamp(integrity, 0f, 100f));
+                int completeCost = Mathf.RoundToInt(
+                    (Mathf.Max(0f, 100f - my.condition) + missingHp)
+                    * RepairPriceFactor * my.price);
+                bool canPayFull = Wallet.CanAfford(completeCost);
                 var rrt = MakeActionRow(needsRepair
-                    ? (canPay ? "RIPARA COMPLETA - \u20ac" + repairCost
-                              : "RIPARAZIONE: \u20ac" + repairCost + " (soldi insufficienti)")
+                    ? (canPayFull ? "RIPARA TUTTO - \u20ac" + completeCost
+                                  : "RIPARAZIONE TOTALE: \u20ac" + completeCost + " (soldi insufficienti)")
                     : "VEICOLO IN PERFETTE CONDIZIONI",
-                    needsRepair && canPay ? RepairColor : OwnedColor,
+                    needsRepair && canPayFull ? RepairColor : OwnedColor,
                     () =>
                     {
-                        if (!needsRepair || !canPay) return;
+                        if (!needsRepair || !canPayFull) return;
                         api.Repair(my.code, ok =>
                         {
                             if (ok)
                             {
-                                Wallet.Spend(repairCost);
+                                Wallet.Spend(completeCost);
                                 VehicleOwnershipApi.Ensure().MarkRepaired(
                                     my.code);
                                 RescueDirector.SetLocalDamage(my.code,
                                     VehicleDamage.None);
+                                // ripara anche le parti meccaniche locali
+                                if (VehicleOwnershipApi.Instance != null &&
+                                    VehicleOwnershipApi.Instance.LocalPlayerVehicle != null)
+                                    VehicleOwnershipApi.Instance.LocalPlayerVehicle
+                                        .RepairAllParts();
                                 Toast("Veicolo riparato!");
                                 Show();   // ricarica lo stato
                             }
@@ -138,7 +171,7 @@ namespace City.Vehicle
 
                     int reduction = Mathf.RoundToInt((1f - mult) * 100f);
                     MakeActionRow(
-                        installed ? name + "  \u2713 INSTALLATO"
+                        installed ? name + "  [OK] INSTALLATO"
                                   : name + " (-" + reduction + "% furto) - \u20ac" + price,
                         installed ? OwnedColor
                             : Wallet.CanAfford(price) ? BuyColor : OwnedColor,
@@ -177,7 +210,133 @@ namespace City.Vehicle
             return "Intatto";
         }
 
+        private static float ClampZone(float v)
+        {
+            return Mathf.Clamp(v, 0f, 100f);
+        }
+
+        /// <summary>Riga di riparazione per una singola zona: mostra la
+        /// percentuale di danno della zona e il costo per azzerarla.</summary>
+        private void ZoneRepairRow(string label, string zoneId,
+            float zoneDamage, string code, int price)
+        {
+            int cost = Mathf.RoundToInt(zoneDamage * RepairPriceFactor * price);
+            bool damaged = zoneDamage > 0.05f;
+            bool canPay = damaged && Wallet.CanAfford(cost);
+            MakeActionRow(
+                damaged
+                    ? label + ": " + Mathf.RoundToInt(zoneDamage) +
+                      "%  - RIPARA \u20ac" + cost
+                      + (canPay ? "" : "  (soldi insufficienti)")
+                    : label + ": OK",
+                damaged ? (canPay ? RepairColor : OwnedColor)
+                        : OwnedColor,
+                () =>
+                {
+                    if (!damaged || !canPay) return;
+                    var api = VehicleOwnershipApi.Ensure();
+                    api.RepairZones(code, new[] { zoneId }, ok =>
+                    {
+                        if (ok)
+                        {
+                            Wallet.Spend(cost);
+                            if (RescueDirector.Instance != null)
+                                RescueDirector.SetLocalDamage(code,
+                                    VehicleDamage.None);
+                            // ripara le parti meccaniche locali della zona
+                            if (VehicleOwnershipApi.Instance != null &&
+                                VehicleOwnershipApi.Instance.LocalPlayerVehicle != null)
+                                VehicleOwnershipApi.Instance.LocalPlayerVehicle
+                                    .RepairPartsForZone(zoneId);
+                            Toast(label + " riparata");
+                            Show();   // aggiorna l'integrita'/zone
+                        }
+                        else Toast("Riparazione non riuscita");
+                    });
+                });
+        }
+
         // ── widget helpers ─────────────────────────────────────────
+
+        /// <summary>
+        /// Diagnostica fine: mostra le single parti meccaniche danneggiate
+        /// (motore, cambio, gomme, freni, etc.) del veicolo locale del
+        /// giocatore e permette di ripararle singolarmente a pagamento.
+        /// Puro locale: il costo scala con l'integrità mancante della parte.
+        /// </summary>
+        private void LocalPartRepairSection(string code)
+        {
+            var api = VehicleOwnershipApi.Instance;
+            var vc = api != null ? api.LocalPlayerVehicle : null;
+            if (vc == null || !vc.HasPartDamage) return;
+
+            var damaged = vc.damageSystem.GetDamagedParts();
+            if (damaged.Count == 0) return;
+
+            MakeNote("DIAGNOSTICA PARTI — danni meccanici specifici:");
+            foreach (var p in damaged)
+            {
+                if (p.integrity >= 99f) continue;
+                int cost = Mathf.RoundToInt(
+                    (1f - p.integrity / 100f) * 30f); // ~€30 per parte a piena integrità persa
+                if (cost < 1) cost = 1;
+                bool canPay = Wallet.CanAfford(cost);
+                float pct = Mathf.RoundToInt(p.integrity);
+                bool broken = p.IsBroken;
+                string status = broken ? "ROTTA" : (p.IsDegraded ? "usurata" : "leggera");
+                // cattura locale per la closure (evita il foreach-capture)
+                var fixPart = p;
+                string fixZone = MapZoneFor(p.type);
+                int fixIndex = IndexOfType(vc, p.type, p);
+                MakeActionRow(
+                    p.partName + " [HP " + pct + "% " + status + "]  RIPARA \u20ac" + cost
+                        + (canPay ? "" : "  (soldi insufficienti)"),
+                    broken ? new Color(0.7f, 0.3f, 0.2f, 1f)
+                           : (canPay ? RepairColor : OwnedColor),
+                    () =>
+                    {
+                        if (!canPay) return;
+                        Wallet.Spend(cost);
+                        vc.RepairPartAt(fixPart.type, fixIndex);
+                        // aggiorna anche la zona corrispondente per coerenza
+                        if (fixZone.Length > 0) vc.RepairPartsForZone(fixZone);
+                        Toast(fixPart.partName + " riparata: " +
+                              Mathf.RoundToInt(vc.damageSystem.AverageIntegrity) + "% HP");
+                        Show();
+                    });
+            }
+            MakeNote("Nota: le parti ritornano pienamente efficienti solo dopo la riparazione meccanica singola.");
+        }
+
+        private int IndexOfType(VehicleController vc, VehiclePartType type,
+            VehicleComponent probe)
+        {
+            var list = vc.damageSystem.GetParts(type);
+            for (int i = 0; i < list.Count; i++)
+                if (ReferenceEquals(list[i], probe)) return i;
+            return 0;
+        }
+
+        private static string MapZoneFor(VehiclePartType type)
+        {
+            switch (type)
+            {
+                case VehiclePartType.Suspension:
+                case VehiclePartType.ShockAbsorber:
+                case VehiclePartType.Tire:
+                    return "suspension";
+                case VehiclePartType.Bumper:
+                case VehiclePartType.Radiator:
+                case VehiclePartType.Engine:
+                case VehiclePartType.Fuel:
+                    return "bumper";
+                case VehiclePartType.Bodywork:
+                case VehiclePartType.Chassis:
+                    return "bodywork";
+                default:
+                    return "";
+            }
+        }
 
         private void MakeRow(string label, string value)
         {

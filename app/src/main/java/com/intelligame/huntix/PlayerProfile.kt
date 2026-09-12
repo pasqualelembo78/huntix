@@ -65,6 +65,9 @@ data class PlayerProfile(
     // Social Profile
     var country: String = "", var city: String = "",
     var birthYear: Int = 0, var isMinor: Boolean = false, var profileCompleted: Boolean = false,
+    // GPS position (editable in profile)
+    var gpsLat: Double = 0.0, var gpsLng: Double = 0.0,
+    var realAge: Int = 0,
     // ── Gender & Character System ─────────────────────────────
     var playerGender:           String  = "",            // "male" o "female"
     var genderChangesCount:     Int     = 0,             // Numero cambi sesso effettuati
@@ -196,7 +199,8 @@ data class PlayerProfile(
         "genderChangesCount"     to genderChangesCount,
         "genderChosenAt"         to genderChosenAt,
         "equippedAccessories" to equippedAccessories,
-        "country" to country, "city" to city, "birthYear" to birthYear, "isMinor" to isMinor, "profileCompleted" to profileCompleted
+        "country" to country, "city" to city, "birthYear" to birthYear, "isMinor" to isMinor, "profileCompleted" to profileCompleted,
+        "gpsLat" to gpsLat, "gpsLng" to gpsLng, "realAge" to realAge
     )
 
     val hasChosenGender: Boolean get() = playerGender.isNotBlank()
@@ -254,7 +258,10 @@ data class PlayerProfile(
                 equippedAccessories = map["equippedAccessories"] as? String ?: "",
                 country = map["country"] as? String ?: "", city = map["city"] as? String ?: "",
                 birthYear = (map["birthYear"] as? Long)?.toInt() ?: 0,
-                isMinor = (map["isMinor"] as? Boolean) ?: false, profileCompleted = (map["profileCompleted"] as? Boolean) ?: false
+                isMinor = (map["isMinor"] as? Boolean) ?: false, profileCompleted = (map["profileCompleted"] as? Boolean) ?: false,
+                gpsLat = (map["gpsLat"] as? Number)?.toDouble() ?: 0.0,
+                gpsLng = (map["gpsLng"] as? Number)?.toDouble() ?: 0.0,
+                realAge = (map["realAge"] as? Long)?.toInt() ?: 0
             )
         }
 

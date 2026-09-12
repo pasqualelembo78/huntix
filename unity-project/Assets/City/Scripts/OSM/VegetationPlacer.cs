@@ -12,6 +12,7 @@ namespace City.OSM
     {
         private static GameObject[] _trees;
         private static Material _parkMat;
+        private static Material _waterMat;
         private const int MaxTreesPerChunk = 400;
 
         private static readonly string[] TreeNames =
@@ -53,7 +54,8 @@ namespace City.OSM
                     int h = Hash(t.a.GetHashCode() ^ t.o.GetHashCode());
                     var tree = UnityEngine.Object.Instantiate(
                         _trees[h % _trees.Length], parent);
-                    tree.transform.localPosition = new Vector3(p.x, 0f, p.z);
+                    float elev = TileElevation.HeightAt(t.a, t.o);
+                    tree.transform.localPosition = new Vector3(p.x, elev, p.z);
                     float s = 0.8f + (h % 50) / 100f;
                     tree.transform.localScale = Vector3.one * s;
                     tree.transform.localRotation = Quaternion.Euler(0f, h % 360, 0f);
@@ -89,6 +91,7 @@ namespace City.OSM
                     if (s == null || signals >= 60) break;
                     var p = toLocal(s);
                     if (!localBounds.Contains(new Vector2(p.x, p.z))) continue;
+                    p.y = TileElevation.HeightAt(s.a, s.o);
                     BuildSignal(parent, p);
                     signals++;
                 }
@@ -100,12 +103,34 @@ namespace City.OSM
         {
             if (park?.poly == null || park.poly.Length < 3) return;
 
+            bool isWater = park.kd == "water";
+            // Quota media del contorno: per i laghi e' la superficie piatta
+            // dell'acqua (l'acqua riempie la depressione, non segue ogni
+            // pendenza). Per i parchi e' l'ANCHORA del clamp qui sotto.
+            float meanElev = 0f;
+            for (int i = 0; i < park.poly.Length; i++)
+                meanElev += TileElevation.HeightAt(park.poly[i].a, park.poly[i].o);
+            meanElev /= park.poly.Length;
+
+            // Su un pendio ripido i vertici DEM distano anche 60+ m fra loro:
+            // drappare ogni vertice alla sua quota produrrebbe una PARETE
+            // verde verticale che taglia il giocatore (log: 'Parco 558801208'
+            // size.y=65 m). Clamp a [media-3, media+3]: i parchi seguono i
+            // pendii dolci ma restano quasi piani su quelli ripidi.
+            const float ParkSpread = 3f;
+            float minElev = meanElev - ParkSpread;
+            float maxElev = meanElev + ParkSpread;
+
             var verts = new List<Vector3>();
             var tris = new List<int>();
             for (int i = 0; i < park.poly.Length; i++)
             {
                 var p = toLocal(park.poly[i]);
-                verts.Add(new Vector3(p.x, 0.02f, p.z));
+                float raw = TileElevation.HeightAt(park.poly[i].a, park.poly[i].o);
+                float elev = isWater
+                    ? meanElev
+                    : Mathf.Clamp(raw, minElev, maxElev);
+                verts.Add(new Vector3(p.x, elev + 0.02f, p.z));
             }
             if (verts.Count < 3) return;
             // L'ordine dei vertici OSM e' arbitrario: calcolo l'area firmata
@@ -134,16 +159,26 @@ namespace City.OSM
                 typeof(MeshFilter), typeof(MeshRenderer));
             go.transform.SetParent(parent, false);
             go.GetComponent<MeshFilter>().sharedMesh = mesh;
-            if (_parkMat == null) _parkMat = TerrainChunk.ParkMaterial();
-            go.GetComponent<MeshRenderer>().sharedMaterial = _parkMat;
+            if (isWater)
+            {
+                if (_waterMat == null) _waterMat = TerrainChunk.WaterMaterial();
+                go.GetComponent<MeshRenderer>().sharedMaterial = _waterMat;
+            }
+            else
+            {
+                if (_parkMat == null) _parkMat = TerrainChunk.ParkMaterial();
+                go.GetComponent<MeshRenderer>().sharedMaterial = _parkMat;
+            }
         }
 
         private static void BuildSignal(Transform parent, Vector3 p)
         {
+            // p.y e' la quota DEM (gia' sollevata dal chiamante): il palo parte
+            // da li' e il "semaforo" e' 1.5 m piu' in alto (altezza del palo).
             var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             pole.name = "Semaforo";
             pole.transform.SetParent(parent, false);
-            pole.transform.localPosition = new Vector3(p.x, 1.5f, p.z);
+            pole.transform.localPosition = new Vector3(p.x, p.y + 1.5f, p.z);
             pole.transform.localScale = new Vector3(0.12f, 1.5f, 0.12f);
 
             var head = GameObject.CreatePrimitive(PrimitiveType.Cube);

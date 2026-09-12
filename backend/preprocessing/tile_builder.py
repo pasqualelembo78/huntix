@@ -191,6 +191,73 @@ def oriented_bbox(pts: Sequence[Tuple[float, float]]
     return ([round(clat, 5), round(clon, 5)], [round(w, 1), round(d, 1)], rot)
 
 
+def clip_ring_to_bbox(ring: Sequence[Tuple[float, float]],
+                      latmin: float, lonmin: float,
+                      latmax: float, lonmax: float) -> List[Tuple[float, float]]:
+    """Clippa un anello poligonale (lat, lon) al rettangolo del tile bbox.
+
+    Sutherland-Hodgman per assi (lat/lon). Serve perche' i poligoni OSM
+    (es. foreste di montagna) possono estendersi ben oltre la tile del loro
+    centroide: senza taglio generano pareti verdi fuori griglia e geometrie
+    duplicate fra tile adiacenti. Se il ring e' gia' tutto dentro il bbox lo
+    restituisce invariato (il caso comune, ~96%). Ritorna [] se si riduce a
+    meno di 3 punti (il parco va scartato).
+    """
+    if not ring:
+        return []
+    if all(latmin - 1e-12 <= p[0] <= latmax + 1e-12 and
+           lonmin - 1e-12 <= p[1] <= lonmax + 1e-12 for p in ring):
+        return list(ring)
+
+    def clip_axis(poly: List[Tuple[float, float]],
+                  keep, interp) -> List[Tuple[float, float]]:
+        out: List[Tuple[float, float]] = []
+        s = poly[-1]
+        s_in = keep(s)
+        for e in poly:
+            e_in = keep(e)
+            if e_in:
+                if not s_in:
+                    out.append(interp(s, e))
+                out.append(e)
+            elif s_in:
+                out.append(interp(s, e))
+            s, s_in = e, e_in
+        return out
+
+    p: List[Tuple[float, float]] = list(ring)
+    # lat >= latmin  (i due vertici dell'edge hanno lat su lati opposti:
+    # il denominatore e' quindi non nullo)
+    p = clip_axis(p, lambda q: q[0] >= latmin,
+                  lambda a, b: (latmin, a[1] + (b[1] - a[1]) *
+                                (latmin - a[0]) / (b[0] - a[0])))
+    if len(p) < 3:
+        return []
+    p = clip_axis(p, lambda q: q[0] <= latmax,
+                  lambda a, b: (latmax, a[1] + (b[1] - a[1]) *
+                                (latmax - a[0]) / (b[0] - a[0])))
+    if len(p) < 3:
+        return []
+    p = clip_axis(p, lambda q: q[1] >= lonmin,
+                  lambda a, b: (a[0] + (b[0] - a[0]) *
+                                (lonmin - a[1]) / (b[1] - a[1]), lonmin))
+    if len(p) < 3:
+        return []
+    p = clip_axis(p, lambda q: q[1] <= lonmax,
+                  lambda a, b: (a[0] + (b[0] - a[0]) *
+                                (lonmax - a[1]) / (b[1] - a[1]), lonmax))
+    if len(p) < 3:
+        return []
+    # SH genera punti doppi quando un vertice cade esattamente sul bordo
+    out: List[Tuple[float, float]] = []
+    for q in p:
+        if not out or q[0] != out[-1][0] or q[1] != out[-1][1]:
+            out.append(q)
+    if len(out) > 1 and out[0][0] == out[-1][0] and out[0][1] == out[-1][1]:
+        out.pop()
+    return out if len(out) >= 3 else []
+
+
 def simplify_polyline(pts: Sequence[Tuple[float, float]], tol_m: float
                       ) -> List[Tuple[float, float]]:
     """Douglas-Peucker con tolleranza in metri (proiezione locale)."""

@@ -70,6 +70,35 @@ object StoreUnityBridge {
         IndoorActivity.instance?.onIndoorSceneReady(poiId)
     }
 
+    /** Chiamato da Unity (scena City) quando i chunk della citta' sono pronti:
+     *  chiude l'overlay di caricamento nativo mostrato da BridgeActivity finche'
+     *  la citta' non e' giocabile. */
+    @JvmStatic
+    fun onCityReady() {
+        val activity = UnityPlayer.currentActivity
+        if (activity is BridgeActivity) {
+            AppLog.d(TAG, "CityReady: overlay di caricamento della citta' chiuso")
+            activity.runOnUiThread { activity.dismissCityLoading() }
+        }
+    }
+
+    /** Chiamato da Unity (scena City) a ogni avanzamento del caricamento dei
+     *  chunk: aggiorna l'overlay con fase, percentuale e byte letti. JSON:
+     *  {"phase":"Mappa|Costruzione", "percent":0..95, "bytes":N, "section":".."} */
+    @JvmStatic
+    fun onCityProgress(json: String) {
+        val activity = UnityPlayer.currentActivity
+        if (activity !is BridgeActivity) return
+        val j = try { JSONObject(json) } catch (_: Exception) { JSONObject() }
+        val phase = j.optString("phase", "")
+        val section = j.optString("section", "")
+        val percent = j.optInt("percent", 0)
+        val bytes = j.optLong("bytes", 0L)
+        activity.runOnUiThread {
+            activity.updateCityProgress(phase, section, percent, bytes)
+        }
+    }
+
     /** Chiamato da Unity per uscire dal negozio. */
     @JvmStatic
     fun exitIndoor() {
@@ -94,11 +123,39 @@ object StoreUnityBridge {
     @Volatile
     private var trackedAppContext: android.content.Context? = null
 
+    /**
+     * Unity registra il proprio persistentDataPath (dove TileClient fa
+     * cache-first delle tile): il preloader di avvio (CityTilePreloader)
+     * lo riusa cosi' i file vengono scritti ESATTAMENTE dove Unity li cerca,
+     * indipendentemente da storage interno/esterno del device.
+     */
+    @Suppress("unused")
+    @JvmStatic
+    fun setTileCacheDir(path: String) {
+        try {
+            val ctx = UnityPlayer.currentActivity?.applicationContext
+            ctx?.getSharedPreferences("world_game_prefs", android.content.Context.MODE_PRIVATE)?.edit()
+                ?.putString("tile_cache_dir", path)
+                ?.apply()
+            AppLog.d(TAG, "setTileCacheDir: $path")
+        } catch (e: Exception) {
+            AppLog.w(TAG, "setTileCacheDir failed: ${e.message}")
+        }
+    }
+
+    /** Lock che rende ATOMICO il check di shuttingDown + UnitySendMessage: un
+     *  thread di fetch puo' passare il check (flag ancora false) un istante
+     *  prima che endUnitySession fissi il flag, e inviare SUL runtime in
+     *  smontaggio = SIGSEGV del processo. Con il lock invio e teardown si
+     *  escludono a vicenda: endUnitySession attende ogni invio in corso e da
+     *  quel momento nessun nuovo messaggio puo' piu' partire. */
+    private val unitySendLock = Any()
+
     /** Inizio sessione Unity (BridgeActivity.onCreate): riabilita gli invii a
      *  Unity dopo l'eventuale uscita precedente. */
     @JvmStatic
     fun beginUnitySession() {
-        shuttingDown = false
+        synchronized(unitySendLock) { shuttingDown = false }
     }
 
     /** Fine sessione Unity (BridgeActivity.onDestroy / exitMiacitta): blocca
@@ -106,7 +163,7 @@ object StoreUnityBridge {
      *  l'engine in smontaggio un UnitySendMessage in volo e' crash nativo. */
     @JvmStatic
     fun endUnitySession() {
-        shuttingDown = true
+        synchronized(unitySendLock) { shuttingDown = true }
         stopLocationTrackingInternal()
     }
 
@@ -131,11 +188,13 @@ object StoreUnityBridge {
      *  esterni a StoreUnityBridge (messenger POI, Indoor, eventi legacy). */
     @JvmStatic
     fun sendToUnityIfAlive(gameObject: String, method: String, arg: String) {
-        if (shuttingDown) return
-        try {
-            UnityPlayer.UnitySendMessage(gameObject, method, arg)
-        } catch (e: Exception) {
-            AppLog.w(TAG, "sendToUnityIfAlive($method): ${e.message}")
+        synchronized(unitySendLock) {
+            if (shuttingDown) return
+            try {
+                UnityPlayer.UnitySendMessage(gameObject, method, arg)
+            } catch (e: Exception) {
+                AppLog.w(TAG, "sendToUnityIfAlive($method): ${e.message}")
+            }
         }
     }
 
@@ -471,10 +530,14 @@ object StoreUnityBridge {
 
     /** Invia un messaggio a Unity solo se il teardown non è in corso: durante lo
      *  shutdown (uscita dalla scena) UnitySendMessage su un runtime in smontaggio
-     *  può essere un crash nativo, quindi i messaggi in volo vengono scartati. */
+     *  può essere un crash nativo, quindi i messaggi in volo vengono scartati.
+     *  Lock congiunto con endUnitySession: nessun invio puo' partire dopo la
+     *  fissazione del flag (check+invio atomici). */
     private fun sendToUnity(method: String, arg: String) {
-        if (shuttingDown) return
-        UnityPlayer.UnitySendMessage("GameManager", method, arg)
+        synchronized(unitySendLock) {
+            if (shuttingDown) return
+            UnityPlayer.UnitySendMessage("GameManager", method, arg)
+        }
     }
 
     /** Invia l'aggiornamento di avanzamento a Unity (barra di caricamento Esplora). */
@@ -616,7 +679,17 @@ object StoreUnityBridge {
     /** Nome del player Huntix (Unified profile). */
     @JvmStatic
     fun getPlayerName(): String =
+
         com.intelligame.huntix.PlayerProfileManager.myProfile?.name ?: "Giocatore"
+    /** JWT di accesso corrente (identita' autentica del player nel multiplayer
+     *  della citta'). Vuoto se l'utente non e' autenticato. Restituito a Unity
+     *  via il ponte StoreUnityBridge. NON persisterlo lato Unity. */
+    @JvmStatic
+    fun getAccessToken(): String {
+        val ctx = UnityPlayer.currentActivity ?: return ""
+        return com.intelligame.huntix.reallife.RealLifeAuth.getAccessToken(ctx)
+    }
+
 
     /** XP totale cumulato del player (Unity non ha un proprio XP separato). */
     @JvmStatic

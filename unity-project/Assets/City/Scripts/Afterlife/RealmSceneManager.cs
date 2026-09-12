@@ -69,14 +69,24 @@ namespace City.Afterlife
         public void EnterRealm(AfterlifeRealm realm)
         {
             _pending = realm;
-            if (Camera.main != null)
-                Camera.main.backgroundColor = RealmColors.Sky(realm);
-            if (TryLoadScene(SceneNameFor(realm)))
-                return;
+            try
+            {
+                if (Camera.main != null)
+                    Camera.main.backgroundColor = RealmColors.Sky(realm);
+                if (TryLoadScene(SceneNameFor(realm)))
+                    return;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[RealmSceneManager] EnterRealm: " + e.Message);
+            }
             // La scena del regno non e' nelle Build Settings (es. APK installato
-            // non ricompilato). Non crashare: costruisci l'arena nella scena
-            // corrente, cosi' l'afterlife funziona comunque senza LoadScene.
-            BuildRealm(realm);
+            // non ricompilato) oppure il load ha fallito. Non crashare: costruisci
+            // l'arena nella scena corrente, cosi' l'afterlife funziona comunque
+            // senza LoadScene. Anche la build dell'arena e' protetta: qualsiasi
+            // errore di costruzione non deve buttare giu' il flusso di morte.
+            try { BuildRealm(realm); }
+            catch (System.Exception e) { Debug.LogWarning("[RealmSceneManager] BuildRealm: " + e.Message); }
         }
 
         /// <summary>Torna alla citta' (fine del ciclo afterlife: reincarnazione).</summary>
@@ -89,11 +99,17 @@ namespace City.Afterlife
 
         /// <summary>
         /// Carica la scena se disponibile (presente nelle Build Settings).
-        /// Se LoadScene fallisce (scena non in build, es. regni non ricompilati)
-        /// ritorna false senza lanciare eccezioni.
+        /// Controlla prima con CanStreamedLevelBeLoaded per non far loggare a
+        /// Unity l'errore "scena non nelle build settings" a ogni morte/regno
+        /// (i regni Inferno/Purgatorio/Paradiso possono non essere ricompilati
+        /// in un APK installato). Se la scena non e' caricabile ritorna false
+        /// senza eccezioni ne' log d'errore: il flusso ripiega sull'arena
+        /// costruita inline (BuildRealm).
         /// </summary>
         private static bool TryLoadScene(string name)
         {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (!Application.CanStreamedLevelBeLoaded(name)) return false;
             try
             {
                 SceneManager.LoadScene(name);

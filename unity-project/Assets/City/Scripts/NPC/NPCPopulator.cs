@@ -126,10 +126,15 @@ namespace City.NPC
                 {
                     float side = sideIdx == 0 ? 1f : -1f;
                     var pts = new List<Vector3>();
+                    var elevs = new List<float>();
                     for (int i = 0; i < road.pts.Length; i++)
+                    {
                         pts.Add(toLocal(road.pts[i]));
+                        elevs.Add(TileElevation.HeightAt(
+                            road.pts[i].a, road.pts[i].o));
+                    }
 
-                    var path = SampleWithOffset(pts, offset * side, rng);
+                    var path = SampleWithOffset(pts, elevs, offset * side, rng);
                     float len = PathLength(path);
                     if (len < MinPathLen) continue;
                     if (!RectIntersects(path, bounds)) continue;
@@ -159,7 +164,7 @@ namespace City.NPC
         // Punti interpolati lungo la polyline ogni ~8-13 m, spostati a
         // destra (offset > 0) o sinistra della mezzeria.
         private static List<Vector3> SampleWithOffset(List<Vector3> line,
-            float offset, System.Random rng)
+            List<float> elevs, float offset, System.Random rng)
         {
             var result = new List<Vector3>();
             if (line.Count < 2) return result;
@@ -169,6 +174,7 @@ namespace City.NPC
             for (int i = 1; i < line.Count; i++)
             {
                 Vector3 a = line[i - 1], b = line[i];
+                float elevA = elevs[i - 1], elevB = elevs[i];
                 Vector3 seg = b - a; seg.y = 0f;
                 float segLen = seg.magnitude;
                 if (segLen < 0.01f) continue;
@@ -180,7 +186,8 @@ namespace City.NPC
                 while (t <= segLen)
                 {
                     Vector3 p = a + dir * t;
-                    p.y = Y_SIDEWALK;
+                    float f = segLen > 0.001f ? t / segLen : 0f;
+                    p.y = Mathf.Lerp(elevA, elevB, f) + Y_SIDEWALK;
                     result.Add(p + right * offAbs);
                     t += step;
                 }

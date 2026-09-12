@@ -218,6 +218,7 @@ namespace City.Vehicle
         {
             DestroyWaiting();
             Vector3 stopWorld = WorldOrigin.ToWorld(stop.lat, stop.lng);
+            stopWorld.y = TileElevation.HeightAt(stop.lat, stop.lng);
             int n = 1 + Random.Range(0, 3);   // 1-3 passeggeri in attesa
 
             var root = new GameObject("BusWaiting");

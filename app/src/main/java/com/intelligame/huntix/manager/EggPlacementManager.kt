@@ -55,14 +55,36 @@ class EggPlacementManager(internal val activity: MainActivity) {
         val mat = sv.materialLoader.createColorInstance(color = col)
         val an = AnchorNode(engine = sv.engine, anchor = anchor)
 
-        val eggNode: Node = when (shape) {
-            "cube" -> CubeNode(sv.engine, Size(0.10f, 0.12f, 0.10f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
-            "cylinder" -> CylinderNode(sv.engine, 0.055f, 0.12f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
-            "diamond" -> CubeNode(sv.engine, Size(0.09f, 0.13f, 0.09f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); rotation = Rotation(45f, 45f, 0f) }
-            else -> SphereNode(sv.engine, 0.055f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); scale = Scale(1f, 1.45f, 1f) }
+        // Egg body: sfera schiacciata (forma uovo) con proporzioni migliori
+        val eggBody = SphereNode(sv.engine, 0.055f, materialInstance = mat).apply {
+            position = Position(0f, 0.075f, 0f)
+            scale = Scale(1f, 1.45f, 1f)
         }
-        an.addChildNode(eggNode)
 
+        // Per le uova non cubo/cilindro/diamante, aggiungi dettagli
+        if (shape == "sphere" || shape.isEmpty()) {
+            an.addChildNode(eggBody)
+            // Halo glow trasparente
+            val glowMat = sv.materialLoader.createColorInstance(
+                color = (col and 0x00FFFFFF) or (0x33 shl 24)
+            )
+            val glow = SphereNode(sv.engine, 0.075f, materialInstance = glowMat).apply {
+                position = Position(0f, 0.075f, 0f)
+                scale = Scale(1.4f, 1.8f, 1.4f)
+            }
+            an.addChildNode(glow)
+        } else {
+            // Fallback per forme speciali
+            val specialNode: Node = when (shape) {
+                "cube" -> CubeNode(sv.engine, Size(0.10f, 0.12f, 0.10f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
+                "cylinder" -> CylinderNode(sv.engine, 0.055f, 0.12f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
+                "diamond" -> CubeNode(sv.engine, Size(0.09f, 0.13f, 0.09f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); rotation = Rotation(45f, 45f, 0f) }
+                else -> eggBody
+            }
+            an.addChildNode(specialNode)
+        }
+
+        // Trap marker
         val trapMarker: SphereNode? = if (isTrap) {
             val tm = sv.materialLoader.createColorInstance(color = MainActivity.TRAP_COLOR)
             SphereNode(sv.engine, 0.022f, materialInstance = tm).apply { position = Position(0f, 0.26f, 0f); isVisible = true }
@@ -71,7 +93,7 @@ class EggPlacementManager(internal val activity: MainActivity) {
 
         an.isVisible = true
         sv.addChildNode(an)
-        activity.eggs.add(EggObject(id, colorIdx, shape, an, eggNode, isTrap, trapMarker))
+        activity.eggs.add(EggObject(id, colorIdx, shape, an, eggBody, isTrap, trapMarker))
 
         if (viewModel.isIndoorMp && viewModel.indoorIsHost && viewModel.indoorRoomCode.isNotEmpty()) {
             try {
@@ -96,13 +118,30 @@ class EggPlacementManager(internal val activity: MainActivity) {
         val col = MainActivity.EGG_COLORS[colorIdx % MainActivity.EGG_COLORS.size]
         val mat = sv.materialLoader.createColorInstance(color = col)
         val an = AnchorNode(engine = sv.engine, anchor = anchor)
+
         val eggNode: Node = when (shape) {
             "cube" -> CubeNode(sv.engine, Size(0.10f, 0.12f, 0.10f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
             "cylinder" -> CylinderNode(sv.engine, 0.055f, 0.12f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f) }
             "diamond" -> CubeNode(sv.engine, Size(0.09f, 0.13f, 0.09f), materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); rotation = Rotation(45f, 45f, 0f) }
-            else -> SphereNode(sv.engine, 0.055f, materialInstance = mat).apply { position = Position(0f, 0.075f, 0f); scale = Scale(1f, 1.45f, 1f) }
+            else -> SphereNode(sv.engine, 0.055f, materialInstance = mat).apply {
+                position = Position(0f, 0.075f, 0f)
+                scale = Scale(1f, 1.45f, 1f)
+            }
         }
         an.addChildNode(eggNode)
+
+        // Halo glow per uova sferiche
+        if (shape == "sphere" || shape.isEmpty()) {
+            val glowMat = sv.materialLoader.createColorInstance(
+                color = (col and 0x00FFFFFF) or (0x33 shl 24)
+            )
+            val glow = SphereNode(sv.engine, 0.075f, materialInstance = glowMat).apply {
+                position = Position(0f, 0.075f, 0f)
+                scale = Scale(1.4f, 1.8f, 1.4f)
+            }
+            an.addChildNode(glow)
+        }
+
         an.isVisible = false
         sv.addChildNode(an)
         activity.eggs.add(EggObject(id, colorIdx, shape, an, eggNode, isTrap))

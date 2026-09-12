@@ -96,11 +96,20 @@ class EggHuntApplication : Application() {
             Log.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
         }
 
-        // Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
+// Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
         try {
             com.intelligame.huntix.manager.PoiMapBridge.feed(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "PoiMapBridge prefeed failed: ${e.message}")
+            AppLog.e("HuntixApp", "PoiMapBridge prefeed failed: ${e.message}")
+        }
+
+        // Preload tile Miacitta in background fin dall'avvio: la geo della tile
+        // di spawn viene generata/scaricata mentre l'utente e' in Home, cosi'
+        // all'ingresso in Miacitta il primo chunk e' gia' visibile (cache-first).
+        try {
+            com.intelligame.huntix.bridge.CityTilePreloader.preload(this)
+        } catch (e: Exception) {
+            AppLog.w("HuntixApp", "CityTilePreloader preload failed: ${e.message}")
         }
 
         // Billing: inizializza il client e sincronizza lo stato VIP all'avvio
@@ -148,13 +157,37 @@ class EggHuntApplication : Application() {
             val signal = if (info.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
                     || info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) info.status else null
             AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal pid=${info.pid} t=${info.timestamp} desc=${info.description}")
-            try {
+            // Su API 30+ il trace nativo (stack `#00 pc ...` dei crash SIGSEGV)
+            // NON passa dall'handler Java di AppLog: arriva qui tramite
+            // ApplicationExitInfo.traceInputStream. Se Android lo ha popolato,
+            // contiene esattamente il frame di crash da leggere in AppLog.
+            val trace = try {
                 info.traceInputStream?.use { input ->
-                    val head = input.readBytes().decodeToString().take(24000)
-                    if (head.isNotBlank()) AppLog.i("AppExit", "trace: $head")
+                    input.readBytes().decodeToString()
                 }
             } catch (t: Throwable) {
-                Log.w("HuntixApp", "exit trace dump failed: ${t.message}")
+                Log.w("HuntixApp", "exit trace read failed: ${t.message}")
+                null
+            }
+            if (!trace.isNullOrBlank()) {
+                AppLog.i("AppExit", "trace (nativo, ${trace.length} byte):")
+                // Suddivido in blocchi ~8KB a fine riga: nel viewer AppLog un
+                // messaggio unico di decine di KB sarebbe illeggibile, e spezzare
+                // a meta' riga perderebbe i frame `#00 pc ...`.
+                val lines = trace.split("\n")
+                val sb = StringBuilder()
+                for (l in lines) {
+                    if (sb.length > 0 && sb.length + l.length > 8192) {
+                        AppLog.i("AppExit", sb.toString())
+                        sb.setLength(0)
+                    }
+                    sb.append(l).append('\n')
+                }
+                if (sb.isNotEmpty()) AppLog.i("AppExit", sb.toString())
+            } else {
+                // Nessuno stack: tipico quando il processo è stato SIGKILLato
+                // (il motivo resta SIGNALED/SIGSEGV ma senza dump del kernel).
+                AppLog.i("AppExit", "trace: NESSUNO (traceInputStream vuoto/non disponibile - SIGKILL del processo)")
             }
         } catch (e: Exception) {
             Log.w("HuntixApp", "exit reason log failed: ${e.message}")

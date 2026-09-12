@@ -6,6 +6,7 @@ import android.widget.Toast;
 
 import com.intelligame.huntix.bridge.Bridge;
 import com.intelligame.huntix.bridge.BridgeActivity;
+import com.intelligame.huntix.bridge.StoreUnityBridge;
 
 public class UnityBridge {
 
@@ -38,7 +39,10 @@ public class UnityBridge {
     public static void LoadData() {
         if (sInstance != null && sInstance.mUnityPlayer != null) {
             String data = Bridge.loadData();
-            UnityPlayer.UnitySendMessage("GameManager", "OnEvent", data);
+            // Guard condiviso con la teardown: durante lo smontaggio dell'engine
+            // UnitySendMessage = SIGSEGV del processo (stesso pattern di
+            // StoreUnityBridge.sendToUnityIfAlive).
+            StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnEvent", data);
         }
     }
 

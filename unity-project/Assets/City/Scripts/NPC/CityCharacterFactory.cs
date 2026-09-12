@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using City.Player;
+using City.OSM;
 
 namespace City.NPC
 {
@@ -64,7 +65,7 @@ namespace City.NPC
             modelRoot.SetParent(null, true);
             modelRoot.localScale = Vector3.one * 0.455f;
             Vector3 pos = modelRoot.position;
-            pos.y = 0.12f;
+            pos.y = TileElevation.HeightAtWorld(pos) + 0.12f;
             modelRoot.position = pos;
             modelRoot.rotation = Quaternion.identity;
 

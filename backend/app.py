@@ -255,8 +255,35 @@ except Exception as e:
     logger.warning(f"Tiles API router not loaded: {e}")
 
 # ─── Socket.IO ───────────────────────────────────────────────────
+# --- Download APK (build di test) ---
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
+
+@app.get("/download/huntix.apk", name="download_huntix_apk")
+def download_huntix_apk():
+    apk = (
+        "/root/giochi/huntix/app/build/outputs/apk/release/"
+        "app-release-signed.apk"
+    )
+    if not os.path.isfile(apk):
+        raise HTTPException(status_code=404, detail="APK non ancora generato")
+    return FileResponse(
+        apk,
+        media_type="application/vnd.android.package-archive",
+        filename="huntix.apk",
+    )
+
 from app_socket import register_socket_handlers
 register_socket_handlers(sio)
+
+# Multiplayer real-time cittadino (namespace /city)
+try:
+    from city_realtime import register_city_realtime_handlers, city_http_router
+    register_city_realtime_handlers(sio)
+    app.include_router(city_http_router)
+    logger.info("City Realtime (multiplayer) initialized")
+except Exception as e:
+    logger.error(f"City Realtime init failed (continuing without): {e}")
 
 socket_app = socketio_lib.ASGIApp(sio, other_asgi_app=app)
 

@@ -208,6 +208,23 @@ namespace Huntix.Core
                 var pet = System.Text.RegularExpressions.Regex.Match(json, "\"pet\"\\s*:\\s*\"([^\"]+)\"");
                 if (pet.Success)
                     ApplyPet(pet.Groups[1].Value);
+
+                // MiAcitma: punto di spawn DECISO dal selettore Android (citta'
+                // o ultima posizione salvata su Google). Il GPS del dispositivo
+                // NON viene mai piu' usato come posizione iniziale.
+                var sLat = System.Text.RegularExpressions.Regex.Match(json, "\"spawnLat\"\\s*:\\s*\"?(-?[0-9.]+)\"?");
+                var sLng = System.Text.RegularExpressions.Regex.Match(json, "\"spawnLng\"\\s*:\\s*\"?(-?[0-9.]+)\"?");
+                if (sLat.Success && sLng.Success &&
+                    double.TryParse(sLat.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double lLat) &&
+                    double.TryParse(sLng.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double lLng))
+                {
+                    City.OSM.CityChunkedWorld.UseSpawnPoint(lLat, lLng);
+                    Debug.Log("[GameManager] spawn scelto da Android: " +
+                        lLat.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
+                        lLng.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
             }
             catch (System.Exception e)
             {

@@ -93,6 +93,7 @@ namespace Huntix.Bridge
         public static string GetPlayerName() => "Giocatore";
         public static long GetPlayerXp() => 0L;
         public static int GetPlayerLevel() => 1;
+        public static string GetAccessToken() => "";
         public static long GetPlayerPower() => 0L;
         public static int GetPlayerGems() => 0;
         public static int GetPlayerEnergy() => 100;
@@ -109,14 +110,20 @@ namespace Huntix.Bridge
 namespace UnityEngine
 {
     // classe JNI Android usata solo su device (RewardedAdHelper)
-    public class AndroidJavaClass : System.IDisposable
+    public class AndroidJavaClass : AndroidJavaObject
     {
         public AndroidJavaClass(string name) {}
-        public void Call(string method) {}
-        public void Call(string method, string arg) {}
-        public T Call<T>(string method) => default(T);
-        public void CallStatic(string method) {}
-        public T CallStatic<T>(string method) => default(T);
-        public void Dispose() {}
+        public T GetStatic<T>(string fieldName) => default(T);
+    }
+
+    // oggetto JNI Android restituito da AndroidJavaClass.GetStatic (CityChunkedWorld)
+    public class AndroidJavaObject : System.IDisposable
+    {
+        public AndroidJavaObject() {}
+        public void Call(string method, params object[] args) {}
+        public T Call<T>(string method, params object[] args) => default(T);
+        public void CallStatic(string method, params object[] args) {}
+        public T CallStatic<T>(string method, params object[] args) => default(T);
+        public virtual void Dispose() {}
     }
 }

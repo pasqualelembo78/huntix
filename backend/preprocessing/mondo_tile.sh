@@ -15,7 +15,7 @@
 # Suggerito:
 #   nohup ./mondo_tile.sh germania > /tmp/mondo_tile.log 2>&1 &
 #   tail -f /tmp/mondo_tile.log
-set -u
+set -euo pipefail
 cd "$(dirname "$0")" || exit 1
 PY=./venv/bin/python
 START=$(date +%s)
@@ -55,7 +55,11 @@ if [ -n "$GEO" ] && [ ! -f "$RAW" ]; then
   URL="https://download.geofabrik.de/${GEO}-latest.osm.pbf"
   echo "[$(date +%H:%M:%S)] scarico $URL (una tantum)"
   mkdir -p data
-  wget -c -q --show-progress "$URL" -O "$RAW"
+  if ! wget -c -q --show-progress "$URL" -O "$RAW"; then
+    rm -f "$RAW"   # niente file parziale da riprendere come se fosse valido
+    echo "[$(date +%H:%M:%S)] ERRORE scarico $URL. Nessun dato toccato; riprova (idempotente)."
+    exit 1
+  fi
 fi
 
 # ── 2. FILTER: ri-estrazione dei PBF filtrati (idempotente, salta se prsenti).
@@ -71,17 +75,17 @@ fi
 
 # ── 4. SPLIT: tile senza grafo (full) vs tile da geöticare (geo).
 FULL=/tmp/mondo_full_$$.txt
+GEO_RAW=/tmp/mondo_geo_raw_$$.txt
 GEO_T=/tmp/mondo_geo_$$.txt
-: > "$FULL"; : > "$GEO_T"
-HUNTIX_COUNTRY="$SLUG" "$PY" - "$BBOX" "$REFRESH" "$FULL" "$GEO_T" <<'PYEOF'
+: > "$FULL"; : > "$GEO_RAW"
+HUNTIX_COUNTRY="$SLUG" "$PY" - "$BBOX" "$FULL" "$GEO_RAW" <<'PYEOF'
 import os, sys
 from math import floor
 sys.path.insert(0, ".")
 from tile_builder import ORIGIN_LAT, ORIGIN_LON, LAT_STEP, LON_STEP, tile_key_from_idx
 
 latmin, lonmin, latmax, lonmax = map(float, sys.argv[1].split(","))
-refresh = sys.argv[2] == "1"
-full_out, geo_out = sys.argv[3], sys.argv[4]
+full_out, geo_raw_out = sys.argv[2], sys.argv[3]
 slug = os.environ["HUNTIX_COUNTRY"]
 land = set()
 with open(f"data/{slug}-land_keys.txt") as f:
@@ -100,35 +104,35 @@ for ilat in range(floor((latmin - ORIGIN_LAT) / LAT_STEP) - 1,
             rows.append(k)
 rows.sort()
 full = [k for k in rows if not os.path.exists(f"tiles/{k}.json.gz")]
-if refresh:
-    geo = [k for k in rows if os.path.exists(f"tiles/{k}.json.gz")]
-else:
-    geo = [k for k in rows
-           if os.path.exists(f"tiles/{k}.json.gz")
-           and not os.path.exists(f"tiles/{k}_geo.json.gz")]
+geo_raw = [k for k in rows if os.path.exists(f"tiles/{k}.json.gz")]
 with open(full_out, "w") as f:
     f.write("\n".join(full) + ("\n" if full else ""))
-with open(geo_out, "w") as f:
-    f.write("\n".join(geo) + ("\n" if geo else ""))
-print(f"tile di terra: {len(rows)} | senza grafo (full): {len(full)} | da geogenerare: {len(geo)}")
+with open(geo_raw_out, "w") as f:
+    f.write("\n".join(geo_raw) + ("\n" if geo_raw else ""))
+print(f"tile di terra: {len(rows)} | senza grafo (full): {len(full)} | con grafo: {len(geo_raw)}")
 PYEOF
+
+# Geo da (ri)generare: mancanti o formato obsoleto (o tutte con --refresh).
+HUNTIX_COUNTRY="$SLUG" "$PY" osm_italy_processor.py geo-todo ${REFRESH:+"--refresh"} \
+  < "$GEO_RAW" > "$GEO_T"
 
 NF=$(wc -l < "$FULL"); NG=$(wc -l < "$GEO_T")
 echo "[$(date +%H:%M:%S)] tile senza grafo (full: grafo+geo da zero) = $NF  |  tile da geogenerare = $NG"
 
 if [ "$NF" -gt 0 ]; then
   echo "[$(date +%H:%M:%S)] pass finale grafi stradali su $NF tile (pesante, una tantum) ..."
-  xargs -a "$FULL" -P "$PAR" -I{} sh -c \
-    'HUNTIX_COUNTRY='"$SLUG"' ./venv/bin/python osm_italy_processor.py gen-tile {} --no-index >> mondo_gen.log 2>&1'
+  HUNTIX_LOG_FILE="mondo_gen.log" HUNTIX_COUNTRY="$SLUG" "$PY" tile_worker.py --no-index < "$FULL"
 fi
 if [ "$NG" -gt 0 ]; then
   echo "[$(date +%H:%M:%S)] rigenerazione geo (edifici+POI) su $NG tile ..."
-  xargs -a "$GEO_T" -P "$PAR" -I{} sh -c \
-    'HUNTIX_COUNTRY='"$SLUG"' ./venv/bin/python osm_italy_processor.py gen-tile {} --skip-graph --no-index >> mondo_gen.log 2>&1'
+  HUNTIX_LOG_FILE="mondo_gen.log" HUNTIX_COUNTRY="$SLUG" "$PY" tile_worker.py --skip-graph --no-index < "$GEO_T"
 fi
 
 echo "[$(date +%H:%M:%S)] ricostruisco index.json ..."
 HUNTIX_COUNTRY="$SLUG" "$PY" osm_italy_processor.py index
+
+echo "[$(date +%H:%M:%S)] backfill DEM sulle geo senza elevazione (idempotente) ..."
+./dem_warm.sh ${HUNTIX_DEM_WARM_TILES:+"--limit" "$HUNTIX_DEM_WARM_TILES"} || true
 
 DUR=$(( $(date +%s) - START ))
 if [ "$NF" = "0" ] && [ "$NG" = "0" ]; then
@@ -136,4 +140,4 @@ if [ "$NF" = "0" ] && [ "$NG" = "0" ]; then
 else
   echo "[$(date +%H:%M:%S)] FATTO in ${DUR}s ($((DUR/60))min) — $SLUG: $NF full + $NG geo"
 fi
-echo "Poi svuota la cache del server: curl -X POST http://<HOST>:<PORTA>/api/tiles/cache/clear"
+./cache_clear.sh

@@ -226,6 +226,9 @@ namespace City.Vehicle
                         zone.deliveryPoint.parent, def,
                         zone.deliveryPoint.localPosition, heading, my.code);
                     api.ApplyOwnedState(go, my.code);
+                    // Registra tra i "gia' materializzati": il popolatore a
+                    // chunk non deve ricrearla sul piazzale al rebuild.
+                    VehicleSpawnManager.RegisterActiveOwned(my.code, go);
                     api.UpdateParkedPosition(my.code,
                         WorldOrigin.ToGeo(zone.deliveryPoint.position).lat,
                         WorldOrigin.ToGeo(zone.deliveryPoint.position).lng,

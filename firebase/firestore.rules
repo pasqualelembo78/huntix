@@ -23,6 +23,18 @@ service cloud.firestore {
       return allowed && sizeOk;
     }
 
+    // WorldPosCloud: update della posizione di gioco fuso nel profilo
+    // (set + merge). Valuta SOLO le chiavi modificate dall'update, non
+    // l'intero documento mergeato (che contiene i 40+ campi del profilo
+    // gestiti da Cloud Functions/admin).
+    function isValidPlayerPositionWrite() {
+      if (resource == null) {
+        return request.resource.data.keys().hasOnly(['gpsLat', 'gpsLng', 'lastSeen']);
+      }
+      let change = request.resource.data.diff(resource.data).affectedKeys();
+      return change.hasOnly(['gpsLat', 'gpsLng', 'lastSeen']) && change.size() >= 1;
+    }
+
     function isTeamMember(teamId) {
       return isAuth() && request.auth.uid in
         get(/databases/$(database)/documents/teams/$(teamId)).data.members;
@@ -36,7 +48,10 @@ service cloud.firestore {
       allow read:   if isAuth() && request.auth.uid != playerId
         && request.resource == null;  // read-only access handled above
       // Solo il proprietario può modificare, con whitelist campi
-      allow write:  if isOwner(playerId) && isValidPlayerWrite();
+      allow write:  if isOwner(playerId) && (
+        isValidPlayerWrite()
+        || isValidPlayerPositionWrite()
+      );
 
       match /quests/{questId} {
         allow read, write: if isOwner(playerId);

@@ -1,11 +1,17 @@
 using UnityEngine;
 using City.NPC;
 using City.Player;
+using City.OSM;
 
 namespace City.Vehicle
 {
     public class TrafficCar : MonoBehaviour
     {
+        /// <summary>Massima inclinazione (gradi) del corpo dalle sospensioni
+        /// sulla pendenza DEM: abbastanza per far vedere lo sbilanciamento
+        /// su un dosso, ma senza mai accappottare l'auto.</summary>
+        private const float MaxInclineDeg = 20f;
+
         public float speed = 6f;
         private Vector3[] path;
         private int currentIdx;
@@ -116,6 +122,7 @@ namespace City.Vehicle
             {
                 // path e' in coordinate LOCALI del chunk root
                 transform.localPosition = path[0];
+                SnapToElevation();
                 if (path.Length > 1)
                 {
                     Vector3 dir = (path[1] - path[0]).normalized;
@@ -311,11 +318,23 @@ namespace City.Vehicle
 
             Vector3 move = dir.normalized * speed * Time.deltaTime * brake;
             transform.localPosition += move;
+            SnapToElevation();
             if (spinner != null) spinner.Spin(speed * brake);
 
-            Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            Quaternion look = Quaternion.LookRotation(dir.normalized,
+                TileElevation.SlopeUpAtWorld(transform.position, MaxInclineDeg));
             transform.localRotation =
                 Quaternion.Slerp(transform.localRotation, look, 5f * Time.deltaTime);
+        }
+
+        /// <summary>Snappa la base del veicolo alla quota DEM del terreno
+        /// (elevazione assoluta s.l.m.), cosi' le auto seguono l'andamento
+        /// della strada rialzata invece di guidare "dritte" a quota zero.</summary>
+        private void SnapToElevation()
+        {
+            float h = TileElevation.HeightAtWorld(transform.position);
+            Vector3 lp = transform.localPosition;
+            transform.localPosition = new Vector3(lp.x, h, lp.z);
         }
 
         /// <summary>Guida in linea retta verso il bersaglio MONDO (convertito
@@ -349,9 +368,11 @@ namespace City.Vehicle
 
             Vector3 move = dir.normalized * speed * Time.deltaTime;
             transform.localPosition += move;
+            SnapToElevation();
             if (spinner != null) spinner.Spin(speed);
 
-            Quaternion look = Quaternion.LookRotation(dir.normalized, Vector3.up);
+            Quaternion look = Quaternion.LookRotation(dir.normalized,
+                TileElevation.SlopeUpAtWorld(transform.position, MaxInclineDeg));
             transform.localRotation =
                 Quaternion.Slerp(transform.localRotation, look, 5f * Time.deltaTime);
         }

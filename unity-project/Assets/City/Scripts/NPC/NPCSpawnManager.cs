@@ -135,7 +135,9 @@ namespace City.NPC
                 var pts = new List<Vector3>();
                 foreach (var p in road.points)
                 {
-                    pts.Add(Local(p));
+                    Vector3 lp = Local(p);
+                    lp.y = TileElevation.HeightAt(p.lat, p.lng);
+                    pts.Add(lp);
                 }
                 for (int i = 0; i < pts.Count - 1; i++)
                     roadLen += (pts[i + 1] - pts[i]).magnitude;

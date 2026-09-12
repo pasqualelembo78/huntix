@@ -1,0 +1,38 @@
+MiaCitta - listone Brookhaven-style
+===================================
+Stato: [ ] da fare | [x] fatto | [~] in corso
+
+LIVELLO 1 (ritocchi rapidi)
+---------------------------
+[x] 1. Doppio tap per saltare                    (UI/TouchInputHandler.cs)
+[x] 2. Barra sonno/energia accanto all'energia   (Environment/EnergySystem.cs)
+[x] 3. Pulsante modalita camera 3a/1a persona    (Player/CameraRig.cs + UIManager)
+[x] 4. Vibrazione + toast sui pulsanti           (UIManager + plugin vibrazione)
+
+LIVELLO 2 (semplici)
+--------------------
+[x] 5.  Ciclo giorno/notte                        (nuovo script DayNight + CityOSMWorld skybox)
+[x] 6.  Clacson e luci auto                       (Vehicle/VehicleController.cs)
+[ ] 7.  Suoni ambience e passi   (SALTATO per scelta: niente asset audio)                    (audio CC0 esterni + FootstepManager)
+[x] 8.  Sirene polizia/ambulanza/elicottero       (Economy/JobManager.cs)
+
+LIVELLO 3 (medie)
+-----------------
+[x] 9.  Dormire sul letto -> ricarica energia    (InteriorGenerator.cs + interazione)
+[x] 10. Sedersi su panchine/poltrone             (pattern override CameraRig SALI IN AUTO)
+[x] 11. Personalizzazione personaggio estesa     (PlayerAppearance.cs + UI pettinature/vestiti)
+[x] 12. Menu Sim-Brookhaven (foto profilo, veicoli, statistiche) (HamburgerMenu.cs)
+[x] 13. Mini-mappa con icone                     (OSM/MinimapHud.cs)
+
+LIVELLO 4 (difficili)
+---------------------
+[x] 14. Sistema eta'/crescita (baby -> adulto)   (PlayerController + CharacterWalker + animazioni)
+[x] 15. NPC vita quotidiana (routine/negozi)     (NPC/NPCController.cs)
+[x] 16. Lavori con riprese cinematografiche      (MissionManager/NPCMission)
+[x] 17. Compra/vendita case e garage personale   (VehicleOwnershipApi.cs + Wallet.cs)
+
+LIVELLO 5 (molto difficili)
+---------------------------
+[ ] 18. Multigiocatore online                    (server Python + sincronizzazione)
+[ ] 19. UI Roblox-style completa                 (avatar 3D, amici, inventario, marketplace)
+[ ] 20. Fisica/danni auto + riparazione in officina (VehicleController + OfficinaUI)

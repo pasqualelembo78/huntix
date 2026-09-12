@@ -17,16 +17,16 @@ namespace City.Interior
         {
             if (!other.CompareTag("Player")) return;
             focused = true;
-            if (UIManager.Instance != null)
-                UIManager.Instance.ShowInteract("USCITA");
+            if (InteriorManager.Instance != null)
+                InteriorManager.Instance.RegisterInteriorAction(Interact, "USCITA");
         }
 
         private void OnTriggerExit(Collider other)
         {
             if (!other.CompareTag("Player")) return;
             focused = false;
-            if (UIManager.Instance != null)
-                UIManager.Instance.HideInteract();
+            if (InteriorManager.Instance != null)
+                InteriorManager.Instance.UnregisterInteriorAction(Interact);
         }
 
         public void Interact()

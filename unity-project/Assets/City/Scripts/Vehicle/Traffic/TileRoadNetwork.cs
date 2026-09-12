@@ -36,11 +36,17 @@ namespace City.Vehicle.Traffic
         private bool _dirty = true;
 
         // ── traffico su rete: auto in movimento che seguono la rete ──
-        private const int CarsPerTile = 10;
-        private const int MaxCars = 150;
+        // Densita' del traffico IN MOVIMENTO. L'utente vuole una citta' viva:
+        // 5-6 auto per chunk che girano sulle strade (un chunk = 1 km quadrato,
+        // una tile = 10x10 = 100 chunk). CarsPerTile e' calcolato per dare
+        // circa 5-6 auto in movimento per chunk nell'area visibile (7x7 chunk
+        // attorno al player). MaxCars e' il tetto assoluto per non saturare
+        // il device sui confini tile.
+        private const int CarsPerTile = 55;
+        private const int MaxCars = 400;
         private const float CullRadius = 500f;
         private const float CullInterval = 0.6f;
-        private const float RouteMinLen = 400f;
+        private const float RouteMinLen = 100f;
 
         private readonly List<CarAgent> _cars = new List<CarAgent>();
         private Transform _root;
@@ -131,7 +137,7 @@ namespace City.Vehicle.Traffic
             {
                 var tn = doc.nodes[i];
                 Vector3 pos = WorldOrigin.ToWorld(tn.lat, tn.lon);
-                pos.y = 0f;
+                pos.y = TileElevation.HeightAt(tn.lat, tn.lon);
                 JunctionType jt = JunctionType.Simple;
                 var jstr = tn.junction;
                 if (jstr == "Real") jt = JunctionType.Real;
@@ -153,7 +159,7 @@ namespace City.Vehicle.Traffic
                 for (int k = 0; k < ta.waypoints.Length; k++)
                 {
                     wp[k] = WorldOrigin.ToWorld(ta.waypoints[k].a, ta.waypoints[k].o);
-                    wp[k].y = 0f;
+                    wp[k].y = TileElevation.HeightAt(ta.waypoints[k].a, ta.waypoints[k].o);
                 }
 
                 var arc = graph.AddArc(from, to, wp,
@@ -311,7 +317,10 @@ namespace City.Vehicle.Traffic
             Vector3 pp = PlayerPosition();
             if (pp == Vector3.zero) return;
             float r2 = CullRadius * CullRadius;
-            float recycle2 = (CullRadius * 1.5f) * (CullRadius * 1.5f);
+            // riciclo piu' dolce: le auto restano vive piu' a lungo prima di
+            // essere rimpiazzate, dando l'effetto di auto che girano
+            // piuttosto che sparire sotto gli occhi del giocatore.
+            float recycle2 = (CullRadius * 2.5f) * (CullRadius * 2.5f);
             for (int i = _cars.Count - 1; i >= 0; i--)
             {
                 var c = _cars[i];
@@ -332,7 +341,7 @@ namespace City.Vehicle.Traffic
         {
             int target = Mathf.Clamp(_raw.Count * CarsPerTile, 0, MaxCars);
             int guard = 0;
-            while (_cars.Count < target && guard++ < 50)
+            while (_cars.Count < target && guard++ < 250)
             {
                 if (!SpawnOne()) break;
             }
@@ -413,8 +422,9 @@ namespace City.Vehicle.Traffic
         private RoadNode PickDistantTarget(RoadNode start)
         {
             RoadNode best = null;
-            float bestD = RouteMinLen;
-            int samples = Mathf.Min(24, _nodes.Count);
+            // soglia minima in distanza al QUADRATO (confrontata con sqrMagnitude)
+            float bestD = RouteMinLen * RouteMinLen;
+            int samples = Mathf.Min(64, _nodes.Count);
             for (int i = 0; i < samples; i++)
             {
                 var n = _nodes[_rng.Next(_nodes.Count)];

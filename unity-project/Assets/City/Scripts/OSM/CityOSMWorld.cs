@@ -45,6 +45,9 @@ namespace City.OSM
         private const double DefaultLat = 41.9028;
         private const double DefaultLng = 12.4964;
 
+        private double startLat = DefaultLat;   // posizione iniziale (profilo/fallback)
+        private double startLng = DefaultLng;
+
         public double CenterLat { get; private set; } = DefaultLat;
         public double CenterLng { get; private set; } = DefaultLng;
         public int RadiusMeters { get; private set; } = StreamRadiusM;
@@ -64,6 +67,22 @@ namespace City.OSM
         private readonly List<Bounds> _buildingBounds = new List<Bounds>();
 
         private readonly Dictionary<Color, Material> _materials = new Dictionary<Color, Material>();
+
+        // Cache statica dei prefab Kenney per categoria + nome: i Resources.Load
+        // per edificio ripetevano lo stesso asset ogni volta che veniva piazzata
+        // una di quelle building (I/O + deserializzazione ripetuta).
+        private static readonly Dictionary<string, GameObject> _buildingPrefabCache =
+            new Dictionary<string, GameObject>();
+
+        private static GameObject LoadBuildingPrefab(string folder, string name)
+        {
+            string path = "Buildings/" + folder + "/" + name;
+            GameObject cached;
+            if (_buildingPrefabCache.TryGetValue(path, out cached)) return cached;
+            var go = Resources.Load<GameObject>(path);
+            _buildingPrefabCache[path] = go;
+            return go;
+        }
 
         // ── bootstrap ────────────────────────────────────────────────
 
@@ -103,6 +122,10 @@ namespace City.OSM
             // i suoi collider erano registrati al load. Forzare l'auto-sync è la
             // soluzione robusta (è anche il default di Unity).
             Physics.autoSyncTransforms = true;
+
+            // CRITICO: nascondi la seed city SUBITO (stesso frame, no yield).
+            // Prima veniva nascosta dopo yield return null (1 frame visibile).
+            HideSeedCityAndFreezePlayer();
 
             // Il tracking GPS parte PRIMA del bootstrap della mappa: lato Android
             // il seed con l'ultima posizione nota è sincrono, quindi LoadInitial
@@ -145,13 +168,8 @@ namespace City.OSM
 
         private IEnumerator LoadInitial()
         {
-            // Niente mappa finta all'avvio: la seed city viene nascosta subito e il
-            // player congelato (CharacterController disattivato = niente gravita),
-            // cosi tra il bootstrap e la ricezione dei dati OSM non c'e' niente da
-            // vedere ne' una caduta nel vuoto. Il player verra' posato sul terreno
-            // OSM da PlacePlayerOnGround quando il build parte.
-            yield return null;
-            HideSeedCityAndFreezePlayer();
+            // La seed city e' gia' nascosta da Init() (stesso frame, no yield).
+            // Questo coroutinette attende solo il fix GPS e poi richiede l'area OSM.
             var loc = ReadBridgeLocation();
             if (loc == null || IsZero(loc))
             {
@@ -175,15 +193,57 @@ namespace City.OSM
             }
             else
             {
-                lat = DefaultLat;
-                lng = DefaultLng;
-                _usedDefaultLocation = "default";
+                // Prova la posizione GPS salvata nel profilo giocatore
+                TryReadProfileGps();
+                if (System.Math.Abs(startLat - DefaultLat) > 0.01 || System.Math.Abs(startLng - DefaultLng) > 0.01)
+                {
+                    lat = startLat;
+                    lng = startLng;
+                    _usedDefaultLocation = null;
+                }
+                else
+                {
+                    lat = DefaultLat;
+                    lng = DefaultLng;
+                    _usedDefaultLocation = "default";
+                }
             }
             Debug.Log($"[CityOSMWorld] Centro iniziale ({lat},{lng}) raggio {StreamRadiusM}m");
             UnityBridge.LogToAndroid("CityOSMWorld", $"Bootstrap: centro iniziale ({lat},{lng}) raggio {StreamRadiusM}m" + (_usedDefaultLocation != null ? " [DEFAULT, GPS non disponibile]" : ""));
             if (Exiting) yield break;
             RequestArea(lat, lng);
             yield break;
+        }
+
+        /// <summary>
+        /// Legge la posizione GPS dal profilo giocatore (SharedPreferences Android).
+        /// </summary>
+        private void TryReadProfileGps()
+        {
+            if (!Application.isMobilePlatform) return;
+            try
+            {
+                using (var playerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = playerClass.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (var prefs = activity.Call<AndroidJavaObject>("getSharedPreferences",
+                    "world_game_prefs", 0))
+                {
+                    float lat = prefs.Call<float>("getFloat", "gpsLat", 0f);
+                    float lng = prefs.Call<float>("getFloat", "gpsLng", 0f);
+                    if (System.Math.Abs(lat) > 0.001f && System.Math.Abs(lng) > 0.001f)
+                    {
+                        startLat = lat;
+                        startLng = lng;
+                        Debug.Log("[CityOSMWorld] posizione da profilo: " +
+                            lat.ToString(CultureInfo.InvariantCulture) + "," +
+                            lng.ToString(CultureInfo.InvariantCulture));
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.Log("[CityOSMWorld] profile GPS fallback: " + e.Message);
+            }
         }
 
         // ── richieste / ricezione ────────────────────────────────────
@@ -291,6 +351,13 @@ namespace City.OSM
             CenterLng = env.centerLng;
             RadiusMeters = Mathf.Max(env.radiusMeters, StreamRadiusM);
             _buildingBounds.Clear();
+
+            // Congela il player durante il build (niente caduta nel vuoto)
+            if (City.Game.Instance != null && City.Game.Instance.player != null)
+            {
+                var cc = City.Game.Instance.player.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+            }
 
             ApplyKenneySkybox();
 
@@ -709,8 +776,6 @@ namespace City.OSM
             }
         }
 
-        private GameObject _roadStraight, _roadBend, _roadCrossroad, _roadIntersection, _roadEnd;
-        private GameObject _roadCurve, _roadRoundabout;
         private float _straightLen, _straightWid;
         private Texture2D _roadColormap;
 
@@ -748,20 +813,26 @@ namespace City.OSM
 
         private const float KENNEY_ROAD_SCALE = 8f;
 
+        private static readonly string[] RoadNames =
+        {
+            "road-straight", "road-bend", "road-crossroad",
+            "road-intersection", "road-end", "road-curve", "road-roundabout"
+        };
+
+        private static GameObject[] _roadPrefabs;
+
         private void LoadRoadPrefabs()
         {
-            if (_roadStraight != null) return;
-            _roadStraight = Resources.Load<GameObject>("Roads/road-straight");
-            _roadBend = Resources.Load<GameObject>("Roads/road-bend");
-            _roadCrossroad = Resources.Load<GameObject>("Roads/road-crossroad");
-            _roadIntersection = Resources.Load<GameObject>("Roads/road-intersection");
-            _roadEnd = Resources.Load<GameObject>("Roads/road-end");
-            _roadCurve = Resources.Load<GameObject>("Roads/road-curve");
-            _roadRoundabout = Resources.Load<GameObject>("Roads/road-roundabout");
-
-            if (_roadStraight != null)
+            if (_roadPrefabs != null) return;
+            _roadPrefabs = new GameObject[RoadNames.Length];
+            for (int i = 0; i < RoadNames.Length; i++)
             {
-                var probe = Instantiate(_roadStraight);
+                _roadPrefabs[i] = Resources.Load<GameObject>("Roads/" + RoadNames[i]);
+            }
+
+            if (_roadPrefabs[0] != null)
+            {
+                var probe = Instantiate(_roadPrefabs[0]);
                 probe.transform.localScale = Vector3.one * KENNEY_ROAD_SCALE;
                 Bounds pb = new Bounds();
                 bool any = false;
@@ -779,8 +850,11 @@ namespace City.OSM
 
             _roadColormap = Resources.Load<Texture2D>("Roads/Textures/colormap");
 
-            int loaded = (_roadStraight ? 1 : 0) + (_roadBend ? 1 : 0) + (_roadCrossroad ? 1 : 0)
-                         + (_roadIntersection ? 1 : 0) + (_roadEnd ? 1 : 0) + (_roadCurve ? 1 : 0) + (_roadRoundabout ? 1 : 0);
+            int loaded = 0;
+            for (int i = 0; i < _roadPrefabs.Length; i++)
+            {
+                if (_roadPrefabs[i] != null) loaded++;
+            }
             UnityBridge.LogToAndroid("CityOSM", "Kenney road tiles loaded: " + loaded + "/7 tileWid=" + _straightWid + " tileLen=" + _straightLen + " colormap=" + (_roadColormap != null));
         }
 
@@ -949,7 +1023,7 @@ namespace City.OSM
                     Vector3 mid = (a + b) * 0.5f;
                     float angle = Mathf.Atan2(b.z - a.z, b.x - a.x);
 
-                    if (_roadStraight != null && _straightLen > 0f && _straightWid > 0f)
+                    if (_roadPrefabs[0] != null && _straightLen > 0f && _straightWid > 0f)
                     {
                         float s = (width / _straightWid) * KENNEY_ROAD_SCALE;
                         float tileLenWorld = _straightLen * s / KENNEY_ROAD_SCALE;
@@ -960,7 +1034,7 @@ namespace City.OSM
                         for (int t = 0; t < tileCount; t++)
                         {
                             Vector3 tileCenter = a + dir * ((t + 0.5f) * tileStep);
-                            var go = Instantiate(_roadStraight, parent);
+                            var go = Instantiate(_roadPrefabs[0], parent);
                             go.name = "Strada";
                             go.transform.localPosition = tileCenter + Vector3.up * -0.03f;
             go.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f);
@@ -993,8 +1067,8 @@ namespace City.OSM
                         && IsRealJunction(nodeBearings.GetValueOrDefault(vKey)))
                     {
                         int cnt = junctionCount[vKey];
-                        GameObject jPrefab = cnt >= 5 ? _roadRoundabout
-                                            : cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                        GameObject jPrefab = cnt >= 5 ? _roadPrefabs[6]
+                                            : cnt >= 3 ? _roadPrefabs[2] : _roadPrefabs[3];
                         InstantiateRoadTile(parent, jPrefab, b, angle, width);
                         UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={vKey} roads={cnt}");
                         placedJunctions.Add(vKey);
@@ -1007,8 +1081,8 @@ namespace City.OSM
                             && IsRealJunction(nodeBearings.GetValueOrDefault(aKey)))
                         {
                             int cnt = junctionCount[aKey];
-                            GameObject jPrefab = cnt >= 5 ? _roadRoundabout
-                                                : cnt >= 3 ? _roadCrossroad : _roadIntersection;
+                            GameObject jPrefab = cnt >= 5 ? _roadPrefabs[6]
+                                                : cnt >= 3 ? _roadPrefabs[2] : _roadPrefabs[3];
                             InstantiateRoadTile(parent, jPrefab, a, angle, width);
                             UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(cnt >= 5 ? "roundabout" : cnt >= 3 ? "crossroad" : "intersection")} at SnapKey={aKey} roads={cnt} (start)");
                             placedJunctions.Add(aKey);
@@ -1027,17 +1101,17 @@ namespace City.OSM
                         {
                             GameObject curvePrefab = null;
                             if (Mathf.Abs(angleDiff - 90f) < 25f)
-                                curvePrefab = _roadBend;
+                                curvePrefab = _roadPrefabs[1];
                             else if (angleDiff > 15f && angleDiff < 65f)
-                                curvePrefab = _roadCurve;
+                                curvePrefab = _roadPrefabs[5];
                             else if (angleDiff > 115f && angleDiff < 165f)
-                                curvePrefab = _roadCurve;
+                                curvePrefab = _roadPrefabs[5];
 
                             if (curvePrefab != null)
                             {
                                 float midAngle = inAngle + signedDiff * 0.5f * Mathf.Deg2Rad;
                                 InstantiateRoadTile(parent, curvePrefab, a, midAngle, width);
-                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadBend ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0} signed={signedDiff:F0}");
+                                UnityBridge.LogToAndroid("CityOSM", $"Road tile: {(curvePrefab == _roadPrefabs[1] ? "bend" : "curve")} at ({a.x:F1},{a.z:F1}) angleDiff={angleDiff:F0} signed={signedDiff:F0}");
                             }
                         }
                     }
@@ -1052,7 +1126,7 @@ namespace City.OSM
                     Vector3 sp = SnappedLocal(r.points[0]);
                     Vector3 sp2 = SnappedLocal(r.points[1]);
                     float sAngle = Mathf.Atan2(sp2.z - sp.z, sp2.x - sp.x) + Mathf.PI;
-                    InstantiateRoadTile(parent, _roadEnd, sp, sAngle, width);
+                    InstantiateRoadTile(parent, _roadPrefabs[4], sp, sAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (start)");
                 }
                 if (junctionCount.GetValueOrDefault(endKey) <= 1)
@@ -1060,7 +1134,7 @@ namespace City.OSM
                     Vector3 ep = SnappedLocal(r.points[r.points.Length - 1]);
                     Vector3 ep2 = SnappedLocal(r.points[r.points.Length - 2]);
                     float eAngle = Mathf.Atan2(ep.z - ep2.z, ep.x - ep2.x);
-                    InstantiateRoadTile(parent, _roadEnd, ep, eAngle, width);
+                    InstantiateRoadTile(parent, _roadPrefabs[4], ep, eAngle, width);
                     UnityBridge.LogToAndroid("CityOSM", "Road tile: dead-end (end)");
                 }
 
@@ -1448,12 +1522,8 @@ namespace City.OSM
                 bool commercial = IsCommercial(b);
                 bool industrial = IsIndustrial(b);
                 source = industrial ? "Resources/Industrial" : commercial ? "Resources/Commercial" : "Resources/Suburban";
-                if (industrial)
-                    prefab = Resources.Load<GameObject>("Buildings/Industrial/" + prefabName);
-                else if (commercial)
-                    prefab = Resources.Load<GameObject>("Buildings/Commercial/" + prefabName);
-                else
-                    prefab = Resources.Load<GameObject>("Buildings/Suburban/" + prefabName);
+                string folder = industrial ? "Industrial" : commercial ? "Commercial" : "Suburban";
+                prefab = LoadBuildingPrefab(folder, prefabName);
             }
             if (prefab == null) return false;
 

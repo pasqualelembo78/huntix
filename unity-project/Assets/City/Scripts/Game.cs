@@ -20,14 +20,14 @@ namespace City
         public UIManager ui;
         public ScreenFader fader;
 
+        /// <summary>Client multiplayer della citta' (Fase 2): gli altri
+        /// giocatori raccolti via HTTP dal server city_realtime.</summary>
+        public City.Multiplayer.MultiplayerManager multiplayer;
+
         private InteractDoor currentDoor;
         private VehicleInteract currentVehicleFocus;
         private NPCMission currentMissionNPC;
         private VehiclePoiZone currentPoiZone;
-
-        // buffer riusabile per lo scan dei trigger nell'interno (evita la
-        // FindObjectsOfType<MonoBehaviour> che scansionava l'intera scena)
-        private readonly Collider[] interiorScan = new Collider[64];
 
         /// <summary>Zona POI veicoli sotto i piedi (concessionaria/officina/garage).</summary>
         public VehiclePoiZone CurrentPoiZone { get { return currentPoiZone; } }
@@ -37,6 +37,13 @@ namespace City
         public InteractDoor CurrentDoor { get { return currentDoor; } }
         public VehicleInteract CurrentVehicleFocus { get { return currentVehicleFocus; } }
         public NPCMission CurrentMissionNPC { get { return currentMissionNPC; } }
+
+        /// <summary>Ingresso edificio focalizzato (la soglia sotto i piedi):
+        /// serve alle azioni casa/garage (compra, vendi, parcheggia).</summary>
+        public City.Interior.BuildingEntrance CurrentEntrance
+        {
+            get { return currentEntrance; }
+        }
 
         // ── Modalita' veicolo ─────────────────────────────────────
         public bool IsDriving { get; private set; }
@@ -68,6 +75,7 @@ namespace City
         private void Start()
         {
             if (player == null) player = FindObjectOfType<PlayerController>();
+            if (multiplayer == null) multiplayer = gameObject.AddComponent<City.Multiplayer.MultiplayerManager>();
             if (rig == null) rig = FindObjectOfType<CameraRig>();
             if (ui == null) ui = GetComponentInChildren<UIManager>();
             if (fader == null && ui != null) fader = ui.fader;
@@ -83,6 +91,8 @@ namespace City
             City.Vehicle.PassengerService.Ensure();
             City.Vehicle.BusMissionService.Ensure();
             City.Vehicle.TaxiService.Ensure();
+            // FASE 6: wallet server-side (sync HTTP, autoritative)
+            City.World.WalletManager.Ensure();
             if (InteriorManager.Instance == null)
             {
                 var imGo = new GameObject("InteriorManager");
@@ -113,7 +123,15 @@ namespace City
                 raGo.AddComponent<RewardedAdHelper>();
             }
 
+            try { City.Environment.DayNightManager.Ensure(); }
+            catch (System.Exception) { }
+            try { City.Environment.SimulationManager.Ensure(); }
+            catch (System.Exception) { }
+            try { City.Environment.FurnitureInteract.Ensure(); }
+            catch (System.Exception) { }
             EnergySystem.EnsureHud();
+            try { City.Environment.SleepSystem.EnsureHud(); }
+            catch (System.Exception) { }
             // Radar di caccia uova (direzione/distanza preda piu' vicina).
             try { City.Economy.EggRadar.EnsureHud(); }
             catch (System.Exception) { }
@@ -133,6 +151,11 @@ namespace City
 
         private void Update()
         {
+            // barra sonno: cala in movimento, recupera da fermi
+            try { City.Environment.SleepSystem.Tick(Time.deltaTime); }
+            catch (System.Exception) { }
+            try { City.Environment.AgeSystem.Tick(Time.deltaTime); }
+            catch (System.Exception) { }
             // Guida con gli stessi controlli della camminata: joystick
             // sinistro (su/giu = gas/retro, dx/sx = sterzo); la camera si
             // ruota trascinando la meta' destra dello schermo
@@ -142,27 +165,16 @@ namespace City
                 Vector2 v = ui.joystick.Value;
                 CurrentVehicle.SetInput(v.y, v.x, false);
             }
-
-            // Modalita' interno: reindirizza input al player interno
-            if (IsInInterior && ui != null)
-            {
-                Vector2 input = ui.joystick != null ? ui.joystick.Value : Vector2.zero;
-                InteriorManager.Instance.OnMoveInput(input);
-            }
         }
 
         // ── Input routing ──────────────────────────────────────────
 
         public void OnOrbitDelta(float dx)
         {
-            if (IsInInterior)
-            {
-                InteriorManager.Instance.OnLookDelta(dx);
-            }
-            else if (rig != null)
-            {
-                rig.Orbit(dx);
-            }
+            // Il player resta SEMPRE in terza persona: nessuna vista da
+            // interno in prima persona. La camera orbita sempre attorno al
+            // player in terza persona.
+            if (rig != null) rig.Orbit(dx);
         }
 
         // ── Ingresso edificio (interno 3D) ────────────────────────
@@ -173,13 +185,17 @@ namespace City
             {
                 currentEntrance = entrance;
                 bool blocked = currentVehicleFocus != null || currentMissionNPC != null;
-                Debug.Log("[Game] OnEntranceFocusChanged: " + entrance.buildingName + " (" + entrance.buildingType + ") blocked=" + blocked);
-                if (!blocked)
-                {
-                    entrance.StartAutoEntry();
-                }
+                // Concessionaria/officina/garage = "case aperte" (vista 3a
+                // persona): non devono auto-aprire un interno in 1a persona.
+                bool inOpenPoi = City.Vehicle.VehiclePoiZone.PlayerInOpenRoomVehicle();
+                // Negozi espliciti (fix #2): si apre SOLO con un tap
+                // (OnInteractPressed -> currentEntrance.Interact()), mai in
+                // automatico attraversando la porta. Qui si mostra solo il
+                // prompt d'interazione.
+                if (ui != null && !blocked && !inOpenPoi)
+                    ui.ShowInteract(entrance.IsShop ? "NEGOZIO" : "APRI");
             }
-            else if (currentEntrance == entrance)
+            else if (entrance == null || currentEntrance == entrance)
             {
                 currentEntrance = null;
                 RefreshInteractLabel();
@@ -195,7 +211,7 @@ namespace City
                 currentPoiZone = zone;
                 if (ui != null) ui.ShowInteract(zone.Label);
             }
-            else if (currentPoiZone == zone)
+            else if (zone == null || currentPoiZone == zone)
             {
                 currentPoiZone = null;
                 RefreshInteractLabel();
@@ -211,7 +227,7 @@ namespace City
                 currentDoor = door;
                 if (ui != null) ui.ShowInteract(door.label);
             }
-            else if (currentDoor == door)
+            else if (door == null || currentDoor == door)
             {
                 currentDoor = null;
                 RefreshInteractLabel();
@@ -220,17 +236,27 @@ namespace City
 
         public void OnInteractPressed()
         {
-            // Se siamo dentro un interno, gestisci interazioni indoor
-            if (IsInInterior)
+            if (City.Environment.FurnitureInteract.IsSleeping)
             {
-                HandleInteriorInteract();
+                City.Environment.FurnitureInteract.WakeUp();
                 return;
             }
-
             if (IsDriving)
             {
                 ExitVehicle();
                 return;
+            }
+
+            // Dentro un edificio: se un oggetto interno (es. bancone negozio)
+            // ha una azione contestuale, eseguila subito.
+            if (IsInInterior)
+            {
+                var mgr = City.Interior.InteriorManager.Instance;
+                if (mgr != null && mgr.CurrentInteriorAction != null)
+                {
+                    mgr.CurrentInteriorAction();
+                    return;
+                }
             }
 
             // taxi del fischio in attesa: il tap fa salire nel taxi
@@ -285,42 +311,6 @@ namespace City
             {
                 currentEntrance.Interact();
                 return;
-            }
-        }
-
-        private void HandleInteriorInteract()
-        {
-            var im = InteriorManager.Instance;
-            if (im == null || !im.IsInside) return;
-
-            // scan dei trigger attorno al player interno (buffer riusabile):
-            // prima FindObjectsOfType<MonoBehaviour> passava in rassegna TUTTI
-            // i componenti della scena a ogni tap (NPC, veicoli, ecc.)
-            int n = Physics.OverlapSphereNonAlloc(im.InteriorPlayerPos, 3f, interiorScan);
-            for (int i = 0; i < n; i++)
-            {
-                var c = interiorScan[i];
-                if (c == null || !c.isTrigger) continue;
-                if (c.GetComponent<StairTrigger>() is StairTrigger st && st.IsFocused)
-                {
-                    st.Interact();
-                    return;
-                }
-                if (c.GetComponent<ExitTrigger>() is ExitTrigger et && et.IsFocused)
-                {
-                    et.Interact();
-                    return;
-                }
-                if (c.GetComponent<ShopCounterTrigger>() is ShopCounterTrigger sct && sct.IsFocused)
-                {
-                    sct.Interact();
-                    return;
-                }
-                if (c.GetComponent<VehicleCounterTrigger>() is VehicleCounterTrigger vct && vct.IsFocused)
-                {
-                    vct.Interact();
-                    return;
-                }
             }
         }
 
@@ -408,13 +398,14 @@ namespace City
 
         public void OnEggCollected(EggController egg)
         {
-            Wallet.Earn(egg.value);
+            int reward = Mathf.Max(1, Mathf.RoundToInt(egg.value * egg.captureMultiplier));
+            Wallet.Earn(reward);
 
             if (MissionManager.Instance != null)
                 MissionManager.Instance.OnEggCollected();
 
             if (ui != null)
-                ui.ShowToast("Uova raccolta! +" + egg.value + " €");
+                ui.ShowToast("Uova raccolta! +" + reward + " €");
 
             if (EggSpawnManager.Instance != null)
                 EggSpawnManager.Instance.RemoveEgg(egg.gameObject);
@@ -494,7 +485,7 @@ namespace City
                     // sull'avvicinamento; l'offerta parte SOLO dal tap
                     ui.HideInteract();
             }
-            else if (currentVehicleFocus == vi)
+            else if (vi == null || currentVehicleFocus == vi)
             {
                 currentVehicleFocus = null;
                 RefreshInteractLabel();
@@ -586,13 +577,63 @@ namespace City
                 ui.ShowToast("Indicazioni impostate: " + name);
         }
 
+        /// <summary>Snap alla superficie del terreno usando raycast (preferito)
+/// o fallback DEM. Evita che il player finisca sotto la strada o nel terreno.</summary>
+        private Vector3 SnapToGroundForTeleport(Vector3 pos)
+        {
+            Transform bridge = CityChunkedWorld.Instance != null &&
+                CityChunkedWorld.Instance.SpawnBridge != null
+                ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
+            Transform playerRoot = player != null
+                ? player.transform : null;
+
+            // raggio da 200m sopra verso il basso: colpisce la mesh terreno
+            // dall'esterno (evita la faccia interna unidirezionale)
+            Vector3 from = pos + Vector3.up * 200f;
+            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 400f);
+            float bestY = float.MinValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].collider == null) continue;
+                var t = hits[i].collider.transform;
+                // salta player e SpawnBridge
+                if (playerRoot != null &&
+                    (t == playerRoot || t.IsChildOf(playerRoot)))
+                    continue;
+                if (bridge != null &&
+                    (t == bridge || t.IsChildOf(bridge)))
+                    continue;
+                if (hits[i].point.y > bestY)
+                    bestY = hits[i].point.y;
+            }
+            if (bestY > float.MinValue)
+            {
+                pos.y = bestY + 1.2f;
+                return pos;
+            }
+            // fallback: DEM
+            float dem = TileElevation.HeightAtWorld(pos);
+            if (dem > 0f)
+            {
+                pos.y = dem + 1.2f;
+                return pos;
+            }
+            // ulteriore fallback: 1.2m (SpawnBridge)
+            pos.y = 1.2f;
+            return pos;
+        }
+
         /// <summary>Teletrasporto immediato sul POI (con fade nero).</summary>
         private void TeleportToPoi(double lat, double lng)
         {
             if (player == null)
                 return;
             Vector3 pos = WorldOrigin.ToWorld(lat, lng);
-            pos.y = 0f;
+            // Snap alla superficie del terreno: raycast prima, fallback DEM.
+            // Senza questo il player verrebbe piazzato a y=1.2 (SpawnBridge)
+            // se il DEM non e' caricato, ma il terreno fisico e' gia' a quota
+            // DEM -> player incastrato sotto la strada.
+            pos = SnapToGroundForTeleport(pos);
             Quaternion rot = Quaternion.identity;
             if (Camera.main != null)
                 rot = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
@@ -610,6 +651,14 @@ namespace City
             // panne da chilometraggio (senza danni): si va in officina
             if (!vc.CanStart() && vc.Damage == VehicleDamage.None)
             {
+                if (vc.IsOutOfFuel)
+                {
+                    if (ui != null)
+                        ui.ShowToast("Serbatoio vuoto! Fai benzina al distributore.");
+                    OfferNearest("fuel", "DISTRIBUTORE",
+                        "Serbatoio vuoto: fai benzina al distributore");
+                    return;
+                }
                 OfferNearest("repair", "OFFICINA",
                     "Motore in panne! Ripara l'auto in officina");
                 return;
@@ -645,6 +694,16 @@ namespace City
         {
             if (vc == null || IsDriving || transitionBusy) return;
             if (player == null) return;
+            // Uscire dalla zona POI aperta se il player sale in auto dentro
+            // concessionaria/officina/garage: col collider spento in guida
+            // OnTriggerExit non scatta e focus+camera indoor resterebbero
+            // bloccati (prompt e camera stretta ovunque dopo l'uscita).
+            City.Vehicle.VehiclePoiZone.ReleaseFocusedZone();
+            // Salire in auto mentre si è dentro un interno in-place: esci
+            // subito dall'edificio (no-op se non si è dentro) per non restare
+            // con la camera indoor forzata + giocatore in stato "dentro".
+            if (City.Interior.InteriorManager.Instance != null)
+                City.Interior.InteriorManager.Instance.ExitInterior();
             StartCoroutine(EnterRoutine(vc));
         }
 
@@ -728,7 +787,7 @@ namespace City
                     }
                     fader.gameObject.SetActive(false);
                 }
-                Debug.Log("[Game] Entrato nel veicolo: " + vc.data.vehicleName);
+                Debug.Log("[Game] Entrato nel veicolo: " + (vc.data != null ? vc.data.vehicleName : vc.name));
             }
             finally
             {
@@ -771,12 +830,28 @@ namespace City
                 Vector3 exitPos = vc.transform.position
                     + vc.transform.right * 2f
                     + Vector3.up * 0.1f;
+
+                // Snap al terreno reale: il vehicle potrebbe essere su
+                // collider a y~0 (SpawnBridge) o su terreno costiero piatto.
+                // Senza snap il player finisce a y~0.1 e GroundProbeAndRescue
+                // ci mette 2 s a correggere (o non lo corregge affatto se
+                // il player e' sopra il ponte di sicurezza, non sotto).
+                exitPos = SnapToGround(exitPos);
+
                 CharacterController cc =
                     player.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = false;
                 player.transform.position = exitPos;
-                player.transform.rotation = vc.transform.rotation;
+                // il giocatore esce SEMPRE in piedi sulla strada: prende solo
+                // la direzione (yaw) del veicolo, non il suo rollio/pitch che
+                // dopo un urto potrebbero essere inclinati o ribaltati.
+                player.transform.rotation =
+                    Quaternion.Euler(0f, vc.transform.eulerAngles.y, 0f);
                 if (cc != null) cc.enabled = true;
+                // Azzera input/velocita' residue: senza questo il player
+                // esce dall'auto e "scappa" per qualche frame nella vecchia
+                // direzione di camminata (moveInput mai resettato in guida).
+                player.Stop();
 
                 if (rig != null) rig.SetDrivingMode(false);
 
@@ -846,6 +921,13 @@ namespace City
 
         public void TeleportPlayer(Vector3 pos, Quaternion rot)
         {
+            Vector3 src = player != null ? player.transform.position : Vector3.zero;
+            OsmDiag.Log("[Audit] Teleport invio (" +
+                src.x.ToString("F1") + "," + src.z.ToString("F1") + ") y=" +
+                src.y.ToString("F2") + " -> (" +
+                pos.x.ToString("F1") + "," + pos.z.ToString("F1") + ") y=" +
+                pos.y.ToString("F2") + " dem=" +
+                TileElevation.HeightAtWorld(pos).ToString("F2"));
             if (fader == null)
             {
                 SetPlayerPosition(pos, rot);
@@ -876,6 +958,60 @@ namespace City
             if (cc != null) cc.enabled = true;
             player.Stop();
             if (rig != null) rig.SetYaw(rot);
+            OsmDiag.Log("[Audit] Teleport applicato (" +
+                player.transform.position.x.ToString("F1") + "," +
+                player.transform.position.z.ToString("F1") + ") y=" +
+                player.transform.position.y.ToString("F2") + " dem=" +
+                TileElevation.HeightAtWorld(player.transform.position).ToString("F2"));
+        }
+
+        /// <summary>Piazza la posizione sulla superficie del terreno reale
+        /// (escludendo SpawnBridge e il collider del player) tramite
+        /// RaycastAll dal alto. Se non trova nulla usa la quota DEM come
+        /// fallback. Serve per evitare che il player finisca a y~0 sul ponte
+        /// di sicurezza dopo l'uscita da un veicolo.</summary>
+        private Vector3 SnapToGround(Vector3 pos)
+        {
+            Transform bridge = CityChunkedWorld.Instance != null &&
+                CityChunkedWorld.Instance.SpawnBridge != null
+                ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
+            Transform playerRoot = player != null
+                ? player.transform : null;
+
+            // raggio da 200m sopra verso il basso: colpisce la mesh terreno
+            // dall'esterno (evita la faccia interna unidirezionale)
+            Vector3 from = pos + Vector3.up * 200f;
+            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 400f);
+            float bestY = float.MinValue;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].collider == null) continue;
+                var t = hits[i].collider.transform;
+                // salta player e SpawnBridge
+                if (playerRoot != null &&
+                    (t == playerRoot || t.IsChildOf(playerRoot)))
+                    continue;
+                if (bridge != null &&
+                    (t == bridge || t.IsChildOf(bridge)))
+                    continue;
+                if (hits[i].point.y > bestY)
+                    bestY = hits[i].point.y;
+            }
+            if (bestY > float.MinValue)
+            {
+                pos.y = bestY + 1.0f;
+                return pos;
+            }
+            // fallback: DEM
+            float dem = TileElevation.HeightAtWorld(pos);
+            if (dem > 0f)
+            {
+                pos.y = dem + 1.0f;
+                return pos;
+            }
+            // ulteriore fallback: mantieni 1.2m (SpawnBridge)
+            pos.y = 1.2f;
+            return pos;
         }
     }
 }

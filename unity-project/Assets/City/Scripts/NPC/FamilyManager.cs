@@ -603,6 +603,29 @@ namespace City.NPC
             FamilyHost.Instance?.BeginAfterlife(type);
         }
 
+        /// <summary>Marca il player come morto SENZA avviare subito l'Afterlife:
+        /// per le morti sceniche scelte dal giocatore, che dopo la sequenza
+        /// mostrano la schermata "reincarnati ORA oppure inizia l'Afterlife".
+        /// (Le morti naturali usano sempre Die(), che parte da sola.)</summary>
+        public static void MarkDead(DeathType type)
+        {
+            if (IsDead) return;
+            IsDead = true;
+            deathTime = System.DateTime.UtcNow;
+            lastDeathType = type;
+            ShowToast("MORTE: " + DeathMessage(type));
+            // nessun afterlife automatico: aspetta la scelta del giocatore
+        }
+
+        /// <summary>Avvia il ciclo Afterlife per la morte corrente (chiamata
+        /// dal DeathDirector quando il giocatore sceglie di non reincarnarsi
+        /// subito ma di percorrere Inferno/Purgatorio/Paradiso).</summary>
+        public static void StartAfterlife(DeathType type)
+        {
+            if (FamilyHost.Instance == null) Ensure();
+            FamilyHost.Instance?.BeginAfterlife(type);
+        }
+
         public static string DeathMessage(DeathType type)
         {
             switch (type)
@@ -687,11 +710,13 @@ namespace City.NPC
         {
             int xp = PlayerPrefs.GetInt("family_wedding_xp", 0)
                    + PlayerPrefs.GetInt("family_foster_xp", 0)
-                   + PlayerPrefs.GetInt("family_spouse_xp", 0);
+                   + PlayerPrefs.GetInt("family_spouse_xp", 0)
+                   + PlayerPrefs.GetInt("family_kid_xp", 0);
             if (xp <= 0) return;
             PlayerPrefs.SetInt("family_wedding_xp", 0);
             PlayerPrefs.SetInt("family_foster_xp", 0);
             PlayerPrefs.SetInt("family_spouse_xp", 0);
+            PlayerPrefs.SetInt("family_kid_xp", 0);
             PlayerPrefs.Save();
             SyncXpToHuntix(xp, "famiglia");
         }

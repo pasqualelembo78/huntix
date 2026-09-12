@@ -40,7 +40,6 @@ namespace City.Player
         private Transform followTarget;
         private Vector3 _prevPlayerPos;
         private float _hopT;
-        private Vector3 _baseLocalPos;
 
         private static GameObject _petRoot;
         private static PetController _instance;
@@ -53,7 +52,6 @@ namespace City.Player
 
         private void Start()
         {
-            _baseLocalPos = transform.localPosition;
             RefreshTarget();
         }
 
@@ -95,7 +93,18 @@ namespace City.Player
                 Vector3 step = toAnchor.normalized * Mathf.Min(moveSpeed * Time.deltaTime, toAnchor.magnitude);
                 targetPos += step;
             }
-            targetPos.y = Mathf.Lerp(targetPos.y, anchor.y, 8f * Time.deltaTime);
+
+            if (moving)
+            {
+                _hopT += Time.deltaTime;
+                if (_hopT >= hopDuration) _hopT = 0f;
+            }
+            else
+            {
+                _hopT = 0f;
+            }
+            float hopOffset = Mathf.Sin(_hopT / hopDuration * Mathf.PI) * hopHeight;
+            targetPos.y = Mathf.Lerp(targetPos.y, anchor.y, 8f * Time.deltaTime) + hopOffset;
             transform.position = targetPos;
 
             // Orientamento verso il player
@@ -117,10 +126,6 @@ namespace City.Player
             {
                 _hopT = 0f;
             }
-            float y = Mathf.Sin(_hopT / hopDuration * Mathf.PI) * hopHeight;
-            Vector3 lp = transform.localPosition;
-            lp.y = _baseLocalPos.y + y;
-            transform.localPosition = lp;
         }
 
         /// <summary>

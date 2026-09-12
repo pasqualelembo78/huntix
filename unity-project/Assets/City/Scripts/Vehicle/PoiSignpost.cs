@@ -120,6 +120,7 @@ namespace City.Vehicle
                 case "school": return "SCUOLA";
                 case "bar": return "BAR";
                 case "bank": return "BANCA";
+                case "fuel": return "BENZINA";
                 default: return "GARAGE";
             }
         }
