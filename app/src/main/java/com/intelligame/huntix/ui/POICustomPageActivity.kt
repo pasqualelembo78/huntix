@@ -251,6 +251,8 @@ class POICustomPageActivity : AppCompatActivity() {
             }
         })
         }
+
+
     }
 
     private fun renderSection(content: LinearLayout, section: JSONObject) {

@@ -1,0 +1,47 @@
+# RIASSUNTO FIX NECESSARI — BRANCH "altitudine"
+
+Confronto branch `origin/unity` (originale funzionante) vs `altitudine` (con problemi:
+fisica personaggio rotta, case sballate, "doppio cielo" sopra la testa).
+
+## A. GIÀ APPLICATI (working tree, NON COMMITTATI)
+| # | Fix | File:riga |
+|---|---|---|
+| A1 | Flip griglia DEM (riga 0 = Sud). Verificato su dati reali (ele[0,0]=381 = HGT sud-ovest) | TileElevation.cs:115, ChunkBuilder.cs:491-498 |
+| A2 | Skybox Kenney nel mondo chunked + tint `_Tint` + nebbia leggera di giorno (elimina il "secondo cielo") | DayNightManager.cs:75-87,139-153 |
+
+## B. PRIORITÀ ALTA — MONDO/FISICA
+| # | Problema | Fix | File:riga |
+|---|---|---|---|
+| B1 | Viadotti/gallerie senza collider: il deck è disegnato sospeso ma il piano di guida resta il terreno → si passa attraverso i ponti | Aggiungere collider al deck della strada (MeshCollider sulla mesh del ponte) oltre al marciapiede | ChunkBuilder.cs:158-177, RoadRenderer.cs:422,651 |
+| B2 | Traffico sotto i ponti / nei monti: le auto usano il terreno DEM, ignorano h0/h1 dei deck | Far guidare le auto alla quota impalcato (usare h0/h1/dh della way) | TileRoadNetwork.cs:140,162, CarAgent.cs:456, TrafficCar.cs:335 |
+| B3 | Player che cade con tile "geo null": chunk non costruito → vuoto | Fallback: costruire chunk con dati parziali (come il vecchio ramo) o bloccare l'area con terreno piano temporaneo | ChunkManager.cs:529-537 |
+| B4 | Spawn legacy a y≈0 sotto il terreno | Usare TileElevation anche in PlacePlayerOnGround | CityOSMWorld.cs:534-540 |
+
+## C. PRIORITÀ ALTA — CASE/EDIFICI
+| # | Problema | Fix | File:riga |
+|---|---|---|---|
+| C1 | Case sospese/affondate su tile senza `ele`: fallback proxy da altezze edifici (terreno finto) | Verificare copertura `ele` sul server di produzione + rigenerare tile mancanti (geo-todo, dem_warm.sh) | ChunkBuilder.cs:427-451 |
+| C2 | Edifici "ruotati storti" (percettivo, prefab Quaternius direzionali) | Decidere se ruotare verso la strada (lato lungo) o clamp a 0/90/180 | BuildingPlacer.cs:329, CityStyle.cs:18 |
+
+## D. PRIORITÀ MEDIA — VEICOLI/GAMEPLAY/NPC
+| # | Problema | Fix | File:riga |
+|---|---|---|---|
+| D1 | Sterzo invertito in retromarcia (cambio vs original) | Verificare l'intento e ripristinare il verso originale | VehicleController.cs:615 |
+| D2 | Auto che mordono le salite >20° | Aumentare MaxInclineDeg o far inclinare il telaio col DEM pieno | VehicleController.cs:119,830-845 |
+| D3 | Player che scivola su pendenze >25° | SlipSlopeDeg più permissivo o slip disattivato sul piano civico | PlayerController.cs (SlipSlopeDeg, MaxBodyInclineDeg) |
+| D4 | NPC a mezz'aria/non riadattati | Riprendere lo snap anche per NPC cullati | CityCharacterFactory.cs:68, NPCController.cs:905-914,937-945 |
+| D5 | Animazione player Mixamo mancante (Resources/Mixamo/ solo .meta) | Importare il controller di animazione o ripristinare l'Animator precedente | CharacterWalker.cs, Resources/Mixamo/ |
+
+## E. BASSA / PERFORMANCE / DA VERIFICARE
+| # | Problema | Fix | File:riga |
+|---|---|---|---|
+| E1 | 55 auto/tile, 400 max + 1 campionamento DEM per auto/frame | Ridurre budget o cache delle quote | TileRoadNetwork.cs:45-46, CarAgent.cs |
+| E2 | Teli acqua/parchi sopra l'occhio (double-sided, flat a meanElev) | Single-sided (_Cull=1) e/o ancoraggio al declivio | TerrainChunk.cs:237,255, VegetationPlacer.cs:101-130 |
+| E3 | Camera a 1.6 m quasi orizzontale amplifica il "doppio cielo" | (Opzionale) alzare a ~2.2-3 m | CameraRig.cs:16-17 |
+| E4 | Porta/edifici "bloccati" prima dello spawn (gate PlayerSpawned) | Verificare che il gate non blocchi l'ingresso in città | BuildingEntrance.cs:69, CityChunkedWorld.cs:25 |
+| E5 | Micro-cugno sui ponti lunghi ai bordi tile (frazione planare vs haversine) | (Minore) uniformare il calcolo di floc | RoadRenderer.cs:487-555 |
+
+## PROSSIMO PASSO CONSIGLIATO
+1. Commit di A1+A2 su `altitudine` (unico blocco coerente).
+2. Build di prova su device PRIMA: isola l'effetto reale del flip (B-D restano da valutare su pezzo).
+3. Poi applicare B1/B2 (world+traffico) e verificare C1 sul server.

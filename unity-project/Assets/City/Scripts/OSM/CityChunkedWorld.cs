@@ -166,6 +166,13 @@ private const float TerrainPhysxTimeoutS = 15f;
                     {
                         RemoveSpawnBridge();
                         NotifyCityReady();
+                        try
+                        {
+                            var telemetry = City.Diagnostics.SessionTelemetry.Instance;
+                            if (telemetry != null)
+                                telemetry.WorldReady(0, Manager.BuiltCount, 0, 0);
+                        }
+                        catch (System.Exception) {}
                     }
                     else
                     {
@@ -1052,6 +1059,13 @@ private const float TerrainPhysxTimeoutS = 15f;
         /// </summary>
         private void GroundProbeAndRescue()
         {
+            // Regni afterlife (3.4): l'arena sta a quota ~0 mentre la citta'
+            // puo' stare a 100+ m, e le cadute nella lava sono previste dal
+            // gioco. La sonda terreno NON deve riportare il player in citta'
+            // durante i mini-giochi dei regni.
+            var rsm = City.Afterlife.RealmSceneManager.Instance;
+            if (rsm != null && rsm.ActiveRealm != null) return;
+
             if (Time.unscaledTime < _nextGroundProbe) return;
             _nextGroundProbe = Time.unscaledTime + 2f;
             if (Manager == null || Manager.target == null) return;

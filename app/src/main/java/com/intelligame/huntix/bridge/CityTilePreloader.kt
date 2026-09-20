@@ -33,7 +33,7 @@ object CityTilePreloader {
 
     private const val BASE_URL = "http://82.165.218.56:5100"
     private const val TILE_DIR = "huntix_tiles"
-    private const val CACHE_VERSION = 2
+    private const val CACHE_VERSION = 4
 
     // Griglia tile (deve combaciare con CityGrid.cs / tile_builder.py)
     private const val ORIGIN_LAT = 34.0
@@ -269,5 +269,47 @@ object CityTilePreloader {
         } finally {
             conn.disconnect()
         }
+    }
+
+    // ── AR Virtuale: geo della tile attorno a un POI virtuale ────────────
+
+    /** Chiave tile della griglia per una coordinata geografica. */
+    fun tileKeyFor(lat: Double, lng: Double): String {
+        val ilat = floor((lat - ORIGIN_LAT) / LAT_STEP).toInt()
+        val ilon = floor((lng - ORIGIN_LON) / LON_STEP).toInt()
+        return String.format("IT_%03d_%03d", ilat, ilon)
+    }
+
+    /**
+     * Scarica (se manca) la geo della tile che contiene (lat,lng) e ne
+     * restituisce il contenuto JSON. BLOCCANTE: da chiamare su un thread di
+     * lavoro. Usato dall'AR Virtuale per costruire la scena attorno al POI
+     * raggiunto con il joystick (posizione virtuale, mai il GPS reale).
+     */
+    fun ensureGeoJsonSync(ctx: Context, lat: Double, lng: Double): String? {
+        val key = tileKeyFor(lat, lng)
+        val dir = unityTileDir(ctx) ?: fallbackTileDir(ctx)
+        if (!dir.exists()) dir.mkdirs()
+        val geoFile = File(dir, "$key.v$CACHE_VERSION.geo.json")
+
+        if (!geoFile.exists() || geoFile.length() == 0L) {
+            if (!inFlight.add(key)) {
+                // gia' in download da un altro thread: attendi brevemente
+                var waited = 0
+                while (inFlight.contains(key) && waited < 60_000) {
+                    Thread.sleep(500)
+                    waited += 500
+                }
+            } else {
+                try {
+                    download(BASE_URL + "/api/tiles/$key/geo", geoFile)
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "ensureGeoJsonSync $key fallito: ${e.message}")
+                } finally {
+                    inFlight.remove(key)
+                }
+            }
+        }
+        return if (geoFile.exists() && geoFile.length() > 0L) geoFile.readText() else null
     }
 }

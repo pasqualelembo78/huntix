@@ -5,6 +5,11 @@ TagManager:
   serializedVersion: 2
   tags:
   - RemotePlayer
+  - Floor
+  - Death
+  - Coin
+  - FloorVictory
+  - BruhMomment
   layers:
   - Default
   - TransparentFX

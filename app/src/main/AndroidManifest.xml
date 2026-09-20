@@ -102,10 +102,6 @@
         </activity>
 
         
-        <activity android:name=".GenderChangeActivity"
-            android:exported="false" android:screenOrientation="portrait"
-            android:theme="@style/Theme.ARProto"/>
-
         <activity android:name=".LoginActivity"
             android:exported="true" android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
@@ -227,8 +223,8 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.ARProto.Fullscreen"/>
 
-        <!-- Eventi Live (Egg Rush, Double XP, ...) -->
-        <activity android:name=".ui.LiveEventsActivity"
+        <!-- Eventi (Live + Speciali + Giornalieri) -->
+        <activity android:name=".ui.EventsActivity"
             android:exported="false"
             android:screenOrientation="portrait"/>
 
@@ -411,7 +407,7 @@
         <activity android:name=".minigames.ar.ARFroggerActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARAsteroidsActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
         <activity android:name=".minigames.ar.ARSudokuActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
-
+        <activity android:name=".minigames.ar.ArCityActivity" android:exported="false" android:screenOrientation="portrait" android:theme="@style/Theme.ARProto.Fullscreen"/>
             <activity android:name=".TutorialActivity"
             android:theme="@style/Theme.ARProto.Fullscreen"
             android:screenOrientation="portrait" />
@@ -469,10 +465,6 @@
     <activity android:name=".social.ChatListActivity" android:theme="@style/Theme.ARProto.Fullscreen" android:screenOrientation="portrait" android:exported="false" />
 
         <!-- ═══ EVENTI SPECIALI — Caccia dell'Elfo ════════════ -->
-        <activity android:name=".ui.SpecialEventsActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"/>
-
         <activity android:name=".ui.ElfHuntActivity"
             android:exported="false"
             android:screenOrientation="portrait"

@@ -12,11 +12,25 @@ namespace City.Afterlife
     /// Flusso afterlife (orchestrato da FamilyHost):
     ///   InfernoScene -> PurgatorioScene -> ParadisoScene -> citta' (reincarn.)
     /// Ogni caricamento usa LoadScene in modalita' Single: la scena precedente
-    /// viene sostituita da sola (niente UnloadScene, non present in stub).
+    /// viene sostituita da sola (niente UnloadScene, not present in stub).
     /// </summary>
     public class RealmSceneManager : MonoBehaviour
     {
+        /// <summary>Destinatario del pulsante SALTA della HUD citta' quando il
+        /// regno Inferno e' una SCENA ESTERNA (gioco FloorIsLava): il player
+        /// della citta' in quel momento e' nascosto, quindi il bridge del gioco
+        /// registra qui la palla e il pulsante continua a funzionare.</summary>
+        public interface IInfernoJumpInput
+        {
+            void BeginJump();
+            void EndJump();
+        }
+
         public static RealmSceneManager Instance { get; private set; }
+
+        /// <summary>Target del pulsante SALTA durante i regni esterni (vedi
+        /// IInfernoJumpInput). Null in citta' o con l'arena procedurale.</summary>
+        public static IInfernoJumpInput InfernoJumpInput { get; set; }
 
         public const string CitySceneName = "City";
         public const string InfernoSceneName = "InfernoScene";
@@ -26,7 +40,24 @@ namespace City.Afterlife
         public RealmSceneController ActiveRealm { get; private set; }
         public AfterlifeRealm ActiveRealmId { get; private set; }
 
+        /// <summary>Callback di fine minigioco Inferno: parametro true = portale
+        /// raggiunto (vittoria), false = vite esaurite (fallimento). Viene
+        /// invocato da InfernoGame e consumato da FamilyHost per avanzare.</summary>
+        public System.Action<bool> InfernoFinished { get; set; }
+
         private AfterlifeRealm _pending = AfterlifeRealm.INFERNO;
+
+        /// <summary>Consumato da OnSceneLoaded: quando carichiamo la scena del
+        /// prossimo regno (o la citta') il fade viene tolto a scena pronta.</summary>
+        private bool _fadePending;
+
+        /// <summary>Scena regno/citta' in precaricamento (LoadSceneAsync con
+        /// allowSceneActivation=false). La scena si carica in BACKGROUND
+        /// mentre il fade va a nero: quando sia il fade sia il load sono pronti
+        /// (Update) si attiva la scena, cosi' il cambio scena non congela
+        /// il player per secondi.</summary>
+        private AsyncOperation _preloadOp;
+        private bool _preloadFadeDone;
 
         private void Awake()
         {
@@ -61,40 +92,145 @@ namespace City.Afterlife
             else if (name == SceneNameFor(_pending) &&
                      (name == InfernoSceneName || name == PurgatorioSceneName || name == ParadisoSceneName))
             {
-                BuildRealm(_pending);
+                if (name == InfernoSceneName)
+                    PrepareExternalInferno();
+                else
+                    BuildRealm(_pending);
+            }
+            _preloadOp = null;
+            _preloadFadeDone = false;
+            if (_fadePending)
+            {
+                _fadePending = false;
+                try { City.UI.ScreenFader.FadeFromBlackGlobal(null); }
+                catch (System.Exception e) { Debug.LogWarning("[RealmSceneManager] fade in: " + e.Message); }
             }
         }
 
-        /// <summary>Entra nel regno indicato: costruisce subito l'arena e carica la sua scena.</summary>
+        /// <summary>Polling del precaricamento: quando il fade e' completo e la
+        /// scena ha finito di caricare i dati (progress >= 0.9), attiva il
+        /// cambio scena. OnSceneLoaded completera' il setup e togliera' il fade.</summary>
+        private void Update()
+        {
+            if (_preloadOp == null) return;
+            if (!_preloadFadeDone) return;
+            if (_preloadOp.allowSceneActivation) return;
+
+            if (_preloadOp.isDone || _preloadOp.progress >= 0.9f)
+            {
+                Debug.Log("[RealmSceneManager] scena precaricata, attivazione.");
+                _preloadOp.allowSceneActivation = true;
+            }
+        }
+
+        /// <summary>Avvia il precaricamento della scena in background:
+        /// la carica senza attivarla (allowSceneActivation=false) cosi' la
+        /// scena attuale resta visibile e il cambio non blocca i frame.
+        /// Restituisce false se la scena non e' nelle Build Settings o il
+        /// load asincrono non e' disponibile: in quel caso si ripiega sul
+        /// flusso storico (LoadScene sincrono o arena inline).</summary>
+        private bool StartPreload(string sceneName)
+        {
+            if (string.IsNullOrEmpty(sceneName)) return false;
+            if (!Application.CanStreamedLevelBeLoaded(sceneName)) return false;
+            try
+            {
+                var op = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+                if (op == null) return false;
+                op.allowSceneActivation = false;
+                _preloadOp = op;
+                _preloadFadeDone = false;
+                Debug.Log("[RealmSceneManager] precaricamento scena '" + sceneName + "' in background.");
+                return true;
+            }
+            catch (System.Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Entra nel regno indicato: costruisce subito l'arena e carica la sua scena.
+        /// La transizione e' coperta da un fade a nero (ScreenFader globale) cosi'
+        /// il cambio scena (citta->Inferno, regno->regno) non e' uno stacco secco.
+        /// La scena del regno viene PRECARICATA in background durante il fade
+        /// (LoadSceneAsync): niente freeze del player a schermo nero.</summary>
         public void EnterRealm(AfterlifeRealm realm)
         {
             _pending = realm;
+            string scene = SceneNameFor(realm);
             try
             {
                 if (Camera.main != null)
                     Camera.main.backgroundColor = RealmColors.Sky(realm);
-                if (TryLoadScene(SceneNameFor(realm)))
+
+                // Precaricamento: la scena del regno parte a caricarsi subito,
+                // in parallelo al fade. All'attivazione (Update) si fa il setup.
+                if (StartPreload(scene))
+                {
+                    _fadePending = true;
+                    City.UI.ScreenFader.FadeToBlackGlobal(() => { _preloadFadeDone = true; });
                     return;
+                }
+
+                // Scena non precaricabile (es. APK installato non ricompilato):
+                // comportamento storico -> fade, load sincrono o arena inline.
+                City.UI.ScreenFader.FadeToBlackGlobal(() =>
+                {
+                    try
+                    {
+                        if (TryLoadScene(scene))
+                        {
+                            _fadePending = true;
+                            return;
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning("[RealmSceneManager] EnterRealm: " + e.Message);
+                    }
+                    City.UI.ScreenFader.FadeFromBlackGlobal(null);
+                    // La scena del regno non e' nelle Build Settings... costruisci
+                    // l'arena nella scena corrente, cosi' l'afterlife funziona comunque.
+                    try { BuildRealm(realm); }
+                    catch (System.Exception e) { Debug.LogWarning("[RealmSceneManager] BuildRealm: " + e.Message); }
+                });
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning("[RealmSceneManager] EnterRealm: " + e.Message);
+                Debug.LogWarning("[RealmSceneManager] fade out: " + e.Message);
+                try { BuildRealm(realm); }
+                catch (System.Exception e2) { Debug.LogWarning("[RealmSceneManager] BuildRealm: " + e2.Message); }
             }
-            // La scena del regno non e' nelle Build Settings (es. APK installato
-            // non ricompilato) oppure il load ha fallito. Non crashare: costruisci
-            // l'arena nella scena corrente, cosi' l'afterlife funziona comunque
-            // senza LoadScene. Anche la build dell'arena e' protetta: qualsiasi
-            // errore di costruzione non deve buttare giu' il flusso di morte.
-            try { BuildRealm(realm); }
-            catch (System.Exception e) { Debug.LogWarning("[RealmSceneManager] BuildRealm: " + e.Message); }
         }
 
-        /// <summary>Torna alla citta' (fine del ciclo afterlife: reincarnazione).</summary>
+        /// <summary>Torna alla citta' (fine del ciclo afterlife: reincarnazione).
+        /// Transizione coperta dal fade a nero e precaricamento come per i regni.</summary>
         public void ReturnToCity()
         {
-            if (TryLoadScene(CitySceneName))
-                return;
-            LeaveRealm();
+            InfernoFinished = null;
+            try
+            {
+                if (StartPreload(CitySceneName))
+                {
+                    _fadePending = true;
+                    City.UI.ScreenFader.FadeToBlackGlobal(() => { _preloadFadeDone = true; });
+                    return;
+                }
+                City.UI.ScreenFader.FadeToBlackGlobal(() =>
+                {
+                    _fadePending = true;
+                    if (TryLoadScene(CitySceneName)) return;
+                    _fadePending = false;
+                    City.UI.ScreenFader.FadeFromBlackGlobal(null);
+                    LeaveRealm();
+                });
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[RealmSceneManager] ReturnToCity: " + e.Message);
+                if (TryLoadScene(CitySceneName)) return;
+                LeaveRealm();
+            }
         }
 
         /// <summary>
@@ -123,10 +259,12 @@ namespace City.Afterlife
 
         private void BuildRealm(AfterlifeRealm realm)
         {
+            RestoreCityPlayer();
             if (ActiveRealm != null) { ActiveRealm.TearDown(); ActiveRealm = null; }
             ActiveRealmId = realm;
             ActiveRealm = RealmSceneController.Build(realm);
             PositionPlayerOnRealm();
+            InfernusKitInstaller.Apply(ActiveRealm.ArenaRoot.gameObject);
         }
 
         /// <summary>
@@ -149,6 +287,57 @@ namespace City.Afterlife
         private void LeaveRealm()
         {
             if (ActiveRealm != null) { ActiveRealm.TearDown(); ActiveRealm = null; }
+            RestoreCityPlayer();
+        }
+
+        /// <summary>
+        /// L'InfernoScene ora e' il GIOCO COMPLETO third-party "Floor is Lava -
+        /// Bowser's Castle": niente arena procedurale. Il bridge del gioco
+        /// (FloorIsLava.InfernoBridge, fuori harness) rileva vittoria (tag
+        /// FloorVictory) e morte (lava) e chiama InfernoFinished per avanzare
+        /// al Purgatorio. Il player/camera della citta' vengono nascosti cosi'
+        /// non restano fantasma dentro il livello del gioco.
+        /// </summary>
+        private void PrepareExternalInferno()
+        {
+            if (ActiveRealm != null) { ActiveRealm.TearDown(); ActiveRealm = null; }
+            ActiveRealmId = _pending;
+            HideCityPlayer();
+        }
+
+        /// <summary>Nasconde il player e la camera persistenti della citta':
+        /// nella scena esterna del gioco il 'Mario Ball' e la sua camera sono i
+        /// soli attori visibili. Riaperti quando si passa a Purgatorio/Citta'.</summary>
+        private void HideCityPlayer()
+        {
+            try
+            {
+                var pc = City.Player.PlayerController.Instance;
+                if (pc != null) pc.gameObject.SetActive(false);
+            }
+            catch (System.Exception) { }
+            try
+            {
+                var rig = City.Player.CameraRig.Instance;
+                if (rig != null) rig.gameObject.SetActive(false);
+            }
+            catch (System.Exception) { }
+        }
+
+        private void RestoreCityPlayer()
+        {
+            try
+            {
+                var pc = City.Player.PlayerController.Instance;
+                if (pc != null) pc.gameObject.SetActive(true);
+            }
+            catch (System.Exception) { }
+            try
+            {
+                var rig = City.Player.CameraRig.Instance;
+                if (rig != null) rig.gameObject.SetActive(true);
+            }
+            catch (System.Exception) { }
         }
 
         public static string SceneNameFor(AfterlifeRealm realm)

@@ -99,6 +99,62 @@ namespace City.NPC
             return (index >= 0 && index < Labels.Length) ? Labels[index] : Labels[0];
         }
 
+        // ── sync (Huntix ↔ Android) ──────────────────────────────
+
+        /// <summary>Numero di persone conosciute (voci registrate).</summary>
+        public static int KnownCount
+        {
+            get
+            {
+                EnsureLoaded();
+                return _store == null ? 0 : _store.entries.Count;
+            }
+        }
+
+        /// <summary>Snapshot delle relazioni: "id=pts;id2=pts2;…".</summary>
+        public static string ExportSnapshot()
+        {
+            EnsureLoaded();
+            if (_store == null || _store.entries.Count == 0) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (var e in _store.entries)
+            {
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                if (sb.Length > 0) sb.Append(';');
+                sb.Append(e.id).Append('=').Append(e.pts);
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Importa uno snapshot "id=pts;…" (merge: tiene il max).</summary>
+        public static bool ImportSnapshot(string snapshot)
+        {
+            if (string.IsNullOrEmpty(snapshot)) return false;
+            bool changed = false;
+            foreach (var item in snapshot.Split(';'))
+            {
+                if (string.IsNullOrEmpty(item)) continue;
+                int eq = item.IndexOf('=');
+                if (eq <= 0) continue;
+                string id = item.Substring(0, eq);
+                int pts;
+                if (!int.TryParse(item.Substring(eq + 1), out pts)) continue;
+                Entry e = Get(id);
+                if (pts > e.pts)
+                {
+                    e.pts = pts;
+                    changed = true;
+                }
+            }
+            if (changed)
+            {
+                Save();
+                var h = OnChanged;
+                if (h != null) h("");
+            }
+            return changed;
+        }
+
         // ── interno ──────────────────────────────────────────────
 
         private static Entry Get(string id)

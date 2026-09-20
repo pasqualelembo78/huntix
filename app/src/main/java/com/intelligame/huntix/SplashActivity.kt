@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.auth.FirebaseAuth
+import com.intelligame.huntix.bridge.CityStateSync
 import io.sentry.Sentry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -48,7 +49,18 @@ class SplashActivity : AppCompatActivity() {
 
             try {
                 val login = PlayerProfileManager.getLoginMethod(this@SplashActivity)
-                val target = if (login != null && tryAutoLogin(login)) {
+                val loggedIn = login != null && tryAutoLogin(login)
+                // ── Sync MiCittà all'avvio ("Realtà Aumentata · Caccia alle Uova") ──
+                if (loggedIn) {
+                    // Best-effort, non bloccante: il profilo generale assorbe lo
+                    // snapshot della città salvato dal ponte Unity. Prima volta è
+                    // lenta solo perché non c'è ancora nulla; da lì in poi lo
+                    // snapshot è già in prefs e questa chiamata è istantanea.
+                    CityStateSync.startupSync(this@SplashActivity)
+                    val report = CityStateSync.checkSync(this@SplashActivity)
+                    AppLog.d("CityStateSync", "startup sync splash: $report")
+                }
+                val target = if (loggedIn) {
                     val tutorialDone = getSharedPreferences("app_prefs", MODE_PRIVATE)
                         .getBoolean("tutorial_done", false)
                     if (tutorialDone) HomeActivity::class.java else TutorialActivity::class.java

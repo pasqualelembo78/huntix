@@ -17,6 +17,21 @@ namespace City.Player
         public float pitch = 5f;
         public float smoothTime = 0.12f;
         public float orbitSpeed = 5f;
+        // Giroscopio (Android): gira la visuale ruotando il telefono, in
+        // aggiunta al drag sul lato destro. Se ruota al contrario inverti
+        // il segno di GyroSensitivity. Il toggle GIRO in HUD lo spegne.
+        public const float GyroSensitivity = 35f;   // rad/s -> gradi (ridotta: meno sensibile al movimento del device)
+        public const float GyroDeadzone = 0.005f;   // ~0.3 gradi/s: ignora i tremori
+        public const float GyroSmoothing = 0.25f;
+        private bool _gyroEnabled = true;
+        private float _gyroRateEma;
+        // Pitch (verticale) dal giroscopio: alzi il telefono -> vedi il cielo,
+        // lo abbassi -> vedi il terreno. Come lo yaw: effetto proporzionale,
+        // riporti il telefono in linea e la vista torna all'orizzonte.
+        public const float GyroPitchMax = 70f;
+        private float _gyroPitchEma;
+        private float _gyroPitchOffset;
+        public bool GyroEnabled { get { return _gyroEnabled; } }
         // Prima persona stile Brookhaven (icona camera): la camera sale alla
         // testa del player. Vale solo a piedi: in auto resta terza persona.
         public bool firstPerson = false;
@@ -70,6 +85,13 @@ namespace City.Player
                 if (p != null) target = p.transform;
             }
             if (target != null) yaw = target.eulerAngles.y;
+            if (SystemInfo.supportsGyroscope)
+            {
+                _gyroEnabled = PlayerPrefs.GetInt("gyroCam", 1) == 1;
+                SetGyroSensor(_gyroEnabled);
+                OsmDiag.Log("[Camera][Gyro] supportato, attivo=" + _gyroEnabled);
+            }
+            else { _gyroEnabled = false; }
         }
 
         public void Orbit(float screenDeltaX)
@@ -177,8 +199,51 @@ namespace City.Player
 
         private void Update()
         {
+            ApplyGyro();
             if (drivingMode) return;
             HandlePinchZoom();
+        }
+
+        /// <summary>Rotazione 360° con il giroscopio. Yaw (asse Y del
+        /// device): giri il telefono a destra/sinistra (come il busto)
+        /// -> guardi intorno. Pitch (asse X): alzi o abbassi il telefono
+        /// -> guardi cielo/terreno, anche in diagonale (i due assi si
+        /// sommano). Effetto proporzionale-posizionale come il drag:
+        /// nessun salto, si accumula mentre muovi il telefono e resta
+        /// dov'e' quando lo fermi. Se una delle due rotazioni fosse
+        /// invertita, cambia il segno della costante corrispondente.</summary>
+        private void ApplyGyro()
+        {
+            if (!_gyroEnabled || !SystemInfo.supportsGyroscope) return;
+            Vector3 rate;
+            try { rate = Input.gyro.rotationRateUnbiased; }
+            catch (System.Exception) { return; }
+
+            float rY = Mathf.Abs(rate.y) < GyroDeadzone ? 0f : rate.y;
+            _gyroRateEma = Mathf.Lerp(_gyroRateEma, rY, GyroSmoothing);
+            yaw -= _gyroRateEma * GyroSensitivity * Time.deltaTime;
+
+            float rX = Mathf.Abs(rate.x) < GyroDeadzone ? 0f : rate.x;
+            _gyroPitchEma = Mathf.Lerp(_gyroPitchEma, rX, GyroSmoothing);
+            _gyroPitchOffset = Mathf.Clamp(
+                _gyroPitchOffset - _gyroPitchEma * GyroSensitivity * Time.deltaTime,
+                -GyroPitchMax, GyroPitchMax);
+        }
+
+        public void SetGyroEnabled(bool on)
+        {
+            _gyroEnabled = on && SystemInfo.supportsGyroscope;
+            SetGyroSensor(_gyroEnabled);
+            OsmDiag.Log("[Camera][Gyro] set -> " + _gyroEnabled);
+        }
+
+        private void SetGyroSensor(bool on)
+        {
+            try { Input.gyro.enabled = on; }
+            catch (System.Exception) { _gyroEnabled = false; }
+            _gyroRateEma = 0f;
+            _gyroPitchEma = 0f;
+            _gyroPitchOffset = 0f;
         }
 
         private void HandlePinchZoom()
@@ -286,7 +351,9 @@ namespace City.Player
             Vector3 finalDesired = Vector3.Lerp(desired, firstPos, _fpBlend);
 
             transform.position = Vector3.SmoothDamp(transform.position, finalDesired, ref velocity, smoothTime);
-            transform.rotation = Quaternion.Euler(Mathf.Lerp(p, 0f, _fpBlend), yaw, 0f);
+            float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)
+                + (_gyroEnabled ? _gyroPitchOffset : 0f);
+            transform.rotation = Quaternion.Euler(viewPitch, yaw, 0f);
         }
     }
 }

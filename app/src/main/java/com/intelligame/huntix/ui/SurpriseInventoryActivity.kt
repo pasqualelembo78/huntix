@@ -75,7 +75,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
             setOnClickListener { finish() }
         })
         headerRow.addView(TextView(this).apply {
-            text = "🎒  La Borsa"; textSize = 20f
+            text = "🧺  Le Tue Creature"; textSize = 20f
             setTextColor(Color.parseColor("#E0E0FF"))
             typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -84,7 +84,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
 
         // Subtitle
         root.addView(TextView(this).apply {
-            text = "Le tue creature scoperte dalle uova. Scegli il tuo Amico Fidato! 🐾"
+            text = "Le creature scoperte dalle tue uova. Scegli il tuo Amico Fidato! 🐾"
             textSize = 12f; setTextColor(Color.parseColor("#9999CC"))
             setPadding(0, 0, 0, dp(12))
         })
@@ -225,7 +225,7 @@ class SurpriseInventoryActivity : BaseNavActivity() {
             list // ritorna lista non ordinata se il sort fallisce
         }
 
-        countLabel?.text = "${list.size} creature nella borsa"
+        countLabel?.text = "${list.size} creature possedute"
 
         if (list.isEmpty()) {
             listContainer.addView(buildEmptyState())

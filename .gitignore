@@ -102,3 +102,11 @@ backend/traffic/garages_state.json
 
 # ── Backup con suffisso (es. .bak_compra, .bak_rp) ────────────
 *.bak_*
+
+# ── Kit grezzi estratti (già copiati dentro Assets; tengono solo il progetto) ─
+kit/player/
+kit/afterlife/
+
+# ── Crash dump Unity (rumore, non codice) ─────────────────────
+unity-project/mono_crash.*
+unity-project/*.blob

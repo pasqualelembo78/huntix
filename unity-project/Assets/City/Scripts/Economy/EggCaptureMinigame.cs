@@ -249,6 +249,7 @@ namespace City.Economy
                 case EggController.Rarity.Common: return SUCCESS_ZONE_WIDE;      // 90°
                 case EggController.Rarity.Uncommon: return 60f;
                 case EggController.Rarity.Rare: return 38f;
+                case EggController.Rarity.Epic: return 28f;
                 case EggController.Rarity.Legendary: return SUCCESS_ZONE_TINY;   // 20°
                 default: return SUCCESS_ZONE_WIDE;
             }
@@ -261,6 +262,7 @@ namespace City.Economy
                 case EggController.Rarity.Common: return "COMUNE";
                 case EggController.Rarity.Uncommon: return "NON COMUNE";
                 case EggController.Rarity.Rare: return "RARO";
+                case EggController.Rarity.Epic: return "EPICO";
                 case EggController.Rarity.Legendary: return "LEGGENDARIO";
                 default: return "COMUNE";
             }
@@ -273,6 +275,7 @@ namespace City.Economy
                 case EggController.Rarity.Common: return new Color(1f, 0.95f, 0.7f);
                 case EggController.Rarity.Uncommon: return new Color(0.4f, 0.9f, 0.4f);
                 case EggController.Rarity.Rare: return new Color(0.3f, 0.5f, 1f);
+                case EggController.Rarity.Epic: return new Color(1f, 0.5f, 0.25f);
                 case EggController.Rarity.Legendary: return new Color(1f, 0.6f, 0.1f);
                 default: return new Color(1f, 0.95f, 0.7f);
             }

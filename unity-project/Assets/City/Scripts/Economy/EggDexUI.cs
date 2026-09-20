@@ -23,6 +23,7 @@ namespace City.Economy
                 { "Common", new Color(0f, 0.8f, 0.53f) },
                 { "Uncommon", new Color(0f, 0.71f, 1f) },
                 { "Rare", new Color(0.66f, 0.33f, 0.97f) },
+                { "Epic", new Color(1f, 0.42f, 0.21f) },
                 { "Legendary", new Color(1f, 0.84f, 0f) },
             };
 
@@ -42,7 +43,7 @@ namespace City.Economy
             var rt = _panel.GetComponent<RectTransform>();
             rt.SetParent(canvas.transform, false);
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(640f, 540f);
+            rt.sizeDelta = new Vector2(760f, 540f);
             var bg = _panel.AddComponent<Image>();
             bg.color = HeaderBg;
 

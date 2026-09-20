@@ -601,6 +601,8 @@ class CityActivity : AppCompatActivity() {
                     putExtra(POICustomPageActivity.EXTRA_JSON_URL, url)
                     putExtra(POICustomPageActivity.EXTRA_POI_NAME, r.name)
                     putExtra(POICustomPageActivity.EXTRA_POI_TYPE, r.poiType)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LAT, r.lat)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LNG, r.lng)
                 })
             }
         }

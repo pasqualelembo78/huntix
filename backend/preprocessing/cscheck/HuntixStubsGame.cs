@@ -23,6 +23,7 @@ namespace City.Economy
         public Rarity rarity;
         public EggType eggType;
         public int value = 10;
+        public float captureMultiplier = 1f;
         public bool Captured => false;
         public bool PlayerNearCanRadar => true;
         public void OnCaptured() {}
@@ -60,6 +61,8 @@ namespace City.UI
         public UnityEngine.UI.Image image;
         public void FadeToBlack(System.Action done) {}
         public void FadeFromBlack(System.Action done) {}
+        public static void FadeToBlackGlobal(System.Action done) {}
+        public static void FadeFromBlackGlobal(System.Action done) {}
     }
 }
 

@@ -26,6 +26,15 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/City/Scenes/City.unity
     guid: 22f5446cab4ce623d9621c3ed0f7719a
+  - enabled: 1
+    path: Assets/City/Scenes/InfernoScene.unity
+    guid: acd6b7f42b6f4cd296d9d977929adce2
+  - enabled: 1
+    path: Assets/City/Scenes/PurgatorioScene.unity
+    guid: 4e02ab3f082747899d95f987ed010a4f
+  - enabled: 1
+    path: Assets/City/Scenes/ParadisoScene.unity
+    guid: 733ea86c1dfb40ec81fc44e165655246
   m_configObjects:
     com.unity.addressableassets: {fileID: 11400000, guid: ec6166c48296079449978afbd0c886c1, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 25c3be061cf5888d9aae82a3948ea9fb, type: 2}

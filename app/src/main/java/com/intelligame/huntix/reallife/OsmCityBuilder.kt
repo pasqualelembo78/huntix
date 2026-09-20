@@ -309,6 +309,48 @@ class OsmCityBuilder(
         return BuildingType.RESIDENTIAL
     }
 
+    /**
+     * DIAGNOSTICA EDIFICI — analizza i dati OSM e logga la distribuzione dei tipi,
+     * quanti edifici sono "detailed" (finestre), quante insegne sono possibili e
+     * la distanza media/max dal centro. Serve a capire perche gli edifici appaiono
+     * grigi e senza insegne/finestre colorate.
+     */
+    private fun logBuildingTypeDistribution(buildings: List<OsmWay>) {
+        val typeCounts = LinkedHashMap<BuildingType, Int>()
+        var validGeometry = 0
+        var nearCenter = 0
+        var withAmenity = 0
+        var withShop = 0
+        var sumDist = 0.0
+        var maxDist = 0f
+        for (way in buildings) {
+            val fp = way.calculateFootprint() ?: continue
+            val w = fp.width.coerceIn(3f, 40f)
+            val d = fp.depth.coerceIn(3f, 40f)
+            val h = way.height.toFloat()
+            if (w < 3f || d < 3f || h < 3f) continue
+            validGeometry++
+            val type = getBuildingType(way)
+            typeCounts[type] = (typeCounts[type] ?: 0) + 1
+            val dist = Math.sqrt((fp.centerX * fp.centerX + fp.centerZ * fp.centerZ).toDouble()).toFloat()
+            sumDist += dist
+            if (dist > maxDist) maxDist = dist
+            if (dist < 400f) nearCenter++
+            if (way.amenity.isNotEmpty()) withAmenity++
+            if (way.shop.isNotEmpty()) withShop++
+        }
+        val avgDist = if (validGeometry > 0) sumDist / validGeometry else 0.0
+        AppLog.d(TAG, "BUILDING DIAG: total=${buildings.size}, validGeom=$validGeometry, near<400m=$nearCenter, avgDist=%.0fm, maxDist=%.0fm".format(avgDist, maxDist))
+        AppLog.d(TAG, "BUILDING DIAG: tag amenity=$withAmenity, tag shop=$withShop -> insegne possibili (max 5 ristoranti + 10 negozi)")
+        AppLog.d(TAG, "BUILDING DIAG: finestre solo per i primi max 80 edifici entro 400m -> detailed stimati=${minOf(80, nearCenter)}")
+        val sb = StringBuilder("BUILDING DIAG types: ")
+        for ((t, c) in typeCounts.entries.sortedByDescending { it.value }) sb.append(t.name).append('=').append(c).append(' ')
+        AppLog.d(TAG, sb.toString())
+        val greyTypes = listOf(BuildingType.MALL, BuildingType.ELECTRONICS, BuildingType.HARDWARE, BuildingType.VEHICLE, BuildingType.PARKING, BuildingType.INDUSTRIAL, BuildingType.GOVERNMENT, BuildingType.BANK, BuildingType.GYM)
+        val greyCount = greyTypes.sumOf { typeCounts[it] ?: 0 }
+        AppLog.d(TAG, "BUILDING DIAG: edifici con colore tipo grigio=$greyCount/${validGeometry} (MALL/ELECTRONICS/HARDWARE/VEHICLE/PARKING/INDUSTRIAL/GOVERNMENT/BANK/GYM)")
+    }
+
     /** Colori per tipo di edificio */
     private fun getTypeColors(type: BuildingType): Pair<Int, Int> {
         return when (type) {
@@ -359,6 +401,8 @@ class OsmCityBuilder(
             .take(600)
 
         val cachedMaterials = mutableMapOf<Int, com.google.android.filament.MaterialInstance>()
+
+        logBuildingTypeDistribution(buildings)
 
         val maxDetailed = 80
         var detailedCount = 0

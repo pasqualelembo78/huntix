@@ -626,6 +626,8 @@ object StoreUnityBridge {
                     putExtra(POICustomPageActivity.EXTRA_JSON_URL, custom.url)
                     putExtra(POICustomPageActivity.EXTRA_POI_NAME, name)
                     putExtra(POICustomPageActivity.EXTRA_POI_TYPE, poiType)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LAT, lat)
+                    putExtra(POICustomPageActivity.EXTRA_POI_LNG, lng)
                 }
             } else if (url.isNotBlank() && !url.startsWith("osm:")) {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -834,6 +836,45 @@ object StoreUnityBridge {
         // Usa il canale esistente per tenere aggiornata anche la classifica
         pm.updatePlayerName(newName, onComplete = { }, onError = { })
         return true
+    }
+
+    // ── City State Sync (snapshot bidirezionale Unity ↔ profilo) ──
+
+    /** Riceve da Unity (MiCittà) lo snapshot completo dello stato città e lo
+     *  conserva + allinea il profilo generale (riepiloghi city*). */
+    @JvmStatic
+    fun onCityStateSync(json: String) {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        CityStateSync.onCitySnapshot(ctx, json)
+    }
+
+    /** Restituisce l'ultimo snapshot città salvato ("" se assente): usato da
+     *  Unity all'avvio della scena per ripristinare lo stato se il salvataggio
+     *  locale è vergine. */
+    @JvmStatic
+    fun getCityStateSync(): String {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return ""
+        return CityStateSync.getSnapshot(ctx)
+    }
+
+    /** Verifica di sincronizzazione: ritorna il report di allineamento dello
+     *  snapshot (evento "CityStateCheck" da Unity). */
+    @JvmStatic
+    fun checkCityStateSync(): String {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{\"ok\":false}"
+        return CityStateSync.checkSync(ctx)
+    }
+
+    /** Allineamento profilo ← ultimo snapshot (usato all'avvio app, non serve
+     *  Unity attiva). Best-effort e non bloccante. */
+    @JvmStatic
+    fun applyStoredCityStateToProfile(): Boolean {
+        val activity = UnityPlayer.currentActivity ?: return false
+        val ctx = activity.applicationContext ?: return false
+        return try {
+            CityStateSync.startupSync(ctx)
+            true
+        } catch (_: Exception) { false }
     }
 
     private fun distanceMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {

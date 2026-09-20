@@ -25,6 +25,7 @@ namespace City.Economy
         private static readonly Color CommonColor = new Color(1f, 0.95f, 0.7f);
         private static readonly Color UncommonColor = new Color(0.4f, 0.9f, 0.4f);
         private static readonly Color RareColor = new Color(0.3f, 0.5f, 1f);
+        private static readonly Color EpicColor = new Color(1f, 0.5f, 0.25f);
         private static readonly Color LegendaryColor = new Color(1f, 0.6f, 0.1f);
 
         private void Awake()
@@ -152,6 +153,7 @@ namespace City.Economy
                 case EggController.Rarity.Common: return CommonColor;
                 case EggController.Rarity.Uncommon: return UncommonColor;
                 case EggController.Rarity.Rare: return RareColor;
+                case EggController.Rarity.Epic: return EpicColor;
                 case EggController.Rarity.Legendary: return LegendaryColor;
                 default: return CommonColor;
             }

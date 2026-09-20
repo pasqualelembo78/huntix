@@ -74,13 +74,16 @@ data class PlayerProfile(
     var genderChosenAt:         Long    = 0L,            // Timestamp prima scelta sesso
     var equippedAccessories:    String  = "",            // Lista accessori equipaggiati
 
-    // ── Ready Player Me Avatar ────────────────────────────────
-    var rpmAvatarUrl:       String  = "",    // URL modello GLB RPM
-    var rpmAvatarId:        String  = "",    // ID avatar RPM
-    var rpmAvatarVersion:   Int     = 0,     // Versione avatar (incrementale)
-    var equippedHeadId:     String  = "",    // Accessorio testa equipaggiato
-    var equippedBodyId:     String  = "",    // Accessorio corpo equipaggiato
-    var equippedEffectId:   String  = ""     // Accessorio effetto equipaggiato
+    // ── Sync MiCittà (Unity ↔ profilo generale) ──────────────
+    // Riepiloghi dello stato città esportati da MiCittà via CityStateSync:
+    // vivono come mirror del gioco Unity ma visibili ovunque nel profilo.
+    var cityMoney:          Long    = 0L,    // soldi € città (max visto)
+    var cityPeopleKnown:    Int     = 0,     // persone conosciute (count max)
+    var cityEggDexCount:    Int     = 0,     // uova nel bestiario (count max)
+    var cityJobs:           String  = "",    // "Consegne=120;Taxi=60;…"
+    var cityFamily:         String  = "",    // "sposo:Giulia · figli:2" / reincarnazione
+    var cityHome:           String  = "",    // casa MiCittà "nome|lat|lng|garage|garagemodel|stanze"
+    var cityEggWhere:       Int     = 0      // ritrovamenti registrati (memoria "DOVE ho trovato l'uovo")
 ) {
     // ─── Livello calcolato da XP ──────────────────────────────────
     val level: Int get() {
@@ -200,7 +203,11 @@ data class PlayerProfile(
         "genderChosenAt"         to genderChosenAt,
         "equippedAccessories" to equippedAccessories,
         "country" to country, "city" to city, "birthYear" to birthYear, "isMinor" to isMinor, "profileCompleted" to profileCompleted,
-        "gpsLat" to gpsLat, "gpsLng" to gpsLng, "realAge" to realAge
+        "gpsLat" to gpsLat, "gpsLng" to gpsLng, "realAge" to realAge,
+        // Sync MiCittà
+        "cityMoney" to cityMoney, "cityPeopleKnown" to cityPeopleKnown,
+        "cityEggDexCount" to cityEggDexCount, "cityJobs" to cityJobs, "cityFamily" to cityFamily,
+        "cityHome" to cityHome, "cityEggWhere" to cityEggWhere
     )
 
     val hasChosenGender: Boolean get() = playerGender.isNotBlank()
@@ -261,7 +268,15 @@ data class PlayerProfile(
                 isMinor = (map["isMinor"] as? Boolean) ?: false, profileCompleted = (map["profileCompleted"] as? Boolean) ?: false,
                 gpsLat = (map["gpsLat"] as? Number)?.toDouble() ?: 0.0,
                 gpsLng = (map["gpsLng"] as? Number)?.toDouble() ?: 0.0,
-                realAge = (map["realAge"] as? Long)?.toInt() ?: 0
+                realAge = (map["realAge"] as? Long)?.toInt() ?: 0,
+                // Sync MiCittà
+                cityMoney = (map["cityMoney"] as? Number)?.toLong() ?: 0L,
+                cityPeopleKnown = (map["cityPeopleKnown"] as? Number)?.toInt() ?: 0,
+                cityEggDexCount = (map["cityEggDexCount"] as? Number)?.toInt() ?: 0,
+                cityJobs = map["cityJobs"] as? String ?: "",
+                cityFamily = map["cityFamily"] as? String ?: "",
+                cityHome = map["cityHome"] as? String ?: "",
+                cityEggWhere = (map["cityEggWhere"] as? Number)?.toInt() ?: 0
             )
         }
 

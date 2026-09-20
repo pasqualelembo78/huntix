@@ -6,8 +6,8 @@ namespace City.Economy
     [RequireComponent(typeof(Collider))]
     public class EggController : MonoBehaviour
     {
-        public enum Rarity { Common, Uncommon, Rare, Legendary }
-        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia }
+        public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna }
 
         public Rarity rarity;
         public EggType eggType;
@@ -25,6 +25,8 @@ namespace City.Economy
         private static readonly Color CommonColor = new Color(0.0f, 0.8f, 0.53f);
         private static readonly Color UncommonColor = new Color(0.0f, 0.71f, 1f);
         private static readonly Color RareColor = new Color(0.66f, 0.33f, 0.97f);
+        // EPIC: scala unica a 5 livelli (Common→Legendary) allineata ad Android
+        private static readonly Color EpicColor = new Color(1f, 0.42f, 0.21f);
         private static readonly Color LegendaryColor = new Color(1f, 0.84f, 0.0f);
         private static readonly Color CreamColor = new Color(1f, 0.98f, 0.8f);
         private static readonly Color creamGlow = new Color(1f, 0.95f, 0.6f, 1f);
@@ -40,6 +42,9 @@ namespace City.Economy
         private static readonly Color SabbiaColor = new Color(0.9f, 0.8f, 0.5f);
         private static readonly Color FangoColor = new Color(0.45f, 0.35f, 0.2f);
         private static readonly Color BrecciaColor = new Color(0.6f, 0.55f, 0.5f);
+        // uova del sistema lavori (stazioni LAVORI e pacchi consegnati)
+        private static readonly Color LavoroColor = new Color(0.2f, 0.75f, 0.55f);
+        private static readonly Color ConsegnaColor = new Color(0.9f, 0.65f, 0.25f);
 
         private void Awake()
         {
@@ -205,6 +210,7 @@ namespace City.Economy
                 egg.name = "EggBody";
                 float height = (r == Rarity.Legendary) ? 0.70f
                              : (r == Rarity.Rare)     ? 0.62f
+                             : (r == Rarity.Epic)     ? 0.60f
                              : (r == Rarity.Uncommon) ? 0.56f
                              :                           0.50f;
                 // Il DAE e' lungo ~66 unita' (0..65.7); scala per l'altezza voluta.
@@ -252,7 +258,8 @@ namespace City.Economy
                 egg.transform.localPosition = new Vector3(0f, 0.25f, 0f);
                 var bodyScale = (r == Rarity.Legendary) ? new Vector3(0.26f, 0.34f, 0.26f)
                               : (r == Rarity.Rare)     ? new Vector3(0.24f, 0.32f, 0.24f)
-                              :                          new Vector3(0.20f, 0.28f, 0.20f);
+                              : (r == Rarity.Epic)     ? new Vector3(0.23f, 0.31f, 0.23f)
+                              :                        new Vector3(0.20f, 0.28f, 0.20f);
                 egg.transform.localScale = bodyScale;
                 egg.GetComponent<Renderer>().sharedMaterial = MakeEggMat(col);
                 var childCol = egg.GetComponent<Collider>();
@@ -307,11 +314,11 @@ namespace City.Economy
             var light = lightGo.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = rarityCol;
-            light.range = (r == Rarity.Legendary) ? 3f : 2f;
-            light.intensity = (r == Rarity.Rare || r == Rarity.Legendary) ? 2.2f : 1.5f;
+            light.range = (r == Rarity.Legendary) ? 3f : (r == Rarity.Epic ? 2.6f : 2f);
+            light.intensity = (r == Rarity.Rare || r == Rarity.Epic || r == Rarity.Legendary) ? 2.2f : 1.5f;
 
             // Legendary: extra glow particles (tiny spheres orbiting)
-            if (r == Rarity.Legendary)
+            if (r == Rarity.Legendary || r == Rarity.Epic)
             {
                 for (int i = 0; i < 6; i++)
                 {
@@ -346,6 +353,8 @@ namespace City.Economy
                 case EggType.Sabbia: return SabbiaColor;
                 case EggType.Fango: return FangoColor;
                 case EggType.Breccia: return BrecciaColor;
+                case EggType.Lavoro: return LavoroColor;
+                case EggType.Consegna: return ConsegnaColor;
                 default: return TerraColor;
             }
         }
@@ -357,6 +366,7 @@ namespace City.Economy
                 case Rarity.Common: return CommonColor;
                 case Rarity.Uncommon: return UncommonColor;
                 case Rarity.Rare: return RareColor;
+                case Rarity.Epic: return EpicColor;
                 case Rarity.Legendary: return LegendaryColor;
                 default: return CommonColor;
             }
@@ -369,6 +379,7 @@ namespace City.Economy
                 case Rarity.Common: return 2;
                 case Rarity.Uncommon: return 5;
                 case Rarity.Rare: return 15;
+                case Rarity.Epic: return 30;
                 case Rarity.Legendary: return 50;
                 default: return 2;
             }

@@ -80,6 +80,12 @@ namespace City.UI
         // non hanno piu' un tasto dedicato: vivono nel menu AZIONI.
         private GameObject jobsButtonGo;
 
+        // pulsante flottante GIRO (giroscopio): gira la visuale ruotando il
+        // telefono. Stato acceso/spento persistito in PlayerPrefs, il colore
+        // riflette lo stato vero della camera.
+        private Image gyroButtonImage;
+        private TMP_Text gyroButtonLabel;
+
         private TMP_Text toast;
         private Coroutine toastRoutine;
 
@@ -586,6 +592,33 @@ namespace City.UI
 
         private void Update()
         {
+            // ── Back hardware Android / Escape in editor ─────────────────
+            // Senza questo hook, il percorso di default di UnityPlayerActivity
+            // chiude direttamente l'Activity (super.onBackPressed → finish()) e
+            // il teardown dell'engine col mondo montato crasha in SIGSEGV dopo
+            // ~10s (signal=11, trace nullo).  Riusiamo lo stesso flusso del
+            // bottone "Esci" in-app: pannello di conferma → ConfirmExit che
+            // scarica il mondo PRIMA del teardown.
+#if UNITY_ANDROID || UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (exitPanel != null && exitPanel.activeSelf)
+                    ConfirmExit();
+                else if (dialogActive)
+                    HideDialog();
+                else if (shopPanel != null && shopPanel.activeSelf)
+                    CloseShop();
+                else if (actionMenuRoot != null && actionMenuRoot.activeSelf)
+                    CloseActionRadial();
+                else if (_legal != null && _legal.IsVisible)
+                    _legal.Hide();
+                else if (MapSelectUI.Instance != null && MapSelectUI.Instance.IsOpen)
+                    MapSelectUI.Close();
+                else
+                    OnExitPressed();
+            }
+#endif
+
             UpdateActionLabel();
 
             // Il dialog di un NPC si chiude se il player si allontana.
@@ -877,6 +910,16 @@ namespace City.UI
             jumpBtn.onClick.AddListener(() =>
             {
                 Vibration.Vibrate(25);
+                // Regno Inferno esterno (gioco FloorIsLava): la HUD citta'
+                // persiste ma il player citta' e' nascosto, l'anima del gioco
+                // ha registrato il suo hook -> il pulsante salta davvero.
+                var infernoJump = City.Afterlife.RealmSceneManager.InfernoJumpInput;
+                if (infernoJump != null)
+                {
+                    City.OSM.OsmDiag.Log("[Brookhaven][UI] Jump -> anima Inferno");
+                    infernoJump.BeginJump();
+                    return;
+                }
                 var pc = City.Player.PlayerController.Instance;
                 if (pc == null)
                 {
@@ -887,6 +930,25 @@ namespace City.UI
                 pc.DoJump();
             });
             MakeText(jumpRt, "SALTA", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            // --- pulsante GIRO (giroscopio): sotto SALTA, stesso stile.
+            var gyroRt = MakeRect("GyroButton", root, new Vector2(1f, 0f), new Vector2(1f, 0f), Vector2.zero, Vector2.zero);
+            gyroRt.pivot = new Vector2(0.5f, 0.5f);
+            gyroRt.anchoredPosition = new Vector2(-110f, 60f);
+            gyroRt.sizeDelta = new Vector2(110f, 84f);
+            Image gyroBg = gyroRt.gameObject.AddComponent<Image>();
+            gyroBg.raycastTarget = true;
+            gyroButtonImage = gyroBg;
+            Button gyroBtn = gyroRt.gameObject.AddComponent<Button>();
+            gyroBtn.targetGraphic = gyroBg;
+            gyroBtn.onClick.AddListener(OnGyroTogglePressed);
+            gyroButtonLabel = MakeText(gyroRt, "GIRO", 26f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            gyroButtonLabel.raycastTarget = false;
+            {
+                var rig = Game.Instance != null ? Game.Instance.rig : City.Player.CameraRig.Instance;
+                bool on = rig != null ? rig.GyroEnabled : PlayerPrefs.GetInt("gyroCam", 1) == 1;
+                DrawGyroButton(on);
+            }
 
             // --- pulsante modalita camera (terza/prima persona), stile
             // Brookhaven mobile: sotto il pulsante menu in alto a sinistra.
@@ -1067,6 +1129,36 @@ namespace City.UI
         }
 
         /// <summary>Apre direttamente il pannello dei lavori dal pulsante.</summary>
+        private void OnGyroTogglePressed()
+        {
+            Vibration.Vibrate(25);
+            bool now;
+            var rig = Game.Instance != null ? Game.Instance.rig : City.Player.CameraRig.Instance;
+            if (rig != null)
+            {
+                now = !rig.GyroEnabled;
+                rig.SetGyroEnabled(now);
+                PlayerPrefs.SetInt("gyroCam", now ? 1 : 0);
+            }
+            else
+            {
+                now = PlayerPrefs.GetInt("gyroCam", 1) != 1;
+                PlayerPrefs.SetInt("gyroCam", now ? 1 : 0);
+            }
+            DrawGyroButton(now);
+            City.OSM.OsmDiag.Log("[Camera][Gyro] toggle -> " + now);
+        }
+
+        private void DrawGyroButton(bool on)
+        {
+            if (gyroButtonImage == null) return;
+            gyroButtonImage.color = on
+                ? new Color(0.15f, 0.65f, 0.95f, 0.85f)
+                : new Color(0.5f, 0.5f, 0.5f, 0.6f);
+            if (gyroButtonLabel != null)
+                gyroButtonLabel.text = on ? "GIRO" : "GIRO OFF";
+        }
+
         private void OnJobsButtonPressed()
         {
             if (JobManager.Instance != null)
@@ -1313,6 +1405,9 @@ namespace City.UI
         {
             if (exitPanel != null) exitPanel.SetActive(false);
             Time.timeScale = 1f;
+            // Sync Finale Unity→Android: esporta lo snapshot dello stato città
+            // PRIMA che l'Activity venga chiusa (il bridge è ancora vivo).
+            try { City.Sync.CityWorldSync.FlushNow(); } catch (System.Exception) { }
             // Ferma subito il polling OSM/JNI prima di chiudere l'Activity Unity:
             // in gara con il teardown dell'engine su Android un accesso al bridge
             // può provocare un crash nativo del processo.

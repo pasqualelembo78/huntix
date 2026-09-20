@@ -19,9 +19,16 @@ namespace City.OSM
 
             Mesh mesh;
             if (heights != null && heights.Count > 0)
+            {
                 mesh = BuildHeightMesh(area, heights, demLattice);
+                OsmDiag.Log("[Terrain] '" + name + "' heightMesh h=" + heights.Count +
+                    " demLattice=" + demLattice);
+            }
             else
+            {
                 mesh = BuildFlatMesh(area);
+                OsmDiag.Log("[Terrain] '" + name + "' FLAT (nessun DEM)");
+            }
             mesh.name = "TerrenoChunk";
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();

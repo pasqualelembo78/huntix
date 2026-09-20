@@ -32,7 +32,7 @@ namespace City.Vehicle
         // 170 m tagliava troppo aggressive: a media 77 auto/chunk sparse su
         // 1 km2 si vedevano poche auto alla volta. 260 m tiene il costo
         // render basso (Kenney low-poly) senza strade deserte.
-        private const float CullRadius = 500f;
+        private const float CullRadius = 260f;
         private const float CullInterval = 0.6f;
         private const int GLOBAL_VEHICLE_CAP = 20000;
 
@@ -324,6 +324,16 @@ namespace City.Vehicle
         }
 
         /// <summary>Culling periodico: attiva solo i veicoli vicini al player.</summary>
+        public int CountTotal() { return tracked.Count; }
+
+        public int CountActive()
+        {
+            int n = 0;
+            for (int i = 0; i < tracked.Count; i++)
+                if (tracked[i] != null && tracked[i].activeInHierarchy) n++;
+            return n;
+        }
+
         private void Update()
         {
             if (Time.unscaledTime < nextCull) return;
@@ -337,7 +347,10 @@ namespace City.Vehicle
             tracked.RemoveAll(v => v == null);
             if (player == null) return;
             Vector3 pp = player.position;
-            float r2 = CullRadius * CullRadius;
+            float cr = CullRadius;
+            var pg = City.Diagnostics.PerformanceGovernor.Instance;
+            if (pg != null) cr = pg.VehicleCullRadius;
+            float r2 = cr * cr;
 
             for (int i = 0; i < tracked.Count; i++)
             {

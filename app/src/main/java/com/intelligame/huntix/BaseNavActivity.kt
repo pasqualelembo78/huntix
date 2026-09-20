@@ -8,9 +8,11 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.View
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -143,19 +145,52 @@ open class BaseNavActivity : AppCompatActivity() {
     }
 
     private fun showAltroMenu() {
-        val items = arrayOf("Profilo", "Personaggio", "Mappa POI", "Impostazioni", "Abilità", "Eventi Live", "Eventi Speciali", "Borsa", "Invita Amico", "Info e Legale")
+        val items = arrayOf("Profilo", "Locali & POI", "Impostazioni", "Abilità", "Eventi", "Le Tue Creature", "Invita Amico", "Info e Legale")
         AlertDialog.Builder(this).setTitle("Altro").setItems(items) { _, i -> when (i) {
             0 -> startActivity(Intent(this, PlayerProfileActivity::class.java))
-            1 -> startActivity(Intent(this, GenderChangeActivity::class.java))
-            2 -> startActivity(Intent(this, PoiListActivity::class.java))
-            3 -> startActivity(Intent(this, SettingsActivity::class.java))
-            4 -> startActivity(Intent(this, AbilityActivity::class.java))
-            5 -> startActivity(Intent(this, LiveEventsActivity::class.java))
-            6 -> startActivity(Intent(this, SpecialEventsActivity::class.java))
-            7 -> startActivity(Intent(this, SurpriseInventoryActivity::class.java))
-            8 -> com.intelligame.huntix.social.ReferralManager.getMyCode(this) { code -> runOnUiThread { if (code.isNotBlank()) com.intelligame.huntix.social.ReferralManager.shareCode(this, code) } }
-            9 -> startActivity(Intent(this, InfoLegalActivity::class.java))
+            1 -> startActivity(Intent(this, PoiListActivity::class.java))
+            2 -> startActivity(Intent(this, SettingsActivity::class.java))
+            3 -> startActivity(Intent(this, AbilityActivity::class.java))
+            4 -> startActivity(Intent(this, EventsActivity::class.java))
+            5 -> startActivity(Intent(this, SurpriseInventoryActivity::class.java))
+            6 -> showInviteDialog()
+            7 -> startActivity(Intent(this, InfoLegalActivity::class.java))
         }}.show()
+    }
+
+    /** Invita amico completo: condividi il codice oppure inserisci quello di un amico. */
+    private fun showInviteDialog() {
+        val items = arrayOf("📤 Condividi il mio codice", "📲 Inserisci codice amico")
+        AlertDialog.Builder(this).setTitle("Invita un Amico").setItems(items) { _, i ->
+            when (i) {
+                0 -> com.intelligame.huntix.social.ReferralManager.getMyCode(this) { code ->
+                    runOnUiThread { if (code.isNotBlank()) com.intelligame.huntix.social.ReferralManager.shareCode(this, code) }
+                }
+                1 -> showInsertCodeDialog()
+            }
+        }.show()
+    }
+
+    private fun showInsertCodeDialog() {
+        val input = EditText(this).apply {
+            hint = "Es. ABC123"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("📲 Inserisci codice amico")
+            .setMessage("Inserisci il codice di un amico per ricevere +500 MVC gratis!")
+            .setView(input)
+            .setPositiveButton("Riscatta") { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.isEmpty()) {
+                    Toast.makeText(this, "Inserisci un codice valido", Toast.LENGTH_SHORT).show()
+                } else {
+                    com.intelligame.huntix.social.ReferralManager.applyCode(this, code) { _, msg ->
+                        runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                    }
+                }
+            }
+            .setNegativeButton("Annulla", null)
+            .show()
     }
 
     @Suppress("DEPRECATION")

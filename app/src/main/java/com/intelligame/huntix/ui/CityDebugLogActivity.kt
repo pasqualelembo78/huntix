@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +28,15 @@ class CityDebugLogActivity : AppCompatActivity() {
     private lateinit var scrollView: NestedScrollView
     private lateinit var counterLabel: TextView
     private lateinit var headerTitle: TextView
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val diskIO = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var _pendingDiskLoad = 0  // contatore per cancellare load obsoleti
+    // Limite testo mostrato nella TextView: oltre questo il LAYOUT/drawing di un
+    // TextView selectable impiega secondi e finisce in ANR (Editor.drawTextRun).
+    // Il viewer NON è selectable (la selezione passa dal bottone Copia), quindi
+    // il carico è solo di rendering: 60K char consentono di leggere l'intera
+    // sessione senza onerare il draw; oltre si mostra solo la coda.
+    private val MAX_DISPLAY_CHARS = 60_000
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,7 +68,7 @@ class CityDebugLogActivity : AppCompatActivity() {
         topRow.addView(counterLabel)
         header.addView(topRow)
 
-        // Button row 1: navigation
+// Button row 1: navigation
         val btnRow1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, 8.dp(), 0, 0)
@@ -97,7 +108,11 @@ class CityDebugLogActivity : AppCompatActivity() {
         logTextView = TextView(this).apply {
             textSize = 11f; typeface = Typeface.MONOSPACE
             setPadding(12.dp(), 8.dp(), 12.dp(), 8.dp())
-            setTextIsSelectable(true); setLineSpacing(0f, 1.15f)
+            // setTextIsSelectable(true) NON va usato: abilita l'Editor (stesso
+            // path di EditText) e il draw di testo lungo finisce in
+            // Editor.drawHardwareAccelerated → ANR. La selezione è garantita
+            // dal bottone "Copia".
+            setLineSpacing(0f, 1.15f)
         }
         scrollView = NestedScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0D0620"))
@@ -117,18 +132,33 @@ class CityDebugLogActivity : AppCompatActivity() {
         showDiskLog()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        diskIO.shutdownNow()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshLog()
     }
 
     private fun showDiskLog() {
-        val diskLog = AppLog.readDiskLog(this)
         headerTitle.text = "Log Disco"
-        counterLabel.text = ""
-        logTextView.text = diskLog
+        counterLabel.text = "caricamento..."
+        logTextView.text = ""
         logTextView.setTextColor(Color.parseColor("#FFD080"))
-        scrollView.post { scrollView.fullScroll(NestedScrollView.FOCUS_DOWN) }
+        val generation = ++_pendingDiskLoad
+        diskIO.execute {
+            val diskLog = AppLog.readDiskLog(this@CityDebugLogActivity)
+            uiHandler.post {
+                if (generation != _pendingDiskLoad) return@post
+                logTextView.text = trimForDisplay(diskLog)
+                counterLabel.text = if (diskLog.length <= MAX_DISPLAY_CHARS)
+                    "mostrati ${diskLog.length} char"
+                else "ultimi $MAX_DISPLAY_CHARS char di ${diskLog.length}"
+                scrollView.post { scrollView.fullScroll(NestedScrollView.FOCUS_DOWN) }
+            }
+        }
     }
 
     private fun refreshLog() {
@@ -140,40 +170,61 @@ class CityDebugLogActivity : AppCompatActivity() {
             logTextView.setTextColor(Color.parseColor("#666666"))
             return
         }
-        logTextView.text = buildString {
+        val full = buildString {
             for (e in entries) append(e.format()).append("\n")
         }
+        logTextView.text = trimForDisplay(full)
         logTextView.setTextColor(Color.parseColor("#CCCCCC"))
         scrollView.post { scrollView.fullScroll(NestedScrollView.FOCUS_DOWN) }
     }
 
+    private fun trimForDisplay(text: String): String =
+        if (text.length <= MAX_DISPLAY_CHARS) text
+        else "...[troncato, ultimi $MAX_DISPLAY_CHARS char]\n" + text.substring(text.length - MAX_DISPLAY_CHARS)
+
     private fun exportToDownloads() {
-        val filename = AppLog.exportToDownloads(this)
-        if (filename != null) {
-            Toast.makeText(this, "Salvato in Downloads/$filename", Toast.LENGTH_LONG).show()
-        } else {
-            Toast.makeText(this, "Nessun log da esportare", Toast.LENGTH_SHORT).show()
+        val generation = ++_pendingDiskLoad
+        logTextView.setTextColor(Color.parseColor("#AAAAAA"))
+        val prev = logTextView.text
+        logTextView.text = "Esportazione in corso..."
+        diskIO.execute {
+            val filename = AppLog.exportToDownloads(this@CityDebugLogActivity)
+            uiHandler.post {
+                if (generation != _pendingDiskLoad) return@post
+                if (filename != null) {
+                    logTextView.text = prev  // ripristina il testo precedente
+                    Toast.makeText(this@CityDebugLogActivity, "Salvato in Downloads/$filename", Toast.LENGTH_LONG).show()
+                } else {
+                    logTextView.text = prev
+                    Toast.makeText(this@CityDebugLogActivity, "Nessun log da esportare", Toast.LENGTH_SHORT).show()
+                }
+                logTextView.setTextColor(Color.parseColor("#FFD080"))
+            }
         }
     }
 
     private fun copyLogToClipboard() {
-        val diskLog = AppLog.readDiskLog(this)
-        val memLog = AppLog.getAllAsString()
-        // Solo disco: contiene gia' tutte le righe della sessione corrente
-        // (il buffer memoria le duplicherebbe) ed e' meta' piu' piccolo.
-        val combined = if (diskLog.isNotEmpty() && diskLog != "(nessun log su disco)") {
-            diskLog
-        } else memLog
-        val maxChars = 60_000
-        val trimmed = if (combined.length > maxChars)
-            "...[troncato]\n" + combined.substring(combined.length - maxChars)
-        else combined
-        try {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("City3D Debug Log", trimmed))
-            Toast.makeText(this, "Log copiato (${trimmed.length} caratteri)", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            Toast.makeText(this, "Copia non riuscita: ${e.message}", Toast.LENGTH_LONG).show()
+        val generation = ++_pendingDiskLoad
+        diskIO.execute {
+            val diskLog = AppLog.readDiskLogFull(this@CityDebugLogActivity)
+            val memLog = AppLog.getAllAsString()
+            val combined = if (diskLog.isNotEmpty() && diskLog != "(nessun log su disco)") {
+                diskLog
+            } else memLog
+            val maxChars = 200_000
+            val trimmed = if (combined.length > maxChars)
+                "...[troncato]\n" + combined.substring(combined.length - maxChars)
+            else combined
+            uiHandler.post {
+                if (generation != _pendingDiskLoad) return@post
+                try {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("City3D Debug Log", trimmed))
+                    Toast.makeText(this@CityDebugLogActivity, "Log copiato (${trimmed.length} caratteri)", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this@CityDebugLogActivity, "Copia non riuscita: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 }

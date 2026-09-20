@@ -241,10 +241,10 @@ namespace City.OSM
 
             if (mergedBuildings != null)
             {
-                int placed = 0, scanned = 0, skipped = 0;
+                int placed = 0, scanned = 0, skipped = 0, skipDegenerate = 0;
                 foreach (var b in mergedBuildings)
                 {
-                    if (b?.c == null || b.c.Length < 2) continue;
+                    if (b?.c == null || b.c.Length < 2) { skipDegenerate++; continue; }
 
                     // protezione per-record: un dato anomalo non deve costare
                     // il chunk intero (su Roma: 32k edifici per tile)
@@ -270,6 +270,12 @@ namespace City.OSM
                         clock.ElapsedMilliseconds > budgetMs)
                     { clock.Reset(); clock.Start(); yield return null; }
                 }
+                OsmDiag.Log("[Builder] " + chunk.key +
+                    " edificiTotali=" + scanned +
+                    " posizionati=" + placed +
+                    " falliti=" + (scanned - placed - skipped - skipDegenerate) +
+                    " degeneri=" + skipDegenerate +
+                    " erroriPerRecord=" + skipped);
                 if (skipped > 3)
                     UnityEngine.Debug.LogWarning("[ChunkBuilder] " + chunk.key +
                         " edifici saltati totali: " + skipped);
@@ -319,6 +325,7 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione VEICOLI: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── pedoni sui marciapiedi (deterministici, animati, parlanti) ──
             Section("Pedoni");
@@ -331,6 +338,7 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione NPC: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── uova raccoglibili (missioni CollectEggs) ──
             Section("Uova");
@@ -345,6 +353,7 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione UOVA: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── POI veicoli: concessionarie / officine / garage da OSM ──
             Section("Concessionarie");
@@ -359,6 +368,7 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione POI VEICOLI: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── segnali stradali con distanze POI ──
             Section("Segnali");
@@ -371,6 +381,7 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE segnali stradali: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── arredo urbano interattivo + POI dagli edifici OSM ──
             Section("Arredo urbano");
@@ -516,6 +527,104 @@ namespace City.OSM
         private static double Clamp(double v, double lo, double hi)
         {
             return v < lo ? lo : (v > hi ? hi : v);
+        }
+
+        /// <summary>
+        /// Ricostruisce SOLO il layer strade (asfalto + marciapiedi + targhette
+        /// "Via") di un chunk gia' costruito. Serve quando arriva una tile DEM
+        /// nuova: alla build originale quei punti cadevano fuori dal registro
+        /// TileElevation (MISS -> y=0) e le strade restavano sepolte sotto un
+        /// terreno rialzato. Il riallineamento non tocca terreno/edifici/natura.
+        /// </summary>
+        public static void BuildRoadsOnly(ChunkManager mgr, ChunkData chunk)
+        {
+            if (mgr == null || chunk == null || chunk.root == null ||
+                chunk.geo == null || !chunk.built)
+                return;
+            TileGeoDoc geo = chunk.geo;
+            if (geo.roads == null || geo.roads.Length == 0)
+            {
+                OsmDiag.Log("[Builder] " + chunk.key +
+                    " roads-only: geo senza strade, niente da riallineare");
+                return;
+            }
+
+            Vector3 originWorld = chunk.root.transform.position;
+            System.Func<GeoLL, Vector3> ToLocal = ll =>
+            {
+                var w = WorldOrigin.ToWorld(ll.a, ll.o);
+                return new Vector3(w.x - originWorld.x, w.y, w.z - originWorld.z);
+            };
+            GeoCoord sw = CityGrid.ChunkCorner(chunk.index);
+            Vector3 swLocal = ToLocal(new GeoLL { a = sw.lat, o = sw.lng });
+            var idxNE = new Vector2Int(chunk.index.x + 1, chunk.index.y + 1);
+            GeoCoord ne = CityGrid.ChunkCorner(idxNE);
+            Vector3 neLocal = ToLocal(new GeoLL { a = ne.lat, o = ne.lng });
+            Rect bounds = new Rect(swLocal.x, swLocal.z,
+                neLocal.x - swLocal.x, neLocal.z - swLocal.z);
+
+            // le targhette "Via ..." sono figli della root: quelle della build
+            // precedente vanno rimosse prima di rigenerarne di nuove, altrimenti
+            // a ogni riallineamento si duplicano.
+            Transform rootT = chunk.root.transform;
+            for (int i = rootT.childCount - 1; i >= 0; i--)
+            {
+                var child = rootT.GetChild(i);
+                if (child != null && child.name.StartsWith("Via "))
+                    Object.Destroy(child.gameObject);
+            }
+
+            try
+            {
+                Mesh sidewalkMesh;
+                Mesh roadMesh = RoadRenderer.Build(geo.roads, ToLocal, bounds,
+                    rootT, out sidewalkMesh);
+                if (roadMesh != null)
+                {
+                    if (chunk.roadsGo == null)
+                    {
+                        chunk.roadsGo = new GameObject("Strade",
+                            typeof(MeshFilter), typeof(MeshRenderer));
+                        chunk.roadsGo.transform.SetParent(rootT, false);
+                        chunk.roadsGo.GetComponent<MeshRenderer>().sharedMaterial =
+                            mgr.SharedRoadMaterial;
+                    }
+                    SwapSharedMesh(chunk.roadsGo, roadMesh);
+                }
+                if (sidewalkMesh != null)
+                {
+                    if (chunk.sidewalksGo == null)
+                    {
+                        chunk.sidewalksGo = new GameObject("Marciapiedi",
+                            typeof(MeshFilter), typeof(MeshRenderer),
+                            typeof(MeshCollider));
+                        chunk.sidewalksGo.transform.SetParent(rootT, false);
+                        chunk.sidewalksGo.GetComponent<MeshRenderer>().sharedMaterial =
+                            mgr.SharedSidewalkMaterial;
+                    }
+                    SwapSharedMesh(chunk.sidewalksGo, sidewalkMesh);
+                    var col = chunk.sidewalksGo.GetComponent<MeshCollider>();
+                    if (col != null) col.sharedMesh = sidewalkMesh;
+                }
+                OsmDiag.Log("[Builder] " + chunk.key +
+                    " roads-only riallineate (DEM aggiornato)");
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE sezione roads-only: " + e);
+            }
+        }
+
+        /// <summary>Scambia la sharedMesh del GO e butta quella vecchia (una
+        /// mesh per build, mai accumularle in memoria).</summary>
+        private static void SwapSharedMesh(GameObject go, Mesh fresh)
+        {
+            var mf = go.GetComponent<MeshFilter>();
+            if (mf == null) mf = go.AddComponent<MeshFilter>();
+            Mesh old = mf.sharedMesh;
+            mf.sharedMesh = fresh;
+            if (old != null && old != fresh) Object.Destroy(old);
         }
 
         /// <summary>Vero se la posizione cade nel lotto libero di un POI

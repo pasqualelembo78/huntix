@@ -555,23 +555,39 @@ namespace City.NPC
         public static int AgeYears { get; set; }
         public static bool IsDead { get; set; }
 
+        private static System.DateTime _lastNeedDay;
+
+        /// <summary>Decadimento dei bisogni su scala GIORNI REALI, non per
+        /// tick: il tick ruota ogni TickSeconds secondi, ma "per day" va
+        /// applicato quando cambia il giorno solare (come AgingTick, che usa
+        /// le date reali). Prima questo metodo svuotava fame/sete/stanchezza
+        /// in ~2 minuti e il tick successivo uccideva il player da fermo.</summary>
         public static void UpdateNeeds()
         {
             if (IsDead) return;
-            if (hunger > 0) hunger = System.Math.Max(0, hunger - (int)NeedsDecreasePerDay);
-            if (thirst > 0) thirst = System.Math.Max(0, thirst - (int)NeedsDecreasePerDay);
-            if (fatigue > 0) fatigue = System.Math.Max(0, fatigue - (int)NeedsDecreasePerDay);
+            System.DateTime today = System.DateTime.UtcNow.Date;
+            if (_lastNeedDay == default(System.DateTime)) _lastNeedDay = today;
+            int daysPassed = (today - _lastNeedDay).Days;
+            if (daysPassed <= 0) return;
+            _lastNeedDay = today;
 
-            if (hunger <= 0) daysGoingHungry++; else daysGoingHungry = 0;
-            if (thirst <= 0) daysGoingThirsty++; else daysGoingThirsty = 0;
-            if (fatigue <= 0) daysGoingTired++; else daysGoingTired = 0;
+            for (int d = 0; d < daysPassed; d++)
+            {
+                if (hunger > 0) hunger = System.Math.Max(0, hunger - (int)NeedsDecreasePerDay);
+                if (thirst > 0) thirst = System.Math.Max(0, thirst - (int)NeedsDecreasePerDay);
+                if (fatigue > 0) fatigue = System.Math.Max(0, fatigue - (int)NeedsDecreasePerDay);
 
-            if (daysGoingHungry >= NeedsCriticalDays && CanDie())
-                Die(DeathType.STARVATION);
-            else if (daysGoingThirsty >= NeedsCriticalDays && CanDie())
-                Die(DeathType.DEHYDRATION);
-            else if (daysGoingTired >= NeedsCriticalDays && CanDie())
-                Die(DeathType.EXHAUSTION);
+                if (hunger <= 0) daysGoingHungry++; else daysGoingHungry = 0;
+                if (thirst <= 0) daysGoingThirsty++; else daysGoingThirsty = 0;
+                if (fatigue <= 0) daysGoingTired++; else daysGoingTired = 0;
+
+                if (daysGoingHungry >= NeedsCriticalDays && CanDie())
+                    Die(DeathType.STARVATION);
+                else if (daysGoingThirsty >= NeedsCriticalDays && CanDie())
+                    Die(DeathType.DEHYDRATION);
+                else if (daysGoingTired >= NeedsCriticalDays && CanDie())
+                    Die(DeathType.EXHAUSTION);
+            }
         }
 
         public static bool CanDie()
@@ -667,6 +683,67 @@ namespace City.NPC
             _ageSeconds = 0f;
             _store.playerBornDay = Today();
             Save();
+        }
+
+        // ── sync State Snap (CityWorldSync Unity ↔ Android) ────────────
+        // Esporta/importa lo STORE famiglia completo, così il profilo generale
+        // conserva famiglia/nascita e il ripristino funziona su install fresche.
+
+        /// <summary>True se la famiglia locale non è mai stata costruita
+        /// (nessun coniuge, fidanzato, figlio o genitore adottivo).</summary>
+        public static bool IsFreshFamily()
+        {
+            EnsureLoaded();
+            return _store.partner == null &&
+                   _store.fiance == null &&
+                   (_store.children == null || _store.children.Count == 0) &&
+                   _store.foster == null;
+        }
+
+        /// <summary>JSON dello store famiglia (coniuge/fidanzato/figli/foster/
+        /// anno di nascita del player), pronto per lo snapshot Unity→Android.</summary>
+        public static string ExportStoreJson()
+        {
+            EnsureLoaded();
+            try { return JsonUtility.ToJson(_store); }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Family] ExportStoreJson: " + e.Message);
+                return "";
+            }
+        }
+
+        /// <summary>Ristabilisce lo store famiglia da uno snapshot, SOLO se la
+        /// famiglia locale è vergine (mai costruita): non sovrascrive mai una
+        /// famiglia il giocatore ha già costruito in sessione.</summary>
+        public static bool RestoreFamilyStore(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return false;
+            EnsureLoaded();
+            if (!IsFreshFamily()) return false;
+            try
+            {
+                var st = JsonUtility.FromJson<Store>(json);
+                if (st == null) return false;
+                if (st.children == null) st.children = new List<ChildInfo>();
+                if (st.breaks == null) st.breaks = new List<BreakInfo>();
+                _store = st;
+                if (!string.IsNullOrEmpty(_store.playerBornDay))
+                {
+                    DateTime born;
+                    if (DateTime.TryParse(_store.playerBornDay, out born))
+                        AgeYears = System.Math.Max(0,
+                            (DateTime.UtcNow.Date - born.Date).Days / DaysPerYear);
+                }
+                Save();
+                Notify();
+                return true;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[Family] RestoreFamilyStore: " + e.Message);
+                return false;
+            }
         }
 
         // ── Sync con il profilo Huntix (unico player, unico universo) ──
@@ -790,6 +867,7 @@ namespace City.NPC
 
             private float _afterlifeTimer;
             private int _afterlifeStep;
+            private bool _infernoDone;
 
             private void EnterRealm(City.Afterlife.AfterlifeRealm realm)
             {
@@ -800,27 +878,84 @@ namespace City.NPC
             {
                 _afterlifeTimer = 0f;
                 _afterlifeStep = 1;
-                EnterRealm(City.Afterlife.AfterlifeRealm.INFERNO);
-                ShowToast("INFERNO: " + FamilyManager.DeathMessage(type) + " Ti risvegli nell'Inferno. Fuoco ovunque.");
+                _infernoDone = false;
+                var rsm = City.Afterlife.RealmSceneManager.Ensure();
+                rsm.InfernoFinished = OnInfernoFinished;
+                rsm.EnterRealm(City.Afterlife.AfterlifeRealm.INFERNO);
+                ShowToast("L'anima di " + PlayerName() + " affronta l'INFERNO: " +
+                    FamilyManager.DeathMessage(type) +
+                    " SUPERSTI IL CASTELLO DI BOWSER: raggiungi l'uscita prima di cadere nella lava!");
+            }
+
+            /// <summary>Nome del player dal profilo Huntix (fallback: Marco/Giulia).</summary>
+            private static string PlayerName()
+            {
+                try
+                {
+                    string n = Huntix.Bridge.UnityBridge.GetPlayerName();
+                    if (!string.IsNullOrEmpty(n)) return n;
+                }
+                catch (System.Exception) { }
+                return FamilyManager.IsFemale ? "Giulia" : "Marco";
+            }
+
+            /// <summary>Fine del minigioco Inferno (callback di RealmSceneManager):
+            /// superato (won) = bonus XP pieno, fallito = XP di consolazione;
+            /// in entrambi i casi si prosegue verso il Purgatorio.</summary>
+            private void OnInfernoFinished(bool won)
+            {
+                if (_afterlifeStep != 1) return;
+                _infernoDone = true;
+                try
+                {
+                    var rsm0 = City.Afterlife.RealmSceneManager.Instance;
+                    if (rsm0 != null) rsm0.InfernoFinished = null;
+                }
+                catch (System.Exception) { }
+                if (won)
+                {
+                    FamilyManager.SyncXpToHuntix(30, "inferno");
+                    ShowToast("INFERNO SUPERATO! +30 XP.");
+                }
+                else
+                {
+                    FamilyManager.SyncXpToHuntix(10, "inferno_consolazione");
+                    ShowToast("L'INFERNO TI HA VINTO. +10 XP di consolazione. L'anima di " +
+                        PlayerName() + " precipita verso il Purgatorio.");
+                }
+                _afterlifeStep = 2; _afterlifeTimer = 0f;
+                EnterRealm(City.Afterlife.AfterlifeRealm.PURGATORIO);
+                ShowToast("PURGATORIO: L'anima di " + PlayerName() +
+                    " sale. Supera gli ostacoli per redimerti. Atmosfera densa e grigia.");
             }
 
             private void TickAfterlife()
             {
                 if (_afterlifeStep == 0) return;
                 _afterlifeTimer += Time.unscaledDeltaTime;
-                if (_afterlifeStep == 1 && _afterlifeTimer >= 4f)
+                // Step 1 (INFERNO): avanzare solo via callback del minigioco.
+                // Ripiegamento di sicurezza: se il minigioco non parte (es.
+                // arena non costruita), non lasciare il player bloccato.
+                // Con l'InfernoScene estero (gioco floor-is-lava) il tempo di
+                // gioco e' libero (esplorazione/piattaforme): il timeout sale a
+                // 10 minuti, resta il fallback contro i soft-lock.
+                if (_afterlifeStep == 1 && !_infernoDone)
                 {
-                    _afterlifeStep = 2; _afterlifeTimer = 0f;
-                    EnterRealm(City.Afterlife.AfterlifeRealm.PURGATORIO);
-                    ShowToast("PURGATORIO: Supera gli ostacoli per redimerti. Atmosfera densa e grigia.");
+                    float limit = ExternalInfernoActive() ? 600f : 25f;
+                    if (_afterlifeTimer >= limit)
+                    {
+                        OnInfernoFinished(false);
+                        return;
+                    }
                 }
-                else if (_afterlifeStep == 2 && _afterlifeTimer >= 4f)
+                if (_afterlifeStep == 2 && _afterlifeTimer >= 6f)
                 {
                     _afterlifeStep = 3; _afterlifeTimer = 0f;
                     EnterRealm(City.Afterlife.AfterlifeRealm.PARADISO);
-                    ShowToast("PARADISO: Purificato. Entri nel Paradiso. Atmosfera serena, XP raddoppiato. Reincarnazione tra poco...");
+                    ShowToast("PARADISO: L'anima di " + PlayerName() +
+                    " e' purificata. Entra nel Paradiso. Atmosfera serena, XP raddoppiato. Reincarnazione tra poco...");
                 }
-                else if (_afterlifeStep == 3 && _afterlifeTimer >= 4f)
+                else if (_afterlifeStep == 3 && _afterlifeTimer >= 6f)
                 {
                     _afterlifeStep = 4; _afterlifeTimer = 0f;
                     City.Afterlife.RealmSceneManager.Ensure().ReturnToCity();
@@ -834,6 +969,17 @@ namespace City.NPC
                     long huntixXp = Huntix.Bridge.UnityBridge.GetPlayerXp();
                     ShowToast("Nasci nuovamente come " + newName + ". Nuova vita! XP totale: " + huntixXp);
                 }
+            }
+
+            /// <summary>True quando il regno INFERNO e' la scena esteriore del gioco
+            /// floor-is-lava (ActiveRealm == null = nessuna arena procedurale)
+            /// e non l'arena costruita inline dei regni.</summary>
+            private static bool ExternalInfernoActive()
+            {
+                var rsm = City.Afterlife.RealmSceneManager.Instance;
+                if (rsm == null) return false;
+                if (rsm.ActiveRealmId != City.Afterlife.AfterlifeRealm.INFERNO) return false;
+                return rsm.ActiveRealm == null;
             }
 
             private void OnDestroy() { if (Instance == this) Instance = null; }

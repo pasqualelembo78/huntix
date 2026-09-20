@@ -41,6 +41,9 @@ namespace City.Player
         /// </summary>
         public static bool ApplyTo(GameObject root, string skinName)
         {
+            // L'hero rig (Remy) usa le proprie texture Mixamo: niente skin.
+            if (root != null && root.GetComponentInChildren<PlayerHeroRig>(true) != null)
+                return true;
             var skinTex = Resources.Load<Texture2D>("Characters/Skins/" + skinName);
             if (skinTex == null || root == null)
             {

@@ -24,9 +24,14 @@ namespace City.OSM
 
         public static Vector2Int ChunkIndexOf(double lat, double lng)
         {
-            return new Vector2Int(
+            var c = new Vector2Int(
                 (int)Math.Floor((lat - OriginLat) / ChunkLatStep),
                 (int)Math.Floor((lng - OriginLng) / ChunkLngStep));
+            OsmDiag.LogThrottled("CityGrid",
+                "[CityGrid] index lat=" + lat.ToString("F5") +
+                " lon=" + lng.ToString("F5") +
+                " -> chunk (" + c.x + "," + c.y + ")");
+            return c;
         }
 
         public static GeoCoord ChunkCenter(Vector2Int c)
@@ -63,6 +68,9 @@ namespace City.OSM
         {
             int ilat = FloorDiv(chunk.x, ChunksPerTile);
             int ilon = FloorDiv(chunk.y, ChunksPerTile);
+            OsmDiag.LogThrottled("CityGrid",
+                "[CityGrid] tile di chunk (" + chunk.x + "," + chunk.y +
+                ") = IT_" + ilat + "_" + ilon);
             return $"IT_{ilat:000}_{ilon:000}";
         }
     }

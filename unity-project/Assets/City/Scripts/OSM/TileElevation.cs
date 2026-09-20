@@ -25,22 +25,35 @@ namespace City.OSM
         private static readonly Dictionary<string, Entry> _entries =
             new Dictionary<string, Entry>();
 
+        // Il MISS sul DEM (quei punti che nessuna tile copre ancora, es. il
+        // terreno/strade costruite prima dell'arrivo delle geo) NON puo' usare
+        // LogThrottled per-chiave: le lat/lon sono uniche e ogni riga passerebbe
+        // il throttle -> flood della logcat. Limitiamo per finestra temporale e
+        // teniamo il contatore cumulativo.
+        private static float _nextMissLogTime = 0f;
+        private static int _missCount = 0;
+
         /// <summary>Svuota il registro (change of city/reload).</summary>
         public static void Reset()
         {
             _entries.Clear();
+            _missCount = 0;
+            _nextMissLogTime = 0f;
         }
 
-        /// <summary>Registra la griglia DEM di una geo doc (idempotente per tile).</summary>
-        public static void Register(TileGeoDoc geo)
+        /// <summary>Registra la griglia DEM di una geo doc (idempotente per tile).
+        /// Ritorna true SOLO se la tile e' stata effettivamente aggiunta adesso:
+        /// chi chiama puo' usarlo per rimettere in coda i layer gia' costruiti
+        /// che ora hanno il DEM di questa tile campionabile (strade sepolte).</summary>
+        public static bool Register(TileGeoDoc geo)
         {
             if (geo == null || string.IsNullOrEmpty(geo.tile) ||
                 geo.ele == null || geo.ele.Length == 0 ||
                 geo.ele_nrow <= 1 || geo.ele_ncol <= 1 ||
                 geo.bbox == null || geo.bbox.Length < 4)
-                return;
+                return false;
 
-            if (_entries.ContainsKey(geo.tile)) return;
+            if (_entries.ContainsKey(geo.tile)) return false;
             _entries[geo.tile] = new Entry
             {
                 latMin = geo.bbox[0], lonMin = geo.bbox[1],
@@ -48,6 +61,10 @@ namespace City.OSM
                 nrow = geo.ele_nrow, ncol = geo.ele_ncol,
                 ele = geo.ele
             };
+            OsmDiag.Log("[DEM] Register tile=" + geo.tile +
+                " rows=" + geo.ele_nrow + " cols=" + geo.ele_ncol +
+                " ele=" + geo.ele.Length + " totali=" + _entries.Count);
+            return true;
         }
 
         /// <summary>Rimuove una tile dal registro (unload).</summary>
@@ -67,6 +84,18 @@ namespace City.OSM
                     continue;
                 return SampleBilinear(e.ele, e.nrow, e.ncol,
                     e.latMin, e.lonMin, e.latMax, e.lonMax, lat, lon);
+            }
+            _missCount++;
+            float now = UnityEngine.Time.time;
+            if (now >= _nextMissLogTime)
+            {
+                _nextMissLogTime = now + 2f;
+                OsmDiag.LogThrottled("DEM",
+                    "[DEM] MISS nessuna tile DEM copre (tile registrate=" +
+                    _entries.Count + ", miss totali=" + _missCount +
+                    ") ultimo=" + lat.ToString("F4") + "," +
+                    lon.ToString("F4"),
+                    2f);
             }
             return 0f;
         }

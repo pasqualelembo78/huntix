@@ -21,9 +21,11 @@ namespace City.Player
     {
         // ── Interfaccia comune ──
         private float speed;
+        private bool grounded = true;
         private bool ready;
         private bool useAnimator;
         private Animator animator;
+        private CharacterController cc;
 
         // ── Parametri Animator mode ──
         [Header("Animator Mode (player)")]
@@ -36,13 +38,19 @@ namespace City.Player
         public float ikRayDistance = 1.5f;
         public float ikSmoothSpeed = 12f;
         public float ikMaxOffset = 0.3f;
+        public float ikMaxLift = 1.6f;
         public LayerMask groundMask = ~0;
         private float _ikWeightL, _ikWeightR;
         private Vector3 _ikPosL, _ikPosR;
         private Quaternion _ikRotL, _ikRotR;
         private float _hipOffsetY;
-        private float _hipOffsetTarget;
         private float _hipsBaseY = float.NaN;
+        private float _legSpanRest = float.NaN;
+        private float _groundDiagAt;
+        private float _pulseAt;
+        private float _ikFiredAt = float.MinValue;
+        private bool _diagToastShown;
+        private static readonly RaycastHit[] IkHitsBuffer = new RaycastHit[8];
 
         // ── Parametri procedural mode (NPC) ──
         private const string IdleState = "Idle";
@@ -101,28 +109,40 @@ namespace City.Player
             if (ownerRoot == null) return null;
             CharacterWalker existing = ownerRoot.GetComponentInChildren<CharacterWalker>();
             if (existing != null) return existing;
-            SkinnedMeshRenderer smr = ownerRoot.GetComponentInChildren<SkinnedMeshRenderer>();
-            if (smr == null) return null;
+            // Always add the walker to the player root so that Start() can find
+            // the Animator component on the hero (which is a child of the player root).
+            // The original logic of attaching to the first SMR GO could place the
+            // component under a descendant where the Animator is invisible to
+            // GetComponentInChildren (ancestor vs descendant issue -> T-pose).
+            var w = ownerRoot.gameObject.AddComponent<CharacterWalker>();
+            City.OSM.OsmDiag.Log("[CharacterWalker][Attach] walker aggiunto a " +
+                ownerRoot.name + " (child=" + ownerRoot.transform.childCount + ")");
+            return w;
+        }
 
-            Transform target = null;
-            for (Transform t = smr.transform; t != null; t = t.parent)
-            {
-                if (t.Find("Root") != null) { target = t; break; }
-            }
-            if (target == null) target = smr.transform;
-
-            var w = target.GetComponent<CharacterWalker>();
-            if (w != null) return w;
-            return target.gameObject.AddComponent<CharacterWalker>();
+        private bool CanDriveProcedural()
+        {
+            return transform.Find(HipsPath) != null &&
+                   transform.Find(LUpLegPath) != null;
         }
 
         private void Start()
         {
             animator = GetComponentInChildren<Animator>(true);
+            cc = GetComponentInParent<CharacterController>();
+            City.OSM.OsmDiag.Log("[CharacterWalker][Start] GO=" + gameObject.name +
+                " animator=" + (animator != null) +
+                " animatorGO=" + (animator != null ? animator.gameObject.name : "-") +
+                " cc=" + (cc != null));
 
             // Prova a caricare il controller Mixamo da Resources
             var mixamoCtrl = Resources.Load<RuntimeAnimatorController>(
                 "Mixamo/PlayerLocomotion");
+            City.OSM.OsmDiag.Log("[CharacterWalker][Start] mixamoCtrl=" +
+                (mixamoCtrl != null ? mixamoCtrl.name : "NULL") +
+                " runtimeCtrl=" +
+                (animator != null && animator.runtimeAnimatorController != null
+                    ? animator.runtimeAnimatorController.name : "-"));
 
             if (animator != null)
             {
@@ -138,19 +158,114 @@ namespace City.Player
                     useAnimator = true;
                     SetupAnimatorMode(animator.runtimeAnimatorController);
                 }
-                else
+                else if (CanDriveProcedural())
                 {
-                    // NPC senza controller: destruilo e usa procedurale
+                    // NPC senza controller con scheletro Kenney: distruggi
+                    // l'Animator e usa le clip procedurali legacy.
+                    City.OSM.OsmDiag.Log("[CharacterWalker][Start] nessun controller, " +
+                        "distruzione Animator e BuildProcedural (scheletro Kenney)");
                     DestroyImmediate(animator);
                     useAnimator = false;
                     BuildProcedural();
                 }
+                else
+                {
+                    // Animator senza controller valido e senza scheletro Kenney:
+                    // NON distruggerlo, altrimenti il modello resta in T-pose
+                    // (bind pose) senza alcuna clip che lo muova.
+                    City.OSM.OsmDiag.Log("[CharacterWalker][Start] Animator senza " +
+                        "controller e senza scheletro Kenney: mantenuto Animator");
+                    useAnimator = true;
+                    SetupAnimatorMode(animator.runtimeAnimatorController);
+                }
             }
-            else
+            else if (CanDriveProcedural())
             {
+                City.OSM.OsmDiag.Log("[CharacterWalker][Start] nessun Animator, " +
+                    "BuildProcedural (scheletro Kenney)");
                 useAnimator = false;
                 BuildProcedural();
             }
+            else
+            {
+                City.OSM.OsmDiag.Log("[CharacterWalker][Start] nessun Animator e " +
+                    "nessuno scheletro Kenney: modello non gestibile, " +
+                    "resta in bind pose");
+                useAnimator = false;
+                ready = true;
+            }
+
+            // State dump UNA TANTUM del player (cc presente = gira il controller
+            // del giocatore): basta una cattura breve all'avvio per capire se il
+            // Foot IK puo' scattare. Se isHuman=false o useAnimator=false,
+            // OnAnimatorIK non parte mai e l'affondamento visivo e' inevitabile.
+            if (cc != null)
+            {
+                bool isHuman = animator != null && animator.avatar != null &&
+                    animator.avatar.isHuman;
+                float feetFromPivot = cc.height * 0.5f - cc.center.y;
+                City.OSM.OsmDiag.Log("[CharacterWalker][Player] " + gameObject.name +
+                    " useAnimator=" + useAnimator +
+                    " footIK=" + footIKEnabled +
+                    " isHuman=" + isHuman +
+                    " animator=" + (animator != null) +
+                    " ccH=" + cc.height.ToString("F2") +
+                    " ccC=" + cc.center.y.ToString("F2") +
+                    " feetFromPivot=" + feetFromPivot.ToString("F2") +
+                    " y=" + transform.position.y.ToString("F2"));
+
+                // Diagnosi a schermo: il player sa subito se il Foot IK puo'
+                // partire (avatar umanoide + animator mode), senza scavare nel
+                // logcat. Se IK=true ma il personaggio e' ancora affondato, il
+                // problema e' nel raycast/offset, non nell'attivazione.
+                // NB: qui la UI puo' non essere ancora pronta; la toast vera
+                // viene riproposta ogni 2s da DiagPlayerPulse (Update) finche'
+                // Game.Instance.ui esiste, così non si perde mai.
+                bool ikOn = useAnimator && footIKEnabled && isHuman;
+                var g = City.Game.Instance;
+                if (g != null && g.ui != null)
+                    g.ui.ShowToast(ikOn
+                        ? "Foot IK attivo (" + feetFromPivot.ToString("F2") +
+                            " m): controllo piedi sul terreno"
+                        : "Foot IK DISATTIVATO (isHuman=" + isHuman +
+                            "): il player non si adatta al terreno");
+            }
+        }
+
+        /// <summary>Heartbeat periodico SOLO del player (cc != null): log di
+        /// stato ogni ~2s indipendente da OnAnimatorIK e dalla cattura del
+        /// logcat all'avvio app, così ogni sessione mostra lo stato del
+        /// personaggio. Riproporre anche la toast finche' la UI e' pronta.</summary>
+        private void DiagPlayerPulse()
+        {
+            if (cc == null) return;
+            float now = UnityEngine.Time.time;
+            if (now < _pulseAt) return;
+            _pulseAt = now + 2f;
+            bool isHuman = animator != null && animator.avatar != null &&
+                animator.avatar.isHuman;
+            float feetFromPivot = cc.height * 0.5f - cc.center.y;
+            float groundRef = transform.position.y - feetFromPivot;
+            City.OSM.OsmDiag.Log("[CharacterWalker][Player] " + gameObject.name +
+                " mode=" + (useAnimator ? "Animator" : "Procedural") +
+                " ik=" + footIKEnabled +
+                " isHuman=" + isHuman +
+                " ikFired=" + (bool)(now - _ikFiredAt < 5f) +
+                " y=" + transform.position.y.ToString("F2") +
+                " groundRef=" + groundRef.ToString("F2") +
+                " grounded=" + grounded +
+                " ccGrounded=" + cc.isGrounded +
+                " feetFromPivot=" + feetFromPivot.ToString("F2"));
+            if (_diagToastShown) return;
+            var g = City.Game.Instance;
+            if (g == null || g.ui == null) return;
+            _diagToastShown = true;
+            bool ikOn = useAnimator && footIKEnabled && isHuman;
+            g.ui.ShowToast(ikOn
+                ? "Foot IK attivo (" + feetFromPivot.ToString("F2") +
+                    " m): controllo piedi sul terreno"
+                : "Foot IK DISATTIVATO (isHuman=" + isHuman +
+                    "): il player non si adatta al terreno");
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -159,44 +274,181 @@ namespace City.Player
 
         private void SetupAnimatorMode(RuntimeAnimatorController controller)
         {
+            if (controller == null)
+            {
+                City.OSM.OsmDiag.Log("[CharacterWalker][Animator] controller null: " +
+                    "Animator lasciato nello stato corrente");
+                ready = true;
+                return;
+            }
             animator.applyRootMotion = false;
             animator.runtimeAnimatorController = controller;
             ready = true;
+
+            // Unity consegna OnAnimatorIK solo ai componenti sullo STESSO
+            // GameObject dell'Animator. Il walker e' attaccato al player root
+            // (cosi' Start() trova l'Animator sul figlio hero) => senza relay
+            // il callback non arriva mai e il Foot IK resta morto
+            // (ikFired=False, player affondato) anche con l'IK Pass abilitato.
+            // Valgono solo i layer con m_IKPass=1: verificato sul controller
+            // PlayerLocomotion rigenerato da RemyKitSetup (build hook).
+            if (animator.gameObject != gameObject &&
+                animator.gameObject.GetComponent<AnimatorIKRelay>() == null)
+            {
+                var relay = animator.gameObject.AddComponent<AnimatorIKRelay>();
+                relay.walker = this;
+                City.OSM.OsmDiag.Log("[CharacterWalker][Animator] relay OnAnimatorIK " +
+                    "installato su " + animator.gameObject.name);
+            }
+            else if (animator.gameObject == gameObject)
+            {
+                City.OSM.OsmDiag.Log("[CharacterWalker][Animator] walker e Animator " +
+                    "sullo stesso GO: OnAnimatorIK raggiunge gia' il walker");
+            }
             City.OSM.OsmDiag.Log("[CharacterWalker][Animator] Controller assegnato: " +
-                controller.name + " footIK=" + footIKEnabled);
+                controller.name + " footIK=" + footIKEnabled +
+                " avatar=" + (animator.avatar != null ? animator.avatar.name : "NULL") +
+                " isHuman=" + (animator.avatar != null && animator.avatar.isHuman));
         }
 
         private void UpdateAnimatorMode()
         {
             if (animator == null) return;
-            // Il controller Mixamo usa "Speed"; il fallback Kenney usa "IsMoving".
-            // SetFloat/SetBool su parametri inesistenti sono no-op (sicuri).
+            // Il controller Mixamo usa "Speed"/"IsGrounded"; il fallback Kenney
+            // usa "IsMoving". SetFloat/SetBool su parametri inesistenti sono
+            // no-op (sicuri).
             animator.SetFloat("Speed", speed);
             animator.SetBool("IsMoving", speed > 0.15f);
+            animator.SetBool("IsGrounded", grounded);
         }
 
         // ── Foot IK ──
 
         private void OnAnimatorIK(int layerIndex)
         {
+            RunFootIK(layerIndex);
+        }
+
+        /// <summary>Esegue il Foot IK. Pubblico perché Unity consegna
+        /// OnAnimatorIK SOLO ai componenti sullo stesso GameObject
+        /// dell'Animator: il walker vive sul player root mentre l'Animator
+        /// sta sul figlio PlayerHeroRig, quindi un relay sull'Animator GO
+        /// (AnimatorIKRelay) inoltra qui il callback.</summary>
+        public void RunFootIK(int layerIndex)
+        {
             if (!useAnimator || !footIKEnabled || animator == null) return;
+            _ikFiredAt = UnityEngine.Time.time;
 
             FootIKStep(AvatarIKGoal.LeftFoot, ref _ikWeightL, ref _ikPosL, ref _ikRotL);
             FootIKStep(AvatarIKGoal.RightFoot, ref _ikWeightR, ref _ikPosR, ref _ikRotR);
 
-            _hipOffsetTarget = Mathf.Min(_ikPosL.y, _ikPosR.y);
-            float groundRef = (transform.position.y);
-            float offset = Mathf.Clamp(_hipOffsetTarget - groundRef, -ikMaxOffset, 0f);
+            // groundRef usa il livello PIEDI (non il pivot del CharacterController):
+            // sul terreno piatto i piedi stanno a root - feetFromPivot.  Usare il
+            // pivot come groundRef produce un offset permanente di -feetFromPivot
+            // (tipicamente -1 m) che spinge la pelvi nel terreno e rende visibile
+            // l'affondamento durante la camminata.
+            float feetFromPivot = (cc != null)
+                ? cc.height * 0.5f - cc.center.y
+                : 1f;
+            float groundRef = transform.position.y - feetFromPivot;
+
+            // Compensazione AFFONDAMENTO clip baked: Idle/Walk/Run Mixamo hanno
+            // ogniuno una quota pelvi diversa (-1.5 m in Run se il fix d'import
+            // heightFromFeet non si e' applicato); i piedi vengono trascinati
+            // sotto il terreno e il vecchio clamp +-0.3 non bastava. Qui si
+            // alza il bacino finche' i fianchi stanno a corretto span di gamba
+            // (groundRef + legSpan) sopra i piedi fisici.
+            if (float.IsNaN(_legSpanRest))
+                _legSpanRest = MeasureLegSpan();
+            else if (_legSpanRest <= 0.05f || _legSpanRest > 3f)
+                _legSpanRest = MeasureLegSpan();
+            if (_legSpanRest <= 0.05f || _legSpanRest > 3f) _legSpanRest = 1f;
+
+            // lift dai piedi IK (curb/step: il piede appoggia sopra il livello
+            // di riferimento) e corpo affondato: massimo dei due, solo positivo;
+            // il negativo (davanti a un gradino) resta limitato a ikMaxOffset.
+            float footLift = Mathf.Min(_ikPosL.y, _ikPosR.y) - groundRef;
+            float bodySinkLift = 0f;
+            Transform hipsBone = animator.GetBoneTransform(HumanBodyBones.Hips);
+            if (hipsBone != null && grounded)
+                bodySinkLift = (groundRef + _legSpanRest) - hipsBone.position.y;
+            float target = Mathf.Max(footLift, bodySinkLift);
+            float offset = Mathf.Clamp(target, -ikMaxOffset, ikMaxLift);
             _hipOffsetY = Mathf.Lerp(_hipOffsetY, offset, ikSmoothSpeed * Time.deltaTime);
 
-            Transform hipsBone = animator.GetBoneTransform(HumanBodyBones.Hips);
             if (hipsBone != null)
             {
-                if (float.IsNaN(_hipsBaseY)) _hipsBaseY = hipsBone.localPosition.y;
+                // Cattura ogni frame: il clip corrente (idle/walk/run) puo'
+                // avere un'altezza pelvi diversa; fissarla al primo frame
+                // (idle) rendeva la camminata piu' bassa dell'originale.
+                _hipsBaseY = hipsBone.localPosition.y;
                 Vector3 hp = hipsBone.localPosition;
                 hp.y = _hipsBaseY + _hipOffsetY;
                 hipsBone.localPosition = hp;
             }
+
+            DiagGround("IK", groundRef, footLift, bodySinkLift, offset, _hipOffsetY,
+                hipsBone != null ? hipsBone.position.y : 0f);
+        }
+
+        /// <summary>Diagnostica in logcat (throttled per istanza) del
+        /// rilevamento terreno: quota piedi di riferimento, lift dai piedi IK,
+        /// corpo affondato e offset pelvi applicato, cosi' si vede a colpo
+        /// d'occhio se il character resta sotto il suolo e perche'. Emette
+        /// una riga ogni GroundDiagInterval su walker (player e NPC).</summary>
+        private void DiagGround(string tag, float groundRef, float footLift,
+            float bodySinkLift, float targetOffset, float appliedOffset,
+            float hipsWorldY)
+        {
+            float now = UnityEngine.Time.time;
+            if (now < _groundDiagAt) return;
+            _groundDiagAt = now + 2f;
+            City.OSM.OsmDiag.Log("[CharacterWalker][Ground][" + tag + "] " +
+                gameObject.name + " y=" + transform.position.y.ToString("F2") +
+                " groundRef=" + groundRef.ToString("F2") +
+                " footLift=" + footLift.ToString("F2") +
+                " bodySinkLift=" + bodySinkLift.ToString("F2") +
+                " target=" + targetOffset.ToString("F2") +
+                " applied=" + appliedOffset.ToString("F2") +
+                " hipsY=" + hipsWorldY.ToString("F2") +
+                " grounded=" + grounded);
+        }
+
+        /// <summary>Diagnostica del raycast che rileva il terreno sotto il
+        /// piede (stesso throttle per-istanza di DiagGround): mostra origine,
+        /// numero di hit, quota del punto migliore vs groundRef e peso IK,
+        /// cosi' si vede subito se il ray parte sottoterra o non trova il suolo.</summary>
+        private void DiagGroundRay(AvatarIKGoal goal, Vector3 origin, int hits,
+            Vector3 hitPoint, Vector3 hitNormal, float groundRef,
+            float weight, float gap)
+        {
+            float now = UnityEngine.Time.time;
+            if (now < _groundDiagAt) return;
+            _groundDiagAt = now + 2f;
+            City.OSM.OsmDiag.Log("[CharacterWalker][GroundRay][" +
+                (goal == AvatarIKGoal.LeftFoot ? "L" : "R") + "] " +
+                gameObject.name + " originY=" + origin.y.ToString("F2") +
+                " hits=" + hits +
+                " bestY=" + (gap >= 0f ? hitPoint.y.ToString("F2") : "NONE") +
+                " nY=" + hitNormal.y.ToString("F2") +
+                " groundRef=" + groundRef.ToString("F2") +
+                " gap=" + (gap >= 0f ? gap.ToString("F2") : "-") +
+                " w=" + weight.ToString("F2"));
+        }
+
+        /// <summary>Span hips->piedi misurato dalla cinematica corrente
+        /// (indipendente dalla quota baked del clip).</summary>
+        private float MeasureLegSpan()
+        {
+            if (animator == null) return 1f;
+            Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+            Transform fl = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+            Transform fr = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+            if (hips == null) return 1f;
+            float l = fl != null ? Mathf.Abs(hips.position.y - fl.position.y) : 0f;
+            float r = fr != null ? Mathf.Abs(hips.position.y - fr.position.y) : 0f;
+            if (fl == null && fr == null) return 1f;
+            return (l + r) * (fl != null && fr != null ? 0.5f : 1f);
         }
 
         private void FootIKStep(AvatarIKGoal goal,
@@ -214,22 +466,60 @@ namespace City.Player
             }
 
             Vector3 footWorld = footBone.position;
-            Vector3 hipWorld = hipsBone.position;
-            Vector3 origin = footWorld + Vector3.up * 0.3f;
-            float maxDist = Mathf.Abs(footWorld.y - hipWorld.y) + ikRayDistance;
+            float feetFromPivot = (cc != null)
+                ? cc.height * 0.5f - cc.center.y
+                : 1f;
+            float groundRef = transform.position.y - feetFromPivot;
 
+            // Origine del raycast ancorata alla QUOTA FISICA (pivot CC), sempre
+            // sopra la superficie, non al footBone: se il clip e' affondato di
+            // -1.5 m l'osso sta sotto il terreno e il vecchio ray da foot+0.3
+            // partiva sottoterra (targetWeight=0 -> IK mai attivo, affondamento
+            // permanente). Siamo gia' sopra il piano: il ray scende sul piede
+            // e trova il terreno, poi l'IK solleva il piede.
+            Vector3 origin = new Vector3(footWorld.x,
+                groundRef + 1.1f, footWorld.z);
+            float maxDist = 1.6f;
             Ray ray = new Ray(origin, Vector3.down);
-            RaycastHit hit;
             float targetWeight = 0f;
             Vector3 targetPos = footWorld;
             Quaternion targetRot = footBone.rotation;
 
-            if (Physics.Raycast(ray, out hit, maxDist, groundMask))
+            int n = Physics.RaycastNonAlloc(ray, IkHitsBuffer, maxDist, groundMask,
+                QueryTriggerInteraction.Ignore);
+            int best = -1;
+            float bestDist = float.MaxValue;
+            for (int i = 0; i < n; i++)
             {
-                targetPos = hit.point + Vector3.up * 0.02f;
-                targetRot = Quaternion.FromToRotation(Vector3.up, hit.normal) *
+                var h = IkHitsBuffer[i];
+                if (h.collider == null) continue;
+                // salta il proprio collider (CC e capsule degli NPC): il ray
+                // parte sopra il pivot quindi puo' colpire la capsula propria.
+                var t = h.collider.transform;
+                if (t == transform || t.IsChildOf(transform)) continue;
+                // il piano d'appoggio deve avere la normale verso l'alto
+                // (altrimenti e' il sotto di un impalcato/ponte): lo scartiamo.
+                if (h.normal.y < 0.1f) continue;
+                if (h.distance < bestDist) { bestDist = h.distance; best = i; }
+            }
+            if (best >= 0)
+            {
+                var h = IkHitsBuffer[best];
+                targetPos = h.point + Vector3.up * 0.02f;
+                targetRot = Quaternion.FromToRotation(Vector3.up, h.normal) *
                     Quaternion.LookRotation(transform.forward, Vector3.up);
-                targetWeight = Mathf.Clamp01(1f - hit.distance / maxDist);
+                // peso per quanto il suolo dista dal livello-piedi: a terra ~1,
+                // sollevato (salto) cala e l'IK si disattiva senza stirare.
+                float gap = Mathf.Abs(h.point.y - groundRef);
+                targetWeight = Mathf.Clamp01(1f - gap / 1f);
+
+                DiagGroundRay(goal, origin, n, h.point, h.normal, groundRef,
+                    targetWeight, gap);
+            }
+            else
+            {
+                DiagGroundRay(goal, origin, n, Vector3.zero, Vector3.up,
+                    groundRef, targetWeight, -1f);
             }
 
             weight = Mathf.MoveTowards(weight, targetWeight, ikSmoothSpeed * Time.deltaTime);
@@ -349,6 +639,14 @@ namespace City.Player
 
         private void BuildProcedural()
         {
+            if (!CanDriveProcedural())
+            {
+                City.OSM.OsmDiag.Log("[CharacterWalker][Procedural] SKIP su " +
+                    gameObject.name + " (né hips né gamba sinistra: " +
+                    "nessun clip procedurale può scandire le ossa)");
+                ready = true;
+                return;
+            }
             CalibrateFold();
             CalibrateLimbAxes();
             anim = gameObject.GetComponent<Animation>();
@@ -371,6 +669,13 @@ namespace City.Player
                     (transform.Find(LUpLegPath) != null) + " animator=" +
                     (GetComponentInChildren<Animator>(true) != null));
             }
+            City.OSM.OsmDiag.Log("[CharacterWalker][Procedural] build completata su " +
+                gameObject.name + " hips=" + (transform.Find(HipsPath) != null) +
+                " lLeg=" + (transform.Find(LUpLegPath) != null) +
+                " useAnimator=" + useAnimator +
+                (transform.Find(HipsPath) == null
+                    ? " -> T-POSE (hips assenti)"
+                    : " -> OK"));
             ready = true;
         }
 
@@ -460,6 +765,13 @@ namespace City.Player
             speed = metersPerSecond;
         }
 
+        /// <summary>Stato a terra/aria: guida lo stato Jump del controller
+        /// (parametro Bool IsGrounded). No-op per il mode procedurale.</summary>
+        public void SetGrounded(bool grounded)
+        {
+            this.grounded = grounded;
+        }
+
         private void Update()
         {
             if (!ready) return;
@@ -472,6 +784,8 @@ namespace City.Player
             {
                 UpdateProceduralMode();
             }
+
+            DiagPlayerPulse();
         }
 
         private void UpdateProceduralMode()
@@ -585,6 +899,20 @@ namespace City.Player
                     clip.SetCurve(kv.Key, typeof(Transform), "m_LocalPosition.y", curve);
                 }
             }
+        }
+    }
+
+    /// <summary>Relay di OnAnimatorIK. Unity consegna il callback IK solo ai
+    /// componenti sullo stesso GameObject dell'Animator; CharacterWalker vive
+    /// sul player root (Animator sul figlio hero), quindi senza questo bridge
+    /// il Foot IK non scatta mai. Installato da SetupAnimatorMode.</summary>
+    public class AnimatorIKRelay : MonoBehaviour
+    {
+        public CharacterWalker walker;
+
+        private void OnAnimatorIK(int layerIndex)
+        {
+            if (walker != null) walker.RunFootIK(layerIndex);
         }
     }
 }

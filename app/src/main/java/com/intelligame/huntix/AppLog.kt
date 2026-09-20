@@ -33,9 +33,13 @@ object AppLog {
         }
     }
 
-    private const val MAX_ENTRIES = 500
+    private const val MAX_ENTRIES = 5000
     private const val LOG_FILE = "city3d_debug.log"
-    private const val MAX_LOG_FILE_BYTES = 512 * 1024L
+    private const val MAX_LOG_FILE_BYTES = 16 * 1024 * 1024L
+    /** Taglia il file alla meta' quando supera il limite (~8 MB dopo il taglio). */
+    private const val TRUNCATE_TO_BYTES = MAX_LOG_FILE_BYTES / 2
+    /** Tail massimo letto da readDiskLog / exportToDownloads per non ANR. */
+    private const val READ_TAIL_BYTES = 1024 * 1024L
 
     private val entries = mutableListOf<Entry>()
     private val lock = Any()
@@ -48,12 +52,7 @@ object AppLog {
         appContext = context.applicationContext
         logFile = File(context.filesDir, LOG_FILE)
         try {
-            val f = logFile
-            if (f != null && f.exists() && f.length() > MAX_LOG_FILE_BYTES) {
-                val bytes = f.readBytes()
-                val half = bytes.size / 2
-                f.writeBytes(bytes.copyOfRange(half, bytes.size))
-            }
+            truncateIfNeeded(logFile)
         } catch (_: Exception) {}
         log(
             Level.I, "AppLog",
@@ -102,8 +101,11 @@ object AppLog {
                 }
                 crashWrite(sb.toString())
             } catch (_: Exception) {}
+            // `default` e' null (catturato prima di Crashlytics/Sentry):
+            // usa System.exit(1) invece di halt(1) cosi' Crashlytics ha il
+            // tempo di fare flush del dump registrato nel ContentProvider.
             default?.uncaughtException(thread, throwable)
-                ?: Runtime.getRuntime().halt(1)
+                ?: Runtime.getRuntime().exit(1)
         }
     }
 
@@ -155,7 +157,15 @@ private fun log(level: Level, tag: String, msg: String) {
             entries.add(entry)
             if (entries.size > MAX_ENTRIES) entries.removeAt(0)
         }
-        logExecutor.execute { runCatching { logFile?.appendText("${sdf.format(Date(ts))} ${level.name} $tag: $msg\n") } }
+        logExecutor.execute {
+            try {
+                logFile?.appendText("${sdf.format(Date(ts))} ${level.name} $tag: $msg\n")
+                // taglia proattivamente se il file cresce troppo durante la
+                // sessione: evita che alla prossima apertura init() debba
+                // leggere decine di MB su readBytes() (OOM/ANR su mobile).
+                truncateIfNeeded(logFile)
+            } catch (_: Exception) {}
+        }
     }
 
 
@@ -166,10 +176,75 @@ private fun log(level: Level, tag: String, msg: String) {
         entries.joinToString("\n") { it.format() }
     }
 
+    /**
+     * Taglia il file di log se supera MAX_LOG_FILE_BYTES: legge solo gli ultimi
+     * TRUNCATE_TO_BYTES byte (via seek) e li riscrive. Nessun readBytes() completo:
+     * il file puo' essere decine di MB senza OOM.
+     */
+    private fun truncateIfNeeded(f: File?) {
+        if (f == null || !f.exists()) return
+        if (f.length() <= MAX_LOG_FILE_BYTES) return
+        try {
+            val raf = java.io.RandomAccessFile(f, "rw")
+            val total = raf.length()
+            val n = TRUNCATE_TO_BYTES.toInt()
+            raf.seek(total - n)
+            val tail = ByteArray(n)
+            val read = raf.read(tail)
+            raf.setLength(0)
+            if (read > 0) raf.write(tail, 0, read)
+            raf.close()
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Legge solo gli ultimi maxBytes del file di log (via seek + read).
+     * Ritorna stringa vuota se il file e' troppo grande da leggere tutto
+     * in memoria — evita ANR nel UI thread del DebugLog viewer.
+     */
+    private fun readTailBytes(f: File, maxBytes: Long): String {
+        try {
+            if (!f.exists()) return ""
+            val len = f.length()
+            if (len <= maxBytes) return f.readText()
+            val n = maxBytes.toInt()
+            val buf = ByteArray(n)
+            val raf = java.io.RandomAccessFile(f, "r")
+            raf.seek(len - n)
+            val read = raf.read(buf)
+            raf.close()
+            return "...[troncato, ultimi $read byte]\n" + String(buf, Charsets.UTF_8)
+        } catch (_: Exception) {
+            return ""
+        }
+    }
+
     fun readDiskLog(context: Context): String {
         return try {
             val f = File(context.filesDir, LOG_FILE)
-            if (f.exists()) f.readText() else "(nessun log su disco)"
+            if (f.exists()) readTailBytes(f, READ_TAIL_BYTES) else "(nessun log su disco)"
+        } catch (e: Exception) {
+            "(errore lettura log: ${e.message})"
+        }
+    }
+
+    /** Legge il log su disco COMPLETO (fino a TRUNCATE_TO_BYTES, 2MB).
+     *  Da usare solo fuori dal UI thread (export/clipboard). */
+    fun readDiskLogFull(context: Context): String {
+        return try {
+            val f = File(context.filesDir, LOG_FILE)
+            if (!f.exists()) return "(nessun log su disco)"
+            val len = f.length()
+            if (len > TRUNCATE_TO_BYTES) {
+                val n = TRUNCATE_TO_BYTES.toInt()
+                val buf = ByteArray(n)
+                val raf = java.io.RandomAccessFile(f, "r")
+                raf.seek(len - n)
+                val read = raf.read(buf)
+                raf.close()
+                return "...[troncato, ultimi $read byte]\n" + String(buf, Charsets.UTF_8)
+            }
+            return f.readText()
         } catch (e: Exception) {
             "(errore lettura log: ${e.message})"
         }
@@ -183,7 +258,7 @@ private fun log(level: Level, tag: String, msg: String) {
     fun exportToDownloads(context: Context): String? {
         val content = try {
             val f = File(context.filesDir, LOG_FILE)
-            if (f.exists()) f.readText() else getAllAsString()
+            if (f.exists()) readDiskLogFull(context) else getAllAsString()
         } catch (_: Exception) { getAllAsString() }
 
         if (content.isBlank()) return null

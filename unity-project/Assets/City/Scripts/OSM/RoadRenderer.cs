@@ -134,9 +134,15 @@ namespace City.OSM
             // mai piu' con un taglio squadrato in mezzo all'incrocio.
             var junctions = CollectJunctions(roads, toLocal);
 
+            int roadsTotal = roads != null ? roads.Length : 0;
+            int roadsSkipped = 0;
             foreach (var roadRec in roads)
             {
-                if (roadRec?.pts == null || roadRec.pts.Length < 2) continue;
+                if (roadRec?.pts == null || roadRec.pts.Length < 2)
+                {
+                    roadsSkipped++;
+                    continue;
+                }
                 if (IsRoundabout(roadRec))
                 {
                     AppendRoundabout(roadRec, toLocal, localBounds, road, walk,
@@ -155,7 +161,14 @@ namespace City.OSM
                 CreateLabels(labels, labelsParent);
 
             sidewalkOut = walk.ToMesh("MarciapiediChunk");
-            return road.ToMesh("StradeChunk");
+            var roadMesh = road.ToMesh("StradeChunk");
+            OsmDiag.Log("[Roads] Build chunk: strade=" + roadsTotal +
+                " saltate=" + roadsSkipped + " giunzioni=" + junctions.Count +
+                " vertAsfalto=" + road.verts.Count + " vertMarciapiede=" +
+                walk.verts.Count + " labels=" + labels.Count +
+                " (mesh asfalto " + (roadMesh != null ? "SI" : "NO") +
+                ", mesh marciapiede " + (sidewalkOut != null ? "SI" : "NO") + ")");
+            return roadMesh;
         }
 
         // ------------------------------------------------------------------
@@ -830,6 +843,8 @@ namespace City.OSM
                 try { _uiFont = Resources.GetBuiltinResource<Font>("Arial.ttf"); }
                 catch { }
             }
+            if (_uiFont == null)
+                OsmDiag.Log("[Roads] NESSUN font builtin caricabile: targhe vie non create");
             return _uiFont;
         }
     }

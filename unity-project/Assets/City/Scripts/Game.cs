@@ -93,6 +93,9 @@ namespace City
             City.Vehicle.TaxiService.Ensure();
             // FASE 6: wallet server-side (sync HTTP, autoritative)
             City.World.WalletManager.Ensure();
+            // Sync bidirezionale Unity↔Android: snapshot dello stato città
+            // (soldi/energia/famiglia/relazioni/ecc.) verso il profilo Huntix.
+            City.Sync.CityWorldSync.Ensure();
             if (InteriorManager.Instance == null)
             {
                 var imGo = new GameObject("InteriorManager");
@@ -124,17 +127,25 @@ namespace City
             }
 
             try { City.Environment.DayNightManager.Ensure(); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] DayNightManager.Ensure FALLITO: " + e.Message); }
             try { City.Environment.SimulationManager.Ensure(); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] SimulationManager.Ensure FALLITO: " + e.Message); }
             try { City.Environment.FurnitureInteract.Ensure(); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] FurnitureInteract.Ensure FALLITO: " + e.Message); }
             EnergySystem.EnsureHud();
             try { City.Environment.SleepSystem.EnsureHud(); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] SleepSystem.EnsureHud FALLITO: " + e.Message); }
             // Radar di caccia uova (direzione/distanza preda piu' vicina).
             try { City.Economy.EggRadar.EnsureHud(); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] EggRadar.EnsureHud FALLITO: " + e.Message); }
+
+            // Telemetria di sessione verso AppLog Android (analisi pregi/difetti)
+            try { City.Diagnostics.SessionTelemetry.Ensure(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] SessionTelemetry.Ensure FALLITO: " + e.Message); }
+
+            // Realtà aumentata: pulsante PASSA A AR (camera + ARCore + piano).
+            try { City.AR.ArCityController.Ensure(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] ArCityController.Ensure FALLITO: " + e.Message); }
 
             // Unico player: mostra in Miacitta l'identita' (nome + livello)
             // del profilo Huntix condiviso, così si vede lo stesso player
@@ -146,16 +157,16 @@ namespace City
                         Huntix.Bridge.UnityBridge.GetPlayerName(),
                         Huntix.Bridge.UnityBridge.GetPlayerLevel());
             }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.Log("[Game] UpdatePlayerProfile FALLITO: " + e.Message); }
         }
 
         private void Update()
         {
             // barra sonno: cala in movimento, recupera da fermi
             try { City.Environment.SleepSystem.Tick(Time.deltaTime); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.LogThrottled("Game", "[Game] SleepSystem.Tick FALLITO: " + e.Message); }
             try { City.Environment.AgeSystem.Tick(Time.deltaTime); }
-            catch (System.Exception) { }
+            catch (System.Exception e) { OsmDiag.LogThrottled("Game", "[Game] AgeSystem.Tick FALLITO: " + e.Message); }
             // Guida con gli stessi controlli della camminata: joystick
             // sinistro (su/giu = gas/retro, dx/sx = sterzo); la camera si
             // ruota trascinando la meta' destra dello schermo
@@ -421,7 +432,10 @@ namespace City
             SendEggToHuntix(egg);
         }
 
-        /// <summary>Invia l'uovo catturato nell'inventario Huntix (Android).</summary>
+        /// <summary>Invia l'uovo catturato nell'inventario Huntix (Android).
+        /// Payload: rarita' (5 livelli: common..legendary), gems (premio
+        /// premium della caccia), power/xp derivati, e POSIZIONE del ritrovamento
+        /// (lat/lng + luogo testuale) per il futuro "DOVE HO TROVATO L'UOVO".</summary>
         private void SendEggToHuntix(EggController egg)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -431,15 +445,36 @@ namespace City
                 case City.Economy.EggController.Rarity.Common: rarityId = "common"; break;
                 case City.Economy.EggController.Rarity.Uncommon: rarityId = "uncommon"; break;
                 case City.Economy.EggController.Rarity.Rare: rarityId = "rare"; break;
+                case City.Economy.EggController.Rarity.Epic: rarityId = "epic"; break;
                 case City.Economy.EggController.Rarity.Legendary: rarityId = "legendary"; break;
                 default: rarityId = "common"; break;
+            }
+            // Il premio gemme della caccia alle uova (scala premium 5 livelli).
+            int gems = 0;
+            switch (egg.rarity)
+            {
+                case City.Economy.EggController.Rarity.Common: gems = 1; break;
+                case City.Economy.EggController.Rarity.Uncommon: gems = 3; break;
+                case City.Economy.EggController.Rarity.Rare: gems = 8; break;
+                case City.Economy.EggController.Rarity.Epic: gems = 20; break;
+                case City.Economy.EggController.Rarity.Legendary: gems = 50; break;
             }
             // power/xp derivati dalla rarita' e dal valore dell'uovo
             int power = Mathf.Max(1, egg.value * 3);
             int xp = Mathf.Max(10, egg.value * 6);
+            // Posizione del ritrovamento: coordinate reali + luogo (per il profilo).
+            string lat = "0", lng = "0", place = egg.eggType.ToString();
+            if (City.OSM.WorldOrigin.Initialized)
+            {
+                var g = City.OSM.WorldOrigin.ToGeo(egg.transform.position);
+                lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            }
             string json = "{\"rarityId\":\"" + rarityId +
                 "\",\"fantasyName\":\"Uovo di MiAcittà\"" +
-                ",\"power\":" + power + ",\"xpReward\":" + xp + "}";
+                ",\"power\":" + power + ",\"xpReward\":" + xp +
+                ",\"gems\":" + gems +
+                ",\"lat\":\"" + lat + "\",\"lng\":\"" + lng + "\",\"place\":\"" + place + "\"}";
             try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("EggCapturedInCity", json); }
             catch (System.Exception e) { UnityEngine.Debug.LogWarning("EggCapturedInCity failed: " + e.Message); }
 #endif
@@ -609,6 +644,8 @@ namespace City
             if (bestY > float.MinValue)
             {
                 pos.y = bestY + 1.2f;
+                OsmDiag.Log("[Game][SnapTp] raycast -> y=" + pos.y.ToString("F2") +
+                    " (hits=" + hits.Length + ")");
                 return pos;
             }
             // fallback: DEM
@@ -616,6 +653,7 @@ namespace City
             if (dem > 0f)
             {
                 pos.y = dem + 1.2f;
+                OsmDiag.Log("[Game][SnapTp] DEM fallback -> y=" + pos.y.ToString("F2"));
                 return pos;
             }
             // ulteriore fallback: 1.2m (SpawnBridge)
@@ -770,6 +808,14 @@ namespace City
                 CurrentVehicle = vc;
                 IsDriving = true;
 
+                try
+                {
+                    City.Diagnostics.SessionTelemetry.Instance?.Driving(true,
+                        vc.data != null ? vc.data.vehicleName : "auto",
+                        enteredVi != null ? enteredVi.vehicleCode : "");
+                }
+                catch (System.Exception) {}
+
                 if (ui != null)
                 {
                     ui.HideInteract();
@@ -865,6 +911,14 @@ namespace City
                 IsDriving = false;
                 CurrentVehicle = null;
 
+                // telemetria AR: fine guida (dopo le coordinate parcheggio)
+                try
+                {
+                    City.Diagnostics.SessionTelemetry.Instance?.Driving(false,
+                        vc.data != null ? vc.data.vehicleName : "auto", vcode);
+                }
+                catch (System.Exception) {}
+
                 if (!string.IsNullOrEmpty(vcode) &&
                     (Inventory.Has("vehicle_" + vcode) ||
                      VehicleOwnershipApi.IsOwnedSafe(vcode)))
@@ -928,6 +982,12 @@ namespace City
                 pos.x.ToString("F1") + "," + pos.z.ToString("F1") + ") y=" +
                 pos.y.ToString("F2") + " dem=" +
                 TileElevation.HeightAtWorld(pos).ToString("F2"));
+            try
+            {
+                City.Diagnostics.SessionTelemetry.Instance?.Mark(
+                    "TELEPORT -> ({0:F0},{1:F0})", pos.x, pos.z);
+            }
+            catch (System.Exception) {}
             if (fader == null)
             {
                 SetPlayerPosition(pos, rot);
@@ -1000,6 +1060,8 @@ namespace City
             if (bestY > float.MinValue)
             {
                 pos.y = bestY + 1.0f;
+                OsmDiag.Log("[Game][Snap] raycast -> y=" + pos.y.ToString("F2") +
+                    " (hits=" + hits.Length + ")");
                 return pos;
             }
             // fallback: DEM
@@ -1007,10 +1069,13 @@ namespace City
             if (dem > 0f)
             {
                 pos.y = dem + 1.0f;
+                OsmDiag.Log("[Game][Snap] DEM fallback -> y=" + pos.y.ToString("F2"));
                 return pos;
             }
             // ulteriore fallback: mantieni 1.2m (SpawnBridge)
             pos.y = 1.2f;
+            OsmDiag.Log("[Game][Snap] NESSUN RAYCAST/DEM -> y=1.2 implicito (player a " +
+                pos.x.ToString("F1") + "," + pos.z.ToString("F1") + ")");
             return pos;
         }
     }

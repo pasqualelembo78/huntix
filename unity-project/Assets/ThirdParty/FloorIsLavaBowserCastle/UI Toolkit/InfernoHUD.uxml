@@ -1,0 +1,9 @@
+<engine:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:engine="UnityEngine.UIElements" xmlns:ui="UnityEngine.UIElements" xsi:noNamespaceSchemaLocation="../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <ui:VisualElement name="HUDRoot" style="flex-grow: 1; background-color: rgba(0, 0, 0, 0);">
+        <ui:Label name="TimeLabel" text="0:00.0" style="position: absolute; left: 16px; top: 12px; color: rgb(255, 255, 255); font-size: 28px; -unity-font-style: bold; text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);" />
+        <ui:Label name="CoinLabel" text="$0" style="position: absolute; right: 16px; top: 12px; color: rgb(255, 210, 0); font-size: 28px; -unity-font-style: bold; text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);" />
+        <ui:Label name="VictoryLabel" text="VITTORIA!" style="-unity-visibility: hidden; position: absolute; left: 50%; top: 40%; -unity-text-align: middle-center; translate: -50% 0; color: rgb(0, 255, 0); font-size: 64px; -unity-font-style: bold; text-shadow: 3px 3px 3px rgba(0, 0, 0, 0.9);" />
+        <ui:Label name="RestartLabel" text="Sei morto..." style="-unity-visibility: hidden; position: absolute; left: 50%; top: 45%; -unity-text-align: middle-center; translate: -50% 0; color: rgb(255, 0, 0); font-size: 52px; -unity-font-style: bold; text-shadow: 3px 3px 3px rgba(0, 0, 0, 0.9);" />
+        <ui:Label name="SoundLabel" text="[M] ON" style="position: absolute; left: 16px; bottom: 12px; color: rgb(255, 255, 255); font-size: 20px; text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.8);" />
+    </ui:VisualElement>
+</engine:UXML>

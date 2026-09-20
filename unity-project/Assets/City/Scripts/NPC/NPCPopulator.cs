@@ -13,7 +13,7 @@ namespace City.NPC
     /// </summary>
     public static class NPCPopulator
     {
-        private const int MaxNpcPerChunk = 50;
+        private const int MaxNpcPerChunk = 30;
         private const float MinPathLen = 18f;
         private const float Y_SIDEWALK = 0.12f;   // = RoadRenderer.Y_SIDEWALK
         private const float GAP = 0.15f;          // = RoadRenderer gap asfalto/marciapiede
@@ -97,8 +97,10 @@ namespace City.NPC
                         "NPC saltato nel " + chunk.key + ": " + e.ToString());
                 }
             }
-            if (placed > 0)
-                OsmDiag.Log("[NPCPopulator] " + chunk.key + ": " + placed + " pedoni");
+            OsmDiag.Log("[NPCPopulator] " + chunk.key + ": " + placed + "/" + count +
+                " pedoni paths=" + paths.Count +
+                " rootY=" + chunk.root.transform.position.y.ToString("F2") +
+                " bounds=" + bounds);
         }
 
         private static void LoadCharacterPrefab()

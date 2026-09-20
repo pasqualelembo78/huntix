@@ -52,6 +52,9 @@ namespace City.Player
         private float canDashAt;
         private Vector3 dashDirection;
 
+        private float knockbackRemain;
+        private Vector3 knockbackVel;
+
         private bool flying;
         private int flightVertical; // +1 sali, -1 scendi, 0 neutro (in volo)
 
@@ -126,6 +129,14 @@ namespace City.Player
             }
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            City.OSM.OsmDiag.Log("[PlayerController][Awake] inizio: GO=" + gameObject.name +
+                " children=" + transform.childCount +
+                " cc=" + (GetComponent<CharacterController>() != null));
+            // Hero rig (Remy): installa il modello del giocatore moderno al
+            // posto del characterMedium legacy (no-op se il prefab manca).
+            PlayerHeroRig.Ensure(gameObject);
+            City.OSM.OsmDiag.Log("[PlayerController][Awake] dopo Ensure: rigAttivo=" +
+                PlayerHeroRig.ActiveFor(gameObject));
             controller = GetComponent<CharacterController>();
             // Pendenza massima percorribile: default Unity 45 gradi fa
             // murare il player sui pendii reali del DEM (scivola di lato
@@ -136,8 +147,16 @@ namespace City.Player
             // e traverse senza inciampare (default 0.3).
             controller.stepOffset = 0.4f;
             animator = GetComponentInChildren<Animator>();
+            City.OSM.OsmDiag.Log("[PlayerController][Awake] animator=" +
+                (animator != null ? animator.gameObject.name : "NULL") +
+                " children=" + transform.childCount);
             walker = CharacterWalker.AttachIfNeeded(gameObject);
-            if (GetComponent<PlayerAppearance>() == null)
+            City.OSM.OsmDiag.Log("[PlayerController][Awake] walker=" +
+                (walker != null ? "attaccato a " + walker.gameObject.name : "NULL"));
+            // La skin del profilo vale per characterMedium/NPC; l'hero rig usa
+            // le proprie texture Mixamo e non va rivestito.
+            if (GetComponent<PlayerAppearance>() == null &&
+                !PlayerHeroRig.ActiveFor(gameObject))
                 gameObject.AddComponent<PlayerAppearance>();
             try { City.Environment.AgeSystem.ApplyTo(gameObject); }
             catch (System.Exception) { }
@@ -194,7 +213,12 @@ namespace City.Player
             // moveDirection ritiene l'ultima direzione: al rilascio del
             // joystick currentSpeed cala e il player decelera in modo
             // naturale invece di fermarsi di colpo.
-            velocity = moveDirection * currentSpeed;
+            // NB: si assegnano SOLO x/z, mai y: velocity.y (gravita' o impulso
+            // di DoJump) deve sopravvivere fino a controller.Move, altrimenti
+            // il salto premuto da fermi verrebbe azzerato a ogni frame.
+            Vector3 horiz = moveDirection * currentSpeed;
+            velocity.x = horiz.x;
+            velocity.z = horiz.z;
 
             if (flying && Realm == AfterlifeRealm.PARADISO)
             {
@@ -221,6 +245,15 @@ namespace City.Player
                     velocity.z = dashDirection.z * dashSpeed;
                 }
 
+                // Knockback (pericoli Inferno): spinta orizzontale breve che
+                // sovrascrive la velocita' per far spiccare il salto/scivolata.
+                if (knockbackRemain > 0f)
+                {
+                    knockbackRemain = Mathf.Max(0f, knockbackRemain - Time.deltaTime);
+                    velocity.x = knockbackVel.x;
+                    velocity.z = knockbackVel.z;
+                }
+
                 controller.Move(velocity * Time.deltaTime);
 
                 // Pendio troppo ripido: il personaggio scivola e cade a terra
@@ -238,7 +271,11 @@ namespace City.Player
                 }
             }
 
-            if (walker != null) walker.SetSpeed(currentSpeed);
+            if (walker != null)
+            {
+                walker.SetSpeed(currentSpeed);
+                walker.SetGrounded(controller.enabled && controller.isGrounded);
+            }
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - Time.deltaTime);
             TrackWalkDistance();
         }
@@ -309,17 +346,18 @@ namespace City.Player
             controller.Move(velocity * Time.deltaTime);
         }
 
-        /// <summary>Salto: impulso verticale se il player e a terra. In Inferno
-        /// e' disponibile anche un secondo salto in aria (doppio salto).</summary>
+        /// <summary>Salto: impulso verticale se il player e a terra (o a pochi
+        /// centimetri da terra, vedi FeetProbeGrounded). In Inferno e'
+        /// disponibile anche un secondo salto in aria (doppio salto).</summary>
         public void DoJump()
         {
             if (controller == null) return;
             // azioni bloccabili col death-lock (inputLocked): da morto non si
             // salta, pure con la cooldown scaduta
-            if (inputLocked) return;
-            if (Time.unscaledTime < canJumpAt) return;
+            if (inputLocked) { LogJumpReject("inputLocked"); return; }
+            if (Time.unscaledTime < canJumpAt) { LogJumpReject("cooldown"); return; }
 
-            bool groundJump = controller.isGrounded;
+            bool groundJump = controller.isGrounded || FeetProbeGrounded();
             bool allowAirJump = Realm == AfterlifeRealm.INFERNO && airJumpCount < MaxAirJumps;
 
             if (groundJump)
@@ -336,8 +374,42 @@ namespace City.Player
             }
             else
             {
-                return;
+                LogJumpReject("non a terra (cc.isGrounded=" + controller.isGrounded +
+                    ", sonda=" + FeetProbeGrounded() + ")");
             }
+        }
+
+        /// <summary>Sonda del suolo sotto i piedi: il CharacterController
+        /// .isGrounded a volte resta false per un frame o su superfici appena
+        /// sotto la base della capsule (terreno OSM/DEM dinamico), e il salto
+        /// veniva rifiutato senza motivo. La sonda parte SOTTO la base della
+        /// capsule (mai la auto-hit della CityOSMWorld) e guarda al massimo
+        /// GroundProbeTolerance m piu' in basso. Solo lettura: non sposta il
+        /// player.</summary>
+        private const float GroundProbeTolerance = 0.35f;
+        private const float GroundProbeMargin = 0.05f;
+
+        private bool FeetProbeGrounded()
+        {
+            if (controller == null || !controller.enabled) return false;
+            try { Physics.SyncTransforms(); }
+            catch (System.Exception) { }
+            float feet = transform.position.y -
+                (controller.height * 0.5f - controller.center.y);
+            Vector3 origin = new Vector3(
+                transform.position.x, feet - GroundProbeMargin, transform.position.z);
+            RaycastHit hit;
+            return Physics.Raycast(origin, Vector3.down, out hit,
+                GroundProbeTolerance + GroundProbeMargin, ~0,
+                QueryTriggerInteraction.Ignore);
+        }
+
+        /// <summary>Diagnostica: quando DoJump viene rifiutato senza saltare il
+        /// motivo finisce in logcat Android (OsmDiag) per la scatola nera del
+        /// problema "pulsante premuto ma nessun salto".</summary>
+        private void LogJumpReject(string reason)
+        {
+            City.OSM.OsmDiag.Log("[Brookhaven][Jump] rifiutato: " + reason);
         }
 
         /// <summary>Sprint: breve scatto in piu, utile per superare tratti
@@ -372,6 +444,15 @@ namespace City.Player
             {
                 dashDirection = transform.forward;
             }
+        }
+
+        /// <summary>Spinta orizzontale per i pericoli dell'Inferno (es. sfere di
+        /// fuoco): un breve impulso che sposta il player, disponibile in ogni
+        /// regno cosi' i pericoli hanno effetto anche in citta'.</summary>
+        public void ApplyKnockback(Vector3 impulse)
+        {
+            knockbackVel = new Vector3(impulse.x, 0f, impulse.z);
+            knockbackRemain = 0.3f;
         }
 
         /// <summary>Abilita il volo (Paradiso).</summary>

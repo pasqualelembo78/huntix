@@ -77,7 +77,10 @@ namespace Huntix.EditorTools
                 "Assets/ThirdParty/LaughLittleLamb/Scenes/Preload.unity",
                 "Assets/ThirdParty/ARDice/Scenes/MainScene.unity",
                 "Assets/Scenes/Room.unity",
-                "Assets/City/Scenes/City.unity"
+                "Assets/City/Scenes/City.unity",
+                "Assets/City/Scenes/InfernoScene.unity",
+                "Assets/City/Scenes/PurgatorioScene.unity",
+                "Assets/City/Scenes/ParadisoScene.unity"
             };
             EditorBuildSettings.scenes = Array.ConvertAll(scenes, s => new EditorBuildSettingsScene(s, true));
 

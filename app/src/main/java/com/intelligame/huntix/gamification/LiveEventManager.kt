@@ -128,6 +128,16 @@ object LiveEventManager {
     fun getActiveLegendaryBonus(): Float = getActiveEvents()
         .sumOf { it.legendaryChanceBonus.toDouble() }.toFloat()
 
+    /** Premio gemme extra degli eventi (es. rewardGems delle ricompense Golden Hour). */
+    fun getActiveGemsMultiplier(): Float {
+        val active = getActiveEvents()
+        if (active.isEmpty()) return 1f
+        val ownGems = active.sumOf { it.rewardGems.toDouble() }.toFloat()
+        if (ownGems > 0f) return 1f + ownGems / 10f
+        val bigReward = active.maxOfOrNull { it.rewardGems } ?: 0
+        return if (bigReward >= 20) 5f else 1f
+    }
+
     // ─── Stato partecipazione ────────────────────────────────────
 
     fun recordParticipation(eventId: String, uid: String) {

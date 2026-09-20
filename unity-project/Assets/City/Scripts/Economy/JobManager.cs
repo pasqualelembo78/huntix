@@ -60,6 +60,12 @@ namespace City.Economy
         private const string XpKeyPrefix = "city_job_xp_";
         private const float FilmHoldSeconds = 2.5f;
 
+        // Riflesso della caccia alle uova: ogni stazione LAVORI ha una chance
+        // di nascondere un uovo dietro il cartello, e ogni lavoro completato
+        // puo' lasciare un uovo a sorpresa nel punto di consegna.
+        private const float StationEggChance = 0.30f;
+        private const float JobEggChance = 0.18f;
+
         private class ActiveJob
         {
             public JobDef def;
@@ -85,6 +91,10 @@ namespace City.Economy
         private bool _taxiBoarded;
         private VehicleController _jobCar;
         private float _filmHoldStart = -1f;
+
+        // uova a sorpresa non catturate ancora vive nel mondo (vanno spostate
+        // col rebase dell'origine e ripulite quando distrutte/scadute)
+        private readonly List<GameObject> _jobEggs = new List<GameObject>();
 
         private Transform Player
         {
@@ -201,6 +211,11 @@ namespace City.Economy
             foreach (var kv in _stations)
                 if (kv.Value != null) kv.Value.transform.position -= delta;
             if (_beacon != null) _beacon.transform.position -= delta;
+            for (int i = _jobEggs.Count - 1; i >= 0; i--)
+            {
+                if (_jobEggs[i] == null) { _jobEggs.RemoveAt(i); continue; }
+                _jobEggs[i].transform.position -= delta;
+            }
             if (_job != null)
                 for (int i = 0; i < _job.pts.Count; i++)
                     _job.pts[i] -= delta;
@@ -216,6 +231,25 @@ namespace City.Economy
         public static int Level(JobType t)
         {
             return 1 + Mathf.Min(9, Xp(t) / 60);
+        }
+
+        /// <summary>
+        /// Universo unico: l'XP guadagnato coi lavori alimenta anche il
+        /// profilo Huntix (XP/livello/classifica), non solo il livello locale
+        /// del lavoro. Chiamato al completamento di ogni lavoro.
+        /// </summary>
+        private static void SyncXpToHuntix(int xpAmount, string source)
+        {
+            if (xpAmount <= 0) return;
+            try
+            {
+                string json = "{\"xp\":" + xpAmount + ",\"source\":\"" + source + "\"}";
+                Huntix.Bridge.UnityBridge.SendMessageToAndroid("CityXpEarned", json);
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[JobManager] SyncXpToHuntix fallito: " + e.Message);
+            }
         }
 
         private static float PayMult(JobType t)
@@ -303,6 +337,12 @@ namespace City.Economy
 
             var gate = station.AddComponent<StationGate>();
             gate.mgr = this;
+
+            // Riflesso della caccia alle uova: ogni stazione LAVORI nasconde
+            // con una certa probabilita' un uovo dietro il cartello.
+            if (UnityEngine.Random.value < StationEggChance)
+                SpawnJobEgg(basePos, EggController.EggType.Lavoro, station.transform);
+
             return station;
         }
 
@@ -342,9 +382,17 @@ namespace City.Economy
 
         public void StartJob(int defIndex)
         {
-            if (defIndex < 0 || defIndex >= Defs.Length) return;
+            if (defIndex < 0 || defIndex >= Defs.Length)
+            {
+                OsmDiag.Log("[JobManager] StartJob indice non valido: " + defIndex);
+                return;
+            }
             Transform p = Player;
-            if (p == null) return;
+            if (p == null)
+            {
+                OsmDiag.Log("[JobManager] StartJob player null, lavoro annullato");
+                return;
+            }
             if (!City.Environment.EnergySystem.CanWork)
             {
                 Toast("Solo stanco: siediti su una panchina o bevi qualcosa");
@@ -450,9 +498,18 @@ namespace City.Economy
             float angle = UnityEngine.Random.Range(0f, 360f);
             string code = prefix + "_" + (int)(Time.time * 1000f) + "_" +
                 (int)UnityEngine.Random.Range(0f, 9999f);
+            OsmDiag.Log("[JobManager] spawn " + prefix + " def='" + def.name +
+                "' presso " + pos.ToString("F1"));
             GameObject go = VehicleSpawnManager.BuildVehicle(null, def, pos, angle, code);
-            if (go == null) return null;
+            if (go == null)
+            {
+                OsmDiag.Log("[JobManager] BuildVehicle null per '" + prefix +
+                    "' (def='" + def.name + "' pos=" + pos.ToString("F1") + ")");
+                return null;
+            }
             var vc = go.GetComponent<VehicleController>();
+            if (vc == null)
+                OsmDiag.Log("[JobManager] VehicleController mancante su '" + prefix + "'");
             vc.SetJobVehicle();
             return vc;
         }
@@ -523,6 +580,54 @@ namespace City.Economy
             HidePanel();
         }
 
+        /// <summary>
+        /// Riflesso della caccia alle uova applicato al sistema lavori: piazza
+        /// un uovo reale (EggController, catturabile col mini-gioco standard)
+        /// in un punto. Nascosto alle stazioni LAVORI o a sorpresa dopo un
+        /// lavoro completato. L'uovo e' un EggController vero: la cattura passa
+        /// da Game.OnEggCollected -> SendEggToHuntix (bridge Android), quindi
+        /// inventario, rarita', gemme, XP e posizione arrivano al profilo.
+        /// parent: se dato, l'uovo segue il genitore (stazione LAVORI) anche
+        /// durante il rebase dell'origine; altrimenti si auto-distrugge dopo
+        /// una finestra (non catturato) per non inquinare il mondo.
+        /// </summary>
+        private void SpawnJobEgg(Vector3 around, EggController.EggType type,
+            Transform parent = null)
+        {
+            Vector3 pos = around;
+            RaycastHit hit;
+            if (Physics.Raycast(pos + Vector3.up * 40f, Vector3.down,
+                    out hit, 100f, ~0, QueryTriggerInteraction.Ignore))
+                pos = hit.point;
+            pos.y += 0.3f;
+
+            var go = new GameObject("JobEgg_" + type);
+            if (parent != null) go.transform.SetParent(parent, false);
+            go.transform.position = pos;
+            var col = go.AddComponent<SphereCollider>();
+            col.radius = 0.5f;
+            col.isTrigger = true;
+            var egg = go.AddComponent<EggController>();
+            egg.Init(pos, RollEggRarity(), type);
+            if (parent == null)
+            {
+                _jobEggs.Add(go);
+                Destroy(go, 180f);
+            }
+            OsmDiag.Log("[JobManager] Uovo nascosto/a sorpresa: " + egg.rarity +
+                " " + type + " @ " + pos.ToString("F1"));
+        }
+
+        private static EggController.Rarity RollEggRarity()
+        {
+            float roll = UnityEngine.Random.value;
+            if (roll < 0.015f) return EggController.Rarity.Legendary;
+            if (roll < 0.05f) return EggController.Rarity.Epic;
+            if (roll < 0.15f) return EggController.Rarity.Rare;
+            if (roll < 0.40f) return EggController.Rarity.Uncommon;
+            return EggController.Rarity.Common;
+        }
+
         private void AdvanceStep(Vector3 playerPos)
         {
             _job.step++;
@@ -549,6 +654,14 @@ namespace City.Economy
                     Xp(_job.def.type) + xpGain + 10);
                 PlayerPrefs.Save();
                 Wallet.Earn(paid);
+                SyncXpToHuntix(xpGain + 10, "lavoro_" + _job.def.type.ToString());
+                // Riflesso uova: a volte il lavoro lascia un uovo a sorpresa
+                // proprio nel punto dove si e' concluso (consegna/scena finale).
+                if (UnityEngine.Random.value < JobEggChance)
+                    SpawnJobEgg(playerPos + new Vector3(
+                        UnityEngine.Random.Range(-3f, 3f), 0f,
+                        UnityEngine.Random.Range(-3f, 3f)),
+                        EggController.EggType.Consegna);
                 Toast("[OK] " + _job.def.title + " completato! +" + paid +
                     "\u20ac" + (PayMult(_job.def.type) > 1.01f
                         ? " (liv. " + Level(_job.def.type) + ")" : ""));

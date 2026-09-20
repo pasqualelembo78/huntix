@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# build_release.sh — Compila e firma l'APK/AAB release di Huntix
+# build_release.sh — Compila e firma (solo APK) release di Huntix
 #
 #Portabile da zero: funziona anche subito dopo `git clone`, senza
 # keystore.properties. Se manca, genera keystore.properties (solo firma)
@@ -45,7 +45,7 @@
 #   - rilevamento ANDROID_HOME
 #   - creazione local.properties
 #   - generazione keystore se assente (idempotente)
-#   - assembleRelease + bundleRelease
+#   - assembleRelease
 #   - firma APK con apksigner / zipalign
 #
 # Uso:
@@ -595,7 +595,7 @@ else
     fi
 fi
 
-# ── Build APK + AAB (logica da build_app.sh) ───────────────
+# ── Build APK (logica da build_app.sh) ─────────
 chmod +x gradlew
 
 # Passa le chiavi delle feature come -P al gradle.
@@ -635,19 +635,6 @@ echo ">> Building APK (assembleRelease)..."
 ./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
-echo ">> Building AAB (bundleRelease)..."
-./gradlew bundleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
-AAB_FILE="app/build/outputs/bundle/release/app-release.aab"
-
-if [ -f "$AAB_FILE" ]; then
-    AAB_SIZE=$(stat -c%s "$AAB_FILE" 2>/dev/null || stat -f%z "$AAB_FILE" 2>/dev/null)
-    AAB_SIZE_MB=$(echo "scale=1; $AAB_SIZE/1048576" | bc)
-    echo ">> AAB: $AAB_FILE (${AAB_SIZE_MB}MB)"
-else
-    echo "!! AAB build failed!"
-    exit 1
-fi
-
 if [ -z "$UNSIGNED_APK" ]; then
     echo "!! APK non trovato dopo la build." >&2
     exit 1
@@ -679,7 +666,6 @@ echo ">> Verifica firma..."
 "$APKSIGNER" verify "$SIGNED_APK"
 
 echo ">> APK firmato: $SIGNED_APK"
-echo ">> AAB:          $AAB_FILE"
 
 # Pulisci il file temporaneo keyless (se creato)
 [ -n "${TMP_PROPS:-}" ] && rm -f "$TMP_PROPS"

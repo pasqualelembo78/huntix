@@ -57,6 +57,7 @@ namespace City.OSM
             if (_kenneyCache.TryGetValue(key, out cached)) return cached;
             var go = Resources.Load<GameObject>("Buildings/" + key);
             _kenneyCache[key] = go;
+            OsmDiag.Log("[Building][Kenney] load='" + key + "' ok=" + (go != null));
             return go;
         }
 
@@ -79,6 +80,164 @@ namespace City.OSM
         }
 
         private const int BuildingLayer = 8;
+
+        // ── Conversione runtime a URP/Lit dei materiali prefab ─────────
+        // I prefab Quaternius/Kenney sono FBX con materiali EMBEDDED
+        // (.fbx.meta: materialImportMode 0 / materialLocation 1): Unity li
+        // importa sullo shader built-in "Standard". In URP quello shader non
+        // campiona le texture e rende le facciate grigie/spente.
+        // Convertiamo i MATERIALI CONDIVISI in place su URP/Lit (stessa
+        // rimappatura di URPUpgradeMaterials, ma a runtime e senza toccare
+        // gli asset): il materiale e' l'asset condiviso del prefab, quindi
+        // convertirlo una volta corregge TUTTI gli edifici della stessa
+        // facciata, subito e senza copie Material per istanza (zero GC).
+        // Idempotente: i materiali gia' su URP (o gia' convertiti) vengono
+        // solo marcati e saltati, nessun double-work per sessione.
+
+        /// <summary>True se il materiale usa uno shader built-in non-URP
+        /// da convertire (Standard/Legacy/Diffuse).</summary>
+        private static bool NeedsURPConversion(Material m)
+        {
+            if (m == null || m.shader == null) return false;
+            string n = m.shader.name;
+            if (string.IsNullOrEmpty(n)) return false;
+            if (n.StartsWith("Universal Render Pipeline", StringComparison.Ordinal) ||
+                n.StartsWith("HDRP", StringComparison.Ordinal) ||
+                n.StartsWith("Shader Graphs/", StringComparison.Ordinal) ||
+                n.StartsWith("Sprites/", StringComparison.Ordinal) ||
+                n.StartsWith("UI/", StringComparison.Ordinal) ||
+                n.StartsWith("Skybox/", StringComparison.Ordinal) ||
+                n.StartsWith("Particles/", StringComparison.Ordinal))
+                return false;
+            return true;
+        }
+
+        // Cache dei materiali gia' processati (convertiti O gia' URP):
+        // il primo edificio converte, tutti gli altri con lo stesso prefab
+        // solo guardano e passano.
+        private static readonly HashSet<Material> _convertedMats =
+            new HashSet<Material>();
+
+        /// <summary>Converte UN materiale condiviso a URP/Lit in place.
+        /// Anche se un materiale built-in compare su piu' renderer, viene
+        /// ripassato una sola volta (cache per sessione).</summary>
+        private static void ConvertToURP(Material m)
+        {
+            if (m == null || _convertedMats.Contains(m)) return;
+            string legacyName = m.shader != null ? m.shader.name : "NONE";
+            if (!NeedsURPConversion(m))
+            {
+                _convertedMats.Add(m);
+                return;
+            }
+
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            if (lit == null)
+            {
+                // Se per qualche motivo manca il shader URP (torna a Standard
+                // senza rompere): niente conversione, evita errori.
+                _convertedMats.Add(m);
+                OsmDiag.Log("[Building][Mat] URP/Lit NON trovato, lascio '" + legacyName + "'");
+                return;
+            }
+
+            bool alphaTest = m.renderQueue >= 2450 && m.renderQueue < 2500;
+            bool transparent = m.renderQueue >= 3000;
+
+            Texture albedo = m.HasProperty("_MainTex") ? m.GetTexture("_MainTex") : null;
+            Color color = m.HasProperty("_Color") ? m.GetColor("_Color") : Color.white;
+            float metallic = m.HasProperty("_Metallic") ? m.GetFloat("_Metallic") : 0f;
+            float glossiness = m.HasProperty("_Glossiness") ? m.GetFloat("_Glossiness") : 0f;
+            float smoothness = m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : glossiness;
+            Texture normals = m.HasProperty("_BumpMap") ? m.GetTexture("_BumpMap") : null;
+            float bumpScale = m.HasProperty("_BumpScale") ? m.GetFloat("_BumpScale") : 1f;
+            Texture emissionMap = m.HasProperty("_EmissionMap") ? m.GetTexture("_EmissionMap") : null;
+            Color emissionColor = m.HasProperty("_EmissionColor")
+                ? m.GetColor("_EmissionColor") : Color.black;
+            float cutoff = m.HasProperty("_Cutoff") ? m.GetFloat("_Cutoff") : 0.5f;
+            bool hasEmission = emissionColor.r > 0.01f || emissionColor.g > 0.01f
+                            || emissionColor.b > 0.01f;
+
+            m.shader = lit;
+
+            m.SetColor("_BaseColor", color);
+            if (albedo != null) m.SetTexture("_BaseMap", albedo);
+            m.SetFloat("_Metallic", metallic);
+            m.SetFloat("_Smoothness", smoothness);
+            if (normals != null)
+            {
+                m.SetTexture("_BumpMap", normals);
+                m.SetFloat("_BumpScale", bumpScale);
+                m.EnableKeyword("_NORMALMAP");
+            }
+            if (emissionMap != null) m.SetTexture("_EmissionMap", emissionMap);
+            m.SetColor("_EmissionColor", emissionColor);
+            m.SetColor("_EmissiveColor", emissionColor);
+            if (hasEmission)
+                m.EnableKeyword("_EMISSION");
+            else
+                m.DisableKeyword("_EMISSION");
+
+            // Rimappa la coda di rendering (opaco/alpha-test/trasparente),
+            // identico alla conversione URP dell'editor. I valori raw delle
+            // enum corrispondono a RenderQueue.{Geometry,AlphaTest,Transparent}.
+            if (transparent)
+            {
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_AlphaClip", 0f);
+                m.SetFloat("_Blend", 0f);
+                m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                m.SetFloat("_ZWrite", 0f);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.DisableKeyword("_ALPHATEST_ON");
+                m.renderQueue = 3000;
+            }
+            else if (alphaTest)
+            {
+                m.SetFloat("_Surface", 0f);
+                m.SetFloat("_AlphaClip", 1f);
+                m.SetFloat("_Cutoff", cutoff);
+                m.EnableKeyword("_ALPHATEST_ON");
+                m.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.renderQueue = 2450;
+            }
+            else
+            {
+                m.SetFloat("_Surface", 0f);
+                m.SetFloat("_AlphaClip", 0f);
+                m.DisableKeyword("_ALPHATEST_ON");
+                m.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+                m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.Zero);
+                m.SetFloat("_ZWrite", 1f);
+                m.renderQueue = 2000;
+            }
+
+            _convertedMats.Add(m);
+            OsmDiag.Log("[Building][Mat] convertito shader='" + legacyName +
+                "' -> URP/Lit tex=" + (albedo != null ? albedo.name : "-") +
+                " nome='" + (m.name != null ? m.name : "") + "'");
+        }
+
+        /// <summary>Converte in place a URP/Lit i materiali built-in di TUTTI
+        /// i renderer dell'oggetto appena istanziato (facciate FBX grigie ->
+        /// texturizzate). Idempotente e cacheato per materiale condiviso:
+        /// chiamabile da qualunque punto che istanzia prefab edifici (chunk
+        /// e seed city) senza rischio di lavoro doppio.</summary>
+        public static void EnsureURPMaterials(GameObject inst)
+        {
+            if (inst == null) return;
+            var rs = inst.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++)
+            {
+                var rr = rs[i];
+                if (rr == null) continue;
+                var ms = rr.sharedMaterials;
+                for (int j = 0; j < ms.Length; j++)
+                    if (ms[j] != null) ConvertToURP(ms[j]);
+            }
+        }
 
         // Materiale del segnaposto porta condiviso tra tutti gli ingressi
         // (fix #3): prima ogni porta clonava un Material nuovo -> spreco GC.
@@ -208,6 +367,8 @@ namespace City.OSM
             if (_quaterniusCache.TryGetValue(name, out cached)) return cached;
             var go = Resources.Load<GameObject>("Buildings/Quaternius/" + name);
             _quaterniusCache[name] = go;
+            OsmDiag.Log("[Building][Quat] load='" + name + "' area=" + area.ToString("F0") +
+                " ok=" + (go != null));
             return go;
         }
 
@@ -293,8 +454,8 @@ namespace City.OSM
             // La scelta volume (Small/Medium/Large) segue l'area. Lo switch
             // stile (hamburger menu / PlayerPrefs) torna a Kenney a caldo:
             // basta rigenerare il chunk per riapplicare la scelta.
-            GameObject quat = City.UI.CityStyle.UseQuaternius
-                ? LoadQuaternius(w, d) : null;
+            bool useQ = City.UI.CityStyle.UseQuaternius;
+            GameObject quat = useQ ? LoadQuaternius(w, d) : null;
             if (quat != null)
             {
                 prefab = quat;
@@ -310,10 +471,58 @@ namespace City.OSM
                     prefab = LoadKenney(folder, prefabName);
                 }
             }
+            OsmDiag.Log("[Building][Pick] id=" + b.id + " t='" + b.t + "' w=" + w.ToString("F1") +
+                " d=" + d.ToString("F1") + " area=" + (w * d).ToString("F0") +
+                " useQuaternius=" + useQ +
+                " prefab=" + (prefab != null ? prefab.name : "NULL") +
+                " via=" + (quat != null ? "Quaternius" : "Kenney"));
             if (prefab == null) return false;
 
             var inst = UnityEngine.Object.Instantiate(prefab, parent);
             inst.name = "Edificio " + b.id;
+
+            // Diagnostica materiali/submesh del prefab appena istanziato
+            // + conversione a URP/Lit in place: prima si conta lo stato di
+            // import (come arrivano da FBX: Standard/Diffuse -> grigio in URP),
+            // poi i materiali built-in vengono rimappati su URP/Lit (vedi
+            // ConvertToURP). I materiali sono CONDIVISI per prefab: la
+            // conversione del primo edificio corregge tutte le facciate.
+            var instRenderers = inst.GetComponentsInChildren<Renderer>(true);
+            int matsTotal = 0, matsNullShader = 0, matsBuiltin = 0, matsWithTex = 0;
+            Material firstMat = null;
+            for (int ri = 0; ri < instRenderers.Length; ri++)
+            {
+                var rr = instRenderers[ri];
+                if (rr == null) continue;
+                var ms = rr.sharedMaterials;
+                for (int mi = 0; mi < ms.Length; mi++)
+                {
+                    var m = ms[mi];
+                    if (m == null) continue;
+                    matsTotal++;
+                    if (firstMat == null) firstMat = m;
+                    bool builtin = NeedsURPConversion(m);
+                    if (m.shader == null || string.IsNullOrEmpty(m.shader.name))
+                        matsNullShader++;
+                    else if (builtin)
+                        matsBuiltin++;
+                    // Textura originaria: _MainTex sullo shader legacy,
+                    // _BaseMap su quello URP — contata PRIMA della conversione.
+                    string baseProp = builtin ? "_MainTex" : "_BaseMap";
+                    if (m.HasProperty(baseProp) && m.GetTexture(baseProp) != null)
+                        matsWithTex++;
+                    ConvertToURP(m);
+                }
+            }
+            OsmDiag.Log("[Building][Spawn] id=" + b.id + " name='" + inst.name +
+                "' renderers=" + instRenderers.Length +
+                " matsTot=" + matsTotal +
+                " matsNoShader=" + matsNullShader +
+                " matsBuiltinNonURP=" + matsBuiltin +
+                " matsConvertitiURP=" + matsBuiltin +
+                " matsConTextura=" + matsWithTex +
+                " primo=" + (firstMat != null
+                    ? (firstMat.shader != null ? firstMat.shader.name : "NONE") : "NULL"));
 
             if (PrefabHasColliders(prefab))
                 foreach (var col in inst.GetComponentsInChildren<Collider>(true))
@@ -387,6 +596,10 @@ namespace City.OSM
                 entranceComp != null ? entranceComp.shop : null,
                 box);
             if (entranceComp != null) gen.SetEntrance(entranceComp);
+            OsmDiag.Log("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
+                "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +
+                " bounds=" + baseB.size.ToString("F2") +
+                " porta=" + (entranceComp != null) + " interno=si");
             return true;
         }
 

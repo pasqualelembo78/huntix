@@ -24,6 +24,11 @@ namespace City.OSM
         /// <summary>Chunk totali dentro il raggio di carico (5x5) a fine load.</summary>
         public const int ExpectedChunkCount = (2 * LoadRadius + 1) * (2 * LoadRadius + 1);
 
+        /// <summary>Build coroutine attive: max 1 per volta. Senza serializzazione
+        /// N chunk in volo consumano ognuno fino a BuildBudgetMs di main-thread
+        /// (25 x 12ms = 300ms/frame) -> frame da 2115ms e fps=0 durante la build.</summary>
+        private int _activeBuilds;
+
         /// <summary>Intervallo dei report di avanzamento "CityProgress" allo
         /// splash Android (Mappa 0-40%, Costruzione 40-95%, Pronto 100%).</summary>
         private const float ProgressIntervalS = 0.5f;
@@ -75,6 +80,16 @@ namespace City.OSM
         private const float TileCooldownS = 60f;
         private readonly Dictionary<string, float> _tileCooldownAt =
             new Dictionary<string, float>();
+
+        // ── riallineamento strade al nuovo DEM ──
+        // Quando arriva una tile DEM nuova (TileElevation.Register), le strade
+        // dei chunk gia' costruiti che ricadono nella zona campionano le
+        // altezze appena diventate disponibili: erano state costruite con
+        // quei punti a MISSA (y=0) e restavano sepolte sotto un terreno
+        // rialzato. Qui teniamo la coda dei chunk da ricostruire e la
+        // svuotiamo nei tick (budget per frame, deduplicata per chunk).
+        private readonly HashSet<Vector2Int> _roadsRebuild =
+            new HashSet<Vector2Int>();
 
         private Material _roadMat;
         private Material _sidewalkMat;
@@ -246,6 +261,7 @@ namespace City.OSM
             EnqueueMissing(cur);
             UnloadFar(cur);
             RetryMissingTiles();
+            RebuildRoadsForNewDem();
             UpdateLods(cur);
             WorldOrigin.TryRebase(target.position);
             MaybeReportCityProgress();
@@ -286,8 +302,10 @@ namespace City.OSM
             if (ready == null) return;
             foreach (var c in ready)
             {
+                if (_activeBuilds >= 1) break;
                 _retryAt.Remove(c);
                 _inFlight.Add(c);
+                _activeBuilds++;
                 OsmDiag.Log("[ChunkManager] retry build chunk " + c.x + "," + c.y);
                 StartCoroutine(BuildChunkCoroutine(c));
             }
@@ -329,10 +347,12 @@ namespace City.OSM
             if (!StreamingEnabled || _pending.Count == 0) return;
             int building = _pending.Count;
             var clock = Stopwatch.StartNew();
-            while (_pending.Count > 0 && clock.ElapsedMilliseconds < BuildBudgetMs)
+            while (_activeBuilds < 1 && _pending.Count > 0 &&
+                clock.ElapsedMilliseconds < BuildBudgetMs)
             {
                 var c = _pending[0];
                 _pending.RemoveAt(0);
+                _activeBuilds++;
                 OsmDiag.Log("[ChunkManager] === BUILD START === chunk " + c.x + "," + c.y + " pending=" + _pending.Count);
                 StartCoroutine(BuildChunkCoroutine(c));
             }
@@ -354,6 +374,7 @@ namespace City.OSM
                     " scartato: origine cambiata durante il download");
                 ReleaseTile(tileKey);
                 _inFlight.Remove(c);
+                _activeBuilds--;
                 yield break;
             }
 
@@ -384,6 +405,7 @@ namespace City.OSM
                 if (!_chunks.ContainsKey(c))
                 {
                     _inFlight.Remove(c);
+                    _activeBuilds--;
                     yield break;
                 }
                 if (chunk.root != null)
@@ -474,6 +496,7 @@ namespace City.OSM
             }
 
             _inFlight.Remove(c);
+            _activeBuilds--;
         }
 
         private IEnumerator EnsureTile(string tileKey)
@@ -542,8 +565,10 @@ namespace City.OSM
             bundle.geo = geo;
             if (graph != null)
                 TileRoadNetwork.Ensure().AddTile(tileKey, graph);
-            if (geo != null)
-                TileElevation.Register(geo);
+            // una tile DEM nuova puo' rialzare strade gia' costruite che la
+            // build aveva campionato a y=0 (punti fuori dal registro di allora)
+            if (geo != null && TileElevation.Register(geo))
+                ScheduleRoadsRebuildsForTile(geo);
             OsmDiag.Log("[ChunkManager] tile " + tileKey + " caricata (graph=" +
                 (graph != null) + ", geo=" + (geo != null) + ")");
         }
@@ -582,6 +607,82 @@ namespace City.OSM
                 TileElevation.Unregister(tileKey);
                 if (TileRoadNetwork.Instance != null)
                     TileRoadNetwork.Instance.RemoveTile(tileKey);
+            }
+        }
+
+        /// <summary>
+        /// Mete in coda di ricalcolo le strade dei chunk gia' costruiti i cui
+        /// bounds (con margine strade) cadono nel bbox della tile DEM appena
+        /// registrata: alla build originale quei punti erano MISS (nessuna tile
+        /// copriva) e le strade sono finite a y=0 sotto il terreno rialzato.
+        /// Ora che il DEM c'e', vanno riallineate (solo layer strade).
+        /// </summary>
+        private void ScheduleRoadsRebuildsForTile(TileGeoDoc geo)
+        {
+            if (geo == null || geo.bbox == null || geo.bbox.Length < 4)
+                return;
+            double latMin = geo.bbox[0], lonMin = geo.bbox[1];
+            double latMax = geo.bbox[2], lonMax = geo.bbox[3];
+
+            // Le strade estendono il nastro fino a ~60 m oltre i bounds del
+            // chunk (RoadRenderer margin): sopradimensioniamo i margini per
+            // essere sicuri di ricostruire anche i soli vertici di bordo.
+            const double marginLat = 0.0020;   // ~220 m
+            const double marginLon = 0.0027;   // ~220 m
+
+            int scheduled = 0;
+            foreach (var kv in _chunks)
+            {
+                ChunkData cd = kv.Value;
+                if (cd == null || !cd.built || cd.root == null) continue;
+                GeoCoord sw = CityGrid.ChunkCorner(cd.index);
+                GeoCoord ne = CityGrid.ChunkCorner(
+                    new Vector2Int(cd.index.x + 1, cd.index.y + 1));
+                // nessuna intersezione col bbox (espanso)? salta
+                if (ne.lat < latMin - marginLat || sw.lat > latMax + marginLat) continue;
+                if (ne.lng < lonMin - marginLon || sw.lng > lonMax + marginLon) continue;
+                if (_roadsRebuild.Add(kv.Key)) scheduled++;
+            }
+            if (scheduled > 0)
+                OsmDiag.Log("[DEM] tile " + geo.tile +
+                    " registrata: strade di " + scheduled +
+                    " chunk da riallineare all'altimetria");
+        }
+
+        /// <summary>Pompa del riallineamento strade: svuota _roadsRebuild con un
+        /// massimo di pezzi per tick (il meshing e' CPU-only, ma resta dentro i
+        /// guard). La deduplicazione per chunk e' data dall'HashSet.</summary>
+        private void RebuildRoadsForNewDem()
+        {
+            if (_roadsRebuild.Count == 0) return;
+            const int maxPerTick = 4;
+            int done = 0;
+            var ready = new List<Vector2Int>(_roadsRebuild);
+            foreach (var c in ready)
+            {
+                if (done >= maxPerTick) break;
+                _roadsRebuild.Remove(c);
+                if (!_chunks.ContainsKey(c) || _inFlight.Contains(c)) continue;
+                done++;
+                StartCoroutine(RebuildRoadsCoroutine(c));
+            }
+        }
+
+        private IEnumerator RebuildRoadsCoroutine(Vector2Int c)
+        {
+            int epoch = WorldOrigin.Epoch;
+            ChunkData chunk;
+            if (!_chunks.TryGetValue(c, out chunk) || chunk == null) yield break;
+            if (!chunk.built || chunk.root == null || chunk.geo == null) yield break;
+            if (epoch != WorldOrigin.Epoch) yield break;
+            try
+            {
+                ChunkBuilder.BuildRoadsOnly(this, chunk);
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkManager] roads-only " +
+                    c.x + "," + c.y + ": " + e);
             }
         }
 
@@ -891,11 +992,13 @@ private const int DiagnosticsMaxHits = 8;
             // il mondo blu e vuoto all'infinito (chunks=0 costruiti=0).
             StopAllCoroutines();
             _tickLoop = null;
+            _activeBuilds = 0;
             _pending.Clear();
             _inFlight.Clear();
             _retryAt.Clear();
             _retryCount.Clear();
             _tileCooldownAt.Clear();
+            _roadsRebuild.Clear();
             _loading.Clear();
             foreach (var kv in _chunks) kv.Value.Destroy();
             _chunks.Clear();
@@ -929,6 +1032,7 @@ private const int DiagnosticsMaxHits = 8;
             _retryAt.Clear();
             _retryCount.Clear();
             _tileCooldownAt.Clear();
+            _roadsRebuild.Clear();
             _loading.Clear();
             foreach (var kv in _chunks) kv.Value.Destroy();
             _chunks.Clear();

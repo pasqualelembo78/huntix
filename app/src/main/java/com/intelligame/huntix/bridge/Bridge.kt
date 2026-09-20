@@ -107,6 +107,33 @@ object Bridge {
             "OutdoorNPCFar" -> StoreUnityBridge.onOutdoorNPCFar(jsonData)
             "OutdoorNPCDialogue" -> StoreUnityBridge.onOutdoorNPCDialogue(jsonData)
             "OutdoorNPCInfo" -> StoreUnityBridge.onOutdoorNPCInfo(jsonData)
+            // ── Realtà Aumentata: pulsante PASSA A AR (Unity) → apre la camera
+            //    reale con ARCore; il mondo OSM viene ancorato al piano
+            //    inquadrato. Posizione VIRTUALE del player, MAI il GPS reale. ──
+            "ArCityRequest" -> {
+                val ctx = UnityPlayer.currentActivity ?: return
+                val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+                val lat = j.optDouble("lat", 0.0)
+                val lng = j.optDouble("lng", 0.0)
+                val intent = Intent(
+                    ctx, com.intelligame.huntix.minigames.ar.ArCityActivity::class.java
+                ).apply {
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_LAT, lat)
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_LNG, lng)
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_POI_LAT,
+                        j.optDouble("poiLat", lat))
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_POI_LNG,
+                        j.optDouble("poiLng", lng))
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_POI_NAME,
+                        j.optString("poiName", "Luogo"))
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_POI_TYPE,
+                        j.optString("poiType", "luogo"))
+                    putExtra(com.intelligame.huntix.minigames.ar.ArCityActivity.EXTRA_EGGS,
+                        j.optJSONArray("eggs")?.toString() ?: "[]")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            }
             // ── MiAcitma: tap su un pedone → chat IA (RealLifeChatActivity) ──
             "NpcChatRequest" -> {
                 // roleplay: preferisci il personaggio RealLife mappato
@@ -139,6 +166,10 @@ object Bridge {
             "CityGemsEarned" -> handleCityGemsEarned(jsonData)
             "CityEnergyUpdate" -> handleCityEnergyUpdate(jsonData)
             "PlayerReincarnated" -> handlePlayerReincarnated(jsonData)
+            // ── City State Sync: snapshot bidirezionale stato città (Unity→Android)
+            "CityStateSync" -> StoreUnityBridge.onCityStateSync(jsonData)
+            // ── City State Sync: verifica di allineamento (risposta via log) ──
+            "CityStateCheck" -> StoreUnityBridge.checkCityStateSync()
         }
     }
 
@@ -198,7 +229,9 @@ object Bridge {
     /**
      * Uovo catturato in MiAcitma (Unity): lo versa nell'inventario uova del
      * player Huntix + aggiorna il profilo (contatori rarita'/XP/power) + premia
-     * MVC, replicando il flusso canonico di OutdoorManager.tryCatch.
+     * MVC e gemme, replicando il flusso canonico di OutdoorManager.tryCatch.
+     * Registra anche il "DOVE HO TROVATO L'UOVO" (posizione + coordinate) nel
+     * profilo, perché Android conosca il ritrovamento anche fuori da Unity.
      */
     private fun handleCityEggCaptured(jsonData: String) {
         val ctx = UnityPlayer.currentActivity ?: return
@@ -208,7 +241,15 @@ object Bridge {
         val rarity = com.intelligame.huntix.EggRarity.fromId(rarityId)
         val fantasyName = j.optString("fantasyName", rarity.randomName())
         val power = j.optInt("power", rarity.basePower)
-        val xpReward = j.optInt("xpReward", rarity.xpReward)
+        var xpReward = j.optInt("xpReward", rarity.xpReward)
+        val gems = j.optInt("gems", 0)
+        val lat = j.optDouble("lat", 0.0)
+        val lng = j.optDouble("lng", 0.0)
+        val place = j.optString("place", "MiAcitta")
+
+        // Eventi stagionali: XP reale x2/x5 (non solo display).
+        val xpMult = com.intelligame.huntix.gamification.LiveEventManager.getActiveXpMultiplier()
+        if (xpMult > 1f) xpReward = (xpReward * xpMult).toInt()
 
         val item = com.intelligame.huntix.EggInventoryItem(
             eggId       = j.optString("eggId", "city_" + System.currentTimeMillis()),
@@ -227,6 +268,15 @@ object Bridge {
             com.intelligame.huntix.EggRarity.LEGENDARY -> 250.0
         }
         com.intelligame.huntix.managers.SavedManager.addMvc(ctx, mvcReward)
+        // Gemme dalla caccia alle uova (premium): stessa scala dell'outdoor.
+        if (gems > 0) {
+            val newGems = StoreUnityBridge.addGemsFromCity(gems)
+            com.intelligame.huntix.AppLog.i("HuntixSync", "Gemme uova +$gems -> $newGems")
+        }
+        // "DOVE HO TROVATO L'UOVO": memoria condivisa del ritrovamento.
+        com.intelligame.huntix.managers.EggWhereLog.record(
+            ctx, rarity.id, place, lat, lng, fantasyName
+        )
         val msg = if (added) "Uovo aggiunto all'inventario! +${mvcReward.toInt()} MVC"
         else "Inventario uova pieno!"
         showToast(msg)

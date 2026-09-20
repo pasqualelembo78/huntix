@@ -1,11 +1,9 @@
 package com.intelligame.huntix.ui
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.view.*
-import android.webkit.*
 import android.widget.*
 import com.intelligame.huntix.LocationBadge
 import com.intelligame.huntix.PlayerProfileManager
@@ -52,6 +50,7 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
         addView(rowText("🆔 ID Giocatore", p?.playerId?.take(12) ?: "—", "#C4B5FD", "#CCBBFF"))
         addView(rowText("👤 Età reale",    "${p?.realAge ?: "—"}",        "#C4B5FD", "#FFFFFF"))
         addView(rowText("🎮 Età personaggio", "${charAge} anni",          "#C4B5FD", "#FFFFFF"))
+        addView(rowText("⚧ Sesso",         genderLabel(p?.playerGender),  "#C4B5FD", "#FFFFFF"))
         addView(rowText("⭐ Livello",       "${p?.level ?: 1}",            "#C4B5FD", "#FFFFFF"))
         addView(rowText("💪 Forza",         "${p?.strength ?: 0}",         "#C4B5FD", "#FFFFFF"))
         addView(rowText("⚡ Energia",       "${p?.energy ?: 100} / 100",   "#C4B5FD", "#FFFFFF"))
@@ -477,6 +476,13 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
         addView(rowText("🟣 Epic",          "${p?.epicFound ?: 0}",       "#AB47BC", "#E1BEE7"))
         addView(rowText("⭐ Legendary",     "${p?.legendaryFound ?: 0}",  "#FFB300", "#FFF9C4"))
         addView(rowText("📅 Sett. corrente","${p?.weeklyEggsFound ?: 0}", "#00FF88", "#A5D6A7"))
+        // Memoria condivisa "DOVE ho trovato l'uovo" (universo unico Unity+Android)
+        addView(rowText("🗺️ Bestiario città","${p?.cityEggDexCount ?: 0} voci scoperte", "#66FFB2", "#A5D6A7"))
+        addView(rowText("📍 Dove le ho trovate","${p?.cityEggWhere ?: 0} luoghi salvati", "#66FFB2", "#A5D6A7"))
+        val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
+        if (homeTxt != null) {
+            addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))
+        }
     })
 
     // Mini giochi
@@ -510,7 +516,6 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
 // ── TAB 5: BADGE ──────────────────────────────────────────────
 internal fun PlayerProfileActivity.buildBadgesTab(root: LinearLayout) {
     val locationBadges = LocationBadge.loadAll(this)
-    val achBadges      = emptyList<String>()
 
     // Location badges
     root.addView(sectionCard("#0A0A1A", "#00B4FF") {
@@ -537,21 +542,6 @@ internal fun PlayerProfileActivity.buildBadgesTab(root: LinearLayout) {
         }
     })
 
-    // Achievement badge
-    root.addView(sectionCard("#001A00", "#00FF88") {
-        addView(tv("🏆 Achievement (${achBadges.size})", 15f, Color.parseColor("#66FFB2"),
-            Gravity.START, true).also { it.setPadding(0, 0, 0, dp(8)) })
-        if (achBadges.isEmpty()) {
-            addView(tv("Nessun achievement ancora — gioca, combatti, raccogli uova! 🥚",
-                12f, Color.parseColor("#9999CC"), Gravity.START))
-        } else {
-            achBadges.forEach { id ->
-                addView(tv("🏅 $id", 12f, Color.parseColor("#A5D6A7"), Gravity.START)
-                    .also { it.setPadding(0, dp(2), 0, dp(2)) })
-            }
-        }
-    })
-
     // Bottone mini giochi
     root.addView(Button(this).apply {
         text = "🎮 Vai ai Mini Giochi"
@@ -567,6 +557,12 @@ internal fun PlayerProfileActivity.buildBadgesTab(root: LinearLayout) {
                 com.intelligame.huntix.MiniGamesHubActivity::class.java))
         }
     })
+}
+
+private fun PlayerProfileActivity.genderLabel(gender: String?): String = when (gender) {
+    "male" -> "♂️  Maschio"
+    "female" -> "♀️  Femmina"
+    else -> "⚧  Non definito"
 }
 
 private fun PlayerProfileActivity.showGpsEditDialog() {
@@ -609,42 +605,4 @@ private fun PlayerProfileActivity.showGpsEditDialog() {
         }
         .setNegativeButton("Annulla", null)
         .show()
-}
-
-@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
-internal fun PlayerProfileActivity.buildGenderCharacterSection(parent: LinearLayout) {
-    val profile = PlayerProfileManager.myProfile ?: return
-    if (profile.playerGender.isBlank()) return
-    val gE = if (profile.playerGender == "male") "🧑" else "👩"
-    val gN = if (profile.playerGender == "male") "Maschio" else "Femmina"
-    val gC = if (profile.playerGender == "male") "#00B4FF" else "#E91E63"
-    parent.addView(TextView(this).apply {
-        text = "$gE Sesso: $gN"; textSize = 15f; setTextColor(Color.parseColor(gC)); gravity = Gravity.CENTER
-        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(8) }
-    })
-    if (profile.equippedAccessories.isNotBlank()) {
-        parent.addView(TextView(this).apply {
-            text = "🎩 Accessori: ${profile.equippedAccessories.replace(",", ", ")}"
-            textSize = 13f; setTextColor(Color.parseColor("#FFD700")); gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(8) }
-        })
-    }
-    parent.addView(TextView(this).apply {
-        text = "👆 Tocca e ruota il personaggio"; textSize = 11f; setTextColor(Color.parseColor("#9999CC")); gravity = Gravity.CENTER
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(6) }
-    })
-    val glb = if (profile.playerGender == "male") "characters/player/male.glb" else "characters/player/female.glb"
-    val accH = if (profile.equippedAccessories.contains("cappello")) """<div slot="hotspot-hat" data-position="0 1.7 0" data-normal="0 1 0">🎩</div>""" else ""
-    val viewer = WebView(this).apply {
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(300))
-        settings.apply { javaScriptEnabled = true; domStorageEnabled = true; allowFileAccess = true; allowContentAccess = true }
-        setBackgroundColor(Color.TRANSPARENT); webChromeClient = WebChromeClient()
-        setOnTouchListener { v, _ -> v.parent.requestDisallowInterceptTouchEvent(true); false }
-        loadDataWithBaseURL("file:///android_asset/", """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
-<style>*{margin:0;padding:0}body{background:transparent;overflow:hidden}model-viewer{width:100vw;height:100vh;background:radial-gradient(ellipse at center,#1a1a3e 0%,#0a0a1a 100%);--poster-color:transparent}model-viewer::part(default-progress-bar){display:none}</style>
-</head><body><model-viewer src="$glb" alt="Character" auto-rotate camera-controls touch-action="pan-y" camera-orbit="0deg 75deg 2.5m" min-camera-orbit="auto auto 1.5m" max-camera-orbit="auto auto 5m" field-of-view="30deg" autoplay shadow-intensity="1" exposure="1.2" environment-image="neutral" style="width:100%;height:100%;">$accH</model-viewer></body></html>""".trimIndent(), "text/html", "UTF-8", null)
-    }
-    parent.addView(viewer)
 }

@@ -472,6 +472,9 @@ namespace City.OSM
                 });
             }
 
+            OsmDiag.LogThrottled("Merge",
+                "[Merge] MergeBuildings: input=" + n + " output=" + result.Count +
+                " fusi=" + (n - result.Count));
             return result;
         }
 
@@ -631,6 +634,9 @@ namespace City.OSM
                 });
             }
 
+            OsmDiag.LogThrottled("Merge",
+                "[Merge] MergeLegacy: input=" + n + " output=" + result.Count +
+                " fusi=" + (n - result.Count));
             return result;
         }
     }

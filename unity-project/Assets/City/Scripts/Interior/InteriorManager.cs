@@ -467,7 +467,22 @@ namespace City.Interior
                     // si avvicina all'ingresso.
                     Vector3 delta = gen.DoorAnchorWorld - pp;
                     if (delta.x * delta.x + delta.z * delta.z <= r2)
-                        gen.BuildInteriorNow();
+                    {
+                        try
+                        {
+                            City.OSM.OsmDiag.Log("[Interior] build lazy: " + gen.name +
+                                " shell " + gen.ShellW.ToString("F0") + "x" +
+                                gen.ShellD.ToString("F0") + "x" +
+                                gen.ShellH.ToString("F0") +
+                                " porta=" + gen.DoorAnchorWorld.ToString("F1"));
+                            gen.BuildInteriorNow();
+                            City.OSM.OsmDiag.Log("[Interior] build OK: " + gen.name);
+                        }
+                        catch (System.Exception e)
+                        {
+                            City.OSM.OsmDiag.Log("[Interior] build FALLITO: " + gen.name + " -> " + e.Message);
+                        }
+                    }
                 }
             }
         }

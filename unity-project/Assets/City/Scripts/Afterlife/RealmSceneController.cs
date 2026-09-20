@@ -64,11 +64,16 @@ namespace City.Afterlife
     /// volutamente assente: si usano solo API compilabili dalla harness
     /// (Camera.main.backgroundColor + Light + primitive).
     /// </summary>
-    public class RealmSceneController : MonoBehaviour
-    {
-        public AfterlifeRealm Realm { get; private set; }
+public class RealmSceneController : MonoBehaviour
+        {
+            public AfterlifeRealm Realm { get; private set; }
 
-        private GameObject _root;
+            /// <summary>Root del regno: TearDown lo distrugge con tutti i figli
+            /// (piattaforme, arena, HUD). I sottoggetti del minigioco devono
+            /// essere figli di questo transform.</summary>
+            public Transform ArenaRoot { get { return _root != null ? _root.transform : transform; } }
+
+            private GameObject _root;
         private Color _cameraBefore;
 
         /// <summary>Crea l'arena procedurale per il regno dato.</summary>
@@ -98,6 +103,13 @@ namespace City.Afterlife
             light.type = LightType.Directional;
             light.color = RealmColors.Light(Realm);
             lightGo.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+
+            // Inferno: arena verbale del minigioco "Scala il Vulcano"
+            if (Realm == AfterlifeRealm.INFERNO)
+            {
+                InfernoGame.Create(this);
+                return;
+            }
 
             BuildPlatforms();
         }

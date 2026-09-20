@@ -286,8 +286,14 @@ namespace City.NPC
             if (_prefab == null)
             {
                 try { _prefab = Resources.Load<GameObject>("Characters/characterMedium"); }
-                catch (Exception) { }
+                catch (Exception e)
+                {
+                    City.OSM.OsmDiag.Log("[FamilyKidHost] Load characterMedium FALLITO: " + e.Message);
+                }
             }
+            if (_prefab == null)
+                City.OSM.OsmDiag.Log("[FamilyKidHost] '" + objectName +
+                    "' niente prefab -> capsule fallback");
             GameObject go = _prefab != null
                 ? Instantiate(_prefab, transform)
                 : GameObject.CreatePrimitive(PrimitiveType.Capsule);

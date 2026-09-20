@@ -80,6 +80,7 @@ namespace UnityEngine
 
     public struct Quaternion { public float x, y, z, w;
         public static Quaternion Euler(float x, float y, float z) => new Quaternion();
+        public static Quaternion Euler(Vector3 v) => new Quaternion();
         public static Quaternion identity => new Quaternion();
         public static Quaternion LookRotation(Vector3 dir) => new Quaternion();
         public static Quaternion LookRotation(Vector3 dir, Vector3 up) => new Quaternion();
@@ -157,6 +158,8 @@ namespace UnityEngine
         public T AddComponent<T>() where T : Component => default(T);
         public T[] GetComponentsInChildren<T>(bool includeInactive) => new T[0];
         public T GetComponentInChildren<T>() where T : Component => default(T);
+        public T GetComponentInChildren<T>(bool includeInactive) where T : Component => default(T);
+        public T GetComponentInParent<T>(bool includeInactive) where T : Component => default(T);
         public bool activeSelf => true;
         public GameObject gameObject => null;
         public void SetActive(bool on) {}
@@ -172,6 +175,7 @@ namespace UnityEngine
         public GameObject gameObject => null;
         public T GetComponent<T>() where T : Component => default(T);
         public T GetComponentInParent<T>() where T : Component => default(T);
+        public T GetComponentInParent<T>(bool includeInactive) where T : Component => default(T);
         public T GetComponentInChildren<T>() where T : Component => default(T);
         public T GetComponentInChildren<T>(bool includeInactive) where T : Component => default(T);
         public T[] GetComponentsInChildren<T>(bool includeInactive) => new T[0];
@@ -215,6 +219,8 @@ namespace UnityEngine
         public T GetComponentInParent<T>() where T : Component => default(T);
         public T GetComponentInChildren<T>() where T : Component => default(T);
         public T GetComponent<T>() where T : Component => default(T);
+        public void SetAsLastSibling() {}
+        public void SetAsFirstSibling() {}
         public Rigidbody attachedRigidbody => null;
     }
     public struct Matrix4x4 { public Vector3 MultiplyPoint3x4(Vector3 p) => p; }
@@ -314,17 +320,27 @@ namespace UnityEngine
         public Transform rootBone { get; set; }
         public Transform[] bones => new Transform[0]; }
     public class RuntimeAnimatorController : Object { }
+    public class Avatar : Object { public bool isHuman => true; public bool isValid => true; }
+    public class AnimatorControllerParameter { public string name => ""; }
     public class Animator : Behaviour { public RuntimeAnimatorController runtimeAnimatorController { get; set; }
         public bool applyRootMotion { get; set; }
+        public Avatar avatar { get; set; }
+        public AnimatorControllerParameter[] parameters => new AnimatorControllerParameter[0];
+        public float speed { get; set; }
         public void SetFloat(string n, float v) {} public void SetBool(string n, bool v) {} public void SetTrigger(string n) {}
         public Transform GetBoneTransform(HumanBodyBones humanBoneId) => null;
+        public bool hasTransformHierarchy => true;
+        public AnimatorStateInfo GetCurrentAnimatorStateInfo(int layer) => new AnimatorStateInfo();
+        public AnimationClipInfo[] GetCurrentAnimatorClipInfo(int layer) => new AnimationClipInfo[0];
         public void SetIKPosition(AvatarIKGoal goal, Vector3 pos) {}
         public void SetIKRotation(AvatarIKGoal goal, Quaternion rot) {}
         public void SetIKPositionWeight(AvatarIKGoal goal, float w) {}
         public void SetIKRotationWeight(AvatarIKGoal goal, float w) {} }
+    public struct AnimatorStateInfo { public int fullPathHash => 0; }
+    public struct AnimationClipInfo { }
 
     public enum AvatarIKGoal { LeftFoot, RightFoot, LeftHand, RightHand }
-    public enum HumanBodyBones { Hips, LeftFoot, RightFoot, LeftHand, RightHand, Spine, Chest, UpperChest, Head }
+    public enum HumanBodyBones { Hips, LeftFoot, RightFoot, LeftHand, RightHand, Spine, Chest, UpperChest, Head, LeftShoulder, RightShoulder, LeftUpperArm, RightUpperArm }
 
     public struct LayerMask
     {
@@ -463,8 +479,30 @@ namespace UnityEngine
 
     public static class Application { public static string persistentDataPath => "/tmp"; public static bool isMobilePlatform => false;
         public static bool isEditor => true;
+        public static string version => "stub";
         public static RuntimePlatform platform => RuntimePlatform.WindowsEditor;
         public static bool CanStreamedLevelBeLoaded(string levelName) => false; }
+
+    public static class SystemInfo
+    {
+        public static string deviceModel => "stub-device";
+        public static bool supportsGyroscope => false;
+    }
+
+    public static class QualitySettings
+    {
+        public static string[] names => new string[0];
+        public static int vSyncCount { get; set; }
+        public static int GetQualityLevel() => 0;
+    }
+
+    namespace Profiling
+    {
+        public static class Profiler
+        {
+            public static long GetTotalReservedMemoryLong() => 0L;
+        }
+    }
     public enum RuntimePlatform { WindowsEditor, Android, IOS, LinuxEditor, WindowsPlayer }
     public enum QueryTriggerInteraction { UseGlobal, Ignore, Collide }
 
@@ -485,7 +523,8 @@ namespace UnityEngine
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask, QueryTriggerInteraction q) => new RaycastHit[0];
-        public static RaycastHit[] RaycastAll(Ray ray, float maxDist) => new RaycastHit[0]; }
+        public static RaycastHit[] RaycastAll(Ray ray, float maxDist) => new RaycastHit[0];
+        public static int RaycastNonAlloc(Ray ray, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) { if (results != null) for (int i = 0; i < results.Length; i++) results[i] = default(RaycastHit); return 0; } }
 
     public struct RaycastHit { public Vector3 point; public Vector3 normal; public Collider collider;
         public Transform transform => null; public float distance => 0f; }
@@ -524,6 +563,12 @@ namespace UnityEngine
         public static float GetAxis(string a) => 0f;
         public static bool GetKey(KeyCode k) => false;
         public static bool GetKeyDown(KeyCode k) => false;
+        public static Gyroscope gyro => new Gyroscope();
+    }
+    public class Gyroscope
+    {
+        public bool enabled { get; set; }
+        public Vector3 rotationRateUnbiased => Vector3.zero;
     }
     public enum KeyCode { Space, Escape, Return }
 
@@ -624,12 +669,20 @@ namespace UnityEngine.SceneManagement
     using System;
     public struct Scene { public string name => null; public bool isLoaded => false; public bool IsValid() => false; }
     public enum LoadSceneMode { Single, Additive }
+    public class AsyncOperation
+    {
+        public bool isDone { get; set; }
+        public float progress { get; set; }
+        public bool allowSceneActivation { get; set; }
+    }
     public class SceneManager
     {
         public static event Action<Scene, LoadSceneMode> sceneLoaded;
         public static Scene GetActiveScene() => new Scene();
         public static void LoadScene(string name) {}
         public static void LoadScene(int index) {}
+        public static AsyncOperation LoadSceneAsync(string sceneName) => new AsyncOperation();
+        public static AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode) => new AsyncOperation();
     }
 }
 
@@ -693,6 +746,7 @@ namespace UnityEngine.UI
     {
         public Graphic targetGraphic { get; set; }
         public Navigation navigation { get; set; }
+        public bool interactable { get; set; }
         public UnityEngine.Events.UnityEvent onClick { get; } = new UnityEngine.Events.UnityEvent();
     }
 

@@ -1,0 +1,15 @@
+== INFERNO IMPROVEMENTS ==
+[1] Mesh egg: verts=6056 tris=12000
+    bounds center=(0.01, 0.00, 32.86) size=(49.57, 49.78, 65.76)
+
+[2] Material egg: Assets/ThirdParty/FloorIsLavaBowserCastle/Materials/EasterEgg.mat (shader Universal Render Pipeline/Lit)
+
+[3] Prefab Assets/ThirdParty/FloorIsLavaBowserCastle/Prefabs/SMB3 Coin.prefab aggiornato.
+    egg scale=0.002128997 collider(local) size=(0.11, 0.14, 0.11) center=(0.00, 0.07, 0.00)
+
+[4] Avatar MiaCityAvatar attaccato a: Mario Ball (Player)
+
+Coin attive rilevate in scena: 788
+
+ERRORI: 0
+Scena salvata OK.

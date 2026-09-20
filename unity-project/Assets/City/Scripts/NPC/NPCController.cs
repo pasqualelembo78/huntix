@@ -59,6 +59,8 @@ namespace City.NPC
         // (il costo dominante): il pedone continua a camminare (logica idle)
         // ma non si disegna ne' pesa sulla fisica grafica.
         private const float CullDistSqr = 280f * 280f;   // ~280 m
+        // il sondaggio fisico del suolo (RaycastAll 700m) costa CPU: solo entro ~120m
+        private const float GroundProbeSqr = 120f * 120f;
         // Inclinazione massima (gradi) del busto sulla pendenza DEM: i pedoni
         // seguono il dislivello senza mai sbilanciarsi del tutto (piedi a terra).
         private const float MaxPedInclineDeg = 22f;
@@ -66,6 +68,7 @@ namespace City.NPC
         private bool _culled = true;
         private Camera _camCache;
         private float _camRefreshAt;
+        private float _lastCamDistSqr = float.MaxValue;
         private static readonly int MaxActiveNpc = 180;
 
         /// <summary>Pedoni attualmente in scena (per il rilevatore di travol-
@@ -170,6 +173,15 @@ namespace City.NPC
 
             CacheRenderers();
             UpdateCull(true);
+
+            OsmDiag.Log("[NPC][Init] " + NpcId + " nome='" + DisplayName + "'" +
+                " localPos=" + transform.localPosition.ToString("F2") +
+                " scale=" + transform.localScale.ToString("F2") +
+                " root=" + (transform.root != null ? transform.root.name : "null") +
+                " rootY=" + (transform.root != null ? transform.root.position.y.ToString("F2") : "?") +
+                " waypoints=" + (waypoints != null ? waypoints.Length : -1) +
+                " kenney=" + (GetComponentInChildren<SkinnedMeshRenderer>(true) != null) +
+                " walker=" + (walker != null));
         }
 
         /// <summary>Prepara renderer e camera per il culling per distanza.
@@ -199,7 +211,10 @@ namespace City.NPC
             if (_camCache != null)
             {
                 float dsqr = (_camCache.transform.position - transform.position).sqrMagnitude;
-                shouldCull = dsqr > CullDistSqr;
+                _lastCamDistSqr = dsqr;
+                var pg = City.Diagnostics.PerformanceGovernor.Instance;
+                float r = pg != null ? pg.NpcRenderRadius : 280f;
+                shouldCull = dsqr > r * r;
             }
             if (shouldCull == _culled && !force) return;
             _culled = shouldCull;
@@ -830,6 +845,7 @@ namespace City.NPC
             UpdateCull();
             UpdateNameTag();
             if (_down) return;
+            if (_culled) return;  // oltre il raggio render: niente simulazione ne' anim
             if (_fleeUntil > 0f && Time.unscaledTime >= _fleeUntil)
             {
                 walkSpeed = _baseSpeed > 0f ? _baseSpeed : walkSpeed * 0.5f;
@@ -906,7 +922,8 @@ namespace City.NPC
         {
             float elev = TileElevation.HeightAtWorld(pos);
             const int GroundMask = ~(1 << 8);
-            if (!_culled)
+            if (!_culled && (_camCache == null
+                || (_camCache.transform.position - transform.position).sqrMagnitude <= GroundProbeSqr))
             {
                 Vector3 from = pos + Vector3.up * 220f;
                 float demProbe = elev + 150f;
@@ -926,10 +943,13 @@ namespace City.NPC
                     float dsqr = h.distance * h.distance;
                     if (dsqr < bestSqr) { bestSqr = dsqr; best = i; }
                 }
-                if (best >= 0) return hits[best].point.y;
+                if (best >= 0) { _lastSurface = hits[best].collider.gameObject.name; return hits[best].point.y; }
             }
+            _lastSurface = "DEM";
             return elev;
         }
+
+        private string _lastSurface = "";
 
         /// <summary>Aggiorna la quota del pedone sulla superficie del terreno.
         /// Chiamato OGNI frame (anche quando il pedone e' fermo), cosi' non
@@ -942,18 +962,55 @@ namespace City.NPC
             Vector3 npcWorld = rootLevel
                 ? npcLocal
                 : npcLocal + new Vector3(rootT.position.x, 0f, rootT.position.z);
-            npcWorld.y = GroundHeightAt(npcWorld) + 0.12f;
-            npcLocal.y = rootLevel ? npcWorld.y : npcWorld.y - rootT.position.y;
+            float ground = GroundHeightAt(npcWorld);
+            float targetY = ground + 0.12f;
+            npcWorld.y = targetY;
+            npcLocal.y = rootLevel ? targetY : targetY - rootT.position.y;
             transform.localPosition = npcLocal;
+
+            // Diagnosi "pedone volante": il pedone sta SU una superficie che
+            // vola? throttle 8s. Se la superficie su cui e' ancorato sta
+            // molto sopra (o sotto) il terreno DEM reale, logga con il nome
+            // del collider colpito (es. impalcato di ponte/tunnel che passa
+            // sopra il marciapiede) per capire da dove arriva il volo.
+            if (Time.unscaledTime >= _flightLogNextAt)
+            {
+                _flightLogNextAt = Time.unscaledTime + 8f;
+                float dem = TileElevation.HeightAtWorld(npcWorld);
+                float sopraDem = ground - dem;
+                if (sopraDem > 1.5f || sopraDem < -1.5f)
+                {
+                    OsmDiag.Log("[NPC][VOLO] " + NpcId +
+                        " y=" + npcLocal.y.ToString("F2") +
+                        " su='" + _lastSurface + "' q=" + ground.ToString("F2") +
+                        " dem=" + dem.ToString("F2") +
+                        " sopraDem=" + sopraDem.ToString("F2") +
+                        " rootY=" + rootT.position.y.ToString("F2") +
+                        " cullato=" + _culled);
+                }
+            }
         }
+
+        private float _flightLogNextAt;
 
         private CharacterWalker walker;
         private Animator animator;
 
         private void SetAnimSpeed(float s)
         {
-            if (walker != null) walker.SetSpeed(s);
-            if (animator != null) animator.SetFloat("Speed", s);
+            var pg = City.Diagnostics.PerformanceGovernor.Instance;
+            float ar = pg != null ? pg.NpcAnimRadius : 160f;
+            bool animate = _lastCamDistSqr <= ar * ar;
+            if (walker != null)
+            {
+                if (walker.enabled != animate) walker.enabled = animate;
+                if (animate) walker.SetSpeed(s);
+            }
+            if (animator != null)
+            {
+                if (animator.speed > 0f != animate) animator.speed = animate ? 1f : 0f;
+                if (animate) animator.SetFloat("Speed", s);
+            }
         }
 
         // Il modello Kenney arriva gia' montato da NPCPopulator: qui si aggiunge
@@ -980,6 +1037,13 @@ namespace City.NPC
             rb.isKinematic = true;
             rb.useGravity = false;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
+
+            OsmDiag.Log("[NPC][Model] " + NpcId +
+                " kenney=" + kenney +
+                " animator=" + (animator != null) +
+                " walker=" + (walker != null) +
+                " smrs=" + (gameObject.GetComponentsInChildren<SkinnedMeshRenderer>(true) != null
+                    ? gameObject.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length : 0));
         }
 
         private static readonly Color[] SkinColors = new Color[]

@@ -15,12 +15,6 @@ import android.webkit.WebView
 import android.widget.*
 import android.widget.FrameLayout
 import androidx.cardview.widget.CardView
-import com.intelligame.huntix.avatar.ReadyPlayerMeActivity
-import com.intelligame.huntix.avatar.AvatarManager
-import com.intelligame.huntix.avatar.AvatarPersistenceManager
-import com.intelligame.huntix.avatar.AvatarSyncManager
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.gamification.SpecialEventManager
 import com.intelligame.huntix.gamification.DailyEventManager
@@ -58,7 +52,6 @@ class HomeActivity : BaseNavActivity() {
     private var lastSyncMs = 0L
 
     override fun activeTab() = "Home"
-    private val RC_RPM_AVATAR = 900
 
     override fun onResume() {
         super.onResume()
@@ -194,7 +187,7 @@ class HomeActivity : BaseNavActivity() {
             loadDataWithBaseURL(
                 "file:///android_asset/",
                 """<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<script type="module" src="model-viewer/model-viewer.min.js"></script>
 <style>*{margin:0;padding:0}body{background:transparent;overflow:hidden}
 model-viewer{width:100%;height:100%;background:transparent;--poster-color:transparent}
 model-viewer::part(default-progress-bar){display:none}
@@ -293,7 +286,7 @@ try {
                 ).apply { cornerRadius = dp(8).toFloat() }
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(12) }
-                    if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, LiveEventsActivity::class.java)) }
+                    if (activeEvents.isNotEmpty()) setOnClickListener { startActivity(Intent(this@HomeActivity, EventsActivity::class.java)) }
                 })
             }
         } catch (e: Exception) { Sentry.captureException(e) }
@@ -316,7 +309,7 @@ try {
                         }
                         isClickable = true; isFocusable = true
                         setOnClickListener {
-                            startActivity(Intent(this@HomeActivity, SpecialEventsActivity::class.java))
+                            startActivity(Intent(this@HomeActivity, EventsActivity::class.java))
                         }
                     }
 
@@ -379,7 +372,7 @@ try {
                         }
                         isClickable = true; isFocusable = true
                         setOnClickListener {
-                            startActivity(Intent(this@HomeActivity, SpecialEventsActivity::class.java))
+                            startActivity(Intent(this@HomeActivity, EventsActivity::class.java))
                         }
                     }
 
@@ -748,26 +741,5 @@ try {
         private const val LP_MW = LinearLayout.LayoutParams.MATCH_PARENT
         private const val LP_WW = LinearLayout.LayoutParams.WRAP_CONTENT
         private const val RESUME_SYNC_INTERVAL_MS = 60_000L
-    }
-
-    // ── Ready Player Me Avatar ────────────────────────────────
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == RC_RPM_AVATAR && resultCode == android.app.Activity.RESULT_OK) {
-            val avatarUrl = data?.getStringExtra(ReadyPlayerMeActivity.EXTRA_AVATAR_URL) ?: return
-            val avatarId = data.getStringExtra(ReadyPlayerMeActivity.EXTRA_AVATAR_ID) ?: ""
-            AvatarPersistenceManager.saveAvatarId(this, avatarId)
-            lifecycleScope.launch {
-                val success = AvatarManager.ensureAvatarDownloaded(this@HomeActivity, avatarUrl)
-                if (success) {
-                    AvatarManager.downloadAvatarThumbnail(this@HomeActivity, avatarId)
-                    AvatarSyncManager.pushLocalToCloud(this@HomeActivity)
-                    Toast.makeText(this@HomeActivity, "\u2705 Avatar salvato!", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@HomeActivity, "\u274C Errore download avatar", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
     }
 }

@@ -333,6 +333,10 @@ namespace City.Vehicle
         private void SnapToElevation()
         {
             float h = TileElevation.HeightAtWorld(transform.position);
+            if (h <= 0.05f)
+                OsmDiag.LogThrottled("TrafficCar",
+                    "[TrafficCar] DEM=0 per " + gameObject.name + " presso " +
+                    transform.position.ToString("F1") + " (auto a quota terra)");
             Vector3 lp = transform.localPosition;
             transform.localPosition = new Vector3(lp.x, h, lp.z);
         }

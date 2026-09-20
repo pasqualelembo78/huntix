@@ -41,8 +41,8 @@ android {
         applicationId "com.intelligame.huntix"
          minSdk 29
         targetSdk 35
-        versionCode 20
-        versionName "1.10"
+        versionCode 26
+        versionName "1.16"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Priorità: -P gradle prop > ENV > keystore.properties > default hardcoded
@@ -184,6 +184,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-auth-ktx'
     implementation 'com.google.firebase:firebase-analytics-ktx'
     implementation 'com.google.firebase:firebase-crashlytics-ktx'
+    implementation 'com.google.firebase:firebase-crashlytics-ndk'
     implementation 'com.google.firebase:firebase-functions-ktx'
     implementation 'com.google.firebase:firebase-config-ktx'
 

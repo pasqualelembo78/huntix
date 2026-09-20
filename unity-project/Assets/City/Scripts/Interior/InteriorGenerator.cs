@@ -336,12 +336,16 @@ namespace City.Interior
             // (_interiorRoot) cosi' la scala non uniforme del prefab (che e'
             // scalato sull'impronta OSM) non deforma pareti e arredi.
             _inPlace = !_prefabExterior;
+            Log("BuildInteriorNow tipo='" + (_lazyType ?? "?") + "' " +
+                _lazyW.ToString("F1") + "x" + _lazyD.ToString("F1") + "x" +
+                _lazyH.ToString("F1") + " prefab=" + _prefabExterior);
             try
             {
                 Transform dest = _prefabExterior && _interiorRoot != null ? _interiorRoot : transform;
                 BuildInterior(dest, _lazyType, _lazyW, _lazyD, _lazyH, 1, _lazyShop);
                 if (_prefabExterior)
                     SetInteriorRootActive(false); // nascosto fin quando non si entra
+                Log("BuildInteriorNow OK tipo='" + _lazyType + "'");
             }
             finally
             {
@@ -391,6 +395,9 @@ namespace City.Interior
             light.range = Mathf.Max(ShellW, ShellD) * 0.7f;
             light.enabled = false;
             AttachLight(light);
+            Log("PreparePrefabExterior done: type=" + type +
+                " shell=" + ShellW.ToString("F1") + "x" + ShellD.ToString("F1") + "x" + ShellH.ToString("F1") +
+                " shop=" + (_lazyShop != null) + " collider=" + (_prefabCollider != null));
         }
 
         public bool IsPrefabExterior

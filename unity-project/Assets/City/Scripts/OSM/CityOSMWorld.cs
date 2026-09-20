@@ -401,6 +401,18 @@ namespace City.OSM
                       " buildings=" + (env.buildings != null ? env.buildings.Length : 0) +
                       " trees=" + (env.trees != null ? env.trees.Length : 0) +
                       " parks=" + (env.parks != null ? env.parks.Length : 0));
+
+            try
+            {
+                var telemetry = City.Diagnostics.SessionTelemetry.Instance;
+                if (telemetry != null)
+                    telemetry.WorldReady(
+                        env.roads != null ? env.roads.Length : 0,
+                        env.buildings != null ? env.buildings.Length : 0,
+                        env.trees != null ? env.trees.Length : 0,
+                        env.parks != null ? env.parks.Length : 0);
+            }
+            catch (System.Exception) {}
         }
 
         // ── veicoli ─────────────────────────────────────────────────
@@ -1530,6 +1542,10 @@ namespace City.OSM
             var inst = Instantiate(prefab, parent);
             inst.name = "Edificio " + b.id;
             inst.transform.position = new Vector3(fp.CenterX, 0f, fp.CenterZ);
+            // Converti materiali built-in (Standard/Diffuse) a URP/Lit: i
+            // prefab FBX li importano grigi in URP, questo rimappa texture +
+            // shader una volta sola per materiale condiviso.
+            BuildingPlacer.EnsureURPMaterials(inst);
             UnityBridge.LogToAndroid("CityOSM", $"Building placed: {prefabName} ({source}) id={b.id}");
 
             // Disabilita subito tutti i collider originali del prefab Kenney

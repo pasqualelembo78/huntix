@@ -13,12 +13,58 @@ namespace City.Economy
         private const float MIN_SPAWN_DIST = 8f;
         private const float EGG_RADIUS = 100f;
 
+        // Densita' spawn stile Pokemon GO: ~23 wild/km^2 nelle aree urbane
+        // (analisi The Silph Road / studi accademici). Il chunk e' 1x1 km,
+        // quindi ~23 uova per chunk, piu' quelle legate ai POI.
+        private const float EGGS_PER_KM2 = 23f;
+
         private readonly List<GameObject> eggs = new List<GameObject>();
 
-        private float GroundY(Transform root, Vector3 local)
+        /// <summary>
+        /// Quota (m s.l.m.) del terreno sotto un punto locale del chunk.
+        /// Campiona PRIMA la griglia DEM della geo (stesso SampleBilinear di
+        /// ChunkBuilder/CollectDemHeights): e' la fonte garantita allineata al
+        /// terreno costruito. Il registro globale TileElevation puo' restituire
+        /// 0 (MISS) se la tile non e' ancora registrata al momento dello spawn:
+        /// le uova finirebbero sepolte sotto un terreno rialzato di decine di
+        /// metri. Se la geo non ha DEM si usa TileElevation come fallback.
+        /// </summary>
+        private float GroundY(Transform root, Vector3 local, TileGeoDoc geo)
         {
-            return TileElevation.HeightAtWorld(
-                root.TransformPoint(new Vector3(local.x, 0f, local.z)));
+            Vector3 world = root.TransformPoint(new Vector3(local.x, 0f, local.z));
+            if (geo != null && geo.ele != null && geo.ele.Length > 0 &&
+                geo.ele_nrow > 1 && geo.ele_ncol > 1 &&
+                geo.bbox != null && geo.bbox.Length >= 4)
+            {
+                var g = WorldOrigin.ToGeo(world);
+                return SampleBilinear(geo.ele, geo.ele_nrow, geo.ele_ncol,
+                    geo.bbox[0], geo.bbox[1], geo.bbox[2], geo.bbox[3],
+                    g.lat, g.lng);
+            }
+            return TileElevation.HeightAtWorld(world);
+        }
+
+        /// <summary>Interpolazione bilineare dell'elevazione sul bbox della
+        /// tile (specchio di ChunkBuilder.SampleBilinear).</summary>
+        private static float SampleBilinear(float[] ele, int nrow, int ncol,
+            double latMin, double lonMin, double latMax, double lonMax,
+            double lat, double lon)
+        {
+            double fy = (lat - latMin) / (latMax - latMin) * (nrow - 1);
+            double fx = (lon - lonMin) / (lonMax - lonMin) * (ncol - 1);
+            fy = fy < 0 ? 0 : (fy > nrow - 1 ? nrow - 1 : fy);
+            fx = fx < 0 ? 0 : (fx > ncol - 1 ? ncol - 1 : fx);
+            int y0 = (int)fy, x0 = (int)fx;
+            int y1 = y0 + 1 < nrow ? y0 + 1 : y0;
+            int x1 = x0 + 1 < ncol ? x0 + 1 : x0;
+            float dy = (float)(fy - y0);
+            float dx = (float)(fx - x0);
+            float v00 = ele[y0 * ncol + x0];
+            float v10 = ele[y1 * ncol + x0];
+            float v01 = ele[y0 * ncol + x1];
+            float v11 = ele[y1 * ncol + x1];
+            return Mathf.Lerp(Mathf.Lerp(v00, v01, dx),
+                             Mathf.Lerp(v10, v11, dx), dy);
         }
         private Transform player;
         private Vector3 lastCenter;
@@ -119,9 +165,10 @@ namespace City.Economy
         private EggController.Rarity RollRarity()
         {
             double roll = rng.NextDouble();
-            if (roll < 0.02) return EggController.Rarity.Legendary;
-            if (roll < 0.10) return EggController.Rarity.Rare;
-            if (roll < 0.30) return EggController.Rarity.Uncommon;
+            if (roll < 0.015) return EggController.Rarity.Legendary;
+            if (roll < 0.05) return EggController.Rarity.Epic;
+            if (roll < 0.14) return EggController.Rarity.Rare;
+            if (roll < 0.35) return EggController.Rarity.Uncommon;
             return EggController.Rarity.Common;
         }
 
@@ -132,6 +179,7 @@ namespace City.Economy
                 case EggController.Rarity.Common: return 2;
                 case EggController.Rarity.Uncommon: return 5;
                 case EggController.Rarity.Rare: return 15;
+                case EggController.Rarity.Epic: return 30;
                 case EggController.Rarity.Legendary: return 50;
                 default: return 2;
             }
@@ -188,7 +236,11 @@ namespace City.Economy
                 if (Game.Instance != null && Game.Instance.player != null)
                     player = Game.Instance.player.transform;
 
-            int maxEggs = 3 + (rng.Next() % 2);
+            // Densita' Pokemon GO: ~23 uova per km2 (il chunk e' 1x1 km).
+            // Minimo 8 per non svuotare i chunk rurali, massimo MAX_EGGS.
+            float km2 = (bounds.width * bounds.height) / 1000000f;
+            int maxEggs = Mathf.Clamp(Mathf.RoundToInt(km2 * EGGS_PER_KM2),
+                8, MAX_EGGS);
             var candidates = new List<EggCandidate>();
 
             // ── 1) Strade ───────────────────────────────────────
@@ -208,7 +260,7 @@ namespace City.Economy
                             if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
                             local += new Vector3((float)(rng.NextDouble() - 0.5) * 4f, 0f,
                                                  (float)(rng.NextDouble() - 0.5) * 4f);
-                            local.y = 0.3f + GroundY(root, local);
+                            local.y = 0.3f + GroundY(root, local, geo);
                             candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Strada });
                         }
                         catch { }
@@ -229,7 +281,7 @@ namespace City.Economy
                         {
                             Vector3 pt = RandomPointInPolygon(park.poly, toLocal);
                             if (!bounds.Contains(new Vector2(pt.x, pt.z))) continue;
-                            pt.y = 0.3f + GroundY(root, pt);
+                            pt.y = 0.3f + GroundY(root, pt, geo);
                             candidates.Add(new EggCandidate { pos = pt, type = ptype });
                         }
                     }
@@ -247,7 +299,7 @@ namespace City.Economy
                         if (rng.NextDouble() > 0.2) continue;
                         Vector3 local = SafeToLocal(toLocal, tree);
                         if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
-                        local.y = 0.3f + GroundY(root, local);
+                        local.y = 0.3f + GroundY(root, local, geo);
                         candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Albero });
                     }
                     catch { }
@@ -268,7 +320,7 @@ namespace City.Economy
                         if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
                         local += new Vector3((float)(rng.NextDouble() - 0.5) * 6f, 0f,
                                              (float)(rng.NextDouble() - 0.5) * 6f);
-                        local.y = 0.3f + GroundY(root, local);
+                        local.y = 0.3f + GroundY(root, local, geo);
                         candidates.Add(new EggCandidate { pos = local, type = EggController.EggType.Edificio });
                     }
                     catch { }
@@ -287,7 +339,7 @@ namespace City.Economy
                     float x = bounds.xMin + (float)rng.NextDouble() * bounds.width;
                     float z = bounds.yMin + (float)rng.NextDouble() * bounds.height;
                     var t = fallbackTypes[rng.Next(fallbackTypes.Length)];
-                    candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f + GroundY(root, new Vector3(x, 0f, z)), z), type = t });
+                    candidates.Add(new EggCandidate { pos = new Vector3(x, 0.3f + GroundY(root, new Vector3(x, 0f, z), geo), z), type = t });
                 }
             }
 
@@ -301,9 +353,27 @@ namespace City.Economy
             }
 
             int placed = 0;
+            // Posizioni gia' piazzate in QUESTO chunk (locale, non la lista
+            // globale `eggs`, che puo' cambiare durante la build a causa di
+            // RemoveEgg/DespawnAll -> indice fuori range).
+            var placedPositions = new List<Vector3>();
             foreach (var c in candidates)
             {
                 if (placed >= maxEggs) break;
+                // Stile Pokemon GO: punti spawn sparsi, mai a grumi. Se un
+                // candidato e' troppo vicino a una uova gia' piazzata, lo
+                // si salta (il seed del chunk rende tutto deterministico).
+                bool tooClose = false;
+                Vector3 wp = root.TransformPoint(c.pos);
+                for (int i = 0; i < placedPositions.Count; i++)
+                {
+                    if (Vector3.Distance(placedPositions[i], wp) < MIN_SPAWN_DIST)
+                    {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose) continue;
                 try
                 {
                     var go = new GameObject("Egg_" + c.type + "_" + placed);
@@ -314,6 +384,7 @@ namespace City.Economy
                     var egg = go.AddComponent<EggController>();
                     egg.Init(root.TransformPoint(c.pos), RollRarity(), c.type);
                     eggs.Add(go);
+                    placedPositions.Add(root.TransformPoint(c.pos));
                 }
                 catch { }
                 placed++;
@@ -324,6 +395,14 @@ namespace City.Economy
             // tipo (chiesa, scuola, bar, ecc.): premiano chi esplora la citta'
             // reale e cerca i luoghi, non solo i punti casuali sulla mappa.
             SpawnPoiEggs(root, geo, toLocal, bounds);
+
+            // Abilita il culling per distanza (Update): senza questo flag le
+            // uova di TUTTI i chunk costruiti restano attive per sempre, con
+            // point light/animazione sempre accesi anche a chilometri di distanza.
+            if (player == null)
+                if (Game.Instance != null && Game.Instance.player != null)
+                    player = Game.Instance.player.transform;
+            spawned = true;
         }
 
         private static readonly string[] PoiEggBuildingTypes = new[]
@@ -361,11 +440,13 @@ namespace City.Economy
                 // angolo dell'edificio, appena fuori
                 local += new Vector3((float)(rng.NextDouble() - 0.5) * 9f, 0.3f,
                                      (float)(rng.NextDouble() - 0.5) * 9f);
-                local.y = 0.3f + GroundY(root, local);
+                local.y = 0.3f + GroundY(root, local, geo);
 
-                EggController.Rarity r = rng.NextDouble() < 0.3
-                    ? EggController.Rarity.Legendary
-                    : EggController.Rarity.Rare;
+                EggController.Rarity r;
+                double rr = rng.NextDouble();
+                if (rr < 0.12) r = EggController.Rarity.Epic;
+                else if (rr < 0.42) r = EggController.Rarity.Legendary;
+                else r = EggController.Rarity.Rare;
 
                 try
                 {

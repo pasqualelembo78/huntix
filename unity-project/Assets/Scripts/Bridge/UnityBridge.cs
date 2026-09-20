@@ -574,5 +574,44 @@ namespace Huntix.Bridge
             catch (System.Exception e) { Debug.LogWarning("[UnityBridge] SetPlayerNameFromCity: " + e.Message); }
             #endif
         }
+
+        // ── City State Sync (snapshot bidirezionale stato città) ─────────
+        // X0magine: lo snapshot completo di MiCittà esportato pigramente ad
+        // Android come "registro" (vedi CityStateSync.kt); al rientro, se il
+        // salvataggio locale è vergine, Unity lo ri-importa per ripristinare
+        // lo stato. Unity è la fonte di verità della sessione; Android il mirror.
+
+        /// <summary>Invia lo snapshot completo dello stato città ad Android
+        ///  (evento "CityStateSync" → CityStateSync.onCitySnapshot).</summary>
+        public static void PushCityStateSnapshot(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            SendMessageToAndroid("CityStateSync", json);
+        }
+
+        /// <summary>Restituisce l'ultimo snapshot città conservato lato Android
+        ///  ("" se assente): usato all'avvio per il ripristino.</summary>
+        public static string GetCityStateSnapshot()
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass("com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    return jc.CallStatic<string>("getCityStateSync") ?? "";
+                }
+            }
+            catch (System.Exception e) { Debug.LogWarning("[UnityBridge] GetCityStateSnapshot: " + e.Message); }
+            #endif
+            return "";
+        }
+
+        /// <summary>Verifica di allineamento dello snapshot (evento
+        ///  "CityStateCheck" → CityStateSync.checkSync): il report è scritto
+        ///  nei log dell'app.</summary>
+        public static void RequestCityStateCheck()
+        {
+            SendMessageToAndroid("CityStateCheck", "{}");
+        }
     }
 }

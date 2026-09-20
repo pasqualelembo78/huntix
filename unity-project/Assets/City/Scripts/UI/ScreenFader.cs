@@ -21,6 +21,7 @@ namespace City.UI
         /// ancora cambiando stato. Delegando la coroutine a un runner
         /// DontDestroyOnLoad sempre attivo il fade non dipende piu' dallo stato
         /// attivo del Fader.</summary>
+        private static ScreenFader _global;
         private static ScreenFaderRunner _runner;
         private static ScreenFaderRunner Runner
         {
@@ -49,6 +50,33 @@ namespace City.UI
         {
             StartFade(1f, 0f, done);
         }
+
+        /// <summary>Istanza globale persistente (DontDestroyOnLoad) del fader,
+        /// autonoma dalle scene: crea un Canvas dedicato full-screen con
+        /// immagine nera. Usata per le transizioni dell'aldila' (morte in
+        /// citta' -> Inferno e regno -> regno) dove la UI della citta' viene
+        /// distrutta dal cambio scena e la UI del gioco non ha propri fader.</summary>
+        public static ScreenFader Global
+        {
+            get
+            {
+                if (_global != null) return _global;
+                var go = new GameObject("ScreenFaderGlobal");
+                DontDestroyOnLoad(go);
+                var canvas = go.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 30000;
+                var img = go.AddComponent<Image>();
+                img.raycastTarget = false;
+                img.color = new Color(0f, 0f, 0f, 0f);
+                _global = go.AddComponent<ScreenFader>();
+                _global.image = img;
+                return _global;
+            }
+        }
+
+        public static void FadeToBlackGlobal(Action done) { Global.FadeToBlack(done); }
+        public static void FadeFromBlackGlobal(Action done) { Global.FadeFromBlack(done); }
 
         private void StartFade(float from, float to, Action done)
         {

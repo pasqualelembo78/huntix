@@ -1,5 +1,14 @@
 # AGENTS.md
 
+> [!IMPORTANT]
+> **LEGGERE SEMPRE, PRIMA DI QUALSIASI RICHIESTA:** il file
+> **`HUNTIX_MANDATO.md`** (nella stessa cartella di questo file) è la
+> Costituzione del gioco: HUNTIX è una **caccia alle uova AR**, universo unico
+> Unity+Android, con **bridge bidirezionale obbligatorio** da/per Android per
+> ogni componente Unity e il **"Riflesso della caccia alle uova"** (ogni nuova
+> funzionalità va proposta con la sua integrazione uova). In caso di conflitto,
+> il Mandato prevale sul resto di questo file.
+
 ## Repository
 - Root: `/root/giochi/huntix` (git). Backend preprocessing in `backend/preprocessing`,
   tile/POI server in `backend/traffic/tile_server.py`, app Android in `app/`,

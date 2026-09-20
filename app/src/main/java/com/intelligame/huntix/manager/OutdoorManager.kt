@@ -356,6 +356,13 @@ class OutdoorManager private constructor() : SensorEventListener {
         val difficulty = prefs?.getString("difficulty", "normale") ?: "normale"
         val setupRadius = prefs?.getInt("radius", 250) ?: 250
 
+        // Eventi stagionali collegati davvero: Egg Rush / Golden Hour riaumentano
+        // lo spawn reale (non solo il display), e Settimana Leggendaria alza le
+        // probabilita' di epic/legendary sul campo.
+        val liveSpawn = com.intelligame.huntix.gamification.LiveEventManager
+        val spawnMult = liveSpawn.getActiveSpawnMultiplier()
+        val activeCount = (eggCount * spawnMult).toInt().coerceAtLeast(eggCount)
+
         val radiusMultiplier = when (difficulty) {
             "facile" -> 0.6
             "difficile" -> 1.5
@@ -365,7 +372,7 @@ class OutdoorManager private constructor() : SensorEventListener {
             "difficile" -> 1.5f
             "leggendario" -> 2.0f
             else -> 1.0f
-        }
+        } + liveSpawn.getActiveLegendaryBonus()
 
         val maxDist = setupRadius.toDouble()
 
@@ -375,7 +382,7 @@ class OutdoorManager private constructor() : SensorEventListener {
         newPois.add(generateGeographicHouseForPlayer(loc))
 
         try {
-            repeat(eggCount) {
+            repeat(activeCount) {
                 val dist = (10.0 + rng.nextDouble() * (maxDist - 10.0).coerceAtLeast(10.0)) * radiusMultiplier
                 val (la, ln) = offset(loc.latitude, loc.longitude, dist, rng)
                 val rarity = pickRarity(rng, rarityBoost)
@@ -781,7 +788,30 @@ class OutdoorManager private constructor() : SensorEventListener {
             EggRarity.EPIC -> 100.0
             EggRarity.LEGENDARY -> 250.0
         }
+        val gemsReward = when (caught.rarity) {
+            EggRarity.COMMON -> 1
+            EggRarity.UNCOMMON -> 3
+            EggRarity.RARE -> 8
+            EggRarity.EPIC -> 20
+            EggRarity.LEGENDARY -> 50
+        }
         com.intelligame.huntix.managers.SavedManager.addMvc(ctx, mvcReward)
+        // Gemme dalla caccia (eventi). Eventi stagionali onsite per rare/leggendarie.
+        val eventGems = (gemsReward * com.intelligame.huntix.gamification.LiveEventManager.getActiveGemsMultiplier()).toInt().coerceAtLeast(gemsReward)
+        if (eventGems > 0) {
+            com.intelligame.huntix.PlayerProfileManager.myProfile?.addGems(eventGems)
+            com.intelligame.huntix.PlayerProfileManager.persistMyProfile()
+        }
+        // XP evento reale (Doppio XP / Golden Hour) accreditato davvero sul profilo.
+        val xpMult = com.intelligame.huntix.gamification.LiveEventManager.getActiveXpMultiplier()
+        if (xpMult > 1f) {
+            val bonusXp = (caught.rarity.xpReward * (xpMult - 1f)).toInt()
+            if (bonusXp > 0) PlayerProfileManager.recordTraining(0, bonusXp.toLong()) { }
+        }
+        // "DOVE HO TROVATO L'UOVO" per il profilo condiviso: anche outdoor.
+        com.intelligame.huntix.managers.EggWhereLog.record(
+            ctx, caught.rarity.id, caught.displayLabel, caught.lat, caught.lng, caught.displayLabel
+        )
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_3")
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "catch_20")
         com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(ctx, "earn_500_mvc", mvcReward.toInt())
