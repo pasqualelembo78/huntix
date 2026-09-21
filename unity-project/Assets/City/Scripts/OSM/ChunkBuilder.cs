@@ -150,9 +150,10 @@ namespace City.OSM
                 try
                 {
                     Mesh sidewalkMesh;
+                    Mesh deckColMesh;
                     Mesh roadMesh = RoadRenderer.Build(
                         geo.roads, ToLocal, bounds, chunk.root.transform,
-                        out sidewalkMesh);
+                        out sidewalkMesh, out deckColMesh);
                     if (roadMesh != null)
                     {
                         chunk.roadsGo = new GameObject("Strade",
@@ -176,11 +177,24 @@ namespace City.OSM
                             mgr.SharedSidewalkMaterial;
                         chunk.sidewalksGo.GetComponent<MeshCollider>().sharedMesh = sidewalkMesh;
                     }
+                    // Viadotti/gallerie: l'impalcato sospeso non ha marciapiede
+                    // (l'unica mesh stradale dotata di collider), quindi restava
+                    // una superficie puramente VISIVA e il player/le auto
+                    // passavano ATTRAVERSO il ponte. Un collider dedicato,
+                    // invisibile (niente renderer), rende percorribile il deck.
+                    if (deckColMesh != null)
+                    {
+                        var deckColGo = new GameObject("DeckColliders",
+                            typeof(MeshCollider));
+                        deckColGo.transform.SetParent(chunk.root.transform, false);
+                        deckColGo.GetComponent<MeshCollider>().sharedMesh = deckColMesh;
+                    }
                     stradeOk = true;
                     OsmDiag.Log("[Builder] " + chunk.key +
                         " stradeIn=" + geo.roads.Length +
                         " stradeVerts=" + (roadMesh != null ? roadMesh.vertexCount : -1) +
                         " marciapiediVerts=" + (sidewalkMesh != null ? sidewalkMesh.vertexCount : -1) +
+                        " deckColVerts=" + (deckColMesh != null ? deckColMesh.vertexCount : -1) +
                         " matStrada=" + (mgr.SharedRoadMaterial != null &&
                             mgr.SharedRoadMaterial.shader != null
                             ? mgr.SharedRoadMaterial.shader.name : "NULL"));
@@ -577,8 +591,9 @@ namespace City.OSM
             try
             {
                 Mesh sidewalkMesh;
+                Mesh deckColMesh;
                 Mesh roadMesh = RoadRenderer.Build(geo.roads, ToLocal, bounds,
-                    rootT, out sidewalkMesh);
+                    rootT, out sidewalkMesh, out deckColMesh);
                 if (roadMesh != null)
                 {
                     if (chunk.roadsGo == null)
@@ -605,6 +620,22 @@ namespace City.OSM
                     SwapSharedMesh(chunk.sidewalksGo, sidewalkMesh);
                     var col = chunk.sidewalksGo.GetComponent<MeshCollider>();
                     if (col != null) col.sharedMesh = sidewalkMesh;
+                }
+                if (deckColMesh != null)
+                {
+                    Transform deckColT = null;
+                    for (int i = 0; i < rootT.childCount; i++)
+                        if (rootT.GetChild(i).name == "DeckColliders")
+                        { deckColT = rootT.GetChild(i); break; }
+                    if (deckColT == null)
+                    {
+                        var go = new GameObject("DeckColliders",
+                            typeof(MeshCollider));
+                        go.transform.SetParent(rootT, false);
+                        deckColT = go.transform;
+                    }
+                    var mcol = deckColT.GetComponent<MeshCollider>();
+                    if (mcol != null) mcol.sharedMesh = deckColMesh;
                 }
                 OsmDiag.Log("[Builder] " + chunk.key +
                     " roads-only riallineate (DEM aggiornato)");

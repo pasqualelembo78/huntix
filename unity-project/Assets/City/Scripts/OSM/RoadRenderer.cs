@@ -123,10 +123,12 @@ namespace City.OSM
         /// sidewalkOut riceve la mesh dei marciapiedi (null se vuota).
         /// </summary>
         public static Mesh Build(TileRoadRec[] roads, System.Func<GeoLL, Vector3> toLocal,
-            Rect localBounds, Transform labelsParent, out Mesh sidewalkOut)
+            Rect localBounds, Transform labelsParent, out Mesh sidewalkOut,
+            out Mesh deckColOut)
         {
             var road = new Acc();
             var walk = new Acc();
+            var deckCol = new Acc();   // collider dei viadotti/gallerie (solo impalcato)
             var labels = new List<LabelSpec>();
 
             // Nodi condivisi fra piu' strade (bivi T/X/incroci): le strade che
@@ -149,7 +151,8 @@ namespace City.OSM
                         labelsParent);
                     continue;
                 }
-                AppendRoad(roadRec, toLocal, localBounds, road, walk, labels, labelsParent);
+                    AppendRoad(roadRec, toLocal, localBounds, road, walk, deckCol,
+                        labels, labelsParent);
             }
 
             // Fan di giunzione per tutti i nodi reali dentro i limiti del chunk.
@@ -161,6 +164,7 @@ namespace City.OSM
                 CreateLabels(labels, labelsParent);
 
             sidewalkOut = walk.ToMesh("MarciapiediChunk");
+            deckColOut = deckCol.ToMesh("DeckColChunk");
             var roadMesh = road.ToMesh("StradeChunk");
             OsmDiag.Log("[Roads] Build chunk: strade=" + roadsTotal +
                 " saltate=" + roadsSkipped + " giunzioni=" + junctions.Count +
@@ -425,14 +429,15 @@ namespace City.OSM
 
         private static void AppendRoad(TileRoadRec road,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds,
-            Acc roadAcc, Acc walkAcc, List<LabelSpec> labels, Transform root)
+            Acc roadAcc, Acc walkAcc, Acc deckCol,
+            List<LabelSpec> labels, Transform root)
         {
             // Viadotti/gallerie con la retta di impalcato nota (dh): sezione
             // elevata/tunnelizzata, NON drappata sul terreno. Senza dh (dati
             // DEM mancanti ai capisaldi) resta la strada classica sul terreno.
             if ((road.br || road.tu) && road.dh)
             {
-                AppendDeck(road, toLocal, bounds, roadAcc, labels, root);
+                AppendDeck(road, toLocal, bounds, roadAcc, deckCol, labels, root);
                 return;
             }
             // Converte e tiene solo i punti dentro i limiti espansi; spezza la
@@ -499,7 +504,7 @@ namespace City.OSM
         /// monte, come deve essere).</summary>
         private static void AppendDeck(TileRoadRec road,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds,
-            Acc roadAcc, List<LabelSpec> labels, Transform root)
+            Acc roadAcc, Acc deckCol, List<LabelSpec> labels, Transform root)
         {
             const float margin = 60f;
             float width = RoadWidth(road.hw);
@@ -538,7 +543,7 @@ namespace City.OSM
                 {
                     if (run.Count > 0)
                     {
-                        EmitRun(run, width, false, roadAcc, null, root, false);
+                        EmitDeck(run, width, roadAcc, deckCol, root);
                         TryAddLabel(road.nm, run, labels);
                         run.Clear();
                     }
@@ -557,9 +562,23 @@ namespace City.OSM
             }
             if (run.Count > 0)
             {
-                EmitRun(run, width, false, roadAcc, null, root, false);
+                EmitDeck(run, width, roadAcc, deckCol, root);
                 TryAddLabel(road.nm, run, labels);
             }
+        }
+
+        /// <summary>Emette il nastro del deck (asfalto visibile) E una copia
+        /// dello stesso impalcato in una mesh dedicata che il chunk monta come
+        /// MeshCollider invisibile: i viadotti/gallerie non hanno marciapiede
+        /// (l'unica mesh con collider stradale), quindi senza questa copia
+        /// player e auto passavano ATTRAVERSO il ponte sospeso.</summary>
+        private static void EmitDeck(List<Vector3> run, float width,
+            Acc roadAcc, Acc deckCol, Transform root)
+        {
+            if (run.Count < 2) return;
+            EmitRun(run, width, false, roadAcc, null, root, false);
+            if (deckCol != null)
+                Strip(run, -width * 0.5f, width * 0.5f, Y_ROAD, deckCol, root, false);
         }
 
         /// <summary>Appende a `run` i punti che fanno seguire all'asfalto il DEM:

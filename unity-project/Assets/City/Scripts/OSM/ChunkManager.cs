@@ -431,6 +431,12 @@ namespace City.OSM
                     " non disponibile: prossimo tentativo per " +
                     chunk.key + " tra " + (int)delay + "s (n." +
                     (attempts + 1) + ")");
+                // B3: niente vuoto sotto il player mentre la tile genera sul
+                // server: costruiamo un TERRENO PIANO temporaneo (con collider)
+                // che impedisce la caduta. Al retry riuscito il ramo sotto
+                // Distrugge questa root e ricostruisce col vero DEM.
+                if (chunk.root == null)
+                    BuildFlatTerrainFallback(chunk, tileKey);
             }
             else
             {
@@ -497,6 +503,64 @@ namespace City.OSM
 
             _inFlight.Remove(c);
             _activeBuilds--;
+        }
+
+        /// <summary>Costruisce un chunk vuoto ma SOLIDO quando la tile geo non
+        /// e' ancora disponibile: un quadrilatero piano (TerrainChunk flat +
+        /// MeshCollider) alla quota del DEM gia' registrato nelle vicinanze, o
+        /// a 0 s.l.m. senza. Cosi' il player non precipita nel vuoto mentre il
+        /// server genera la zona; il retry di BuildChunkCoroutine Distruggerà'
+        /// questo scaffolding e ricostruirà il chunk vero.</summary>
+        private void BuildFlatTerrainFallback(ChunkData chunk, string tileKey)
+        {
+            try
+            {
+                var root = new GameObject(chunk.key + " [vuoto]");
+                chunk.root = root;
+                if (ChunkRootParent != null)
+                    root.transform.SetParent(ChunkRootParent, false);
+
+                if (!WorldOrigin.Initialized)
+                    WorldOrigin.Init(41.9028, 12.4964);
+
+                Vector3 originWorld = WorldOrigin.ToWorld(chunk.center);
+                // rialzo il piano alla quota locale: evita da un lato la buca a
+                // y=0 se intorno c'e' gia' del DEM registrato, e resta -0.05 m
+                // sotto il calpestabile come ogni terreno TerrainChunk.
+                float support = TileElevation.HeightAt(chunk.center.lat, chunk.center.lng);
+                root.transform.position = new Vector3(originWorld.x, support, originWorld.z);
+
+                System.Func<GeoLL, Vector3> toLocal = ll =>
+                {
+                    var w = WorldOrigin.ToWorld(ll.a, ll.o);
+                    return new Vector3(w.x - originWorld.x, 0f, w.z - originWorld.z);
+                };
+                GeoCoord sw = CityGrid.ChunkCorner(chunk.index);
+                GeoCoord ne = CityGrid.ChunkCorner(
+                    new Vector2Int(chunk.index.x + 1, chunk.index.y + 1));
+                Vector3 cSW = toLocal(new GeoLL { a = sw.lat, o = sw.lng });
+                Vector3 cNE = toLocal(new GeoLL { a = ne.lat, o = ne.lng });
+                Rect bounds = new Rect(cSW.x, cSW.z, cNE.x - cSW.x, cNE.z - cSW.z);
+
+                // heights null -> BuildFlatMesh: piano unico con MeshCollider.
+                // politico: niente LOD sul fallback (lod resta -1, SetLod esce
+                // per via di !built), gli HUD filtrano per geo!=null.
+                chunk.terrainGo = TerrainChunk.Create(root.transform, "Terreno",
+                    bounds, null);
+                OsmDiag.Log("[ChunkManager] " + chunk.key +
+                    " fallback PIANO temporaneo (geo assente, tile " + tileKey +
+                    ", quota supporto " + support.ToString("F1") + " m)");
+            }
+            catch (System.Exception e)
+            {
+                if (chunk.root != null)
+                {
+                    UnityEngine.Object.Destroy(chunk.root);
+                    chunk.root = null;
+                }
+                UnityEngine.Debug.LogError("[ChunkManager] fallback terreno piano per " +
+                    chunk.key + " fallito: " + e);
+            }
         }
 
         private IEnumerator EnsureTile(string tileKey)

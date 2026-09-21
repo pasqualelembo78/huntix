@@ -131,13 +131,35 @@ namespace City.Vehicle.Traffic
 
         private void MergeTile(RoadGraph graph, TileGraphDoc doc)
         {
+            // Viadotti/gallerie: se un arco della tile e' su impalcato (dh), i
+            // suoi nodi di testa/coda hanno la quota del deck ai portali e NON
+            // quella del terreno: se li lasciavamo sul DEM, le auto "scendevano
+            // dal ponte" nel punto di ingresso. Associa qui la quota (in metri)
+            // ai nodi della tile prima di crearli sul grafo.
+            var nodeDeckY = new Dictionary<long, float>();
+            if (doc.arcs != null)
+            {
+                for (int a = 0; a < doc.arcs.Length; a++)
+                {
+                    var tal = doc.arcs[a];
+                    if (!tal.dh || tal.waypoints == null ||
+                        tal.waypoints.Length < 2) continue;
+                    var prof = new DeckProfile(tal);
+                    if (prof.lenM <= 0f) continue;
+                    if (!nodeDeckY.ContainsKey(tal.from)) nodeDeckY[tal.from] = prof.YAt(0f);
+                    if (!nodeDeckY.ContainsKey(tal.to)) nodeDeckY[tal.to] = prof.YAt(prof.lenM);
+                }
+            }
+
             // nodi: gli ID OSM globali uniscono le tile confinanti
             var nodeByTileId = new Dictionary<int, int>();   // tile node id -> graph node id
             for (int i = 0; i < doc.nodes.Length; i++)
             {
                 var tn = doc.nodes[i];
                 Vector3 pos = WorldOrigin.ToWorld(tn.lat, tn.lon);
-                pos.y = TileElevation.HeightAt(tn.lat, tn.lon);
+                float deck;
+                pos.y = nodeDeckY.TryGetValue(tn.id, out deck)
+                    ? deck : TileElevation.HeightAt(tn.lat, tn.lon);
                 JunctionType jt = JunctionType.Simple;
                 var jstr = tn.junction;
                 if (jstr == "Real") jt = JunctionType.Real;
@@ -156,10 +178,21 @@ namespace City.Vehicle.Traffic
 
                 if (ta.waypoints == null || ta.waypoints.Length < 2) continue;
                 var wp = new Vector3[ta.waypoints.Length];
+                // Sul deck i waypoint seguono la retta di impalcato h0/h1 (con
+                // frazioni globali s0/s1, come AppendDeck): cosi' le auto GUIDANO
+                // sul viadotto invece di scomparire nella valle sotto il ponte.
+                TileRoadNetwork.DeckProfile prof = ta.dh ? new DeckProfile(ta) : default(DeckProfile);
+                float acc = 0f;
                 for (int k = 0; k < ta.waypoints.Length; k++)
                 {
                     wp[k] = WorldOrigin.ToWorld(ta.waypoints[k].a, ta.waypoints[k].o);
-                    wp[k].y = TileElevation.HeightAt(ta.waypoints[k].a, ta.waypoints[k].o);
+                    if (prof.lenM > 0f)
+                        wp[k].y = prof.YAt(acc);
+                    else
+                        wp[k].y = TileElevation.HeightAt(ta.waypoints[k].a, ta.waypoints[k].o);
+                    if (k < ta.waypoints.Length - 1)
+                        acc += Mathf.Sqrt((wp[k + 1].x - wp[k].x) * (wp[k + 1].x - wp[k].x) +
+                                          (wp[k + 1].z - wp[k].z) * (wp[k + 1].z - wp[k].z));
                 }
 
                 var arc = graph.AddArc(from, to, wp,
@@ -169,6 +202,39 @@ namespace City.Vehicle.Traffic
                 // guidabile; da to -> from solo se non è oneway.
                 AddOut(from, to, arc.id);
                 if (!ta.oneway) AddOut(to, from, arc.id);
+            }
+        }
+
+        /// <summary>Retta di impalcato di un arco bridge/tunnel (dh): la quota
+        /// in un punto a distanza `acc` (metri, lunghezza locale) e' il lerp
+        /// h0/h1 sulla frazione GLOBALE della way s0 + (s1-s0)*floc, identica a
+        /// quella con cui RoadRenderer disegna il deck.</summary>
+        private struct DeckProfile
+        {
+            public readonly float h0, h1, s0, s1, lenM;
+
+            public DeckProfile(TileArc ta)
+            {
+                h0 = ta.h0; h1 = ta.h1; s0 = ta.s0; s1 = ta.s1;
+                lenM = 0f;
+                if (ta.waypoints != null && ta.waypoints.Length >= 2)
+                {
+                    Vector3 prev = WorldOrigin.ToWorld(ta.waypoints[0].a, ta.waypoints[0].o);
+                    for (int k = 1; k < ta.waypoints.Length; k++)
+                    {
+                        Vector3 p = WorldOrigin.ToWorld(ta.waypoints[k].a, ta.waypoints[k].o);
+                        lenM += Mathf.Sqrt((p.x - prev.x) * (p.x - prev.x) +
+                                           (p.z - prev.z) * (p.z - prev.z));
+                        prev = p;
+                    }
+                }
+            }
+
+            public float YAt(float acc)
+            {
+                float floc = lenM > 0f ? acc / lenM : 0f;
+                float f = (s1 > s0 && s1 - s0 > 0.0001f) ? s0 + (s1 - s0) * floc : floc;
+                return Mathf.Lerp(h0, h1, Mathf.Clamp01(f));
             }
         }
 

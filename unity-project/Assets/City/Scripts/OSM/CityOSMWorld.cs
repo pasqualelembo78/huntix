@@ -543,13 +543,18 @@ namespace City.OSM
             }
 
             Physics.SyncTransforms();
-            Vector3 pos = new Vector3(0f, -0.06f + 0.05f, 0f);
+            // Il vecchio spawn metteva i piedi a y≈0 (s.l.m.): su una citta' a
+            // quota >0 il player sprofondava nel terreno rialzato appena il DEM
+            // si registrava. Se una tile DEM e' gia' disponibile (es. restore
+            // GPS), usa l'elevazione vera del punto di spawn (0,0 = origin GPS).
+            float ground = TileElevation.HeightAtWorld(Vector3.zero);
+            Vector3 pos = new Vector3(0f, ground - 0.06f + 0.05f, 0f);
             var cc = game.player.GetComponent<CharacterController>();
             if (cc != null)
             {
                 cc.includeLayers = (1 << 0) | (1 << 8);
                 float feetFromPivot = cc.height * 0.5f - cc.center.y;
-                pos.y = -0.06f + feetFromPivot + 0.05f;
+                pos.y = ground - 0.06f + feetFromPivot + 0.05f;
                 cc.enabled = false;
             }
 
@@ -686,7 +691,11 @@ namespace City.OSM
                 float feetY = p.y - feetFromPivot;
                 if (feetY < -0.5f || feetY > 1f)
                 {
-                    p.y = -0.06f + feetFromPivot + 0.05f;
+                    // Base = elevazione DEM reale del punto (non y=0): con la
+                    // citta' alta (es. 300 m s.l.m.) la correzione "a quota 0"
+                    // seppelliva il player nel terreno appena costruito.
+                    float ground = TileElevation.HeightAtWorld(p);
+                    p.y = ground - 0.06f + feetFromPivot + 0.05f;
                     cc.enabled = false;
                     player.transform.position = p;
                     cc.enabled = true;

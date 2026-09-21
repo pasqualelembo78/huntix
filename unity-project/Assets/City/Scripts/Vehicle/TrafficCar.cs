@@ -329,16 +329,54 @@ namespace City.Vehicle
 
         /// <summary>Snappa la base del veicolo alla quota DEM del terreno
         /// (elevazione assoluta s.l.m.), cosi' le auto seguono l'andamento
-        /// della strada rialzata invece di guidare "dritte" a quota zero.</summary>
+        /// della strada rialzata invece di guidare "dritte" a quota zero. Sui
+        /// viadotti/gallerie l'aggancio del solo DEM farebbe passare l'auto
+        /// SOTTO il ponte: se il binario corrente viaggia "a ponte" (waypoint
+        /// bake staccati dal terreno) si segue la retta di impalcato.</summary>
         private void SnapToElevation()
         {
-            float h = TileElevation.HeightAtWorld(transform.position);
-            if (h <= 0.05f)
+            Vector3 lp = transform.localPosition;
+            float dem = TileElevation.HeightAtWorld(transform.position);
+            if (dem <= 0.05f)
                 OsmDiag.LogThrottled("TrafficCar",
                     "[TrafficCar] DEM=0 per " + gameObject.name + " presso " +
                     transform.position.ToString("F1") + " (auto a quota terra)");
-            Vector3 lp = transform.localPosition;
+            float deck = DeckHeightAt(lp);
+            float h = deck > float.MinValue ? deck : dem;
             transform.localPosition = new Vector3(lp.x, h, lp.z);
+        }
+
+        private const float DeckOffTerrainM = 1.5f;   // oltre questo scarto dal DEM = sono sul deck
+        private const float DeckLateralM = 10f;
+
+        // Proietta la posizione (locale chunk) sui segmenti di path intorno a
+        // currentIdx: se i due waypoint bake si discostano dal terreno di
+        // almeno DeckOffTerrainM e il punto cade vicino al binario, e' un
+        // tratto di impalcato -> quota = lerp dei waypoint.
+        private float DeckHeightAt(Vector3 local)
+        {
+            if (path == null || path.Length < 2) return float.MinValue;
+            int lo = Mathf.Max(0, currentIdx - 1);
+            int hi = Mathf.Min(path.Length - 2, currentIdx + 4);
+            float dem = TileElevation.HeightAtWorld(transform.position);
+            for (int i = lo; i <= hi; i++)
+            {
+                Vector3 a = path[i]; a.y = 0f;
+                Vector3 b = path[i + 1]; b.y = 0f;
+                Vector3 ab = b - a;
+                float len2 = ab.sqrMagnitude;
+                if (len2 < 0.0001f) continue;
+                Vector3 pa = local; pa.y = 0f;
+                pa -= a;
+                float t = Mathf.Clamp01(Vector3.Dot(pa, ab) / len2);
+                Vector3 near = a + ab * t;
+                Vector3 lat = local - near; lat.y = 0f;
+                if (lat.sqrMagnitude > DeckLateralM * DeckLateralM) continue;
+                float deckY = Mathf.Lerp(path[i].y, path[i + 1].y, t);
+                if (Mathf.Abs(deckY - dem) < DeckOffTerrainM) continue;
+                return deckY;
+            }
+            return float.MinValue;
         }
 
         /// <summary>Guida in linea retta verso il bersaglio MONDO (convertito

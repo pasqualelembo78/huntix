@@ -91,7 +91,7 @@ namespace City.Player
             var cc = root.GetComponent<CharacterController>();
             if (cc != null)
             {
-                float feet0 = feetAnchor.y;
+                float feet0 = rig.feetAnchor.y;
                 if (Mathf.Abs(feet0) > 0.05f)
                 {
                     cc.height = 2f * Mathf.Abs(feet0);

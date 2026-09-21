@@ -296,21 +296,27 @@ class RoadsEmit(osmium.SimpleHandler):
             key = tile_key(*pts[run[0]])
             seg_pts = [list(p) for p in pts[run[0]:run[-1] + 1]]
             seg_ids = ids[run[0]:run[-1] + 1]
-            self.graph.write(key, {"k": "g", **a, "nids": seg_ids,
-                                   "pts": seg_pts})
+            # Profilo di impalcato (dh): IDENTICO sui record grafo ("g",
+            # traffico auto) e ribbon ("r", mesh stradale) dello stesso tratto,
+            # cosi' le auto guidano alla stessa quota del deck disegnato.
+            selev = None
+            if is_elev and h0 is not None and h1 is not None and \
+                    cum is not None and cum[-1] > 0.0:
+                L = cum[-1]
+                selev = {"dh": True, "h0": h0, "h1": h1,
+                         "s0": round(cum[run[0]] / L, 6),
+                         "s1": round(cum[run[-1]] / L, 6)}
+            grec = {"k": "g", **a, "nids": seg_ids, "pts": seg_pts}
+            if selev:
+                grec.update(selev)
+            self.graph.write(key, grec)
             rec = {"k": "r", "nm": a["nm"], "hw": a["hw"], "pts": seg_pts}
             if a["tu"]:
                 rec["tu"] = True
             if a["br"]:
                 rec["br"] = True
-            if is_elev and h0 is not None and h1 is not None and \
-                    cum is not None:
-                L = cum[-1]
-                rec["dh"] = True
-                rec["h0"] = h0
-                rec["h1"] = h1
-                rec["s0"] = round(cum[run[0]] / L, 6)
-                rec["s1"] = round(cum[run[-1]] / L, 6)
+            if selev:
+                rec.update(selev)
             self.geo.write(key, rec)
             self.n_rec += 1
 
@@ -598,7 +604,10 @@ def merge_graph_tile(spill_file: Path, out_dir: Path) -> dict:
                          "length_m": round(length, 1),
                          "tunnel": g["tu"], "bridge": g["br"],
                          "maxspeed": g["ms"], "oneway": g["ow"],
-                         "lanes": g["ln"]})
+                         "lanes": g["ln"],
+                         "dh": g.get("dh", False),
+                         "h0": g.get("h0", 0.0), "h1": g.get("h1", 0.0),
+                         "s0": g.get("s0", 0.0), "s1": g.get("s1", 0.0)})
 
     doc = {"tile": key, "bbox": [latmin, lonmin, latmax, lonmax],
            "nodes": list(nodes.values()), "arcs": arcs}

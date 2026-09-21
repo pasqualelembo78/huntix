@@ -449,12 +449,52 @@ namespace City.Vehicle.Traffic
         }
 
         // Aggancia la base alla quota DEM del terreno: le auto seguono i
-        // dislivelli delle strade invece di restare a quota fissa.
+        // dislivelli delle strade invece di restare a quota fissa. Sui
+        // viadotti/gallerie l'aggancio DEM farebbe sprofondare l'auto nella
+        // valle SOTTO il ponte: se il binario corrente viaggia "a ponte" (la
+        // quota bake dei waypoint si stacca dal terreno) si segue quella retta
+        // di impalcato, identica alla mesh del deck.
         private void SnapToElevation()
         {
             Vector3 p = transform.position;
-            float h = TileElevation.HeightAtWorld(p);
+            float deck = DeckHeightAt(p);
+            float h = deck > float.MinValue
+                ? deck : TileElevation.HeightAtWorld(p);
             transform.position = new Vector3(p.x, h, p.z);
+        }
+
+        private const float DeckOffTerrainM = 1.5f;   // oltre questo scarto dal DEM = sono sul deck
+        private const float DeckLateralM = 10f;
+
+        // Proietta la posizione sui segmenti di path intorno a _wpIndex: se i
+        // due waypoint bake si discostano dal terreno di almeno
+        // DeckOffTerrainM e il punto cade vicino al binario, e' un tratto di
+        // impalcato -> quota = lerp dei waypoint. Niente risultato = il DEM fa
+        // da piano (strade normali, anche sotto un ponte).
+        private float DeckHeightAt(Vector3 p)
+        {
+            if (_waypoints == null || _waypoints.Length < 2) return float.MinValue;
+            int lo = Mathf.Max(0, _wpIndex - 1);
+            int hi = Mathf.Min(_waypoints.Length - 2, _wpIndex + 4);
+            float dem = TileElevation.HeightAtWorld(p);
+            for (int i = lo; i <= hi; i++)
+            {
+                Vector3 a = _waypoints[i]; a.y = 0f;
+                Vector3 b = _waypoints[i + 1]; b.y = 0f;
+                Vector3 ab = b - a;
+                float len2 = ab.sqrMagnitude;
+                if (len2 < 0.0001f) continue;
+                Vector3 pa = p; pa.y = 0f;
+                pa -= a;
+                float t = Mathf.Clamp01(Vector3.Dot(pa, ab) / len2);
+                Vector3 near = a + ab * t;
+                Vector3 lat = p - near; lat.y = 0f;
+                if (lat.sqrMagnitude > DeckLateralM * DeckLateralM) continue;
+                float deckY = Mathf.Lerp(_waypoints[i].y, _waypoints[i + 1].y, t);
+                if (Mathf.Abs(deckY - dem) < DeckOffTerrainM) continue;
+                return deckY;
+            }
+            return float.MinValue;
         }
 
         private void BuildModel(int seed)

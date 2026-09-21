@@ -45,6 +45,14 @@ namespace City.OSM
         public float maxspeed;
         public bool oneway;
         public int lanes;
+        // Quota di impalcato per viadotti/gallerie: `dh` attivo = la retta
+        // h0/h1 fra i capisaldi con frazioni globali s0/s1 (stessi campi dei
+        // record "r" di RoadRenderer). Se mancano, la strada resta sul DEM.
+        public bool dh;
+        public float h0;
+        public float h1;
+        public float s0;
+        public float s1;
     }
 
     [Serializable]
