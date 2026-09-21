@@ -101,13 +101,27 @@ namespace City.OSM
             return t.IsChildOf(self);
         }
 
+        private static int _lastSyncFrame = -1;
+
+        // Unity sincronizza i transform con PhysX PRIMA di ogni query solo se
+        // autoSyncTransforms e' attivo (default); per essere robusti anche se
+        // qualcuno lo spegne forziamo UNA sincronizzazione per frame (non per
+        // sonda: con decine di NPC non si deve flushare PhysX a ogni chiamata).
+        private static void SyncOnce()
+        {
+            int f = Time.frameCount;
+            if (_lastSyncFrame == f) return;
+            _lastSyncFrame = f;
+            try { Physics.SyncTransforms(); }
+            catch (System.Exception) { }
+        }
+
         /// <summary>Sonda del piano di appoggio sotto il livello piedi `pos`
         /// (world). `self` = radice dell'attore (player/NPC): i suoi collider
         /// e lo SpawnBridge di sicurezza vengono esclusi dalla misura.</summary>
         public static GroundSample SampleGround(Vector3 pos, Transform self)
         {
-            try { Physics.SyncTransforms(); }
-            catch (System.Exception) { }
+            SyncOnce();
 
             float feetY = pos.y;
             Transform bridge = CityChunkedWorld.Instance != null &&

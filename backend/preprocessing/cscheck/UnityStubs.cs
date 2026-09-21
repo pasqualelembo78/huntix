@@ -588,7 +588,7 @@ namespace UnityEngine
 
     public class TooltipAttribute : Attribute { public TooltipAttribute(string t) {} }
     public class HideInInspector : Attribute { }
-    public static class Time { public static float time => 0f; public static float deltaTime => 0f; public static float timeScale { get; set; } public static float unscaledDeltaTime => 0f; public static float unscaledTime => 0f; public static float realtimeSinceStartup => 0f; public static float fixedDeltaTime => 0.02f; }
+    public static class Time { public static float time => 0f; public static float deltaTime => 0f; public static float timeScale { get; set; } public static float unscaledDeltaTime => 0f; public static float unscaledTime => 0f; public static float realtimeSinceStartup => 0f; public static float fixedDeltaTime => 0.02f; public static int frameCount => 0; }
     public static class Resources { public static T Load<T>(string p) where T : Object => default(T);
         public static T[] LoadAll<T>(string p) where T : Object => new T[0];
         public static Object[] LoadAll(string p, Type t) => new Object[0];
