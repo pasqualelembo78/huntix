@@ -59,8 +59,6 @@ namespace City.NPC
         // (il costo dominante): il pedone continua a camminare (logica idle)
         // ma non si disegna ne' pesa sulla fisica grafica.
         private const float CullDistSqr = 280f * 280f;   // ~280 m
-        // il sondaggio fisico del suolo (RaycastAll 700m) costa CPU: solo entro ~120m
-        private const float GroundProbeSqr = 120f * 120f;
         // Inclinazione massima (gradi) del busto sulla pendenza DEM: i pedoni
         // seguono il dislivello senza mai sbilanciarsi del tutto (piedi a terra).
         private const float MaxPedInclineDeg = 22f;
@@ -910,63 +908,37 @@ namespace City.NPC
             SetAnimSpeed(walking ? effSpeed : 0f);
         }
 
-        /// <summary>Quota del terreno sotto il pedone: prima prova la
-        /// superficie fisica (raycast verso il basso sui collider) ignorando
-        /// se stesso, gli altri NPC, i trigger e il layer 8 (edifici/props,
-        /// cosi' non finisce su un tetto); se la colonna non trova nulla usa
-        /// l'altimetria DEM (TileElevation). L'origine e' ancorata alla quota
-        /// DEM come nello spawn del player: se la superficie sta SOPRA di noi
-        /// (pedone sotto un dosso del terreno proxy) la colonna la raggiunge
-        /// comunque e il pedone risale, non passa attraverso.</summary>
-        private float GroundHeightAt(Vector3 pos)
-        {
-            float elev = TileElevation.HeightAtWorld(pos);
-            const int GroundMask = ~(1 << 8);
-            if (!_culled && (_camCache == null
-                || (_camCache.transform.position - transform.position).sqrMagnitude <= GroundProbeSqr))
-            {
-                Vector3 from = pos + Vector3.up * 220f;
-                float demProbe = elev + 150f;
-                if (demProbe > from.y) from.y = demProbe;
-                RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down,
-                    700f, GroundMask, QueryTriggerInteraction.Ignore);
-                int best = -1;
-                float bestSqr = float.PositiveInfinity;
-                for (int i = 0; i < hits.Length; i++)
-                {
-                    var h = hits[i];
-                    if (h.collider == null) continue;
-                    var t = h.collider.transform;
-                    if (t == transform || t.IsChildOf(transform)) continue;
-                    if (h.collider.GetComponentInParent<NPCController>() != null)
-                        continue;
-                    float dsqr = h.distance * h.distance;
-                    if (dsqr < bestSqr) { bestSqr = dsqr; best = i; }
-                }
-                if (best >= 0) { _lastSurface = hits[best].collider.gameObject.name; return hits[best].point.y; }
-            }
-            _lastSurface = "DEM";
-            return elev;
-        }
-
+        private GroundFollowState _groundFollow;
         private string _lastSurface = "";
+        // Il sondaggio fisico del suolo (RaycastAll) costa CPU: oltre ~120m o
+        // per i pedoni cullati si usa solo il DEM (nessun raycast).
+        private const float GroundProbeSqr = 120f * 120f;
 
-        /// <summary>Aggiorna la quota del pedone sulla superficie del terreno.
-        /// Chiamato OGNI frame (anche quando il pedone e' fermo), cosi' non
-        /// resta appeso a y=0.12 se il terreno e' a quota DEM.</summary>
+        /// <summary>Aggiorna la quota del pedone sulla superficie del terreno
+        /// tramite GroundSnapper (sistema condiviso col player): sonda corta
+        /// sotto i piedi sui collider walkable (terreno, strade, deck dei
+        /// viadotti; mai gli edifici layer 8), sonda lunga in fondo alla
+        /// colonna per i dislivelli e fallback DEM. Chiamato OGNI frame (anche
+        /// quando il pedone e' fermo), cosi' non resta appeso a quota vecchia
+        /// se il terreno viene rialzato/ricostruito sotto di lui.</summary>
         private void SnapToGround()
         {
             Transform rootT = transform.root;
-            bool rootLevel = rootT == transform;
-            Vector3 npcLocal = transform.localPosition;
-            Vector3 npcWorld = rootLevel
-                ? npcLocal
-                : npcLocal + new Vector3(rootT.position.x, 0f, rootT.position.z);
-            float ground = GroundHeightAt(npcWorld);
-            float targetY = ground + 0.12f;
-            npcWorld.y = targetY;
-            npcLocal.y = rootLevel ? targetY : targetY - rootT.position.y;
-            transform.localPosition = npcLocal;
+            Vector3 npcWorld = transform.position;
+            bool probe = !_culled && (_camCache == null
+                || (_camCache.transform.position - transform.position).sqrMagnitude <= GroundProbeSqr);
+            // Solo gli NPC vicini/non cullati pagano il raycasting fisico; gli
+            // altri seguono l'altimetria DEM (follow 1/mesh metrico identico).
+            GroundSample s = probe
+                ? GroundSnapper.SampleGround(npcWorld, transform)
+                : GroundSnapper.DemOnly(npcWorld);
+            if (!s.found) return;
+
+            float targetY = s.height + 0.12f;
+            float newY = GroundSnapper.Follow(ref _groundFollow, npcWorld.y,
+                targetY, Time.deltaTime);
+            transform.position = new Vector3(npcWorld.x, newY, npcWorld.z);
+            _lastSurface = s.surfaceName;
 
             // Diagnosi "pedone volante": il pedone sta SU una superficie che
             // vola? throttle 8s. Se la superficie su cui e' ancorato sta
@@ -977,12 +949,12 @@ namespace City.NPC
             {
                 _flightLogNextAt = Time.unscaledTime + 8f;
                 float dem = TileElevation.HeightAtWorld(npcWorld);
-                float sopraDem = ground - dem;
+                float sopraDem = newY - dem;
                 if (sopraDem > 1.5f || sopraDem < -1.5f)
                 {
                     OsmDiag.Log("[NPC][VOLO] " + NpcId +
-                        " y=" + npcLocal.y.ToString("F2") +
-                        " su='" + _lastSurface + "' q=" + ground.ToString("F2") +
+                        " y=" + newY.ToString("F2") +
+                        " su='" + _lastSurface + "' q=" + s.height.ToString("F2") +
                         " dem=" + dem.ToString("F2") +
                         " sopraDem=" + sopraDem.ToString("F2") +
                         " rootY=" + rootT.position.y.ToString("F2") +

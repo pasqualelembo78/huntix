@@ -460,6 +460,7 @@ namespace UnityEngine
         public float radius { get; set; }
         public float slopeLimit { get; set; }
         public float stepOffset { get; set; }
+        public float skinWidth { get; set; }
         public CollisionFlags Move(Vector3 motion) => default(CollisionFlags);
     }
     public enum CollisionFlags { None, Sides, Above, Below }

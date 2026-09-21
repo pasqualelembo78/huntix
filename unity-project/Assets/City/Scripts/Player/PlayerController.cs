@@ -45,6 +45,11 @@ namespace City.Player
         private const float SlipCooldown = 3f;
         private float _lastSlipAt = -10f;
 
+        // ── Binding professionale al terreno (GroundSnapper, condiviso NPC) ──
+        private GroundFollowState _groundFollow;
+        private float _nextGroundLogAt;
+        private const float GroundFollowClearance = 0.02f;
+
         private int airJumpCount;
         private const int MaxAirJumps = 1;
 
@@ -146,6 +151,10 @@ namespace City.Player
             // Scalino massimo sormontabile: 0.4 m supera cordoli/marciapiedi
             // e traverse senza inciampare (default 0.3).
             controller.stepOffset = 0.4f;
+            // Skin: un filo piu' sottile del default (0.08) attacca meglio ai
+            // collider (isGrounded piu' stabile sui giunti di chunk) senza
+            // aumentare gli stick sui bordi verticali.
+            controller.skinWidth = 0.05f;
             animator = GetComponentInChildren<Animator>();
             City.OSM.OsmDiag.Log("[PlayerController][Awake] animator=" +
                 (animator != null ? animator.gameObject.name : "NULL") +
@@ -476,6 +485,82 @@ namespace City.Player
         {
             if (inputLocked) { flightVertical = 0; return; }
             flightVertical = flying ? Mathf.Clamp(input, -1, 1) : 0;
+        }
+
+        private void LateUpdate()
+        {
+            GroundFollow();
+        }
+
+        /// <summary>
+        /// Binding professionale al terreno DEM/OSM (GroundSnapper, condiviso
+        /// con gli NPC): tiene i piedi sul piano di appoggio reale. Corre in
+        /// LateUpdate (dopo controller.Move) e:
+        /// - non tocca il player in ARIA (salto/caduta: la gravita' fa tutto);
+        /// - non tocca il volo del Paradiso, la guida e i minigiochi congelati;
+        /// - superficie VICINA (sonda corta) = piano su cui si cammina davvero:
+        ///   la segue sempre, salita dolce e discesa controllata (basta affondi
+        ///   o sollevate quando il DEM/terreno arriva sotto i piedi);
+        /// - superficie LONTANA = aiuta solo se il terreno e' arrivato SOPRA di
+        ///   noi (sepolti da una tile in quota) o il gap e' modico; un fondo a
+        ///   -10m da sotto i piedi senza alcun appoggio vicino non viene toccato
+        ///   (tetto non visto / bordo ponte: la fisica ne fa le spese).
+        /// </summary>
+        private void GroundFollow()
+        {
+            if (controller == null || !controller.enabled) return;
+            if (City.Game.Instance != null && City.Game.Instance.IsDriving) return;
+            if (flying) return;   // volo Paradiso: quota pilotata a mano
+            if (City.Economy.EggCaptureMinigame.Instance != null &&
+                City.Economy.EggCaptureMinigame.Instance.IsActive) return;
+            if (!(controller.isGrounded || FeetProbeGrounded())) return; // aria
+
+            Vector3 pos = transform.position;
+            float feetFromPivot = controller.height * 0.5f - controller.center.y;
+            float feetY = pos.y - feetFromPivot;
+            Vector3 feetPos = new Vector3(pos.x, feetY, pos.z);
+
+            GroundSample s = GroundSnapper.SampleGround(feetPos, transform);
+            if (!s.found) return;   // nessun dato: la fisica e' gia' in carico
+
+            float targetFeet = s.height + GroundFollowClearance;
+            float err = targetFeet - feetY;
+
+            if (s.near)
+            {
+                // piano reale sotto i piedi: seguito in ogni caso
+            }
+            else if (err > 0f)
+            {
+                // il terreno e' arrivato SOPRA di noi (tile in quota): risali
+            }
+            else if (err > -GroundSnapper.FallGraceM)
+            {
+                // float leggero sopra il fondo della colonna: ridiscendi
+            }
+            else
+            {
+                // superficie non vista molto piu' in basso (tetto/collo):
+                // non trascinare giu', la fisica attuale resta valida
+                return;
+            }
+
+            float newFeet = GroundSnapper.Follow(ref _groundFollow, feetY,
+                targetFeet, Time.deltaTime);
+            if (Mathf.Abs(newFeet - feetY) <= GroundFollowClearance) return;
+
+            pos.y = newFeet + feetFromPivot;
+            transform.position = new Vector3(pos.x, pos.y, pos.z);
+
+            // Diagnostica throttled: solo correzioni significative
+            if (Time.time >= _nextGroundLogAt && Mathf.Abs(err) > 0.35f)
+            {
+                _nextGroundLogAt = Time.time + 6f;
+                City.OSM.OsmDiag.Log("[GroundFollow] player fonte=" + s.source +
+                    " su='" + s.surfaceName + "' h=" + s.height.ToString("F2") +
+                    " err=" + err.ToString("F2") + " -> piedi=" +
+                    newFeet.ToString("F2"));
+            }
         }
 
         /// <summary>Accumula la distanza percorsa e la consegna alle missioni
