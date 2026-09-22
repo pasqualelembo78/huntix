@@ -119,9 +119,11 @@ namespace City.Economy
                 foreach (var r in renderers)
                 {
                     if (r == null) continue;
-                    Color c = r.sharedMaterial.GetColor("_BaseColor");
+                    Material m = r.sharedMaterial;
+                    Color c = m.HasProperty("_BaseColor") ? m.GetColor("_BaseColor") : m.GetColor("_Color");
                     float emission = pulse * 0.8f;
-                    r.sharedMaterial.SetColor("_EmissionColor", c * emission);
+                    if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", c * emission);
+                    else m.SetColor("_Color", c * (1f + emission * 0.25f));
                 }
             }
         }
