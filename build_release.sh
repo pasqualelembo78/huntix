@@ -460,7 +460,7 @@ build_unity_aar() {
 
     ensure_gradle_7_5_1 || return 1
     echo ">> [Gradle] :unityLibrary:assembleRelease (Il2Cpp: 20-40 min alla prima volta)..."
-    ( cd "$UNITY_EXPORT_DIR" && "$GRADLE_UNITY" :unityLibrary:assembleRelease :unityLibrary:xrmanifest.androidlib:assembleRelease --console=plain ) \
+    ( cd "$UNITY_EXPORT_DIR" && "$GRADLE_UNITY" -Dorg.gradle.jvmargs="-Xmx6144M" :unityLibrary:assembleRelease :unityLibrary:xrmanifest.androidlib:assembleRelease --console=plain ) \
         || { echo "!! Build AAR Unity fallita." >&2; return 1; }
 
     mkdir -p "$UNITY_AAR_DEST"
@@ -632,7 +632,7 @@ APK_DIR="app/build/outputs/apk/release"
 rm -f "$APK_DIR"/*.apk
 
 echo ">> Building APK (assembleRelease)..."
-./gradlew assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
+./gradlew -Dorg.gradle.jvmargs="-Xmx6144M" assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
 if [ -z "$UNSIGNED_APK" ]; then
@@ -887,18 +887,15 @@ start_huntix_backend() {
     # ── 5) Firewall ──
     ensure_fw_port "$PORT"
 
-    # ── 6) Avvio backend (idempotente) ──
-    # Se il tile server (parte integrante del backend huntix) è già attivo
-    # sulla porta $PORT, NON riavviamo nulla. Altrimenti avvia e attende.
+    # ── 6) Avvio/riavvio backend SEMPRE (idempotente e coerente) ──
+    # Il backend va riavviato AD OGNI build: altrimenti potrebbe restare
+    # attivo con codice vecchio (es. modifiche a city_realtime.py/chat) e la
+    # pipeline non sarebbe davvero idempotente "dall'inizio alla fine".
+    # `start_backend.sh` fa pkill sulla porta $PORT e rilancia uvicorn con il
+    # codice CORRENTE; qui sotto si attende che risponda (ping tile server).
     local TILES_URL="http://localhost:$PORT/api/tiles/ping"
     local i
-    if curl -s -o /dev/null -m 5 -w "%{http_code}" "$TILES_URL" 2>/dev/null | grep -q 200; then
-        echo ">> Tile server/backend huntix già ATTIVO su porta $PORT (nessun riavvio)."
-        cd ..
-        return 0
-    fi
-
-    echo ">> Avvio backend huntix su porta $PORT ..."
+    echo ">> Riavvio backend huntix su porta $PORT (sempre, per non girare mai con codice vecchio)..."
     HUNTIX_BACKEND_PORT="$PORT" ./start_backend.sh >/dev/null 2>&1 &
     for i in $(seq 1 15); do
         sleep 2
