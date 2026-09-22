@@ -296,8 +296,18 @@ namespace City.Economy
             float haloScale = (r == Rarity.Legendary) ? 0.60f : 0.45f;
             halo.transform.localScale = Vector3.one * haloScale;
             var haloR = halo.GetComponent<Renderer>();
-            var haloMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            if (haloMat.shader == null) haloMat = new Material(Shader.Find("Unlit/Color"));
+            // NB: mai costruire Material con Shader.Find() nullo: il costruttore
+            // lancia ArgumentNullException("shader") e il fallback successivo non
+            // gira mai. Si risolve lo shader PRIMA e si fallisce sulla catena
+            // URP/Unlit -> Unlit/Color -> URP/Lit -> Standard; in assoluto
+            // fallback si clona il material default del Primitive (mai nullo).
+            Shader haloShader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (haloShader == null) haloShader = Shader.Find("Unlit/Color");
+            if (haloShader == null) haloShader = Shader.Find("Universal Render Pipeline/Lit");
+            if (haloShader == null) haloShader = Shader.Find("Standard");
+            var haloMat = haloShader != null
+                ? new Material(haloShader)
+                : new Material(haloR.sharedMaterial);
             float alpha = (r == Rarity.Legendary) ? 0.28f : 0.15f;
             haloMat.color = new Color(col.r, col.g, col.b, alpha);
             haloMat.EnableKeyword("_EMISSION");
