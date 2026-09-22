@@ -848,6 +848,104 @@ object StoreUnityBridge {
         CityStateSync.onCitySnapshot(ctx, json)
     }
 
+    /**
+     * Riceve da Unity l'aspetto fisiologico applicato dal livello XP
+     * (GrowthXpDriver → GrowthStateSync). Best-effort e non bloccante:
+     * valida il JSON e conserva l'ultimo valore su prefs condivise, così
+     * anche il lato Android ha il mirror della crescita raggiunta.
+     * Livello XP non viene toccato: resta l'unica fonte di verità.
+     *
+     * Riflesso della caccia alle uova: ai livelli chiave (5/10/20/35/50)
+     * schiude in inventario l'"Egg of Growth" della rarità progressiva e
+     * registra su EggWhereLog il luogo di ritrovamento ("Livello X → crescita",
+     * coerente col Mandato §5). Idempotente: a ogni sync rivede i livelli
+     * raggiunti e salta quelli già presenti in inventario.
+     */
+    @JvmStatic
+    fun onGrowthStateSync(json: String) {
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        if (json.isBlank()) return
+        val j = try { org.json.JSONObject(json) } catch (_: Exception) { return }
+        val level = j.optInt("level", 1)
+        val prefs = ctx.getSharedPreferences("huntix_growth", android.content.Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("level", level)
+            .putFloat("age", j.optDouble("age", 0.5).toFloat())
+            .putFloat("height", j.optDouble("height", 0.5).toFloat())
+            .putFloat("proportion", j.optDouble("proportion", 0.5).toFloat())
+            .putFloat("shape", j.optDouble("shape", 0.5).toFloat())
+            .apply()
+        android.util.Log.d("HuntixGrowth",
+            "GrowthStateSync da Unity: livello=" + level + " json=" + json)
+
+        // Mirror sul profilo generale (Firestore + cache): i valori 4D
+        // della crescita sono visibili nel profilo giocatore ovunque.
+        // Best-effort e non bloccante come onCityStateSync.
+        try {
+            val pm = com.intelligame.huntix.PlayerProfileManager
+            val p = pm.myProfile
+            if (p != null) {
+                if (level > p.growthLevel) p.growthLevel = level
+                p.growthAge = j.optDouble("age", p.growthAge)
+                p.growthHeight = j.optDouble("height", p.growthHeight)
+                p.growthProportion = j.optDouble("proportion", p.growthProportion)
+                p.growthShape = j.optDouble("shape", p.growthShape)
+                pm.persistMyProfile()
+                android.util.Log.d("HuntixGrowth", "Profilo aggiornato con crescita livello " + level)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("HuntixGrowth", "Profilo growth mirror non aggiornato: " + e.message)
+        }
+
+        hatchGrowthEggs(ctx, level)
+    }
+
+    // ── Egg of Growth (Riflesso uova): helper privati dell'object ──
+
+    /** Livelli chiave della crescita: schiudono l'Egg of Growth. */
+    private val growthKeyLevels = intArrayOf(5, 10, 20, 35, 50)
+
+    private fun growthRarityFor(level: Int): com.intelligame.huntix.EggRarity =
+        when {
+            level >= 50 -> com.intelligame.huntix.EggRarity.LEGENDARY
+            level >= 35 -> com.intelligame.huntix.EggRarity.EPIC
+            level >= 20 -> com.intelligame.huntix.EggRarity.RARE
+            level >= 10 -> com.intelligame.huntix.EggRarity.UNCOMMON
+            else -> com.intelligame.huntix.EggRarity.COMMON
+        }
+
+    /**
+     * Schiude in inventario l'Egg of Growth per ogni livello chiave
+     * raggiunto e non ancora presente. Idempotente via eggId "growth_<lv>".
+     */
+    private fun hatchGrowthEggs(ctx: android.content.Context, currentLevel: Int) {
+        val existing = com.intelligame.huntix.EggInventoryManager.getInventory(ctx)
+            .map { it.eggId }.toHashSet()
+        for (key in growthKeyLevels) {
+            if (key > currentLevel) break
+            val eggId = "growth_$key"
+            if (existing.contains(eggId)) continue
+            val rarity = growthRarityFor(key)
+            val item = com.intelligame.huntix.EggInventoryItem(
+                eggId = eggId,
+                rarityId = rarity.id,
+                fantasyName = "Uovo della Crescita (Livello $key)",
+                power = rarity.basePower,
+                xpReward = 0
+            )
+            val added = com.intelligame.huntix.EggInventoryManager.addEgg(ctx, item)
+            if (added) {
+                com.intelligame.huntix.managers.EggWhereLog.record(
+                    ctx, rarity.id,
+                    place = "Livello $key → crescita",
+                    name = item.fantasyName
+                )
+                android.util.Log.i("HuntixGrowth",
+                    "Egg of Growth schiuso al livello $key (${rarity.id})")
+            }
+        }
+    }
+
     /** Restituisce l'ultimo snapshot città salvato ("" se assente): usato da
      *  Unity all'avvio della scena per ripristinare lo stato se il salvataggio
      *  locale è vergine. */

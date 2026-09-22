@@ -107,6 +107,18 @@ namespace City.Player
             // in A-pose finche' l'animazione non prende il controllo.
             ArmsPoseFallback.Ensure(go);
 
+            // Crescita fisiologica (FASE 1 - test isolato): se i morph del
+            // personaggio sono stati "cotti" da RemyMorphBaker installa il
+            // GrowthMorphController sull'hero rig. Guardato e idempotente:
+            // senza morph cotti e' un no-op, il gioco procede come prima.
+            // NON tocca il sistema XP esistente.
+            GrowthMorphController.Ensure(go);
+
+            // FASE 2: guida la crescita col livello XP esistente (un'unica XP
+            // condivisa via bridge). Se il bridge manca resta il livello 1 e
+            // l'aspetto base. Era: solo morph a mano, ora Xp->morph automatico.
+            GrowthXpDriver.Ensure(go);
+
             // Diagnostica: verifica finale della filiera
             var anim = go.GetComponentInChildren<Animator>(true);
             var smrs = go.GetComponentsInChildren<SkinnedMeshRenderer>(true);

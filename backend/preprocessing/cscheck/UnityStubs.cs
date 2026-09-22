@@ -296,7 +296,11 @@ namespace UnityEngine
         public Bounds bounds => new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
         public void SetVertices(List<Vector3> v) {} public void SetUVs(int i, List<Vector2> u) {}
         public void SetTriangles(List<int> t, int sub) {}
-        public void RecalculateNormals() {} public void RecalculateBounds() {} }
+        public void RecalculateNormals() {} public void RecalculateBounds() {}
+        public int blendShapeCount => 0;
+        public string GetBlendShapeName(int i) => "";
+        public int GetBlendShapeIndex(string n) => -1;
+        public void AddBlendShapeFrame(string n, float f, Vector3[] dv, Vector3[] dn, float[] dt) {} }
 
     public class Material : Object { public Material(Shader s) {}
         public Shader shader { get; set; }
@@ -317,8 +321,14 @@ namespace UnityEngine
     public class MeshFilter : Component { public Mesh sharedMesh { get; set; } }
     public class SkinnedMeshRenderer : Renderer {
         public Material[] sharedMaterials { get; set; }
+        public Mesh sharedMesh { get; set; }
         public Transform rootBone { get; set; }
-        public Transform[] bones => new Transform[0]; }
+        public Transform[] bones => new Transform[0];
+        public int blendShapeCount => 0;
+        public string GetBlendShapeName(int i) => "";
+        public int GetBlendShapeIndex(string n) => -1;
+        public void SetBlendShapeWeight(int index, float weight) {}
+        public float GetBlendShapeWeight(int index) => 0f; }
     public class RuntimeAnimatorController : Object { }
     public class Avatar : Object { public bool isHuman => true; public bool isValid => true; }
     public class AnimatorControllerParameter { public string name => ""; }
@@ -476,10 +486,12 @@ namespace UnityEngine
         public Rect rect { get; set; }
         public bool enabled { get; set; }
         public Ray ScreenPointToRay(Vector3 p) => new Ray(Vector3.zero, Vector3.forward);
+        public Vector3 WorldToScreenPoint(Vector3 p) => new Vector3(0, 0, 0);
         public Ray ScreenPointToRay(Vector2 p) => new Ray(Vector3.zero, Vector3.forward); }
 
     public static class Application { public static string persistentDataPath => "/tmp"; public static bool isMobilePlatform => false;
         public static bool isEditor => true;
+        public static bool isPlaying => false;
         public static string version => "stub";
         public static RuntimePlatform platform => RuntimePlatform.WindowsEditor;
         public static bool CanStreamedLevelBeLoaded(string levelName) => false; }
@@ -628,6 +640,9 @@ namespace UnityEngine
         public void StopCoroutine(Coroutine c) {}
         public void StopAllCoroutines() {}
         public Coroutine StartCoroutine(string method) => null;
+        public void Invoke(string methodName, float time) {}
+        public void CancelInvoke(string methodName) {}
+        public bool IsInvoking(string methodName) => false;
     }
     public class Coroutine {}
     public class WaitForSeconds { public WaitForSeconds(float s) {} }
@@ -735,7 +750,9 @@ namespace UnityEngine.UI
 
     // ── widget interattivi (pannelli runtime: concessionaria, garage...) ──
     public class RectOffset { public int left, right, top, bottom;
-        public RectOffset(int l, int r, int t, int b) { left = l; right = r; top = t; bottom = b; } }
+        public RectOffset() {}
+        public RectOffset(int l, int r, int t, int b) { left = l; right = r; top = t; bottom = b; }
+    }
 
     public struct Navigation
     {
@@ -810,6 +827,7 @@ namespace UnityEngine.Events
     {
         public void AddListener(UnityAction call) {}
         public void RemoveListener(UnityAction call) {}
+        public void RemoveAllListeners() {}
         public void Invoke() {}
     }
     public class UnityEvent<T> : UnityEventBase
@@ -827,6 +845,14 @@ namespace UnityEngine
     using System;
     public class Texture : Object {}
     public enum TextureFormat { RGBA32, RGB24 }
+
+    public class GUIStyle { public float fontSize; }
+    public static class GUI
+    {
+        public static bool Button(Rect position, string text) { return false; }
+        public static void Label(Rect position, string text) {}
+        public static void Label(Rect position, string text, GUIStyle style) {}
+    }
 
     public class Texture2D : Texture
     {

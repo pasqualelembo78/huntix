@@ -83,7 +83,17 @@ data class PlayerProfile(
     var cityJobs:           String  = "",    // "Consegne=120;Taxi=60;…"
     var cityFamily:         String  = "",    // "sposo:Giulia · figli:2" / reincarnazione
     var cityHome:           String  = "",    // casa MiCittà "nome|lat|lng|garage|garagemodel|stanze"
-    var cityEggWhere:       Int     = 0      // ritrovamenti registrati (memoria "DOVE ho trovato l'uovo")
+    var cityEggWhere:       Int     = 0,     // ritrovamenti registrati (memoria "DOVE ho trovato l'uovo")
+
+    // ── Sync Crescita (Unity ↔ profilo generale) ─────────────────
+    // Mirror della crescita fisiologica 4D applicata in Unity da
+    // GrowthXpDriver via GrowthStateSync: visibile nel profilo ovunque,
+    // fonte di verità resta il livello XP (mai toccato qui).
+    var growthLevel:        Int     = 0,     // livello XP raggiunto all'ultima sync crescita
+    var growthAge:          Double  = 0.5,   // età fisiologica 0..1
+    var growthHeight:       Double  = 0.5,   // statura 0..1
+    var growthProportion:   Double  = 0.5,   // complessione 0..1
+    var growthShape:        Double  = 0.5,   // corporatura 0..1
 ) {
     // ─── Livello calcolato da XP ──────────────────────────────────
     val level: Int get() {
@@ -207,7 +217,11 @@ data class PlayerProfile(
         // Sync MiCittà
         "cityMoney" to cityMoney, "cityPeopleKnown" to cityPeopleKnown,
         "cityEggDexCount" to cityEggDexCount, "cityJobs" to cityJobs, "cityFamily" to cityFamily,
-        "cityHome" to cityHome, "cityEggWhere" to cityEggWhere
+        "cityHome" to cityHome, "cityEggWhere" to cityEggWhere,
+        // Sync Crescita
+        "growthLevel" to growthLevel, "growthAge" to growthAge,
+        "growthHeight" to growthHeight, "growthProportion" to growthProportion,
+        "growthShape" to growthShape
     )
 
     val hasChosenGender: Boolean get() = playerGender.isNotBlank()
@@ -276,7 +290,13 @@ data class PlayerProfile(
                 cityJobs = map["cityJobs"] as? String ?: "",
                 cityFamily = map["cityFamily"] as? String ?: "",
                 cityHome = map["cityHome"] as? String ?: "",
-                cityEggWhere = (map["cityEggWhere"] as? Number)?.toInt() ?: 0
+                cityEggWhere = (map["cityEggWhere"] as? Number)?.toInt() ?: 0,
+                // Sync Crescita
+                growthLevel = (map["growthLevel"] as? Number)?.toInt() ?: 0,
+                growthAge = (map["growthAge"] as? Number)?.toDouble() ?: 0.5,
+                growthHeight = (map["growthHeight"] as? Number)?.toDouble() ?: 0.5,
+                growthProportion = (map["growthProportion"] as? Number)?.toDouble() ?: 0.5,
+                growthShape = (map["growthShape"] as? Number)?.toDouble() ?: 0.5
             )
         }
 

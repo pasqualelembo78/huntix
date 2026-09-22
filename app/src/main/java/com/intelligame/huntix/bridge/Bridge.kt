@@ -170,6 +170,9 @@ object Bridge {
             "CityStateSync" -> StoreUnityBridge.onCityStateSync(jsonData)
             // ── City State Sync: verifica di allineamento (risposta via log) ──
             "CityStateCheck" -> StoreUnityBridge.checkCityStateSync()
+            // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
+            //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
+            "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)
         }
     }
 

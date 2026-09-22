@@ -65,6 +65,9 @@ internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
         addView(tv("L'età del personaggio è fittizia e serve per le meccaniche di gioco (crescita, famiglia, adozioni). Non corrisponde all'età reale del giocatore.", 11f, Color.parseColor("#8A8AD0"), Gravity.START))
     })
 
+    // ── Crescita del personaggio (mirror Unity via GrowthStateSync) ──
+    root.addView(buildGrowthCard())
+
     // Personalizzazione
     root.addView(sectionCard("#1A0A30", "#7B1FA2") {
         addView(tv("🎨 Personalizzazione", 15f, Color.parseColor("#D8B4FE"), Gravity.START, true)
@@ -563,6 +566,86 @@ private fun PlayerProfileActivity.genderLabel(gender: String?): String = when (g
     "male" -> "♂️  Maschio"
     "female" -> "♀️  Femmina"
     else -> "⚧  Non definito"
+}
+
+// ── Card crescita (mirror Unity via GrowthStateSync) ─────────────
+private fun PlayerProfileActivity.buildGrowthCard(): LinearLayout {
+    val p = PlayerProfileManager.myProfile
+    val level = p?.level ?: 1
+    // Mirror reale ricevuto da Unity (la sync crescita aumenta growthLevel);
+    // senza mirror i valori 4D restano i default e mostriamo "—".
+    val hasMirror = (p?.growthLevel ?: 0) > 0
+
+    val age = when {
+        !hasMirror -> "Gioca in MiCittà per sbloccarla!"
+        p!!.growthAge < 0.40 -> "🍼 Bambino"
+        p.growthAge < 0.48 -> "🚸 Ragazzino"
+        p.growthAge < 0.56 -> "🧑 Adolescente"
+        p.growthAge < 0.62 -> "👨 Giovane adulto"
+        else -> "🧔 Adulto"
+    }
+
+    val heightPct = if (hasMirror) (p!!.growthHeight * 100).toInt() else 0
+    val propPct   = if (hasMirror) (p!!.growthProportion * 100).toInt() else 0
+    val shapePct  = if (hasMirror) (p!!.growthShape * 100).toInt() else 0
+
+    // Trofei Egg of Growth: si basano sul livello XP (fonte di verità),
+    // identico alla logica che schiude le uova (livelli chiave).
+    val keyLevels = intArrayOf(5, 10, 20, 35, 50)
+    val reached   = keyLevels.filter { it <= level }
+    val nextKey   = keyLevels.firstOrNull { it > level }
+
+    return sectionCard("#002018", "#00E5A0") {
+        addView(tv("🌱 Crescita del personaggio", 15f, Color.parseColor("#66FFB2"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        addView(rowText("🧬 Fase di crescita", age, "#66BB6A", "#FFFFFF"))
+        addView(spacer(dp(4)))
+        if (hasMirror) {
+            addView(tv("📏 Statura  " + ((p!!.growthHeight * 100).toInt()) + "%", 12f,
+                Color.parseColor("#66BB6A"), Gravity.START))
+            addView(buildProgressBar(heightPct, "#00E5A0"))
+            addView(tv("⚖️ Complessione  " + propPct + "%", 12f,
+                Color.parseColor("#66BB6A"), Gravity.START).also { it.setPadding(0, dp(6), 0, 0) })
+            addView(buildProgressBar(propPct, "#26C6DA"))
+            addView(tv("🏋️️ Corporatura  " + shapePct + "%", 12f,
+                Color.parseColor("#66BB6A"), Gravity.START).also { it.setPadding(0, dp(6), 0, 0) })
+            addView(buildProgressBar(shapePct, "#FFB74D"))
+        }
+        addView(spacer(dp(8)))
+
+        // Trofei Egg of Growth
+        addView(tv("🥚 Trofei Egg of Growth", 13f, Color.parseColor("#66FFB2"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(4)) })
+        if (reached.isEmpty()) {
+            addView(tv("Nessuno ancora — ogni uovo cresce con te ai livelli 5, 10, 20, 35 e 50.", 11f,
+                Color.parseColor("#8A8AD0"), Gravity.START))
+        } else {
+            val wrap = PlayerProfileActivity.FlowLayout(this@buildGrowthCard)
+            reached.forEach { lv ->
+                val rarity = when {
+                    lv >= 50 -> "⭐"; lv >= 35 -> "🟣"; lv >= 20 -> "🔵"; lv >= 10 -> "🟢"; else -> "⚪"
+                }
+                wrap.addView(tv("$rarity Livello $lv", 12f, Color.WHITE, Gravity.CENTER).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.RECTANGLE; cornerRadius = dp(20).toFloat()
+                        setColor(Color.parseColor("#0A3D2A"))
+                    }
+                    setPadding(dp(10), dp(6), dp(10), dp(6))
+                    (layoutParams as? ViewGroup.MarginLayoutParams)?.apply {
+                        marginEnd = dp(6); bottomMargin = dp(6)
+                    }
+                })
+            }
+            addView(wrap)
+            if (nextKey != null) {
+                addView(tv("➡️ Prossimo trofeo al livello $nextKey", 11f,
+                    Color.parseColor("#8A8AD0"), Gravity.START).also { it.setPadding(0, dp(4), 0, 0) })
+            }
+        }
+        addView(spacer(dp(2)))
+        addView(tv("La crescita si sblocca giocando in MiCittà: il personaggio matura col tuo livello XP e le uova si schiudono ai livelli chiave.", 10f,
+            Color.parseColor("#6F9E8C"), Gravity.START))
+    }
 }
 
 private fun PlayerProfileActivity.showGpsEditDialog() {
