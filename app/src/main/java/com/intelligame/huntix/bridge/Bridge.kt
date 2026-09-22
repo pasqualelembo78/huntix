@@ -173,6 +173,9 @@ object Bridge {
             // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
             //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
             "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)
+            // ── Regali P2P (uova e gemme): Unity ha riscattato (claim) il regalo
+            //    sul ledger; Android accredita inventario/gemme e lo registra. ──
+            "GiftClaimed" -> handleGiftClaimed(jsonData)
         }
     }
 
@@ -283,6 +286,58 @@ object Bridge {
         val msg = if (added) "Uovo aggiunto all'inventario! +${mvcReward.toInt()} MVC"
         else "Inventario uova pieno!"
         showToast(msg)
+    }
+
+    /**
+     * Regalo P2P riscattato da Unity (claim sul ledger): accredita il
+     * contenuto — uovo → inventario + profilo, gemme → gemme del profilo —
+     * replicando il flusso canônico di handleCityEggCaptured (qui però senza
+     * XP/MVC aggiuntivi: il donatore li ha già spesi in codesto regalo).
+     */
+    private fun handleGiftClaimed(jsonData: String) {
+        val ctx = UnityPlayer.currentActivity ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+
+        val kind = j.optString("kind", "")
+        val from = j.optString("from_name", "Giocatore")
+
+        when (kind) {
+            "gem" -> {
+                val amount = j.optInt("amount", 0)
+                if (amount <= 0) return
+                val newGems = StoreUnityBridge.addGemsFromCity(amount)
+                com.intelligame.huntix.AppLog.i("HuntixSync", "Regalo gemme +$amount -> $newGems")
+                showToast("💎 Regalo ricevuto: +$amount gemme da $from")
+            }
+            "egg" -> {
+                val rarityId = j.optString("rarity", "common")
+                val rarity = com.intelligame.huntix.EggRarity.fromId(rarityId)
+                val fantasyName = j.optString("egg_name", "").ifBlank { rarity.randomName() }
+                val eggId = j.optString("egg_id", "gift_" + System.currentTimeMillis())
+                // Idempotenza: se questo specifico regalo è già arrivato in
+                // inventario (es. ritrasmissione dal toast), non duplicarlo.
+                val alreadyHas = com.intelligame.huntix.EggInventoryManager.getInventory(ctx)
+                    .any { it.eggId == eggId }
+                if (!alreadyHas) {
+                    val item = com.intelligame.huntix.EggInventoryItem(
+                        eggId = eggId,
+                        rarityId = rarity.id,
+                        fantasyName = fantasyName,
+                        power = rarity.basePower,
+                        xpReward = 0
+                    )
+                    val added = com.intelligame.huntix.EggInventoryManager.addEgg(ctx, item)
+                    com.intelligame.huntix.managers.EggWhereLog.record(
+                        ctx, rarity.id, place = "Regalo da $from", name = fantasyName
+                    )
+                    val msg = if (added) "Regalo ricevuto: $fantasyName da $from!"
+                    else "Regalo ricevuto ma inventario pieno!"
+                    showToast(msg)
+                } else {
+                    com.intelligame.huntix.AppLog.i("HuntixSync", "Regalo gia' in inventario: $eggId (skip)")
+                }
+            }
+        }
     }
 
     @JvmStatic

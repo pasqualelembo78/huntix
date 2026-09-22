@@ -185,6 +185,9 @@ namespace Huntix.Core
                 case "MVCUpdated":
                     HandleMVCUpdated(jsonData);
                     break;
+                case "setTargetCoord":
+                    City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
+                    break;
                 case "ReturnToMenu":
                     ReturnToAndroid();
                     break;

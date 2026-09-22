@@ -81,6 +81,7 @@ def _players_in_zones(zones):
 
 def _player_payload(pid, p):
     """Costruisce il payload di un player per il client."""
+    now = time.time()
     return {
         "id": pid,
         "username": p.get("username", "Giocatore"),
@@ -91,6 +92,9 @@ def _player_payload(pid, p):
         "heading": p.get("heading", 0.0),
         "anim_state": p.get("anim_state", "idle"),
         "vehicle_code": p.get("vehicle_code", ""),
+        "pet": p.get("pet", "none"),
+        # "x secondi fa" come presenza (0 = ora): per il cliente "in linea".
+        "last_seen_sec": max(0, int(now - p.get("last_update", now))),
     }
 
 
@@ -108,6 +112,7 @@ def _init_city_table():
                     username     TEXT NOT NULL DEFAULT 'Giocatore',
                     level        INT DEFAULT 1,
                     skin         TEXT DEFAULT 'humanMaleA',
+                    pet          TEXT DEFAULT 'none',
                     lat          DOUBLE PRECISION,
                     lon          DOUBLE PRECISION,
                     heading      REAL DEFAULT 0,
@@ -116,6 +121,7 @@ def _init_city_table():
                     connected_at TIMESTAMP DEFAULT NOW()
                 )
             """)
+            cur.execute("ALTER TABLE city_active_players ADD COLUMN IF NOT EXISTS pet TEXT DEFAULT 'none'")
             conn.commit()
         finally:
             put_conn(conn)
@@ -229,29 +235,37 @@ def _db_send_msg(from_user, to_user, text):
         return False
 
 
-def _db_pull_inbox(user_id, limit=50):
-    """Ritorna i messaggi non ancora letti indirizzati a user_id e li marca
-    come letti (pull-and-clear, adatto al polling HTTP)."""
+def _db_pull_inbox(user_id, limit=50, peek=False):
+    """Ritorna i messaggi non ancora letti indirizzati a user_id. Con
+    peek=False (default) li marca come letti (pull-and-clear, adatto al
+    polling HTTP consumante); con peek=True li lascia leggibili anche a un
+    secondo consumatore (il client Unity notifica in citta' senza rubarli
+    all'activity di chat). Include il nome visuale del mittente quando
+    presente."""
     try:
         conn = get_conn()
         try:
             cur = conn.cursor()
             cur.execute("""
-                SELECT id, from_user, text, created_at
-                FROM city_msgs
-                WHERE to_user = %s AND read = FALSE
-                ORDER BY id ASC
+                SELECT m.id, m.from_user, m.text, m.created_at, a.username
+                FROM city_msgs m
+                LEFT JOIN city_active_players a ON a.user_id = m.from_user
+                WHERE m.to_user = %s AND m.read = FALSE
+                ORDER BY m.id ASC
                 LIMIT %s
             """, (user_id, limit))
             rows = cur.fetchall()
-            ids = [r["id"] for r in rows]
-            if ids:
-                cur.execute(
-                    "UPDATE city_msgs SET read = TRUE WHERE id = ANY(%s)",
-                    (ids,))
+            if not peek:
+                ids = [r["id"] for r in rows]
+                if ids:
+                    cur.execute(
+                        "UPDATE city_msgs SET read = TRUE WHERE id = ANY(%s)",
+                        (ids,))
             conn.commit()
             return [
-                {"from": r["from_user"], "text": r["text"],
+                {"from": r["from_user"],
+                 "from_name": r["username"] or "",
+                 "text": r["text"],
                  "ts": str(r["created_at"]) if r["created_at"] else ""}
                 for r in rows
             ]
@@ -262,9 +276,564 @@ def _db_pull_inbox(user_id, limit=50):
         return []
 
 
+def _db_chat_history(user_id, other_user, limit=50):
+    """Storia della conversazione tra due giocatori (entrambe le direzioni,
+    anche i gia' letti), dal piu' vecchio al piu' recente. Ogni messaggio
+    indica se e' "mine" (per renderizzarlo correttamente nella chat)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT m.from_user, m.text, m.created_at, a.username
+                FROM (
+                    SELECT from_user, text, created_at, to_user
+                    FROM city_msgs
+                    WHERE (from_user = %s AND to_user = %s)
+                       OR (from_user = %s AND to_user = %s)
+                    ORDER BY id DESC
+                    LIMIT %s
+                ) m
+                LEFT JOIN city_active_players a ON a.user_id = m.from_user
+                ORDER BY m.created_at ASC, m.text ASC
+            """, (user_id, other_user, other_user, user_id, limit))
+            rows = cur.fetchall()
+            # Aprire la conversazione = leggere i messaggi dell'altro (badge rubrica).
+            cur.execute(
+                "UPDATE city_msgs SET read = TRUE WHERE to_user = %s AND from_user = %s",
+                (user_id, other_user))
+            conn.commit()
+            return [
+                {"from": r["from_user"],
+                 "from_name": r["username"] or "",
+                 "mine": r["from_user"] == user_id,
+                 "text": r["text"],
+                 "ts": str(r["created_at"]) if r["created_at"] else ""}
+                for r in rows
+            ]
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB storia chat fallita: {e}")
+        return []
 
 
-def _db_upsert_player(user_id, username, level, skin, lat, lon, heading, zone):
+# Rate-limit chat: massimo un messaggio ogni 2s per coppia (from,to).
+_CHAT_RATE_WINDOW = 2.0
+_chat_rate = {}
+
+
+def _chat_rate_ok(from_user, to_user):
+    now = time.time()
+    key = (from_user, to_user)
+    try:
+        last = _chat_rate.get(key, 0.0)
+        if now - last < _CHAT_RATE_WINDOW:
+            return False
+        _chat_rate[key] = now
+        # pulizia pigra: cancella voci vecchie oltre la finestra
+        if len(_chat_rate) > 500:
+            for k in list(_chat_rate):
+                if now - _chat_rate[k] > _CHAT_RATE_WINDOW * 4:
+                    del _chat_rate[k]
+        return True
+    except Exception:
+        return True
+
+
+# ─── Rubrica / presenza ─────────────────────────────────────────
+
+def _db_conversations(user_id, limit=50):
+    """Rubrica: per ogni altro giocatore con cui si e' parlato, l'ultimo
+    messaggio, il timestamp e il numero di non letti."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT CASE WHEN from_user = %s THEN to_user ELSE from_user END AS other,
+                       MAX(id) AS last_id,
+                       COUNT(*) FILTER (WHERE to_user = %s AND read = FALSE) AS unread
+                FROM city_msgs
+                WHERE from_user = %s OR to_user = %s
+                GROUP BY CASE WHEN from_user = %s THEN to_user ELSE from_user END
+                ORDER BY last_id DESC
+                LIMIT %s
+            """, (user_id, user_id, user_id, user_id, user_id, limit))
+            rows = cur.fetchall()
+            contacts = []
+            for r in rows:
+                other = r["other"]
+                cur.execute(
+                    "SELECT username FROM city_active_players WHERE user_id = %s",
+                    (other,))
+                name_row = cur.fetchone()
+                name = (name_row["username"] or "") if name_row else ""
+                last_text, last_ts = "", ""
+                cur.execute("SELECT text, created_at FROM city_msgs WHERE id = %s",
+                            (r["last_id"],))
+                m = cur.fetchone()
+                if m:
+                    last_text = m["text"]
+                    last_ts = str(m["created_at"]) if m["created_at"] else ""
+                contacts.append({
+                    "other_id": other,
+                    "other_name": name or "Giocatore",
+                    "last_text": last_text,
+                    "last_ts": last_ts,
+                    "unread": int(r["unread"] or 0),
+                })
+            conn.commit()
+            return contacts
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB rubrica fallita per {user_id}: {e}")
+        return []
+
+
+def _db_had_thread(user_id, other):
+    """True se esiste almeno un messaggio tra i due giocatori (qualsiasi lato)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT 1 FROM city_msgs
+                WHERE (from_user = %s AND to_user = %s)
+                   OR (from_user = %s AND to_user = %s)
+                LIMIT 1
+            """, (user_id, other, other, user_id))
+            return cur.fetchone() is not None
+        finally:
+            put_conn(conn)
+    except Exception:
+        return False
+
+
+def _db_player_row(user_id):
+    """Riga city_active_players (presenza offline), best-effort."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT user_id, username, level, skin, lat, lon, last_update
+                FROM city_active_players WHERE user_id = %s
+            """, (user_id,))
+            return cur.fetchone()
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB player row fallita per {user_id}: {e}")
+        return None
+
+
+# ─── Party / gruppi di amici ────────────────────────────────────
+
+def _init_party_tables():
+    """Crea le tabelle per il party (gruppo di amici in citta')."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS city_parties (
+                    id         BIGSERIAL PRIMARY KEY,
+                    leader     TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS city_party_members (
+                    party_id  BIGINT NOT NULL,
+                    user_id   TEXT NOT NULL,
+                    joined_at TIMESTAMP DEFAULT NOW(),
+                    PRIMARY KEY (party_id, user_id)
+                )
+            """)
+            # un giocatore puo' stare in una sola party
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_party_member_user "
+                        "ON city_party_members(user_id)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS city_party_invites (
+                    id         BIGSERIAL PRIMARY KEY,
+                    party_id   BIGINT NOT NULL,
+                    from_user  TEXT NOT NULL,
+                    to_user    TEXT NOT NULL,
+                    status     TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_party_invites_to "
+                        "ON city_party_invites(to_user, status)")
+            conn.commit()
+        finally:
+            put_conn(conn)
+        logger.info("[CityRealtime] Tabelle party pronte")
+    except Exception as e:
+        logger.error(f"[CityRealtime] Errore creazione tabelle party: {e}")
+
+
+def _db_create_party(user_id):
+    """Crea una party con user_id come leader. Se e' gia' in una, la riusa."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT party_id FROM city_party_members WHERE user_id = %s",
+                        (user_id,))
+            row = cur.fetchone()
+            if row:
+                return row["party_id"]
+            cur.execute(
+                "INSERT INTO city_parties (leader, created_at) VALUES (%s, NOW()) RETURNING id",
+                (user_id,))
+            nid = cur.fetchone()["id"]
+            cur.execute(
+                "INSERT INTO city_party_members (party_id, user_id) VALUES (%s, %s)",
+                (nid, user_id))
+            conn.commit()
+            return nid
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB crea party fallita per {user_id}: {e}")
+        return None
+
+
+def _db_get_party_by_user(user_id):
+    """party_id della party di user_id (o None)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT party_id FROM city_party_members WHERE user_id = %s",
+                        (user_id,))
+            row = cur.fetchone()
+            return row["party_id"] if row else None
+        finally:
+            put_conn(conn)
+    except Exception:
+        return None
+
+
+def _db_is_member(party_id, user_id):
+    """True se user_id e' membro della party."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM city_party_members WHERE party_id = %s AND user_id = %s",
+                (party_id, user_id))
+            return cur.fetchone() is not None
+        finally:
+            put_conn(conn)
+    except Exception:
+        return False
+
+
+def _db_invite_to_party(party_id, from_user, to_user):
+    """Crea un invito in sospeso per to_user."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO city_party_invites (party_id, from_user, to_user, status)
+                VALUES (%s, %s, %s, 'pending')
+            """, (party_id, from_user, to_user))
+            conn.commit()
+            return True
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB invite party fallita: {e}")
+        return False
+
+
+def _db_pending_invites(user_id):
+    """Inviti in sospeso ricevuti da user_id."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT i.party_id, i.from_user, a.username AS from_name, i.created_at
+                FROM city_party_invites i
+                LEFT JOIN city_active_players a ON a.user_id = i.from_user
+                WHERE i.to_user = %s AND i.status = 'pending'
+                ORDER BY i.id DESC
+                LIMIT 20
+            """, (user_id,))
+            rows = cur.fetchall()
+            conn.commit()
+            return [
+                {"party_id": r["party_id"],
+                 "from_user": r["from_user"],
+                 "from_name": r["from_name"] or "Giocatore",
+                 "ts": str(r["created_at"]) if r["created_at"] else ""}
+                for r in rows
+            ]
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB pending invites fallita: {e}")
+        return []
+
+
+def _db_decline_party(party_id, user_id):
+    """Rifiuta un invito (lo smaltisce, senza spam futuro)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE city_party_invites SET status = 'declined'
+                WHERE party_id = %s AND to_user = %s AND status = 'pending'
+            """, (party_id, user_id))
+            conn.commit()
+            return True
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB decline party fallita: {e}")
+        return False
+
+
+def _db_accept_party(party_id, user_id):
+    """Entra nella party (lasciando un'eventuale altra). Consuma gli inviti."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT party_id FROM city_party_members WHERE user_id = %s",
+                        (user_id,))
+            row = cur.fetchone()
+            if row and row["party_id"] != party_id:
+                # lascia la party attuale (se leader: la dissolvera' _db_leave_party)
+                _db_leave_party(user_id)
+            cur.execute("""
+                INSERT INTO city_party_members (party_id, user_id)
+                VALUES (%s, %s) ON CONFLICT DO NOTHING
+            """, (party_id, user_id))
+            cur.execute("""
+                UPDATE city_party_invites SET status = 'accepted'
+                WHERE party_id = %s AND to_user = %s AND status = 'pending'
+            """, (party_id, user_id))
+            conn.commit()
+            return True
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB accept party fallita: {e}")
+        return False
+
+
+def _db_leave_party(user_id):
+    """Esce dalla party; se il leader esce, la party si scioglie."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT party_id FROM city_party_members WHERE user_id = %s",
+                        (user_id,))
+            row = cur.fetchone()
+            if row is None:
+                return True
+            party_id = row["party_id"]
+            cur.execute("SELECT leader FROM city_parties WHERE id = %s", (party_id,))
+            p = cur.fetchone()
+            if p and p["leader"] == user_id:
+                cur.execute("DELETE FROM city_party_members WHERE party_id = %s", (party_id,))
+                cur.execute("DELETE FROM city_party_invites WHERE party_id = %s", (party_id,))
+                cur.execute("DELETE FROM city_parties WHERE id = %s", (party_id,))
+            else:
+                cur.execute("DELETE FROM city_party_members WHERE user_id = %s", (user_id,))
+            conn.commit()
+            return True
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB leave party fallita per {user_id}: {e}")
+        return False
+
+
+def _db_party_state(user_id):
+    """Stato della party di user_id (membri + leader), o None se non in una."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT party_id FROM city_party_members WHERE user_id = %s",
+                        (user_id,))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            party_id = row["party_id"]
+            cur.execute("SELECT leader FROM city_parties WHERE id = %s", (party_id,))
+            p = cur.fetchone()
+            now = time.time()
+            cur.execute("""
+                SELECT m.user_id, a.username, a.level, a.skin, a.lat, a.lon, a.last_update
+                FROM city_party_members m
+                LEFT JOIN city_active_players a ON a.user_id = m.user_id
+                WHERE m.party_id = %s
+            """, (party_id,))
+            members = []
+            for m in cur.fetchall():
+                lu = m["last_update"]
+                last_seen = max(0, int(now - lu.timestamp())) if lu else 0
+                members.append({
+                    "id": m["user_id"],
+                    "username": m["username"] or "Giocatore",
+                    "level": m["level"] or 1,
+                    "skin": m["skin"] or "humanMaleA",
+                    "lat": m["lat"],
+                    "lon": m["lon"],
+                    "last_seen_sec": last_seen,
+                })
+            conn.commit()
+            return {
+                "party_id": party_id,
+                "leader": p["leader"] if p else "",
+                "members": members,
+            }
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB party state fallita per {user_id}: {e}")
+        return None
+
+
+# ─── Regali fra giocatori (uova e gemme) ───────────────────────
+
+def _init_gift_table():
+    """Crea la tabella city_gifts (ledger P2P: uova e gemme)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS city_gifts (
+                    id         BIGSERIAL PRIMARY KEY,
+                    from_user  TEXT NOT NULL,
+                    to_user    TEXT NOT NULL,
+                    kind       TEXT NOT NULL,
+                    egg_id     TEXT,
+                    rarity     TEXT,
+                    egg_name   TEXT,
+                    amount     INT,
+                    status     TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    claimed_at TIMESTAMP
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_city_gifts_to "
+                        "ON city_gifts(to_user, status)")
+            conn.commit()
+        finally:
+            put_conn(conn)
+        logger.info("[CityRealtime] Tabella city_gifts pronta")
+    except Exception as e:
+        logger.error(f"[CityRealtime] Errore creazione tabella gifts: {e}")
+
+
+def _db_send_gift(from_user, to_user, kind, egg_id, rarity, egg_name, amount):
+    """Registra un regalo in sospeso. Ritorna l'id o None."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO city_gifts
+                    (from_user, to_user, kind, egg_id, rarity, egg_name, amount, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')
+                RETURNING id
+            """, (from_user, to_user, kind, egg_id, rarity, egg_name, amount))
+            gid = cur.fetchone()["id"]
+            conn.commit()
+            return gid
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB send gift fallito: {e}")
+        return None
+
+
+def _db_pending_gifts(user_id, limit=50):
+    """Regali in sospeso indirizzati a user_id (nome mittente incluso)."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT g.id, g.from_user, g.kind, g.egg_id, g.rarity, g.egg_name,
+                       g.amount, g.created_at, a.username
+                FROM city_gifts g
+                LEFT JOIN city_active_players a ON a.user_id = g.from_user
+                WHERE g.to_user = %s AND g.status = 'pending'
+                ORDER BY g.id DESC
+                LIMIT %s
+            """, (user_id, limit))
+            rows = cur.fetchall()
+            conn.commit()
+            return [
+                {"id": r["id"],
+                 "from_user": r["from_user"],
+                 "from_name": r["username"] or "Giocatore",
+                 "kind": r["kind"],
+                 "egg_id": r["egg_id"],
+                 "rarity": r["rarity"],
+                 "egg_name": r["egg_name"],
+                 "amount": r["amount"],
+                 "ts": str(r["created_at"]) if r["created_at"] else ""}
+                for r in rows
+            ]
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB pending gifts fallita per {user_id}: {e}")
+        return []
+
+
+def _db_claim_gift(gift_id, user_id):
+    """Riscatta un regalo (solo se pendente e destinato a user_id).
+    Ritorna il dettaglio del regalo, o None se gia' riscattato/estraneo."""
+    try:
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE city_gifts SET status = 'claimed', claimed_at = NOW()
+                WHERE id = %s AND to_user = %s AND status = 'pending'
+                RETURNING id, from_user, kind, egg_id, rarity, egg_name, amount, created_at
+            """, (gift_id, user_id))
+            row = cur.fetchone()
+            conn.commit()
+            if row is None:
+                return None
+            return {
+                "id": row["id"],
+                "from_user": row["from_user"],
+                "kind": row["kind"],
+                "egg_id": row["egg_id"],
+                "rarity": row["rarity"],
+                "egg_name": row["egg_name"],
+                "amount": row["amount"],
+                "ts": str(row["created_at"]) if row["created_at"] else "",
+            }
+        finally:
+            put_conn(conn)
+    except Exception as e:
+        logger.warning(f"[CityRealtime] DB claim gift fallito: {e}")
+        return None
+
+
+
+
+def _db_upsert_player(user_id, username, level, skin, pet, lat, lon, heading, zone):
     """Inserisce o aggiorna un player nella tabella (best-effort)."""
     try:
         conn = get_conn()
@@ -272,18 +841,19 @@ def _db_upsert_player(user_id, username, level, skin, lat, lon, heading, zone):
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO city_active_players
-                    (user_id, username, level, skin, lat, lon, heading, zone, last_update)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    (user_id, username, level, skin, pet, lat, lon, heading, zone, last_update)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (user_id) DO UPDATE SET
                     username = EXCLUDED.username,
                     level = EXCLUDED.level,
                     skin = EXCLUDED.skin,
+                    pet = EXCLUDED.pet,
                     lat = EXCLUDED.lat,
                     lon = EXCLUDED.lon,
                     heading = EXCLUDED.heading,
                     zone = EXCLUDED.zone,
                     last_update = NOW()
-            """, (user_id, username, level, skin, lat, lon, heading, zone))
+            """, (user_id, username, level, skin, pet, lat, lon, heading, zone))
             conn.commit()
         finally:
             put_conn(conn)
@@ -361,6 +931,8 @@ def register_city_realtime_handlers(sio):
     _init_city_table()
     _init_wallet_table()
     _init_chat_table()
+    _init_party_tables()
+    _init_gift_table()
 
     # Avvia il cleanup loop all'avvio del server
     try:
@@ -414,6 +986,7 @@ def register_city_realtime_handlers(sio):
         username = data.get("username", "Giocatore")
         level = data.get("level", 1)
         skin = data.get("skin", "humanMaleA")
+        pet = data.get("pet", "none")
         lat = float(data.get("lat", LAT_ORIGIN))
         lon = float(data.get("lon", LON_ORIGIN))
         heading = float(data.get("heading", 0.0))
@@ -431,6 +1004,7 @@ def register_city_realtime_handlers(sio):
             "username": username,
             "level": level,
             "skin": skin,
+            "pet": pet,
             "lat": lat,
             "lon": lon,
             "heading": heading,
@@ -462,7 +1036,7 @@ def register_city_realtime_handlers(sio):
                      exclude_pid=user_id)
 
         # Salva su DB
-        _db_upsert_player(user_id, username, level, skin, lat, lon, heading, new_zone)
+        _db_upsert_player(user_id, username, level, skin, pet, lat, lon, heading, new_zone)
 
         logger.info(f"[CityRealtime] {username} ({user_id}) entrato in zona {new_zone}")
 
@@ -546,7 +1120,7 @@ def register_city_realtime_handlers(sio):
         if now - p.get("_last_db_update", 0) > 5.0:
             p["_last_db_update"] = now
             _db_upsert_player(pid, p["username"], p["level"],
-                              p["skin"], lat, lon, heading, new_zone)
+                              p["skin"], p.get("pet", "none"), lat, lon, heading, new_zone)
 
     # ── city:vehicle ──────────────────────────────────────────
 
@@ -673,6 +1247,7 @@ async def api_city_heartbeat(req: dict):
     username = str(req.get("username", "Giocatore"))[:40]
     level = int(req.get("level", 1))
     skin = str(req.get("skin", "humanMaleA"))[:40]
+    pet = str(req.get("pet", "none"))[:40]
     vehicle_code = str(req.get("vehicle_code", ""))[:40]
     last_seen = time.time()
 
@@ -684,6 +1259,7 @@ async def api_city_heartbeat(req: dict):
             "username": username,
             "level": level,
             "skin": skin,
+            "pet": pet,
             "lat": lat,
             "lon": lon,
             "heading": heading,
@@ -693,7 +1269,7 @@ async def api_city_heartbeat(req: dict):
             "last_update": last_seen,
         }
         _zone_members[new_zone].add(pid)
-        _db_upsert_player(pid, username, level, skin, lat, lon, heading, new_zone)
+        _db_upsert_player(pid, username, level, skin, pet, lat, lon, heading, new_zone)
         return {"ok": True, "new": True, "zone": new_zone, "id": pid}
 
     p = existing
@@ -705,6 +1281,7 @@ async def api_city_heartbeat(req: dict):
     p["username"] = username
     p["level"] = level
     p["skin"] = skin
+    p["pet"] = pet
     p["vehicle_code"] = vehicle_code
     p["last_update"] = last_seen
 
@@ -719,7 +1296,7 @@ async def api_city_heartbeat(req: dict):
     # Throttle DB a 5s come per i client WebSocket
     if last_seen - p.get("_last_db_update", 0) > 5.0:
         p["_last_db_update"] = last_seen
-        _db_upsert_player(pid, username, level, skin, lat, lon, heading, new_zone)
+        _db_upsert_player(pid, username, level, skin, pet, lat, lon, heading, new_zone)
 
     return {"ok": True, "new": False, "zone": new_zone, "id": pid}
 
@@ -827,21 +1404,334 @@ async def api_city_chat_send(req: dict):
         return {"ok": False, "error": "'to_user' e 'text' richiesti"}
     if to_user == from_user:
         return {"ok": False, "error": "non puoi parlarti da solo"}
+    if not _chat_rate_ok(from_user, to_user):
+        return {"ok": False, "error": "troppo veloce: aspetta un attimo tra un messaggio e l'altro"}
     if _db_send_msg(from_user, to_user, text):
         return {"ok": True}
     return {"ok": False, "error": "db non disponibile"}
 
 
 @city_http_router.get("/chat/inbox")
-async def api_city_chat_inbox(token: str = Query(default="")):
-    """Ritorna i messaggi NON letti arrivati per me (dal mio JWT) e li segna
-    come letti (pull-and-clear). Chiamato periodicamente dal client."""
+async def api_city_chat_inbox(
+    token: str = Query(default=""),
+    peek: bool = Query(default=False),
+):
+    """Ritorna i messaggi NON letti arrivati per me (dal mio JWT). Default:
+    pull-and-clear (li segna come letti). Con peek=1 li restituisce SENZA
+    consumarli, cosi' il client Unity puo' notificarli in citta' senza farli
+    sparire dalla chat aperta sul telefono."""
     payload = socket_authenticate(token) if token else None
     if not payload:
         return {"ok": False, "error": "autenticazione richiesta"}
     user_id = str(payload.get("user_id", "")).strip()
     if not user_id:
         return {"ok": False, "error": "user_id assente nel token"}
-    msgs = _db_pull_inbox(user_id)
+    msgs = _db_pull_inbox(user_id, peek=peek)
     return {"ok": True, "count": len(msgs), "messages": msgs}
+
+
+@city_http_router.get("/chat/history")
+async def api_city_chat_history(
+    token: str = Query(default=""),
+    with_id: str = Query(default=""),
+):
+    """Storia della conversazione con un altro giocatore (anche i messaggi
+    gia' letti, entrambe le direzioni, dal piu' vecchio al piu' recente).
+    Il campo 'mine' indica se il messaggio e' mio, per renderizzarlo nel
+    verso giusto nella chat."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    other = str(with_id or "").strip()
+    if not user_id or not other:
+        return {"ok": False, "error": "user_id e with assenti"}
+    if other == user_id:
+        return {"ok": False, "error": "conversa con un ALTRO giocatore"}
+    msgs = _db_chat_history(user_id, other)
+    return {"ok": True, "count": len(msgs), "messages": msgs}
+
+
+@city_http_router.get("/chat/conversations")
+async def api_city_chat_conversations(token: str = Query(default="")):
+    """Rubrica: elenco dei giocatori con cui si e' parlato, con l'ultimo
+    messaggio e il numero di non letti (per i badge)."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    convs = _db_conversations(user_id)
+    return {"ok": True, "count": len(convs), "conversations": convs}
+
+
+@city_http_router.get("/presence")
+async def api_city_presence(
+    token: str = Query(default=""),
+    with_id: str = Query(default=""),
+):
+    """Presenza e posizione di un altro giocatore. Le coordinate reali vengono
+    esposte solo agli utenti che hanno gia' una conversazione con lui (privacy:
+    si vede chi si conosce), e solo se e' online nel town server."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    other = str(with_id or "").strip()
+    if not user_id or not other:
+        return {"ok": False, "error": "user_id e with_id richiesti"}
+    if other == user_id:
+        return {"ok": False, "error": "guarda la TUA posizione, non quella altrui"}
+
+    known = _db_had_thread(user_id, other)
+    target = city_players.get(other)
+    if target is not None:
+        if known:
+            return {"ok": True, "online": True, **_player_payload(other, target)}
+        return {"ok": True, "online": True,
+                "id": other,
+                "username": target.get("username", "Giocatore"),
+                "level": target.get("level", 1),
+                "last_seen_sec": 0}
+
+    row = _db_player_row(other)
+    if row is None:
+        return {"ok": True, "online": False}
+    lu = row["last_update"]
+    last_seen = max(0, int(time.time() - lu.timestamp())) if lu else 0
+    return {"ok": True, "online": False,
+            "id": other,
+            "username": row["username"] or "Giocatore",
+            "level": row["level"] or 1,
+            "last_seen_sec": last_seen}
+
+
+# ─── Party (gruppo di amici) ─────────────────────────────────────
+
+@city_http_router.post("/party/create")
+async def api_city_party_create(req: dict):
+    """Crea (o restituisce) la party del giocatore autenticato."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    nid = _db_create_party(user_id)
+    if nid is None:
+        return {"ok": False, "error": "db non disponibile"}
+    return {"ok": True, "party_id": nid}
+
+
+@city_http_router.post("/party/invite")
+async def api_city_party_invite(req: dict):
+    """Invita un giocatore nella propria party."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    party_id = _db_get_party_by_user(user_id)
+    if not party_id:
+        return {"ok": False, "error": "prima crea o entra in una party"}
+    to_user = str(req.get("to_user", "")).strip()
+    if not to_user:
+        return {"ok": False, "error": "'to_user' richiesto"}
+    if to_user == user_id:
+        return {"ok": False, "error": "non puoi invitarti da solo"}
+    if not _db_is_member(party_id, user_id):
+        return {"ok": False, "error": "non sei piu' membro della party"}
+    if not _chat_rate_ok(user_id, to_user):
+        return {"ok": False, "error": "troppo veloce: ritenta tra un attimo"}
+    if not _db_invite_to_party(party_id, user_id, to_user):
+        return {"ok": False, "error": "db non disponibile"}
+    return {"ok": True, "party_id": party_id}
+
+
+@city_http_router.get("/party/invites")
+async def api_city_party_invites(token: str = Query(default="")):
+    """Inviti in sospeso ricevuti."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    invites = _db_pending_invites(user_id)
+    return {"ok": True, "count": len(invites), "invites": invites}
+
+
+@city_http_router.post("/party/accept")
+async def api_city_party_accept(req: dict):
+    """Accetta un invito ed entra nella party."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    try:
+        party_id = int(req.get("party_id", 0))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "party_id non valido"}
+    if party_id <= 0:
+        return {"ok": False, "error": "party_id non valido"}
+    if not _db_accept_party(party_id, user_id):
+        return {"ok": False, "error": "db non disponibile"}
+    return {"ok": True, "party_id": party_id}
+
+
+@city_http_router.post("/party/leave")
+async def api_city_party_leave(req: dict):
+    """Esce dalla party (il leader la scioglie)."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    _db_leave_party(user_id)
+    return {"ok": True}
+
+
+@city_http_router.post("/party/decline")
+async def api_city_party_decline(req: dict):
+    """Rifiuta (e smaltisce) un invito in sospeso."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    try:
+        party_id = int(req.get("party_id", 0))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "party_id non valido"}
+    if party_id <= 0:
+        return {"ok": False, "error": "party_id non valido"}
+    if not _db_decline_party(party_id, user_id):
+        return {"ok": False, "error": "db non disponibile"}
+    return {"ok": True}
+
+
+@city_http_router.get("/party/state")
+async def api_city_party_state(token: str = Query(default="")):
+    """Stato della propria party (membri con presenza e posizione)."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    state = _db_party_state(user_id)
+    if state is None:
+        return {"ok": True, "party_id": None, "members": []}
+    return {"ok": True, **state}
+
+
+# ─── Regali fra giocatori (uova e gemme) ─────────────────────────
+
+@city_http_router.post("/gift/send")
+async def api_city_gift_send(req: dict):
+    """Invia un regalo (uovo o gemme) a un altro giocatore. Il trasferimento
+    reale avviene localmente su entrambi i lati (Android ricevente riscatta e
+    lo aggiunge all'inventario); qui c'e' il ledger di recapito."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    from_user = str(payload.get("user_id", "")).strip()
+    if not from_user:
+        return {"ok": False, "error": "user_id assente nel token"}
+    to_user = str(req.get("to_user", "")).strip()
+    if to_user == from_user:
+        return {"ok": False, "error": "non puoi regalarti qualcosa da solo"}
+    if not to_user:
+        return {"ok": False, "error": "'to_user' richiesto"}
+    kind = str(req.get("kind", "")).strip().lower()
+    if kind not in ("egg", "gem"):
+        return {"ok": False, "error": "kind deve essere 'egg' o 'gem'"}
+    if not _chat_rate_ok(from_user, to_user):
+        return {"ok": False, "error": "troppo veloce: ritenta tra un attimo"}
+
+    if kind == "gem":
+        try:
+            amount = int(req.get("amount", 0))
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "amount non valido"}
+        if amount <= 0 or amount > 9999:
+            return {"ok": False, "error": "amount fuori range (1-9999)"}
+        gid = _db_send_gift(from_user, to_user, "gem", None, None, None, amount)
+    else:
+        egg_id = str(req.get("egg_id", "")).strip()[:40]
+        rarity = str(req.get("rarity", "")).strip()[:32]
+        egg_name = str(req.get("egg_name", "")).strip()[:80]
+        if not egg_id or not rarity:
+            return {"ok": False, "error": "egg_id e rarity richiesti per l'uovo"}
+        gid = _db_send_gift(from_user, to_user, "egg", egg_id, rarity, egg_name, None)
+
+    if gid is None:
+        return {"ok": False, "error": "db non disponibile"}
+    return {"ok": True, "gift_id": gid}
+
+
+@city_http_router.get("/gift/inbox")
+async def api_city_gift_inbox(
+    token: str = Query(default=""),
+    peek: bool = Query(default=False),
+):
+    """Regali in arrivo (restano pendenti finche' non vengono riscattati;
+    'peek' non consuma nulla: i regali si riscattano esplicitamente)."""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    gifts = _db_pending_gifts(user_id)
+    return {"ok": True, "count": len(gifts), "gifts": gifts}
+
+
+@city_http_router.post("/gift/claim")
+async def api_city_gift_claim(req: dict):
+    """Riscatta un regalo. L'Android ricevente lo accredita poi nel profilo
+    (inventario uova / gemme + Firestore)."""
+    if not isinstance(req, dict):
+        return {"ok": False, "error": "body JSON richiesto"}
+    token = req.get("token", "") or ""
+    payload = socket_authenticate(token) if token else None
+    if not payload:
+        return {"ok": False, "error": "autenticazione richiesta"}
+    user_id = str(payload.get("user_id", "")).strip()
+    if not user_id:
+        return {"ok": False, "error": "user_id assente nel token"}
+    try:
+        gift_id = int(req.get("gift_id", 0))
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "gift_id non valido"}
+    if gift_id <= 0:
+        return {"ok": False, "error": "gift_id non valido"}
+    gift = _db_claim_gift(gift_id, user_id)
+    if gift is None:
+        return {"ok": False, "error": "regalo non trovato o gia' riscattato"}
+    return {"ok": True, "gift": gift}
 

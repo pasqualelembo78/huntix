@@ -372,6 +372,15 @@ namespace City.UI
             toastRoutine = StartCoroutine(ToastRoutine(message));
         }
 
+        /// Toast interattivo per la chat P2P: resta un avviso temporaneo ma il
+        /// TAP su di esso esegue onTap (es. aprire la chat con il mittente).
+        public void ShowChatToast(string message, UnityEngine.Events.UnityAction onTap)
+        {
+            if (toast == null) { onTap?.Invoke(); return; }
+            if (toastRoutine != null) StopCoroutine(toastRoutine);
+            toastRoutine = StartCoroutine(ToastRoutine(message, onTap));
+        }
+
         public void ShowLegal()
         {
             if (legal != null) legal.Show();
@@ -779,6 +788,55 @@ namespace City.UI
                 toast.color = c;
                 yield return null;
             }
+        }
+
+        private IEnumerator ToastRoutine(string message, UnityEngine.Events.UnityAction onTap)
+        {
+            toast.text = message;
+            Color c = toast.color;
+            c.a = 1f;
+            toast.color = c;
+            AttachToastTap(onTap);
+            yield return new WaitForSecondsRealtime(2.2f);
+            float t = 0f;
+            while (t < 0.4f)
+            {
+                t += Time.deltaTime;
+                c.a = Mathf.Lerp(1f, 0f, t / 0.4f);
+                toast.color = c;
+                yield return null;
+            }
+            DetachToastTap();
+        }
+
+        private UnityEngine.UI.Button _toastButton;
+
+        private void AttachToastTap(UnityEngine.Events.UnityAction onTap)
+        {
+            try
+            {
+                if (toast == null || onTap == null) return;
+                if (_toastButton == null)
+                    _toastButton = toast.gameObject.AddComponent<UnityEngine.UI.Button>();
+                _toastButton.targetGraphic = toast;
+                toast.raycastTarget = true;
+                _toastButton.onClick.RemoveAllListeners();
+                _toastButton.onClick.AddListener(onTap);
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[UIManager] toast tap non attivabile: " + e.Message);
+            }
+        }
+
+        private void DetachToastTap()
+        {
+            try
+            {
+                if (_toastButton != null)
+                    _toastButton.onClick.RemoveAllListeners();
+            }
+            catch (System.Exception) { }
         }
 
         // ---------------------------------------------------------------- internals

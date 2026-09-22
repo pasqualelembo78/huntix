@@ -18,8 +18,8 @@ namespace City.Economy
     // stub di EggController.cs (escluso dal check)
     public class EggController : MonoBehaviour
     {
-        public enum Rarity { Common, Uncommon, Rare, Legendary }
-        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia }
+        public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna }
         public Rarity rarity;
         public EggType eggType;
         public int value = 10;
@@ -28,6 +28,7 @@ namespace City.Economy
         public bool PlayerNearCanRadar => true;
         public void OnCaptured() {}
         public void StartCapture() {}
+        public void Init(UnityEngine.Vector3 position, Rarity r, EggType t = EggType.Strada) { rarity = r; eggType = t; }
     }
 }
 

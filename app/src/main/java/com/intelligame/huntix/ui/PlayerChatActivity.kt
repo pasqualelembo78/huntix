@@ -12,10 +12,12 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.content.ClipboardManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.bridge.WorldPosCloud
 import com.intelligame.huntix.reallife.RealLifeAuth
 import com.intelligame.huntix.reallife.RealLifeConfig
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +89,11 @@ class PlayerChatActivity : AppCompatActivity() {
             textSize = 14f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
+        val locBtn = UiKit.button(c, "\uD83D\uDCCD", "#3A2E66") { shareLocation() }.apply {
+            layoutParams = LinearLayout.LayoutParams(
+                UiKit.dp(c, 44), UiKit.dp(c, 44)
+            ).apply { rightMargin = UiKit.dp(c, 8) }
+        }
         sendBtn = UiKit.button(c, "\u27a4", UiKit.ACCENT) { sendMessage() }.apply {
             layoutParams = LinearLayout.LayoutParams(
                 UiKit.dp(c, 52), UiKit.dp(c, 44)
@@ -97,6 +104,7 @@ class PlayerChatActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(Color.parseColor("#0A0618"))
             setPadding(UiKit.dp(c, 10), UiKit.dp(c, 8), UiKit.dp(c, 10), UiKit.dp(c, 8))
+            addView(locBtn)
             addView(input)
             addView(sendBtn)
         }
@@ -141,18 +149,109 @@ class PlayerChatActivity : AppCompatActivity() {
         window.statusBarColor = Color.parseColor("#0A0618")
         setContentView(root)
 
-        pollInbox()
+        loadHistory()
+    }
+
+    /** Carica la conversazione precedente (anche i messaggi gia' letti) e
+     *  solo dopo avvia il polling dei nuovi. Svuota una volta la inbox cosi'
+     *  i messaggi gia' mostrati dalla storia non vengono duplicati. */
+    private fun loadHistory() {
+        lifecycleScope.launch {
+            val items = fetchHistory()
+            for ((mine, text) in items) addLine(mine, text) // addLine è thread-safe
+            if (items.isNotEmpty()) addSeparator("— conversazione precedente —")
+            drainInbox()
+            pollInbox()
+        }
+    }
+
+    private suspend fun fetchHistory(): List<Pair<Boolean, String>> {
+        val token = RealLifeAuth.getAccessToken(this)
+        if (token.isEmpty() || toUserId.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val req = Request.Builder()
+                .url("${RealLifeConfig.BASE_URL}/api/city/chat/history?token=$token&with_id=$toUserId")
+                .get()
+                .build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use emptyList()
+                    val j = org.json.JSONObject(resp.body?.string().orEmpty())
+                    val arr = j.optJSONArray("messages") ?: return@use emptyList()
+                    (0 until arr.length()).map { i ->
+                        val m = arr.optJSONObject(i)
+                        val mine = m?.optBoolean("mine", false) ?: false
+                        val t = m?.optString("text", "") ?: ""
+                        Pair(mine, t)
+                    }.filter { it.second.isNotBlank() }
+                }
+            }.getOrDefault(emptyList())
+        }
+    }
+
+    /** Consuma la inbox una sola volta (pull-and-clear) senza mostrarla:
+     *  evita la duplicazione con la storia appena caricata. */
+    private suspend fun drainInbox() {
+        val token = RealLifeAuth.getAccessToken(this)
+        if (token.isEmpty()) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder()
+                    .url("${RealLifeConfig.BASE_URL}/api/city/chat/inbox?token=$token")
+                    .get()
+                    .build()
+                client.newCall(req).execute().close()
+            }
+        }
+    }
+
+    private fun addSeparator(label: String) {
+        val tv = TextView(this).apply {
+            setText(label)
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor(UiKit.TEXT_DIM))
+            setPadding(0, UiKit.dp(this@PlayerChatActivity, 10), 0, UiKit.dp(this@PlayerChatActivity, 4))
+        }
+        runOnUiThread {
+            messagesContainer.addView(tv, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT))
+            scrollView.post { scrollView.fullScroll(ViewGroup.FOCUS_DOWN) }
+        }
     }
 
     private fun sendMessage() {
         val text = input.text?.toString()?.trim().orEmpty()
         if (text.isEmpty() || toUserId.isEmpty()) return
+        input.text?.clear()
+        postText(text)
+    }
+
+    /** Condivisione posizione: invia le coordinate del mio ultimo punto in
+     *  citta' (arrivate da Unity via "PlayerPosition", vedi WorldPosCloud). */
+    private fun shareLocation() {
+        if (toUserId.isEmpty()) return
+        if (RealLifeAuth.getAccessToken(this).isEmpty()) {
+            addLine(false, "Autenticazione mancante: fai login.")
+            return
+        }
+        val pos = WorldPosCloud.lastPosition(this)
+        if (pos == null) {
+            addLine(false, "Posizione non disponibile: entra prima in citt\u00e0.")
+            return
+        }
+        postText(String.format(
+            java.util.Locale.ITALY, "\uD83D\uDCCD %.6f,%.6f", pos.first, pos.second))
+    }
+
+    private fun postText(text: String) {
+        if (text.isEmpty()) return
         val token = RealLifeAuth.getAccessToken(this)
         if (token.isEmpty()) {
             addLine(false, "Autenticazione mancante: fai login.")
             return
         }
-        input.text?.clear()
         addLine(true, text) // ottimistica
         lifecycleScope.launch {
             val ok = postSend(token, text)
@@ -218,21 +317,49 @@ class PlayerChatActivity : AppCompatActivity() {
             setBackgroundColor(if (isMine)
                 Color.parseColor(UiKit.ACCENT) else Color.parseColor("#26203A"))
         }
+        val chip = if (!isMine && text.startsWith("\uD83D\uDCCD"))
+            TextView(this@PlayerChatActivity).apply {
+                setText("\uD83D\uDCCF Copia")
+                textSize = 11f
+                setTextColor(Color.parseColor(UiKit.ACCENT))
+                setPadding(UiKit.dp(this@PlayerChatActivity, 8),
+                    UiKit.dp(this@PlayerChatActivity, 4),
+                    UiKit.dp(this@PlayerChatActivity, 8),
+                    UiKit.dp(this@PlayerChatActivity, 4))
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                setOnClickListener { copyLocation(text) }
+            } else null
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = if (isMine) Gravity.END else Gravity.START
+            gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = UiKit.dp(this@PlayerChatActivity, 6) }
             addView(bubble, LinearLayout.LayoutParams(
-                (UiKit.dp(this@PlayerChatActivity, 260)),
+                (UiKit.dp(this@PlayerChatActivity, 250)),
                 ViewGroup.LayoutParams.WRAP_CONTENT))
+            if (chip != null) addView(chip)
         }
         runOnUiThread {
             messagesContainer.addView(row)
             scrollView.post { scrollView.fullScroll(ViewGroup.FOCUS_DOWN) }
         }
+    }
+
+    /** Copia la coppia lat,lon contenuta in un messaggio 📌 ricevuto. */
+    private fun copyLocation(text: String) {
+        val nums = Regex("(-?\\d+\\.\\d+)").findAll(text).map { it.value }.toList()
+        if (nums.size < 2) return
+        val out = "Lat: ${nums[0]}, Lon: ${nums[1]}"
+        try {
+            val cm = getSystemService(ClipboardManager::class.java)
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("coordinate", out))
+            addLine(false, out + " \u2713") // conferma nella chat
+        } catch (_: Exception) {}
     }
 
     companion object {

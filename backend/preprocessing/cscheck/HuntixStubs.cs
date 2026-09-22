@@ -59,6 +59,8 @@ namespace City.Economy
     public class MissionManager : UnityEngine.MonoBehaviour
     {
         public static MissionManager Instance;
+        public int ActiveCount => 0;
+        public int CompletedCount => 0;
         public System.Collections.Generic.List<NPCMission> GetActiveMissions() => null;
         public void OnEggCollected() {}
         public void OnPlayerWalked(float meters) {}
@@ -82,6 +84,9 @@ namespace Huntix.Bridge
     public static class UnityBridge
     {
         public static void LogToAndroid(string tag, string msg) {}
+        public static void PushCityStateSnapshot(string json) {}
+        public static string GetCityStateSnapshot() => "";
+        public static void RequestCityStateCheck() {}
         public static string GetCurrentLocation() { return "{\"lat\":0.0,\"lng\":0.0}"; }
         public static void StartLocationTracking() {}
         public static void SendMessageToAndroid(string type, string json) {}
