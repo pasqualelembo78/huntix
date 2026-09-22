@@ -160,6 +160,7 @@ namespace City.Player
                 (animator != null ? animator.gameObject.name : "NULL") +
                 " children=" + transform.childCount);
             walker = CharacterWalker.AttachIfNeeded(gameObject);
+            City.Player.GroundDiag.Ensure(gameObject);
             City.OSM.OsmDiag.Log("[PlayerController][Awake] walker=" +
                 (walker != null ? "attaccato a " + walker.gameObject.name : "NULL"));
             // La skin del profilo vale per characterMedium/NPC; l'hero rig usa
