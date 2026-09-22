@@ -189,3 +189,33 @@ l'autorizzazione esplicita del proprietario.
 - Tutte le comunicazioni con l'utente in **italiano** (UI e chat).
 - UAV nei testi: tema uovo sempre presente (nomi, descrizioni, missioni).
 - Codice: seguire le convenzioni esistenti, mai commenti a scatola chiusa.
+
+## 10 · COMMIT OBBLIGATORIO DELLE MODIFICHE (FOTOGRAFIA SANNA)
+
+Il repository git è la **fotografia sana** del progetto: deve essere sempre
+aggiornata, utile e ripristinabile, anche per fare `revert` puntuali senza
+perdere lavori non correlati.
+
+**Regole obbligatorie:**
+
+- Ogni modifica o aggiunta va **committata man mano che viene completata e
+  verificata**, mai lasciata in sospeso nella working tree.
+- Un commit deve contenere un **solo concetto logico** (una feature, un fix,
+  un aggiornamento di tile/POI/mappa): niente commit "cestino" con lavori
+  non imparentati messi insieme.
+- Il messaggio del commit in **italiano**, descrittivo: cosa fa l'aggiunta e
+  perché (es. "feat: …", "fix: …", "build: …", "chore: …").
+- Prima di committare: **verificare** che il codice compili e passi i check
+  previsti (cscheck per Unity, build gradle per Android, ecc.).
+- Alla fine di ogni sessione di lavoro la working tree deve risultare **pulita
+  o giustificata**: i file modificati senza commit sono un debito da saldare
+  nella sessione successiva.
+- Non committare mai segreti, chiavi, token o file artefatto/derivati di
+  grandi dimensioni che non fanno parte del progetto (le risorse Unity
+  giustificate vanno bene).
+- Il commit NON sostituisce la **Regola del Riflesso**: ogni feature committata
+  deve già contenere la sua integrazione uova (o la richiesta di conferma).
+
+Concetto cardine: **mai impilare lavoro senza salvarlo**. Se un revert è
+necessario, deve poter annullare un singolo commit senza trascinare via
+mezz'ora di lavoro non ancora salvato.
