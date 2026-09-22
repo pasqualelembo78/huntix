@@ -633,6 +633,35 @@ namespace City.OSM
             box.center = baseB.center;
             inst.layer = BuildingLayer;
 
+            // Guardia anti-"player che vola": se l'edificio viene istanziato
+            // mentre il player e' dentro (o a ridosso de) la sua impronta, il
+            // BoxCollider pieno spingerebbe il CC verso l'alto sul tetto e,
+            // col layer 8 escluso dalle sonde di GroundSnapper, il player non
+            // tornerebbe mai a terra. Teniamo il collider spento finche' il
+            // player non esce dal footprint (ColliderReArm lo riattiva poi).
+            var guardPlayer = City.Game.Instance != null
+                ? City.Game.Instance.player : null;
+            if (guardPlayer != null)
+            {
+                Vector3 worldCenter = parent.TransformPoint(
+                    new Vector3(centerLocal.x, 0f, centerLocal.z));
+                Vector3 gp = guardPlayer.transform.position;
+                float hw = w * 0.5f;
+                float hd = d * 0.5f;
+                float halfDiag = Mathf.Sqrt(hw * hw + hd * hd);
+                // Impronta allargata del raggio del CC (la capsule del player
+                // deve poter uscire senza scontrarsi col muro appena comparso).
+                if (Mathf.Abs(gp.x - worldCenter.x) <= halfDiag + 1.2f &&
+                    Mathf.Abs(gp.z - worldCenter.z) <= halfDiag + 1.2f)
+                {
+                    box.enabled = false;
+                    var guard = inst.AddComponent<ColliderReArm>();
+                    guard.Setup(box, worldCenter, w, d);
+                    OsmDiag.Log("[Building][Guard] id=" + b.id +
+                        " collider differito (player nell'impronta): anti-volo");
+                }
+            }
+
             var entranceComp = MaybeAddEntrance(inst, b, baseB, w, d, h, sx, sy, sz);
 
             // Interno reale in modalita' PREFAB: ogni edificio è esplorabile.
