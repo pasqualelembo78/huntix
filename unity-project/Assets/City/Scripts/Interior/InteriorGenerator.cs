@@ -148,6 +148,15 @@ namespace City.Interior
                 _interiorLight.enabled = on;
         }
 
+        /// <summary>F5 lampade: regola l'intensita' della luce interna
+        /// (giorno = 1f, notte/lampada spenta = 0.28f). Effetto immediato a
+        /// costo zero (una sola Light per edificio, gia' LOD dal ticker).</summary>
+        public void SetLightIntensity(float intensity)
+        {
+            if (_interiorLight != null)
+                _interiorLight.intensity = Mathf.Clamp(intensity, 0f, 1.5f);
+        }
+
         private void EnsureMaterials()
         {
             if (_wallMat != null) return;
@@ -203,6 +212,17 @@ namespace City.Interior
         /// Costruisce l'intero interno come figli di parent.
         /// Ogni piano è un GameObject "Floor_N" attivabile/disattivabile.
         /// </summary>
+        /// <summary>Piani interni dall'altezza del guscio (~3 m/piano):
+        /// specchia BuildingPlacer.SuggestedFloors così l'interno (costruito
+        /// lazy) ha gli stessi piani dell'ingresso (entrance.floorCount).</summary>
+        private static int FloorsFromHeight(float h)
+        {
+            if (h >= 12.5f) return 4;
+            if (h >= 9.5f) return 3;
+            if (h >= 6.5f) return 2;
+            return 1;
+        }
+
         public void BuildInterior(Transform parent, string type,
             float extW, float extD, float extH, int floors, Shop shop)
         {
@@ -278,7 +298,8 @@ namespace City.Interior
                 BuildShell(parent, w, d, shellH);
                 // Edificio in-place a PIANO UNICO (l'ingresso reale è a terra);
                 // i piani multipli restano per la vecchia modalità on-demand.
-                BuildInterior(parent, type, w, d, shellH, 1, shop);
+                BuildInterior(parent, type, w, d, shellH,
+                    FloorsFromHeight(extH), shop);
             }
             finally
             {
@@ -342,7 +363,8 @@ namespace City.Interior
             try
             {
                 Transform dest = _prefabExterior && _interiorRoot != null ? _interiorRoot : transform;
-                BuildInterior(dest, _lazyType, _lazyW, _lazyD, _lazyH, 1, _lazyShop);
+                BuildInterior(dest, _lazyType, _lazyW, _lazyD, _lazyH,
+                    FloorsFromHeight(_lazyH), _lazyShop);
                 if (_prefabExterior)
                     SetInteriorRootActive(false); // nascosto fin quando non si entra
                 Log("BuildInteriorNow OK tipo='" + _lazyType + "'");
@@ -631,6 +653,38 @@ namespace City.Interior
             return new Vector3(1f, floorObj.position.y + 0.1f, -1f);
         }
 
+        /// <summary>Porta interna apribile a battente (F3): pivot sul bordo
+        /// -x della soglia + pannello figlio con BoxCollider che ruota su Y
+        /// + trigger che registra APRI/CHIUDI PORTA. Closed blocca, aperta
+        /// libera il passaggio fra le stanze.</summary>
+        private void BuildInteriorDoor(Transform parent, Vector3 center,
+            float doorW, float doorH, float thick, Material mat)
+        {
+            var pivot = new GameObject("PortaInt");
+            pivot.transform.SetParent(parent, false);
+            pivot.transform.localPosition = center;
+            pivot.transform.localRotation = Quaternion.identity;
+
+            var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            UnityEngine.Object.Destroy(panel.GetComponent<Collider>());
+            panel.name = "PannelloPorta";
+            panel.transform.SetParent(pivot.transform, false);
+            panel.transform.localPosition = new Vector3(doorW * 0.5f, 0f, 0f);
+            panel.transform.localScale = new Vector3(doorW, doorH, thick);
+            var rndr = panel.GetComponent<Renderer>();
+            if (rndr != null) rndr.sharedMaterial = mat;
+            panel.AddComponent<BoxCollider>();
+
+            var trig = new GameObject("PortaTrigger");
+            trig.transform.SetParent(pivot.transform, false);
+            trig.transform.localPosition = new Vector3(doorW * 0.5f, 0f, 0f);
+            var tcol = trig.AddComponent<BoxCollider>();
+            tcol.isTrigger = true;
+            tcol.size = new Vector3(doorW + 0.2f, doorH, 2.6f);
+            var door = trig.AddComponent<InteriorDoor>();
+            door.panel = panel.transform;
+        }
+
         // ── HOUSE ──────────────────────────────────────────────────
 
         private void BuildHouse(Transform parent, float w, float d, float floorH, int floors, Shop shop)
@@ -668,9 +722,10 @@ namespace City.Interior
                     Box(floorGo.transform, "PareteDiv", new Vector3(0f, yBase + floorH * 0.5f, divZ),
                         new Vector3(w * 0.9f, floorH, WALL_THICK), _wallMat);
 
-                    // Porta tra sogorno e cucina
-                    Box(floorGo.transform, "PortaInt", new Vector3(w * 0.2f, yBase + 1.1f, divZ),
-                        new Vector3(1.0f, 2.2f, WALL_THICK + 0.05f), _doorMat);
+                    // Porta tra sogorno e cucina: battente apribile (F3)
+                    BuildInteriorDoor(floorGo.transform,
+                        new Vector3(w * 0.2f, yBase + 1.1f, divZ),
+                        1.0f, 2.2f, 0.08f, _doorMat);
 
                     // ── Sogorno (fronte) ──
                     float sogornoZ = d * 0.25f;
@@ -687,9 +742,10 @@ namespace City.Interior
                     Furniture(floorGo.transform, "TV", new Vector3(w * 0.45f, yBase + 1.3f, sogornoZ),
                         new Vector3(0.6f, 0.6f, 1.0f));
 
-                    // Lampada
+                    // Lampada (interagibile: ACCENDI/SPEGNI LAMPADA)
                     Furniture(floorGo.transform, "Lampada", new Vector3(-w * 0.4f, yBase + 1.0f, sogornoZ),
                         new Vector3(0.5f, 1.0f, 0.5f));
+                    AddLampInteract(floorGo.transform, new Vector3(-w * 0.4f, yBase + 1.2f, sogornoZ), 1.8f);
 
                     // ── Cucina (retro) ──
                     float cucinaZ = -d * 0.3f;
@@ -783,9 +839,10 @@ namespace City.Interior
                     Furniture(floorGo.transform, "Comodino1", new Vector3(-w * 0.4f, yBase + 0.35f, cam1Z + 0.5f),
                         new Vector3(0.4f, 0.5f, 0.35f));
 
-                    // Lampada comodino
+                    // Lampada comodino (interagibile: luce notte)
                     Furniture(floorGo.transform, "LampCom1", new Vector3(-w * 0.4f, yBase + 0.7f, cam1Z + 0.5f),
                         new Vector3(0.3f, 0.4f, 0.3f));
+                    AddLampInteract(floorGo.transform, new Vector3(-w * 0.4f, yBase + 1.0f, cam1Z + 0.5f), 1.6f);
 
                     // Armadio
                     Furniture(floorGo.transform, "Armadio1", new Vector3(w * 0.4f, yBase + 0.9f, cam1Z),
@@ -1554,6 +1611,12 @@ namespace City.Interior
             float railY = yBase + floorH * 0.5f;
             Box(floorGo, "Balaustreira", new Vector3(x + stairW * 0.5f, railY, z),
                 new Vector3(0.06f, railH, numSteps * stepD * 0.5f), _woodMat);
+
+            // Ancora "Scala" (senza collider/renderer): GetStairPosition la
+            // cerca per teletrasportare il player alla base delle scale.
+            var scala = new GameObject("Scala");
+            scala.transform.SetParent(floorGo, false);
+            scala.transform.localPosition = new Vector3(x, yBase + 0.1f, z);
         }
 
         // ── TRIGGER SCALE ──────────────────────────────────────────
@@ -1623,6 +1686,19 @@ namespace City.Interior
                 var c = go.GetComponent<Collider>();
                 if (c != null) Destroy(c);
             }
+        }
+
+        // F5: area trigger per il toggle della lampada (giocatore vicino ->
+        // pulsante ACCENDI/SPEGNI nel menu azioni interne).
+        private void AddLampInteract(Transform floorRoot, Vector3 center, float radius)
+        {
+            var go = new GameObject("LampInteract");
+            go.transform.SetParent(floorRoot, false);
+            go.transform.localPosition = center;
+            var col = go.AddComponent<SphereCollider>();
+            col.isTrigger = true;
+            col.radius = radius;
+            go.AddComponent<LampInteract>();
         }
 
         private void Furniture(Transform parent, string name, Vector3 center, Vector3 scale)

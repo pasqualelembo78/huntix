@@ -271,6 +271,60 @@ namespace City.OSM
                 "hotel", "supermarket");
         }
 
+        /// <summary>Mappa il tag OSM al costruttore interior esistente.
+        /// InteriorGenerator ha gia' 10 builder (shop/apartment/bar/hospital/)
+        /// dealer/repair/garage/fuel/bank/school/hotel + house di default):
+        /// finora il placer ne usava solo 2 ("shop"/"house"), quindi quasi
+        /// tutta la città era "shop" o "house". L'ordine delle regole conta
+        /// (più specifiche prima: car_repair prima di car).</summary>
+        public static string MapInteriorType(string t)
+        {
+            if (ContainsAny(t, "fuel", "petrol", "gas_station")) return "fuel";
+            if (ContainsAny(t, "car_repair", "repair", "mechanic")) return "repair";
+            if (ContainsAny(t, "garage", "parking")) return "garage";
+            if (ContainsAny(t, "dealer", "showroom", "cars")) return "dealer";
+            if (ContainsAny(t, "shop", "commercial", "retail", "supermarket", "market")) return "shop";
+            if (ContainsAny(t, "bar", "cafe", "pub", "restaurant", "fast_food")) return "bar";
+            if (ContainsAny(t, "bank", "atm", "office", "civic")) return "bank";
+            if (ContainsAny(t, "hotel", "hostel", "motel", "guest")) return "hotel";
+            if (ContainsAny(t, "hospital", "clinic", "pharmacy", "medical")) return "hospital";
+            if (ContainsAny(t, "school", "kindergarten", "college", "university", "library")) return "school";
+            if (ContainsAny(t, "apartments", "residential", "apartment")) return "apartment";
+            if (ContainsAny(t, "church", "chapel", "cathedral")) return "house";
+            if (ContainsAny(t, "industrial", "warehouse", "barn", "shed", "hangar", "farm")) return "repair";
+            return "house";
+        }
+
+        /// <summary>Nome leggibile per la porta (UI in italiano).</summary>
+        public static string FriendlyBuildingName(string iType, long id)
+        {
+            switch (iType)
+            {
+                case "shop": return "Negozio " + id;
+                case "apartment": return "Palazzina " + id;
+                case "bar": return "Bar " + id;
+                case "hospital": return "Ospedale " + id;
+                case "dealer": return "Concessionaria " + id;
+                case "repair":
+                case "garage":
+                case "fuel": return "Officina " + id;
+                case "bank": return "Banca " + id;
+                case "school": return "Scuola " + id;
+                case "hotel": return "Hotel " + id;
+                default: return "Casa " + id;
+            }
+        }
+
+        /// <summary>Piani suggeriti dall'altezza del guscio (~3 m per piano).
+        /// La decisione finale resta a InteriorGenerator/InteriorManager.</summary>
+        public static int SuggestedFloors(float h)
+        {
+            if (h >= 12.5f) return 4;
+            if (h >= 9.5f) return 3;
+            if (h >= 6.5f) return 2;
+            return 1;
+        }
+
         public static bool IsIndustrial(string t)
         {
             return ContainsAny(t, "industrial", "warehouse", "farm_auxiliary",
@@ -591,7 +645,7 @@ namespace City.OSM
             // cosi' il giocatore non lo attraversa da fuori.
             var gen = inst.AddComponent<City.Interior.InteriorGenerator>();
             gen.PreparePrefabExterior(
-                IsCommercial(b.t) ? "shop" : "house",
+                MapInteriorType(b.t),
                 w, d, h,
                 entranceComp != null ? entranceComp.shop : null,
                 box);
@@ -617,7 +671,8 @@ namespace City.OSM
             Bounds baseB, float w, float d, float h,
             float sx, float sy, float sz)
         {
-            bool shop = IsCommercial(b.t);
+            string iType = MapInteriorType(b.t);
+            bool shop = iType == "shop";
 
             // Lato porta = +Z locale (facciata), coerente con la PortaIngresso
             // interna di InteriorGenerator (a +d*0.5). Il trigger-porta sporge
@@ -659,12 +714,12 @@ namespace City.OSM
             r.sharedMaterial = DoorMarkMat();
 
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
-            entrance.buildingType = shop ? "shop" : "house";
-            entrance.buildingName = shop ? "Negozio " + b.id : "Casa " + b.id;
+            entrance.buildingType = iType;
+            entrance.buildingName = FriendlyBuildingName(iType, b.id);
             entrance.buildingWidth = w;
             entrance.buildingDepth = d;
             entrance.buildingHeight = h;
-            entrance.floorCount = h > 7f ? 2 : 1;
+            entrance.floorCount = SuggestedFloors(h);
 
             if (shop)
             {

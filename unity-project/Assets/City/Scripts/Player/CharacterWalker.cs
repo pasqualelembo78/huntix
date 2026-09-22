@@ -38,7 +38,13 @@ namespace City.Player
         public float ikRayDistance = 1.5f;
         public float ikSmoothSpeed = 12f;
         public float ikMaxOffset = 0.3f;
-        public float ikMaxLift = 1.6f;
+        // FIX fluttuazione: prima 1.6 m, il bacino poteva essere sollevato di
+        // oltre un metro sopra i piedi ancorati a terra (look "sospeso in
+        // aria"). Il tetto è ora 0.25 m: compensa l'affondamento del clip
+        // baked (fianchi sotto il livello-piedi) senza staccare il corpo dal
+        // suolo. L'inerzia del corpo/salta resta responsabile di ogni quota
+        // reale sopra il terreno.
+        public float ikMaxLift = 0.25f;
         public LayerMask groundMask = ~0;
         private float _ikWeightL, _ikWeightR;
         private Vector3 _ikPosL, _ikPosR;
@@ -411,6 +417,8 @@ namespace City.Player
                 " target=" + targetOffset.ToString("F2") +
                 " applied=" + appliedOffset.ToString("F2") +
                 " hipsY=" + hipsWorldY.ToString("F2") +
+                " legSpanRest=" + (float.IsNaN(_legSpanRest) ? -1f : _legSpanRest).ToString("F2") +
+                " base=" + (float.IsNaN(_hipsBaseY) ? -1f : _hipsBaseY).ToString("F2") +
                 " grounded=" + grounded);
         }
 
@@ -436,10 +444,20 @@ namespace City.Player
                 " w=" + weight.ToString("F2"));
         }
 
-        /// <summary>Span hips->piedi misurato dalla cinematica corrente
-        /// (indipendente dalla quota baked del clip).</summary>
+        /// <summary>Span hips->piedi a RIPOSO (gamba distesa). FIX fluttuazione:
+        /// la vecchia misura leggeva lo span dal POSE CORRENTE del clip
+        /// (ginocchia piegate in Walk/Run), quindi il "corpo affondato" veniva
+        /// calibrato su gambe corte e il bacino era innalzato oltre il giusto.
+        /// Ora si usa lo span anatomico stabile ricavato dalla capsule del
+        /// CharacterController (fianchi in posizione eretta ~0.52 * altezza):
+        /// lo stesso valore per ogni clip, nessun sollevamento fantasma.</summary>
         private float MeasureLegSpan()
         {
+            if (cc != null)
+            {
+                float standing = cc.height * 0.52f;
+                if (standing > 0.4f && standing < 3f) return standing;
+            }
             if (animator == null) return 1f;
             Transform hips = animator.GetBoneTransform(HumanBodyBones.Hips);
             Transform fl = animator.GetBoneTransform(HumanBodyBones.LeftFoot);

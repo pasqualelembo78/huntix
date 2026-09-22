@@ -61,6 +61,11 @@ namespace City.Interior
         private int currentFloor;
         private int totalFloors;
 
+        // F4: nome dell'amico gia' salutato nella stanza attuale.
+        private string _greetedMate;
+        private float _sharedAt;
+        private const float SHARED_SCAN = 3f;
+
         public bool IsInside { get; private set; }
 
         /// <summary>Radice dell'interno dell'edificio in cui ci troviamo
@@ -172,7 +177,7 @@ namespace City.Interior
             currentEntrance = e;
             ActiveShop = e.shop;
             ActiveVehicleZone = e.poiZone;
-            totalFloors = Mathf.Clamp(e.floorCount, 1, 1); // in-place a piano unico
+            totalFloors = Mathf.Clamp(e.floorCount, 1, 4);
             currentFloor = 0;
             IsInside = true;
 
@@ -192,7 +197,19 @@ namespace City.Interior
             if (g.player != null)
                 g.player.Stop();
 
+            var mp4 = City.Multiplayer.MultiplayerManager.Instance;
+            if (mp4 != null && g.player != null)
+            {
+                string mate = mp4.SharedRoomMate(g.player.transform.position, 6f);
+                if (mate != null)
+                {
+                    _greetedMate = mate;
+                    Log("Stanza condivisa con " + mate);
+                }
+            }
+
             Log("Entrato (in-place, 3a persona): " + e.buildingName);
+            ContainerEgg.Ensure();
             City.OSM.ColliderProbe.ProbeAt(g.player.transform.position, "inside");
         }
 
@@ -214,6 +231,7 @@ namespace City.Interior
             ActiveShop = null;
             ActiveVehicleZone = null;
             currentEntrance = null;
+            _greetedMate = null;
 
             if (g == null) return;
 
@@ -377,7 +395,27 @@ namespace City.Interior
 
         public void ChangeFloor(int direction)
         {
-            // In-place a piano unico: nessun cambio piano.
+            if (currentEntrance == null) return;
+            int next = Mathf.Clamp(currentFloor + direction, 0, totalFloors - 1);
+            if (next == currentFloor) return;
+
+            var g = Game.Instance;
+            if (g == null || g.player == null) return;
+            var gen = currentEntrance.GetComponentInParent<InteriorGenerator>();
+            if (gen == null) return;
+
+            Transform root = ActiveInteriorRoot ?? gen.transform;
+            Vector3 pos = gen.GetStairPosition(root, next);
+
+            var cc = g.player.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            g.player.transform.position = pos;
+            if (cc != null) cc.enabled = true;
+            g.player.Stop();
+
+            currentFloor = next;
+            Log("Cambio piano: " + currentFloor + " (" + totalFloors + " piani)");
+            City.OSM.ColliderProbe.ProbeAt(pos, "floor" + currentFloor);
         }
 
         public int GetCurrentFloor() { return currentFloor; }
@@ -409,6 +447,24 @@ namespace City.Interior
             if (g == null) return;
             if (g.player == null || g.ui == null) return;
             if (g.IsDriving) return;
+
+            // Stanza condivisa: se un amico entra nella stessa impronta mentre
+            // siamo dentro, lo annunciamo una volta per edificio.
+            if (Time.time >= _sharedAt)
+            {
+                _sharedAt = Time.time + SHARED_SCAN;
+                var mp = City.Multiplayer.MultiplayerManager.Instance;
+                if (mp != null && g.player != null)
+                {
+                    string mate = mp.SharedRoomMate(g.player.transform.position, 6f);
+                    if (mate != null && mate != _greetedMate)
+                    {
+                        _greetedMate = mate;
+                        if (g.ui != null)
+                            g.ui.ShowToast(mate + " e' nella stessa stanza con te!");
+                    }
+                }
+            }
 
             Vector2 input = g.ui.joystick != null ? g.ui.joystick.Value : Vector2.zero;
             g.player.SetMoveInput(input);

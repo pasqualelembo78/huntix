@@ -140,8 +140,7 @@ namespace City.UI
                 if (City.Environment.FurnitureInteract.NearSitTransform != null)
                     return "SEDUTI";
             }
-            if (g != null && g.CurrentEntrance != null &&
-                g.CurrentEntrance.buildingType == "house")
+            if (g != null && g.CurrentEntrance != null && IsResidential(g.CurrentEntrance))
             {
                 Vector3 doorPos = g.CurrentEntrance.transform.position;
                 if (City.Environment.HomeSystem.IsThisHome(doorPos))
@@ -153,6 +152,18 @@ namespace City.UI
                 return "COMPRA CASA";
             }
             return "AZIONI";
+        }
+
+        /// <summary>True per gli ingresso residenziali dove si puo' comprare/
+        /// vendere casa (house/apartment/hotel) o per la porta salvata di casa
+        /// propria, qualunque sia il tipo architettonico (F0 ha differenziato
+        /// i tipi: NEGOZIO/OFFICINA/OFFICINA non sono piu' acquistabili).</summary>
+        private static bool IsResidential(City.Interior.BuildingEntrance e)
+        {
+            if (e == null) return false;
+            if (e.buildingType == "house" || e.buildingType == "apartment" ||
+                e.buildingType == "hotel") return true;
+            return City.Environment.HomeSystem.IsThisHome(e.transform.position);
         }
 
         /// <summary>L elenco completo delle azioni per il menu contestuale.</summary>
@@ -225,8 +236,7 @@ namespace City.UI
             }
 
             // Casa propria / compravendita + garage personale (livello 4)
-            if (g != null && g.CurrentEntrance != null &&
-                g.CurrentEntrance.buildingType == "house")
+            if (g != null && g.CurrentEntrance != null && IsResidential(g.CurrentEntrance))
             {
                 Vector3 doorPos = g.CurrentEntrance.transform.position;
                 string doorName = g.CurrentEntrance.buildingName;
@@ -249,6 +259,18 @@ namespace City.UI
                         () => City.Environment.HomeSystem.Buy(doorName, doorPos)));
                 }
             }
+
+            // Rientro a casa da qualsiasi punto della mappa (home-spawn).
+            if (!interior && City.Environment.HomeSystem.OwnsHome)
+                outList.Add(Make("TORNA A CASA",
+                    () => City.Environment.HomeSystem.TeleportHome()));
+
+            // F4: visita la casa dell'amico tracciato (presenza o coordinate
+            // condivise) con teletrasporto + fade.
+            var mpVisit = City.Multiplayer.MultiplayerManager.Instance;
+            if (!interior && mpVisit != null && mpVisit.HasVisitTarget)
+                outList.Add(Make("VISITA " + mpVisit.VisitTargetName,
+                    () => mpVisit.VisitFriendTeleport()));
 
             if (NearPackage())
             {

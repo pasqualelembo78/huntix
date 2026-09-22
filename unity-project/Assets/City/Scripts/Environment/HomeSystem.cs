@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using Huntix.Bridge;
 
 namespace City.Environment
 {
@@ -246,6 +247,49 @@ namespace City.Environment
                 if (defs[i].name == cand) return cand;
             }
             return "Hatchback";
+        }
+
+        /// <summary>Rientro a casa dal menu azioni: teletrasporta con fade nero
+        /// alla porta della propria casa (punto di rientro sempre raggiungibile,
+        /// come l'home-spawn dei giochi sandbox multiplayer). Il CC viene spento
+        /// durante la mossa per non far scattare collider intermedi.</summary>
+        public static void TeleportHome()
+        {
+            if (!OwnsHome) return;
+            var g = Game.Instance;
+            if (g == null || g.player == null) return;
+            float lat = PlayerPrefs.GetFloat(KeyLat, 0f);
+            float lng = PlayerPrefs.GetFloat(KeyLng, 0f);
+            if (lat == 0f && lng == 0f) return;
+            Vector3 pos = OSM.WorldOrigin.ToWorld(lat, lng);
+            g.StartCoroutine(TeleportHomeRoutine(g, pos));
+            UnityBridge.LogToAndroid("HomeSystem", "TeleportHome a " + lat + "," + lng);
+        }
+
+        private static System.Collections.IEnumerator TeleportHomeRoutine(Game g, Vector3 pos)
+        {
+            var fader = g.fader;
+            if (fader != null) fader.gameObject.SetActive(true);
+            if (fader != null) fader.FadeToBlack(null);
+
+            var player = g.player;
+            var cc = player.GetComponent<CharacterController>();
+            if (cc != null) cc.enabled = false;
+            player.transform.position = pos + Vector3.up * 0.3f;
+            player.transform.rotation = Quaternion.Euler(0f, 0f, 0f);
+            if (cc != null) cc.enabled = true;
+            player.Stop();
+            if (g.rig != null) g.rig.SetYaw(player.transform.rotation);
+
+            Toast("Rientrato a casa: " + HomeName);
+
+            if (fader != null)
+            {
+                yield return new WaitForSeconds(fader.duration);
+                fader.FadeFromBlack(null);
+                yield return new WaitForSeconds(fader.duration);
+                fader.gameObject.SetActive(false);
+            }
         }
 
         private static void Toast(string msg)
