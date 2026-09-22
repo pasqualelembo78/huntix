@@ -841,7 +841,13 @@ private const float TerrainPhysxTimeoutS = 15f;
             // altrimenti il player verrebbe lasciato sul ponte a y=1 invece di
             // salire sulla superficie reale (che in Bari arriva fino a y~16).
             RaycastHit hit;
-            if (FirstTerrainHitBelow(RayStartAboveSurface(p), 600f, out hit))
+            // mask WalkableMask (esclude gli edifici, layer 8): il raggio deve
+            // agganciare la SUPERFICIE stradale/terreno, non il tetto di un
+            // edificio che sorge sul punto GPS (il player nascerebbe sul tetto
+            // e, essendo la mask di GroundSnapper priva del layer 8, non
+            // potrebbe mai esserne risceso).
+            if (FirstTerrainHitBelow(RayStartAboveSurface(p), 600f,
+                GroundSnapper.WalkableMask, out hit))
             {
                 p.y = hit.point.y + 1.0f;
                 pl.transform.position = p;
@@ -850,6 +856,7 @@ private const float TerrainPhysxTimeoutS = 15f;
                     " (prima " + yBefore.ToString("F1", CultureInfo.InvariantCulture) +
                     ", delta " + (p.y - yBefore).ToString("F1", CultureInfo.InvariantCulture) +
                     ") (collider " + hit.collider.name + ")");
+                EvictPlayerFromBuildingFootprint(pl.transform, hit.point.y);
                 return;
             }
             // fallback: altimetria da TileElevation (terra piena)
@@ -862,6 +869,94 @@ private const float TerrainPhysxTimeoutS = 15f;
                 " (prima " + yBefore.ToString("F1", CultureInfo.InvariantCulture) +
                 ", delta " + (p.y - yBefore).ToString("F1", CultureInfo.InvariantCulture) +
                 ")");
+        }
+
+        /// <summary>Se il punto di spawn (XZ) cade dentro l'impronta di un
+        /// edificio, il player vi nascerebbe e il CharacterController verrebbe
+        /// spinto sul tetto (o ci resterebbe dentro). Lo si sposta all'uscita
+        /// XZ piu' vicina sul piano di appoggio gia' calcolato (surfaceY),
+        /// come faceva EnsurePlayerOutsideBuildings nel mondo legacy.</summary>
+        private void EvictPlayerFromBuildingFootprint(Transform target,
+            float surfaceY)
+        {
+            if (target == null) return;
+            var game = City.Game.Instance;
+            var pl = game != null ? game.player : null;
+            if (pl == null) return;
+
+            Vector3 p = target.position;
+            Bounds? inside = null;
+            Collider[] cols = Physics.OverlapBox(
+                new Vector3(p.x, surfaceY + 4f, p.z),
+                new Vector3(8f, 8f, 8f), Quaternion.identity,
+                1 << GroundSnapper.BuildingLayer,
+                QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                if (cols[i] == null) continue;
+                Bounds b = cols[i].bounds;
+                if (p.x >= b.min.x && p.x <= b.max.x &&
+                    p.z >= b.min.z && p.z <= b.max.z)
+                {
+                    inside = b;
+                    break;
+                }
+            }
+            if (inside == null) return;
+
+            Bounds bd = inside.Value;
+            Vector3 center = bd.center;
+            Vector3 ext = bd.extents;
+            Vector3 toP = p - center;
+
+            float sx = toP.x >= 0f ? 1f : -1f;
+            float sz = toP.z >= 0f ? 1f : -1f;
+            if (sx == 0f) sx = 1f;
+            if (sz == 0f) sz = 1f;
+
+            Vector3 exitX = new Vector3(
+                center.x + sx * (ext.x + 3f), surfaceY + 1f, p.z);
+            Vector3 exitZ = new Vector3(
+                p.x, surfaceY + 1f, center.z + sz * (ext.z + 3f));
+
+            float dx = Vector3.Distance(p, exitX);
+            float dz = Vector3.Distance(p, exitZ);
+            Vector3 best = dx < dz ? exitX : exitZ;
+
+            // ri-controlla che l'uscita non ricada in un altro edificio
+            int safety = 0;
+            while (safety < 6)
+            {
+                bool still = false;
+                Collider[] re = Physics.OverlapBox(
+                    new Vector3(best.x, surfaceY + 4f, best.z),
+                    new Vector3(8f, 8f, 8f), Quaternion.identity,
+                    1 << GroundSnapper.BuildingLayer,
+                    QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < re.Length; i++)
+                {
+                    if (re[i] == null) continue;
+                    Bounds b2 = re[i].bounds;
+                    if (best.x >= b2.min.x && best.x <= b2.max.x &&
+                        best.z >= b2.min.z && best.z <= b2.max.z)
+                    {
+                        still = true;
+                        break;
+                    }
+                }
+                if (!still) break;
+                best = best + (best - p).normalized * 5f;
+                best.y = surfaceY + 1f;
+                safety++;
+            }
+
+            OsmDiag.Log("[CityChunkedWorld] spawn dentro footprint edificio " +
+                "(" + bd.center.x.ToString("F1", CultureInfo.InvariantCulture) +
+                ", " + bd.center.z.ToString("F1", CultureInfo.InvariantCulture) +
+                ") -> spostato a " +
+                best.x.ToString("F1", CultureInfo.InvariantCulture) + "," +
+                best.z.ToString("F1", CultureInfo.InvariantCulture));
+            pl.transform.position = best;
         }
 
         /// <summary>Origine consapevole della quota DEM per i raycast di
@@ -887,13 +982,13 @@ private const float TerrainPhysxTimeoutS = 15f;
         /// ponte coplanare verrebbe colpito per primo e maschererebbe il vero
         /// terreno sottostante.</summary>
         private bool FirstTerrainHitBelow(Vector3 from, float maxDist,
-            out RaycastHit result)
+            int mask, out RaycastHit result)
         {
             result = default(RaycastHit);
             Transform playerRoot = City.Game.Instance != null &&
                 City.Game.Instance.player != null
                 ? City.Game.Instance.player.transform : null;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist);
+            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist, mask);
             for (int i = 0; i < hits.Length; i++)
             {
                 if (hits[i].collider == null) continue;
