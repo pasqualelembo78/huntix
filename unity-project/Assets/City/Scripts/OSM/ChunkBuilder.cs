@@ -157,11 +157,17 @@ namespace City.OSM
                     if (roadMesh != null)
                     {
                         chunk.roadsGo = new GameObject("Strade",
-                            typeof(MeshFilter), typeof(MeshRenderer));
+                            typeof(MeshFilter), typeof(MeshRenderer),
+                            typeof(MeshCollider));
                         chunk.roadsGo.transform.SetParent(chunk.root.transform, false);
                         chunk.roadsGo.GetComponent<MeshFilter>().sharedMesh = roadMesh;
                         chunk.roadsGo.GetComponent<MeshRenderer>().sharedMaterial =
                             mgr.SharedRoadMaterial;
+                        // Collider fisico = asfalto VISIBILE (quota roadMesh):
+                        // il player/NPC camminano sulla strada vera, niente
+                        // sospensione tra terreno (-0.05) e asfalto (0.03).
+                        chunk.roadsGo.GetComponent<MeshCollider>().sharedMesh =
+                            roadMesh;
                     }
                     // Marciapiedi rialzati: mesh separata (materiale chiaro) con
                     // MeshCollider che fa da cordolo alle auto. Il collider si
@@ -605,12 +611,15 @@ namespace City.OSM
                     if (chunk.roadsGo == null)
                     {
                         chunk.roadsGo = new GameObject("Strade",
-                            typeof(MeshFilter), typeof(MeshRenderer));
+                            typeof(MeshFilter), typeof(MeshRenderer),
+                            typeof(MeshCollider));
                         chunk.roadsGo.transform.SetParent(rootT, false);
                         chunk.roadsGo.GetComponent<MeshRenderer>().sharedMaterial =
                             mgr.SharedRoadMaterial;
                     }
                     SwapSharedMesh(chunk.roadsGo, roadMesh);
+                    var roadCol = chunk.roadsGo.GetComponent<MeshCollider>();
+                    if (roadCol != null) roadCol.sharedMesh = roadMesh;
                 }
                 if (sidewalkMesh != null)
                 {
