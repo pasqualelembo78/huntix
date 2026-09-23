@@ -449,6 +449,7 @@ namespace UnityEngine
     public class ParticleSystemRenderer : Renderer {}
     public class Collider : Component { public bool enabled { get; set; }
         public bool isTrigger { get; set; }
+        public Bounds bounds => default(Bounds);
         public bool CompareTag(string t) => false; }
 
     public class RequireComponentAttribute : Attribute { public RequireComponentAttribute(Type t) {} }
@@ -537,6 +538,7 @@ namespace UnityEngine
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask, QueryTriggerInteraction q) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Ray ray, float maxDist) => new RaycastHit[0];
+        public static Collider[] OverlapBox(Vector3 center, Vector3 halfExtents, Quaternion rotation, int mask, QueryTriggerInteraction q) => new Collider[0];
         public static int RaycastNonAlloc(Ray ray, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) { if (results != null) for (int i = 0; i < results.Length; i++) results[i] = default(RaycastHit); return 0; } }
 
     public struct RaycastHit { public Vector3 point; public Vector3 normal; public Collider collider;
