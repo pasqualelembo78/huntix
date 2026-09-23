@@ -440,6 +440,12 @@ namespace City.OSM
             TileGeoDoc geo, System.Func<GeoLL, Vector3> toLocal,
             Rect bounds, Vector3 originWorld)
         {
+            // MODALITA' PIATTA (default): nessuna altimetria, nemmeno il
+            // proxy edifici. Terreno, strade ed edifici tornano tutti a
+            // quota 0 come nel ramo unity (piedi per terra).
+            if (CityConfig.WorldHeights == WorldHeightMode.Flat)
+                return new Dictionary<Vector2, float>();
+
             // Elevazione REALE (DEM/SRTM) se il server l'ha iniettata nella geo:
             // griglia 'ele' row-major sul bbox della tile. Usa la bilineare.
             if (geo != null && geo.ele != null && geo.ele.Length > 0 &&
@@ -504,8 +510,8 @@ namespace City.OSM
                     // locali -> mondo -> lat/lon (world y=0 non influisce)
                     var w = new Vector3(originWorld.x + x, 0f, originWorld.z + z);
                     var g = WorldOrigin.ToGeo(w);
-                    float h = SampleBilinear(ele, nrow, ncol,
-                        latMin, lonMin, latMax, lonMax, g.lat, g.lng);
+                    float h = CityConfig.ApplyMode(SampleBilinear(ele, nrow,
+                        ncol, latMin, lonMin, latMax, lonMax, g.lat, g.lng));
                     heights[new Vector2(x, z)] = h;
                 }
             }

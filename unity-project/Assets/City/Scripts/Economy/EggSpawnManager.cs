@@ -32,16 +32,23 @@ namespace City.Economy
         private float GroundY(Transform root, Vector3 local, TileGeoDoc geo)
         {
             Vector3 world = root.TransformPoint(new Vector3(local.x, 0f, local.z));
+            float h;
             if (geo != null && geo.ele != null && geo.ele.Length > 0 &&
                 geo.ele_nrow > 1 && geo.ele_ncol > 1 &&
                 geo.bbox != null && geo.bbox.Length >= 4)
             {
                 var g = WorldOrigin.ToGeo(world);
-                return SampleBilinear(geo.ele, geo.ele_nrow, geo.ele_ncol,
+                h = SampleBilinear(geo.ele, geo.ele_nrow, geo.ele_ncol,
                     geo.bbox[0], geo.bbox[1], geo.bbox[2], geo.bbox[3],
                     g.lat, g.lng);
             }
-            return TileElevation.HeightAtWorld(world);
+            else
+            {
+                h = TileElevation.HeightAtWorld(world);
+            }
+            // MODALITA' PIATTA/Threshold (CityConfig): le uova devono stare
+            // sullo stesso piano del resto (mai sotto/sopra il suolo).
+            return CityConfig.ApplyMode(h);
         }
 
         /// <summary>Interpolazione bilineare dell'elevazione sul bbox della

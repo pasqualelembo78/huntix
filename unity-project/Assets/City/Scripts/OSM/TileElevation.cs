@@ -4,7 +4,13 @@ using UnityEngine;
 namespace City.OSM
 {
     /// <summary>
-    /// Servizio centralizzato per l'ELEVAZIONE REALE (DEM/SRTM) del terreno.
+    /// Servizio centralizzato per l'ELEVAZIONE (DEM/SRTM) del terreno.
+    ///
+    /// MODALITA' PIATTA (default, CityConfig.WorldHeights=Flat): ogni quota
+    /// qui restituita e' 0 — strade, terreno, spawn, NPC, veicoli e uova
+    /// tornano tutti sullo stesso piano (comportamento ramo unity, piedi per
+    /// terra). L'altimetria DEM resta nei dati; si riattiva cambiando
+    /// CityConfig.WorldHeights.
     /// Le tile geo (iniettate dal server con la griglia 'ele') vengono registrate
     /// qui quando caricano; chiunque (terreno, strade, spawn giocatore, acqua)
     /// chiede l'altitudine in metri s.l.m. a una data lat/lon con interpolazione
@@ -74,16 +80,21 @@ namespace City.OSM
         }
 
         /// <summary>Altezza (m s.l.m.) alla lat/lon data, interpolata sulla tile
-        /// la cui bbox contiene il punto. 0 se nessuna copre il punto o non c'e' DEM.</summary>
+        /// la cui bbox contiene il punto. 0 se nessuna copre il punto o non c'e' DEM.
+        /// Il risultato passa da CityConfig.ApplyMode (mondo piatto di default).</summary>
         public static float HeightAt(double lat, double lon)
         {
+            // MODALITA' PIATTA (default): quota 0 ovunque, nessun campionamento
+            // DEM (anche i veicoli campionano ogni frame: niente loop sprecati).
+            if (CityConfig.WorldHeights == WorldHeightMode.Flat) return 0f;
             foreach (var e in _entries.Values)
             {
                 if (lat < e.latMin || lat > e.latMax ||
                     lon < e.lonMin || lon > e.lonMax)
                     continue;
-                return SampleBilinear(e.ele, e.nrow, e.ncol,
-                    e.latMin, e.lonMin, e.latMax, e.lonMax, lat, lon);
+                return CityConfig.ApplyMode(SampleBilinear(e.ele, e.nrow,
+                    e.ncol, e.latMin, e.lonMin, e.latMax, e.lonMax,
+                    lat, lon));
             }
             _missCount++;
             float now = UnityEngine.Time.time;
