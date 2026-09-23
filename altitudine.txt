@@ -71,3 +71,15 @@ fisica personaggio rotta, case sballate, "doppio cielo" sopra la testa).
 1. Commit di A1+A2 su `altitudine` (unico blocco coerente).
 2. Build di prova su device PRIMA: isola l'effetto reale del flip (B-D restano da valutare su pezzo).
 3. Poi applicare B1/B2 (world+traffico) e verificare C1 sul server.
+## FIX 23/09 (seconda build flat-world): piedi a contatto con lasfalto
+
+## FIX 23/09 (seconda build flat-world): piedi a contatto con l'asfalto
+Overlay GroundDiag mostrava la suola a ~1 cm sopra l'asfalto (PIEDI=0.02, ASFALTO=0.03).
+Causa: il piano fisico calpestabile era il Terreno a -0.05, mentre le strade visive stanno a
+0.03 (senza collider); skin del CC + clearance del GroundFollow lasciavano i piedi visivi "in aria".
+Fix applicata in flat-world (commit 6dd731a e c929862):
+1) MeshCollider sulle Strade: il collider e' l'asfalto visibile stesso (quota roadMesh, 0.03
+   in flat, DEM+0.03 nelle altre modalita') -- in ogni modalita' collider = superficie visiva.
+2) PlayerHeroRig.SoleTouchDrop=0.03: la suola del modello viene portata 3 cm sotto la base
+   capsula, finendo esattamente sul piano calpestato (compensa skin 0.05 + clearance 0.02).
+Nota: i valori overlay PIEDI/ASFALTO continuano a riferirsi alla base capsula (non alla suola).
