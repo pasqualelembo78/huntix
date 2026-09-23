@@ -3,6 +3,28 @@
 Confronto branch `origin/unity` (originale funzionante) vs `altitudine` (con problemi:
 fisica personaggio rotta, case sballate, "doppio cielo" sopra la testa).
 
+> **AGGIORNAMENTO 2026-09-23 — DECISIONE MONDO PIATTO (branch `flat-world`):**
+> Dopo MESI di tentativi falliti sul player "sospeso in aria / sprofondato" in città
+> (altitude, collider pavimento, collider palazzi, edifici-push-sul-tetto, anti-volo,
+> spawn-su-tetto, GroundSnapper, Foot IK…), il gameplay in città è tornato al
+> comportamento del ramo `unity`: **mondo OSM PIATTO (altitudine zero) di default**.
+>
+> - **Come:** nuovo `unity-project/Assets/City/Scripts/OSM/CityConfig.cs` —
+>   `CityConfig.WorldHeights = WorldHeightMode.Flat` (default). Ogni quota DEM
+>   (terreno, strade, edifici, spawn, NPC, veicoli, uova) passa da
+>   `CityConfig.ApplyMode` → 0. Terreno = `BuildFlatMesh`, strade a Y=0.03:
+>   collider fisico e asfalto visivo NON possono più divergere (causa storica
+>   del volo/affondamento).
+> - **Seconda chance:** altimetria DEM/SRTM NON cancellata. Si riattiva cambiando
+>   UN'UNICA costante (`WorldHeights = Dem`). Ramo `altitudine` intatto + tag
+>   `backup-altitudine-20260923`.
+> - **Futuro montagne:** `WorldHeightMode.Threshold` già predisposto (pianure a 0,
+>   montagne reali sopra `MountainThresholdM=120`); da rifinire lo smussamento dei
+>   confini piatto↔montagna prima dell'attivazione.
+> - **Storico dei commit (branch `flat-world`):**
+>   1. `edf1378` chore: stato corrente device (hero rig Mixamo…)
+>   2. `2e53a63` fix: mondo OSM piatto di default (CityConfig)
+
 ## A. GIÀ APPLICATI (working tree, NON COMMITTATI)
 | # | Fix | File:riga |
 |---|---|---|
@@ -16,6 +38,10 @@ fisica personaggio rotta, case sballate, "doppio cielo" sopra la testa).
 | B2 | Traffico sotto i ponti / nei monti: le auto usano il terreno DEM, ignorano h0/h1 dei deck | Far guidare le auto alla quota impalcato (usare h0/h1/dh della way) | TileRoadNetwork.cs:140,162, CarAgent.cs:456, TrafficCar.cs:335 |
 | B3 | Player che cade con tile "geo null": chunk non costruito → vuoto | Fallback: costruire chunk con dati parziali (come il vecchio ramo) o bloccare l'area con terreno piano temporaneo | ChunkManager.cs:529-537 |
 | B4 | Spawn legacy a y≈0 sotto il terreno | Usare TileElevation anche in PlacePlayerOnGround | CityOSMWorld.cs:534-540 |
+
+> **NB 2026-09-23:** B1-B4 e quanto sotto riguardavano il ramo `altitudine`.
+> Con la modalità `Flat` attiva il mondo è piatto e questi punti di rischio
+> DEM non si presentano (si rileggono solo se si riattiva `WorldHeightMode.Dem`).
 
 ## C. PRIORITÀ ALTA — CASE/EDIFICI
 | # | Problema | Fix | File:riga |
