@@ -40,7 +40,13 @@ namespace City.Player
         private string _lastSource;
         private string _lastSurfaceName;
         private float _lastDem;
+        private float _lastAsphaltY;
+        private float _lastVisGap;
         private bool _lastNear;
+
+        // l'asfalto (roadsGo) non ha collider: e' drappato su TileElevation
+        // + Y_ROAD (0.03), mentre il collider fisico e' il Terreno geo.ele.
+        private const float AsphaltLift = 0.03f;
 
         public static GroundDiag Ensure(GameObject root)
         {
@@ -93,6 +99,8 @@ namespace City.Player
             _lastSurfaceName = s.found && !string.IsNullOrEmpty(s.surfaceName)
                 ? s.surfaceName : "";
             _lastDem = TileElevation.HeightAtWorld(transform.position);
+            _lastAsphaltY = _lastDem + AsphaltLift;
+            _lastVisGap = feetY - _lastAsphaltY;
             _lastNear = s.near;
         }
 
@@ -112,6 +120,10 @@ namespace City.Player
                 " src=" + _lastSource +
                 " near=" + _lastNear +
                 " dem=" + demStr +
+                " asfY=" + _lastAsphaltY.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture) +
+                " visGap=" + _lastVisGap.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture) +
                 " gcdiff=" + (float.IsNaN(_lastSurfaceY)
                     ? "NA" : (_lastSurfaceY - _lastFeetY).ToString("F2",
                         System.Globalization.CultureInfo.InvariantCulture)) +
@@ -136,6 +148,10 @@ namespace City.Player
                 ? "NA" : _lastDem.ToString("F1",
                     System.Globalization.CultureInfo.InvariantCulture);
 
+            string vg = _lastVisGap.ToString("F2",
+                System.Globalization.CultureInfo.InvariantCulture);
+            string asf = _lastAsphaltY.ToString("F2",
+                System.Globalization.CultureInfo.InvariantCulture);
             string txt =
                 "PIEDI y=" + _lastFeetY.ToString(
                     "F2", System.Globalization.CultureInfo.InvariantCulture) +
@@ -147,6 +163,8 @@ namespace City.Player
                 "  gcdiff=" + (float.IsNaN(_lastSurfaceY)
                     ? "NA" : (_lastSurfaceY - _lastFeetY).ToString(
                         "F2", System.Globalization.CultureInfo.InvariantCulture)) + "\n" +
+                "ASFALTO y=" + asf +
+                "  visGap=" + vg + "\n" +
                 "DEM locale=" + demStr +
                 "  grounded=" + _cc.isGrounded;
 
