@@ -25,6 +25,14 @@ namespace City.Player
             + "-> i piedi stanno a y=-1).")]
         public Vector3 feetAnchor = new Vector3(0f, -1f, 0f);
 
+        /// <summary>Abbassamento extra dei piedi visivi sotto la base della
+        /// capsula (compensa skin + clearance del GroundFollow): la suola
+        /// finisce ESATTAMENTE sulla superficie calpestata, senza il classico
+        /// "galleggiamento" di qualche centimetro sopra asfalto/marciapiede.
+        /// In flat-world il collider stradale e' l'asfalto stesso (0.03),
+        /// quindi base = superficie + clearance e suola = superficie.</summary>
+        public const float SoleTouchDrop = 0.03f;
+
         private static readonly string PrefabResource = "PlayerHero";
         private static readonly string RigName = "PlayerHeroRig";
 
@@ -172,7 +180,8 @@ namespace City.Player
             Vector3 centerLocal = transform.InverseTransformPoint(b.center);
             Vector3 bottomLocal = transform.InverseTransformPoint(
                 new Vector3(b.center.x, b.min.y, b.center.z));
-            transform.localPosition += feetAnchor - bottomLocal;
+            transform.localPosition += feetAnchor - bottomLocal +
+                Vector3.down * SoleTouchDrop;
 
             OsmDiag.Log("[PlayerHeroRig] modello attivo boundsH=" + b.size.y.ToString("F2") +
                 " scale=" + s.ToString("F2") + " foot=" + feetAnchor.ToString("F1"));
