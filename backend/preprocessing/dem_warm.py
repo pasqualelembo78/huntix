@@ -45,6 +45,30 @@ def _load_geo(path: Path) -> Optional[dict]:
         return None
 
 
+def _current_ver() -> Optional[str]:
+    """Versione formato geo corrente, dal processore (None se non importabile:
+    il backfill non deve fallire solo perche' manca osmium nel python usato).
+
+    Serve perche' `--regrid` riscrive il CONTENUTO della geo nel formato nuovo:
+    senza aggiornare `ver`, `geo-todo` continuerebbe a listare tutte le tile come
+    obsolete e il prossimo `aggiorna_*` rigenererebbe 1265 geo inutili.
+    """
+    try:
+        from osm_italy_processor import _geo_format_version
+        return _geo_format_version()
+    except Exception:
+        return None
+
+
+def _stamp_ver(doc: dict, new_ver: str) -> None:
+    """Aggiorna `ver` preservando il suffisso `-bt` (tile con viadotti/
+    gallerie): quello marcatore serve a far rigenerare SOLO loro al prossimo
+    cambio di formato, e perderlo cambierebbe quali tile vengono toccate."""
+    old = str(doc.get("ver") or "")
+    suffix = "-bt" if old.endswith("-bt") else ""
+    doc["ver"] = new_ver + suffix
+
+
 def _save_geo(path: Path, doc: dict) -> None:
     tmp = path.with_suffix(".tmp.gz")
     with gzip.open(tmp, "wt", encoding="utf-8", compresslevel=6) as gz:
@@ -62,6 +86,10 @@ def main() -> int:
                     help="pacing extra (s) tra una tile e l'altra (gentile con l'API)")
     ap.add_argument("--dry-run", action="store_true",
                     help="conta e elenca le tile in attesa senza scrivere")
+    ap.add_argument("--regrid", action="store_true",
+                    help="rigenera ANCHE le tile che hanno gia' 'ele' ( cambio "
+                         "di passo/allineamento/riempimento void: la griglia "
+                         "vecchia non e' piu' valida)")
     args = ap.parse_args()
 
     geo_dir = Path(args.geo_dir)
@@ -71,13 +99,20 @@ def main() -> int:
 
     from dem import bake_offline_grid, elevation_grid, grid_shape
 
-    # tile di terra (= hanno un file geo), senza elevazione nel documento
+    # tile di terra (= hanno un file geo), senza elevazione nel documento.
+    # Con --regrid passano anche quelle che ne hanno una: dopo un cambio di
+    # passo (1000 -> 250 m), di allineamento ai chunk o di riempimento void, la
+    # griglia gia' scritta e' geometricamente sbagliata e va rifatta.
     todo: List[Path] = []
     for p in sorted(geo_dir.glob("IT_*_geo.json.gz")):
-        if p.name.startswith("IT_"):  # evita .tmp ecc
-            doc = _load_geo(p)
-            if doc and isinstance(doc, dict) and not doc.get("ele"):
-                todo.append(p)
+        if not p.name.startswith("IT_"):  # evita .tmp ecc
+            continue
+        doc = _load_geo(p)
+        if not doc or not isinstance(doc, dict):
+            continue
+        if doc.get("ele") and not args.regrid:
+            continue
+        todo.append(p)
 
     n = len(todo)
     if n == 0:
@@ -86,16 +121,26 @@ def main() -> int:
 
     done = 0
     failed = 0
+    stamped = 0
     st = time.time()
     batch = todo if args.limit <= 0 else todo[: args.limit]
-    print(f"[dem_warm] {n} tile senza DEM | questo passaggio: {len(batch)}"
+    new_ver = _current_ver()
+    if args.regrid and new_ver is None:
+        print("[dem_warm] avviso: non riesco a leggere la versione formato geo "
+              "(processore non importabile): i `ver` NON verranno aggiornati e "
+              "geo-todo continuera' a listare queste tile come obsolete.")
+    print(f"[dem_warm] {n} tile da aggiornare"
+          + (" (REGRID: anche quelle con ele gia' presente)" if args.regrid else "")
+          + f" | questo passaggio: {len(batch)}"
           + (" | DRY-RUN (nessuna scrittura)" if args.dry_run else ""))
 
     for i, p in enumerate(batch, 1):
         key = _tile_key_from_name(p.name)
         doc = _load_geo(p)
-        if not doc or not isinstance(doc, dict) or doc.get("ele"):
-            continue  # gia' provvista o irrecuperabile
+        if not doc or not isinstance(doc, dict):
+            continue
+        if doc.get("ele") and not args.regrid:
+            continue  # gia' provvista e non richiesta la rigenerazione
         bbox = doc.get("bbox")
         if not bbox or len(bbox) != 4:
             print(f"[dem_warm] {key}: bbox mancante, salto")
@@ -113,6 +158,13 @@ def main() -> int:
                 doc["ele_nrow"] = nrow
                 doc["ele_ncol"] = ncol
                 doc["ele"] = [round(float(v), 1) for v in grid]
+                # Il contenuto e' ora nel formato corrente: allineo `ver` cosi'
+                # geo-todo non chiede di rigenerare questi file al prossimo
+                # aggiornamento. Solo con --regrid: un backfill "solo mancanti"
+                # non deve cambiare la versione dichiarata di una geo.
+                if args.regrid and new_ver is not None:
+                    _stamp_ver(doc, new_ver)
+                    stamped += 1
                 _save_geo(p, doc)
         except Exception as e:  # noqa: BLE001
             print(f"[dem_warm] {key}: DEM non disponibile ({e}) — riprovero' al prossimo giro")
@@ -130,7 +182,8 @@ def main() -> int:
 
     rem = max(0, n - len(batch))
     print(f"[dem_warm] FATTO: {done} tile provviste, {failed} non disponibili, "
-          f"{rem} rimandate al prossimo giro")
+          f"{rem} rimandate al prossimo giro"
+          + (f", {stamped} con `ver` aggiornato a {new_ver}" if stamped else ""))
     if rem:
         print("[dem_warm] riavvia ./dem_warm.sh per proseguire (idempotente)")
     return 0

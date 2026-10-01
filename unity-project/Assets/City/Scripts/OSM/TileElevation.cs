@@ -79,23 +79,50 @@ namespace City.OSM
             if (tileKey != null) _entries.Remove(tileKey);
         }
 
+        /// <summary>Chiave tile server ("IT_xxx_yyy") che contiene il punto.
+        /// Stessa griglia di `tile_builder.py` (ORIGIN 34/5, passo 0.090/0.121)
+        /// e di `CityGrid`: calcolarla qui evita di scansionare TUTTE le entry
+        /// registrate per ogni campionamento. Serve perche' `HeightAtWorld` e'
+        /// nel percorso caldo (corpo del player ogni frame, sospensioni auto,
+        /// waypoint NPC): con la scansione lineare il costo cresceva con le
+        /// tile cariche e i veicoli in citta' molto popolose.</summary>
+        private static string TileKeyAt(double lat, double lon)
+        {
+            int ilat = (int)System.Math.Floor((lat - CityGrid.OriginLat) /
+                                              CityGrid.TileLatStep);
+            int ilon = (int)System.Math.Floor((lon - CityGrid.OriginLng) /
+                                              CityGrid.TileLngStep);
+            return "IT_" + ilat.ToString("000") + "_" + ilon.ToString("000");
+        }
+
         /// <summary>Altezza (m s.l.m.) alla lat/lon data, interpolata sulla tile
-        /// la cui bbox contiene il punto. 0 se nessuna copre il punto o non c'e' DEM.
+        /// che contiene il punto. 0 se nessuna copre il punto o non c'e' DEM.
         /// Il risultato passa da CityConfig.ApplyMode (mondo piatto di default).</summary>
         public static float HeightAt(double lat, double lon)
         {
             // MODALITA' PIATTA (default): quota 0 ovunque, nessun campionamento
             // DEM (anche i veicoli campionano ogni frame: niente loop sprecati).
             if (CityConfig.WorldHeights == WorldHeightMode.Flat) return 0f;
-            foreach (var e in _entries.Values)
-            {
-                if (lat < e.latMin || lat > e.latMax ||
-                    lon < e.lonMin || lon > e.lonMax)
-                    continue;
+
+            // 1) via diretta: la tile che contiene il punto (O(1)).
+            Entry e;
+            if (_entries.TryGetValue(TileKeyAt(lat, lon), out e))
                 return CityConfig.ApplyMode(SampleBilinear(e.ele, e.nrow,
-                    e.ncol, e.latMin, e.lonMin, e.latMax, e.lonMax,
-                    lat, lon));
+                    e.ncol, e.latMin, e.lonMin, e.latMax, e.lonMax, lat, lon));
+
+            // 2) fallback: il punto puo' cadere su un confine (bordi di tile
+            //    floating-point) o la chiave calcolata puo' non combaciare per
+            //    un arrotondamento. Scansione, ma solo in questo caso raro.
+            foreach (var k in _entries)
+            {
+                var v = k.Value;
+                if (lat < v.latMin || lat > v.latMax ||
+                    lon < v.lonMin || lon > v.lonMax)
+                    continue;
+                return CityConfig.ApplyMode(SampleBilinear(v.ele, v.nrow,
+                    v.ncol, v.latMin, v.lonMin, v.latMax, v.lonMax, lat, lon));
             }
+
             _missCount++;
             float now = UnityEngine.Time.time;
             if (now >= _nextMissLogTime)
@@ -116,6 +143,39 @@ namespace City.OSM
         {
             var g = WorldOrigin.ToGeo(world);
             return HeightAt(g.lat, g.lng);
+        }
+
+        /// <summary>Come <see cref="HeightAt"/>, ma dice anche SE il punto e'
+        /// coperto da una griglia DEM caricata. Serve ai caller che campionano
+        /// il suolo appena FUORI dai bordi del proprio chunk (es. i bordi del
+        /// nastro stradale, che sporgono di qualche metro oltre i bounds): se il
+        /// punto cade in una tile non ancora caricata, `HeightAt` ritorna 0 e il
+        /// chiamante deve poter ricadere sulla quota del centro invece di
+        /// affondare il pezzo di asfalto a quota 0. Con il mondo piatto la
+        /// distinzione non esiste, quindi il bug restava nascosto.</summary>
+        public static bool TryHeightAtWorld(Vector3 world, out float height)
+        {
+            height = 0f;
+            if (CityConfig.WorldHeights == WorldHeightMode.Flat) return false;
+            var g = WorldOrigin.ToGeo(world);
+            Entry e;
+            if (_entries.TryGetValue(TileKeyAt(g.lat, g.lng), out e))
+            {
+                height = CityConfig.ApplyMode(SampleBilinear(e.ele, e.nrow, e.ncol,
+                    e.latMin, e.lonMin, e.latMax, e.lonMax, g.lat, g.lng));
+                return true;
+            }
+            foreach (var k in _entries)
+            {
+                var v = k.Value;
+                if (g.lat < v.latMin || g.lat > v.latMax ||
+                    g.lng < v.lonMin || g.lng > v.lonMax)
+                    continue;
+                height = CityConfig.ApplyMode(SampleBilinear(v.ele, v.nrow, v.ncol,
+                    v.latMin, v.lonMin, v.latMax, v.lonMax, g.lat, g.lng));
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Normale (lato su) del terreno in un punto world, calcolata

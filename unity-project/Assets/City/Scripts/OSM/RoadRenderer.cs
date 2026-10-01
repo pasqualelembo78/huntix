@@ -765,7 +765,14 @@ namespace City.OSM
         {
             if (root == null) return centerFallback;
             Vector3 w = root.TransformPoint(new Vector3(local.x, 0f, local.z));
-            return TileElevation.HeightAtWorld(w);
+            // I bordi del nastro sporgono di qualche metro oltre i bounds del
+            // chunk: se quel punto cade in una tile DEM non ancora caricata,
+            // HeightAtWorld restituirebbe 0 (il fallback "nessun DEM = 0") e il
+            // margine dell'asfalto affonderebbe di tutta la quota del terreno.
+            // In quel caso si tiene la quota del centro, che e' campionata.
+            float h;
+            if (TileElevation.TryHeightAtWorld(w, out h)) return h;
+            return centerFallback;
         }
 
         /// <summary>

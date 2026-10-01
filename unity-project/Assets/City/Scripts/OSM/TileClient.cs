@@ -78,7 +78,15 @@ namespace City.OSM
         //        nelle geo: il renderer le sospende/tunnelizza, non le
         //        drappa piu' sui rialzi (senza bump i device riusano le
         //        vecchie .v3.geo.json drappate)
-        public const int CacheVersion = 4;
+        //  - v5 = griglia DEM RIGENERATA lato server: passo 1000 -> 250 m
+        //        allineato ai confini dei chunk (5x5 celle per chunk, prima
+        //        1x1 = un piano per chunk con piega secca al confine) e void
+        //        SRTM riempiti col valore valido piu' vicino invece che con 0.
+        //        Quel 0 era livello del mare: su ogni tile costiera (Bari:
+        //        129 celle su 132 a 0.0) produceva una scogliera artificiale
+        //        fra citta' e mare. Obbligatorio: senza bump i device riusano
+        //        le .v4.geo.json con la griglia rotta in memoria.
+        public const int CacheVersion = 5;
         public static string TileGraphCachePath(string key) =>
             CachePath(key, ".v" + CacheVersion + ".graph.json");
         public static string TileGeoCachePath(string key) =>

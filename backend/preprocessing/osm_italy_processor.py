@@ -111,7 +111,14 @@ FILTERS = {
 # parte geo (grafi, dump e PBF filtrati restano intatti). La versione reale
 # incorpora anche la firma dei filtri: se aggiungi un tag ai FILTERS qui
 # sopra, cambia da sola.
-GEO_FORMAT_BASE = 1
+#
+# 2 = griglia DEM rigenerata: passo 1000 -> 250 m allineato ai confini dei
+#     chunk (5x5 celle per chunk invece di 1x1) e void SRTM riempiti col
+#     valore valido piu' vicino invece che con 0 (= livello del mare). Le geo
+#     con `ver` 1 hanno dentro la griglia vecchia: rigenerale con
+#     `dem_warm.py --regrid` OPPURE lasciale stare e accetta che il client le
+#     tratti con la modalita' di fallback (vedi CityConfig).
+GEO_FORMAT_BASE = 2
 
 
 def _filter_sig() -> str:

@@ -53,10 +53,32 @@ DEM_API = os.environ.get(
 DEM_TIMEOUT_S = int(os.environ.get("HUNTIX_DEM_TIMEOUT", "30"))
 DEM_RETRY = int(os.environ.get("HUNTIX_DEM_RETRY", "3"))
 
-# Spaziatura griglia di campionamento (metri). Sui ~10 km di una tile genera
-# una maglia ~12x12 = ~150 punti, un buon compromesso tra dettaglio e costo.
-# La griglia e' ricampionata in Unity con interpolazione bilineare.
-SAMPLE_SPACING_M = float(os.environ.get("HUNTIX_DEM_SPACING_M", "1000"))
+# Spaziatura griglia di campionamento (metri), PASSO MASSIMO: vedi
+# `grid_shape`, che arrotonda per eccesso a multipli interi di
+# `HUNTIX_DEM_ALIGN_STEPS` (di default 10 = i chunk da ~1 km del client).
+# Perche' l'allineamento conta: i nodi DEM devono TUMBARE sulle giunzioni fra
+# chunk, altrimenti ogni chunk taglia la superficie a meta' cella e i due
+# lati della stessa strada/terreno usano piani diversi (spigolo visibile a ogni
+# confine di chunk, auto e pedoni che "sbattono" sul gradino).
+#
+# Storico dei valori (e cosa rompevano):
+#  - 1000 m: una cella DEM == un chunk (~1 km). Ogni chunk diventava un piano
+#    perfetto con una PIEGA secca al confine, e la citta' diventava una scala di
+#    rampe da 1 km. Inoltre il risparmio di punti non esisteva piu': la mesh
+#    del terreno lato client e' molto piu' fine della griglia.
+#  - 250 m: 4-5 celle per chunk, piege 4-5 volte meno ampie, e la risoluzione
+#    si avvicina alla spaziatura reale dei chunk cosi' l'errore di pendenza
+#    sui bordi scende sotto quello della griglia di sampling del terreno.
+SAMPLE_SPACING_M = float(os.environ.get("HUNTIX_DEM_SPACING_M", "250"))
+
+# La griglia viene allineata ai confini dei chunk del client: i passi per riga
+# e per colonna diventano multipli di questo valore (in gradi di tile).
+HUNTIX_DEM_ALIGN_STEPS = int(os.environ.get("HUNTIX_DEM_ALIGN_STEPS", "10"))
+
+# Soglia di copertura sotto la quale una griglia e' considerata "nessun dato"
+# (tutto void): meglio nessuna `ele` (mondo piatto, che si cammina) che una
+# griglia inventata. 0.25 = almeno un quarto dei campioni con dato reale.
+MIN_VALID_RATIO = float(os.environ.get("HUNTIX_DEM_MIN_VALID", "0.25"))
 
 # OpenTopoData free API: max ~100 locations richiesti ma con rate limit
 # (~1 req/s). Usiamo batch piu' piccoli e backoff per evitare il 429.
@@ -87,26 +109,128 @@ def grid_shape(bbox: List[float]) -> Tuple[int, int]:
     """Righe, colonne della griglia DEM per il bbox [latmin,lonmin,latmax,lonmax].
 
     NOSA: la griglia e' regolare in coordinate DEGREE; nrow lungo lat, ncol lon.
+
+    `SAMPLE_SPACING_M` e' un PASSO MASSIMO: il numero di celle viene
+    arrotondato per eccesso a un multiplo di `HUNTIX_DEM_ALIGN_STEPS` (di
+    default 10), cosi' i nodi DEM allineano con i confini dei chunk da ~1 km
+    del client (`CityGrid.ChunkLatStep`/`ChunkLngStep`). Allineati, i nodi
+    cadono esattamente sugli angoli dei chunk e non li tagliano a meta'.
     """
     latmin, lonmin, latmax, lonmax = bbox
     lat_m, lon_m = geo_delta_m_per_deg((latmin + latmax) * 0.5)
-    nrow = max(3, int(round((latmax - latmin) * lat_m / SAMPLE_SPACING_M)))
-    ncol = max(3, int(round((lonmax - lonmin) * lon_m / SAMPLE_SPACING_M)))
+    align = max(1, HUNTIX_DEM_ALIGN_STEPS)
+
+    def steps(span_m: float) -> int:
+        want = span_m / SAMPLE_SPACING_M
+        # arrotonda per eccesso, poi riporta al multiplo di `align`
+        return max(align, int(math.ceil(want / align)) * align)
+
+    nrow = steps((latmax - latmin) * lat_m)
+    ncol = steps((lonmax - lonmin) * lon_m)
     # numero punti (estremi inclusi)
     return nrow + 1, ncol + 1
+
+
+def fill_voids(grid: List[Optional[float]], nrow: int, ncol: int) -> List[float]:
+    """Riempi i buchi (void/mare, `None`) col valore valido piu' vicino.
+
+    Motivo (storico): i void SRTM venivano scritti come 0 = livello del mare.
+    Su una tile costiera il risultato era una scogliera artificiale: la citta'
+    (es. Bari a 10-25 m) affiancava campioni a 0 e il terreno scivolava al mare
+    entro ~2 km, con pendenze assurde. Riempiendo col vicino piu' vicino, il
+    mare aperto resta ~0 (il vicino e' la costa, che e' a 0) e l'entroterra
+    resta continuo: la griglia smette di avere discontinuita'.
+
+    Voce non riempita (nessun valido raggiungibile) resta 0, che e' comunque
+    la quota giusta per il mare aperto.
+    """
+    n = nrow * ncol
+    if n == 0:
+        return []
+    out: List[float] = [0.0] * n
+    seen = bytearray(n)
+    queue: List[int] = []
+    valid = 0
+    for i, v in enumerate(grid):
+        if v is None:
+            continue
+        valid += 1
+        out[i] = float(v)
+        seen[i] = 1
+        queue.append(i)
+    if not queue:
+        return out
+    # BFS multi-sorgente: propaga i valori validi ai vicini, anello per anello.
+    # Copre l'intera griglia perche' il BFS non si ferma: anche i bordi lontani
+    # ricevono il valore del valido piu' vicino.
+    head = 0
+    while head < len(queue):
+        i = queue[head]
+        head += 1
+        r, c = divmod(i, ncol)
+        if r > 0:
+            j = i - ncol
+            if not seen[j]:
+                seen[j] = 1
+                out[j] = out[i]
+                queue.append(j)
+        if r + 1 < nrow:
+            j = i + ncol
+            if not seen[j]:
+                seen[j] = 1
+                out[j] = out[i]
+                queue.append(j)
+        if c > 0:
+            j = i - 1
+            if not seen[j]:
+                seen[j] = 1
+                out[j] = out[i]
+                queue.append(j)
+        if c + 1 < ncol:
+            j = i + 1
+            if not seen[j]:
+                seen[j] = 1
+                out[j] = out[i]
+                queue.append(j)
+    _ = valid
+    return out
 
 
 def _cache_path(key: str) -> Path:
     return CACHE_DIR / f"{key}.json"
 
 
-def _load_cache(key: str) -> Optional[List[float]]:
+# Firma del formato di griglia: entra nella cache cosi' un cambio di passo, di
+# allineamento o di bbox invalida le griglie vecchie invece di riusarle in
+# silenzio (era esattamente il motivo per cui 1000 -> 250 m non si vedeva).
+GRID_SIG_VERSION = 2   # 2 = riempimento void col vicino (prima: void = 0)
+
+
+def _grid_sig(bbox: List[float]) -> str:
+    nrow, ncol = grid_shape(bbox)
+    return (f"v{GRID_SIG_VERSION}|{SAMPLE_SPACING_M:g}|"
+            f"{HUNTIX_DEM_ALIGN_STEPS}|{nrow}x{ncol}|"
+            f"{round(bbox[0], 6)},{round(bbox[1], 6)},"
+            f"{round(bbox[2], 6)},{round(bbox[3], 6)}")
+
+
+def _load_cache(key: str, bbox: List[float]) -> Optional[List[float]]:
+    """Griglia in cache, ma SOLO se e' ancora valida per questo bbox.
+
+    La validita' e' data da una FIRMA: bbox arrotondato + passo richiesto +
+    versione del formato di riempimento void. Senza, cambiando
+    `HUNTIX_DEM_SPACING_M` (storicamente 1000 -> 250 m) la cache riusava le
+    griglie vecchie a risoluzione sbagliata e la nuova spaziatura non si
+    vedeva mai, nemmeno dopo un bump di GEO_FORMAT_BASE.
+    """
     p = _cache_path(key)
     if not p.exists():
         return None
     try:
         with open(p, encoding="utf-8") as f:
             data = json.load(f)
+        if data.get("sig") != _grid_sig(bbox):
+            return None
         return data.get("grid")
     except Exception:
         return None
@@ -116,8 +240,8 @@ def _save_cache(key: str, grid: List[float], bbox: List[float]) -> None:
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         with open(_cache_path(key), "w", encoding="utf-8") as f:
-            json.dump({"key": key, "bbox": bbox, "grid": grid},
-                      f, separators=(",", ":"))
+            json.dump({"key": key, "bbox": bbox, "sig": _grid_sig(bbox),
+                       "grid": grid}, f, separators=(",", ":"))
     except Exception:
         pass
 
@@ -261,20 +385,31 @@ def _hgt_covers(bbox: List[float]) -> bool:
 
 
 def _compute_local_grid(bbox: List[float]) -> Optional[List[float]]:
-    """Griglia DEM del bbox SOLO da fonti locali (HGT). None se l'area non e'
-    coperta. I punti void/mare diventano 0 (compatibile con la vecchia API)."""
+    """Griglia DEM del bbox SOLO da fonti locali (HGT).
+
+    I punti void/mare diventano il valore valido PIU' VICINO (`fill_voids`):
+    prima erano 0, cioe' livello del mare, e su ogni tile costiera quello
+    significava una scogliera artificiale fra citta' e mare. Se la copertura
+    valida e' troppo bassa (< MIN_VALID_RATIO) si ritorna None: meglio nessuna
+    `ele` (mondo piatto) che una griglia inventata.
+    """
     nrow, ncol = grid_shape(bbox)
     latmin, lonmin, latmax, lonmax = bbox
     if not _hgt_covers(bbox):
         return None
-    grid: List[float] = [0.0] * (nrow * ncol)
+    raw: List[Optional[float]] = [None] * (nrow * ncol)
+    valid = 0
     for i in range(nrow * ncol):
         lat = latmin + (latmax - latmin) * (i // ncol) / (nrow - 1)
         lon = lonmin + (lonmax - lonmin) * (i % ncol) / (ncol - 1)
         v = _hgt_sample_ll(lat, lon)
         if v is not None:
-            grid[i] = round(v, 2)
-    return grid
+            raw[i] = round(v, 2)
+            valid += 1
+    if valid == 0 or valid < MIN_VALID_RATIO * (nrow * ncol):
+        return None
+    grid = fill_voids(raw, nrow, ncol)
+    return [round(v, 2) for v in grid]
 
 
 # ── API OpenTopoData (fallback rete) ───────────────────────────────────
@@ -319,7 +454,7 @@ def bake_offline_grid(key: str, bbox: List[float]) -> Optional[List[float]]:
     nrow, ncol = grid_shape(bbox)
     npts = nrow * ncol
 
-    cached = _load_cache(key)
+    cached = _load_cache(key, bbox)
     if cached is not None and len(cached) == npts:
         return cached
 
@@ -335,14 +470,16 @@ def elevation_grid(key: str, bbox: List[float]) -> List[float]:
 
     Il ritorno e' row-major (lat esterna), ciascuna riga percorre la
     longitudine da min a max, con ncol = grid_shape(...)[1] colonne.
-    I punti mancanti (mare/senza dato) restano 0.
+    I punti mancanti (mare/senza dato) vengono riempiti col valore valido
+    PIU' VICINO (`fill_voids`), non lasciati a 0: 0 significa mare e produceva
+    discontinuita' artificiali terra-mare.
 
     Ordine delle fonti: cache disco -> SRTM HGT locale -> API OpenTopoData.
     """
     nrow, ncol = grid_shape(bbox)
     npts = nrow * ncol
 
-    cached = _load_cache(key)
+    cached = _load_cache(key, bbox)
     if cached is not None and len(cached) == npts:
         return cached
 
@@ -352,20 +489,29 @@ def elevation_grid(key: str, bbox: List[float]) -> List[float]:
         return local
 
     latmin, lonmin, latmax, lonmax = bbox
-    grid: List[float] = [0.0] * npts
+    raw: List[Optional[float]] = [None] * npts
     # Per le richieste generiamo i punti fino a _MAX_PER_REQ a chiamata.
     locs = [
         f"{latmin + (latmax - latmin) * (i // ncol) / (nrow - 1)},"
         f"{lonmin + (lonmax - lonmin) * (i % ncol) / (ncol - 1)}"
         for i in range(npts)
     ]
+    valid = 0
     for chunk_start in range(0, npts, _MAX_PER_REQ):
         chunk = locs[chunk_start:chunk_start + _MAX_PER_REQ]
         vals = _request("|".join(chunk))
         for k, v in enumerate(vals):
             if v is not None:
-                grid[chunk_start + k] = v
+                raw[chunk_start + k] = v
+                valid += 1
         time.sleep(0.05)
+
+    if valid < MIN_VALID_RATIO * npts:
+        # copertura insufficiente: niente griglia inventata. Il tile resta
+        # senza `ele` e il client lo tratta come mondo piatto (camminabile).
+        grid = [0.0] * npts
+    else:
+        grid = fill_voids(raw, nrow, ncol)
 
     _save_cache(key, grid, bbox)
     return grid
