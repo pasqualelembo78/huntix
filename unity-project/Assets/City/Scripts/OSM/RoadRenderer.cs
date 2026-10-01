@@ -537,7 +537,17 @@ namespace City.OSM
                 float f = globalOk
                     ? road.s0 + (road.s1 - road.s0) * floc[i]
                     : floc[i];
-                p.y = Mathf.Lerp(road.h0, road.h1, Mathf.Clamp01(f));
+                // h0/h1 sono metri ASSOLUTI s.l.m. (es. 18.6, 221.1): vanno
+                // passati da CityConfig.ApplyMode come ogni altra quota del
+                // mondo. Senza, in modalita' piatta (default) tutto il resto
+                // del mondo sta a quota ~0 ma il deck restava a +18 m (o
+                // +221 in montagna): il viadotto e il suo COLLIDER
+                // (DeckColliders, percorribile) galleggiavano sopra la citta'
+                // e il player ci saliva o ci cadeva dentro. Con ApplyMode il
+                // ponte torna una strada qualunque alla quota del terreno,
+                // esattamente come nel ramo `unity` (che i deck non aveva).
+                p.y = CityConfig.ApplyMode(
+                    Mathf.Lerp(road.h0, road.h1, Mathf.Clamp01(f)));
                 bool inside = bounds.Contains(new Vector2(p.x, p.z));
                 if (!(inside || TouchesNext(road.pts, i, toLocal, bounds, margin)))
                 {

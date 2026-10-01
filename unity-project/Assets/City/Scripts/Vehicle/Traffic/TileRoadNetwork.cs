@@ -234,7 +234,14 @@ namespace City.Vehicle.Traffic
             {
                 float floc = lenM > 0f ? acc / lenM : 0f;
                 float f = (s1 > s0 && s1 - s0 > 0.0001f) ? s0 + (s1 - s0) * floc : floc;
-                return Mathf.Lerp(h0, h1, Mathf.Clamp01(f));
+                // Come RoadRenderer.AppendDeck: h0/h1 sono metri ASSOLUTI
+                // s.l.m. e vanno passati da CityConfig.ApplyMode. In modalita'
+                // piatta (default) un deck non viene piu' a +18/+221 m mentre
+                // il resto della citta' e' a quota 0: le auto ci salivano e ci
+                // riprecipitavano dentro. ApplyMode e' idempotente, quindi qui
+                // non si puo'Applicare due volte per sbaglio.
+                return CityConfig.ApplyMode(
+                    Mathf.Lerp(h0, h1, Mathf.Clamp01(f)));
             }
         }
 

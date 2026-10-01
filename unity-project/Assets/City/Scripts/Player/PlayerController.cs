@@ -550,8 +550,22 @@ namespace City.Player
                 targetFeet, Time.deltaTime);
             if (Mathf.Abs(newFeet - feetY) <= GroundFollowClearance) return;
 
-            pos.y = newFeet + feetFromPivot;
-            transform.position = new Vector3(pos.x, pos.y, pos.z);
+            // Spostare il transform di un CharacterController ATTIVO desincronizza
+            // la sua sweep interna dalla posizione reale: al frame successivo
+            // Move() riparte da uno stato interno vecchio e puo' attraversare un
+            // collider o sbilanciarsi di qualche centimetro (il classico
+            // "sprofonda/rimbalza a ogni correzione"). E' la stessa ragione per
+            // cui il resto del progetto (Game.SetPlayerPosition,
+            // ChunkManager.OnRebased, CityOSMWorld, DeathDirector) spegne il CC,
+            // sposta e riaccende. Qui la scrittura avviene solo quando la
+            // correzione supera GroundFollowClearance, quindi il costo della
+            // sequenza e' trascurabile.
+            Vector3 corrected = new Vector3(pos.x, newFeet + feetFromPivot, pos.z);
+            controller.enabled = false;
+            transform.position = corrected;
+            controller.enabled = true;
+            try { Physics.SyncTransforms(); }
+            catch (System.Exception) { }
 
             // Diagnostica throttled: solo correzioni significative
             if (Time.time >= _nextGroundLogAt && Mathf.Abs(err) > 0.35f)
