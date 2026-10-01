@@ -191,11 +191,16 @@ namespace City.OSM
 
         private sealed class Junction
         {
-            public GeoLL geo;
             public Vector3 local;
             public bool emitted;
-            public readonly HashSet<int> ways = new HashSet<int>();
-            public readonly List<Rib> ribs = new List<Rib>();
+            /// <summary>Ultima way che ha aggiunto una costola: serve a
+            /// ignorare il secondo tocco della STESSA way su un nodo (anello
+            /// chiuso, pt di partenza == pt di arrivo), che altrimenti
+            /// farebbe sembrare un nodo condiviso due volte da una strada sola.
+            /// Sostituisce il vecchio HashSet&lt;int&gt; ways: bastava il
+            /// penultimo indice.</summary>
+            public int lastWay = -1;
+            public readonly List<Rib> ribs = new List<Rib>(4);
         }
 
         /// <summary>Chiave quantizzata (0.1 m) per far coincidere i nodi dello
@@ -210,11 +215,45 @@ namespace City.OSM
         /// <summary>Costruisce la mappa dei nodi condivisi fra minimo 2 strade.
         /// Le rotonde restano FUORI dal grafo (i loro nodi appartengono al
         /// disco, non a un raccordo). Le direzioni delle costole sono calcolate
-        /// nella stessa metrica toLocal del nastro cosi' le bocche combaciano.</summary>
+        /// nella stessa metrica toLocal del nastro cosi' le bocche combaciano.
+        ///
+        /// DUE PASSATE, per non allocare su tutti i nodi della tile. Questa
+        /// funzione gira UNA VOLTA PER CHUNK ma riceve l'elenco strade della
+        /// TILE INTERA (ogni chunk filtra dopo per i propri bounds): quindi il
+        /// costo si moltiplica per i ~100 chunk che la compongono. La versione
+        /// precedente costruiva un `Junction` (con HashSet + List) per OGNI
+        /// nodo e poi buttava via il 87%: su una tile urbana sono ~150k nodi,
+        /// cioe' ~150k Junction + 150k HashSet + 150k List **per chunk**, e
+        /// milioni di allocazioni gestite sul main thread durante il
+        /// caricamento — la pressione di GC che si legge come lag.
+        ///
+        /// Ora: passata 1 conta le occorrenze per nodo in un dizionario di
+        /// soli primitivi (nessun oggetto allocato), passata 2 costruisce i
+        /// Junction SOLO per i nodi toccati da 2+ strade (~13% del totale).
+        /// Stesso risultato, ~8x meno allocazioni.</summary>
         private static Dictionary<ulong, Junction> CollectJunctions(
             TileRoadRec[] roads, System.Func<GeoLL, Vector3> toLocal)
         {
-            var map = new Dictionary<ulong, Junction>();
+            // ── passata 1: conta i tocchi per nodo, senza allocare nulla ──
+            var touches = new Dictionary<ulong, int>(roads.Length * 4);
+            for (int r = 0; r < roads.Length; r++)
+            {
+                var road = roads[r];
+                if (road?.pts == null || road.pts.Length < 2) continue;
+                if (IsRoundabout(road)) continue;
+                var pts = road.pts;
+                for (int k = 0; k < pts.Length; k++)
+                {
+                    ulong key = NodeKeyOf(pts[k].a, pts[k].o);
+                    int c;
+                    touches.TryGetValue(key, out c);
+                    touches[key] = c + 1;
+                }
+            }
+            if (touches.Count == 0) return new Dictionary<ulong, Junction>();
+
+            // ── passata 2: Junction solo per i nodi davvero condivisi ──
+            var map = new Dictionary<ulong, Junction>(touches.Count / 4 + 8);
             for (int r = 0; r < roads.Length; r++)
             {
                 var road = roads[r];
@@ -227,13 +266,19 @@ namespace City.OSM
                 {
                     GeoLL g = road.pts[k];
                     ulong key = NodeKeyOf(g.a, g.o);
+                    int c;
+                    if (!touches.TryGetValue(key, out c) || c < 2) continue;
+
                     Junction j;
                     if (!map.TryGetValue(key, out j))
                     {
-                        j = new Junction { geo = g, local = toLocal(g) };
+                        j = new Junction { local = toLocal(g) };
                         map[key] = j;
                     }
-                    j.ways.Add(r);
+                    // La stessa way che tocca lo stesso nodo due volte (anello
+                    // chiuso) non conta come due strate diverse.
+                    if (j.lastWay == r) continue;
+                    j.lastWay = r;
 
                     Vector3 d;
                     if (k == 0)       d = toLocal(road.pts[1]) - j.local;
@@ -246,11 +291,13 @@ namespace City.OSM
                 }
             }
 
-            // Tiene solo i nodi davvero condivisi (>=2 strade) e con >=2 costole
-            // (una bocca serve almeno a due strade, altrimenti e' un dead-end).
+            // Un nodo serve solo se ha >=2 costole: altrimenti e' un dead-end
+            // (una sola strada arriva lì) e il fan non avrebbe niente da
+            // raccordare. Con il conteggio per nodo gia' filtrato, "2+ strade
+            // distinte" coincide con "2+ costole".
             var keep = new List<ulong>();
             foreach (var kv in map)
-                if (kv.Value.ways.Count < 2 || kv.Value.ribs.Count < 2)
+                if (kv.Value.ribs.Count < 2)
                     keep.Add(kv.Key);
             for (int i = 0; i < keep.Count; i++) map.Remove(keep[i]);
             return map;

@@ -85,6 +85,11 @@ namespace City.Vehicle.Traffic
             _gateScan = 0;
             _grantedNode = -1;
             _waiting = false;
+            // Sfalsa la prima sonda: senza questo tutte le auto appena
+            // spawnate (che nascono tutte nello stesso tick) sonderebbero
+            // insieme e l'overlap si concentrerebbe in un singolo frame.
+            _spawnIndex = _spawnSerial++;
+            _probePhase = _spawnIndex % CurbProbeStagger;
 
             if (waypoints.Length > 0)
             {
@@ -115,6 +120,41 @@ namespace City.Vehicle.Traffic
 
         public float GetLeaderDistance() => _leaderDist;
 
+        /// <summary>Auto che NON sondano il cordolo/ostacolo in un dato frame.
+        ///
+        /// Con `CarsPerTile` passato da 10 a 55 (MaxCars 150 -> 400) le due
+        /// sonde costose di `Update` sono diventate il costo per frame
+        /// dominante:
+        ///  - `CheckCurb`: `Physics.OverlapSphereNonAlloc` con mask `~0`, cioe'
+        ///    broadphase su TUTTI i collider della scena (terreno, strade,
+        ///    marciapiedi, edifici, veicoli);
+        ///  - `CheckObstacle`: ciclo su TUTTI gli NPC attivi (fino a ~750).
+        /// 400 auto x (1 overlap broadphase + 750 confronti) ogni frame sono
+        /// centinaia di migliaia di operazioni, e nel ramo `unity` erano solo
+        /// ~90 auto.
+        ///
+        /// Stagger: ogni auto sonda 1 frame su `CurbProbeStagger`, e WHICH frame
+        /// dipende da un indice che avanza a sua volta, cosi' le sonde sono
+        /// distribuite uniformi nel tempo invece che tutte insieme. Con 400 auto
+        /// e stagger 6 si passa da ~400 overlap+300k confronti PER FRAME a
+        /// ~67 overlap+50k confronti.
+        ///
+        /// Perche' e' invisibile al gameplay: la reazione al cordolo e
+        /// all'ostacolo resta a 10 Hz per auto, mentre la guida
+        /// (AdvanceWaypoint/FollowLeader/Drive) resta a 60 Hz come prima. Un
+        /// pedone che attraversa la strada viene visto entro 100 ms, che a
+        /// 40 km/h sono 4 metri: identico a quello che vede un giocatore.
+        /// Con `CurbProbeStagger = 1` torni esattamente al comportamento
+        /// precedente.
+        private const int CurbProbeStagger = 6;
+        private int _probePhase;
+
+        /// <summary>Indice stabile dell'auto, usato per sfalsare le sonde.
+        /// Non correlato con `_probePhase` (che avanza): serve a distribuire le
+        /// auto sui frame anche subito dopo lo spawn.</summary>
+        private static int _spawnSerial;
+        private int _spawnIndex;
+
         private void Update()
         {
             if (state == CarAgentState.Punctured)
@@ -129,8 +169,16 @@ namespace City.Vehicle.Traffic
             AdvanceWaypoint();
             FollowLeader();
             EvaluateGates();
-            CheckCurb();
-            CheckObstacle();
+            // Sonde costose (broadphase sul cordolo + scansione di tutti gli
+            // NPC): sfalsate nel tempo, vedi CurbProbeStagger. Con 1 tornano
+            // a girare ogni frame come prima.
+            _probePhase++;
+            if (_probePhase >= CurbProbeStagger)
+            {
+                _probePhase = 0;
+                CheckCurb();
+                CheckObstacle();
+            }
             Drive();
             AuditGateStall();
             AuditRoadBounds();
