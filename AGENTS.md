@@ -78,6 +78,29 @@
   void −32768→0, bilineare) → API OpenTopoData (pacing).
   **Regola: nei batch `gen-tile` mai rete**: si usa `dem.bake_offline_grid` (solo
   cache+HGT); se l'HGT manca la geo resta senza `ele` e lo provvede il backfill.
+- **Griglia DEM: passo e allineamento (2026-09-30, fix del ramo `altitudine`).**
+  `HUNTIX_DEM_SPACING_M` default **250 m** (era 1000) e i passi per riga/colonna
+  sono arrotondati per eccesso a multipli di `HUNTIX_DEM_ALIGN_STEPS` (default 10,
+  cioè i chunk da ~1 km del client). Risultato: **5x5 celle DEM per chunk**, con
+  i nodi che cadono esattamente sui confini dei chunk. Con 1000 m una cella DEM
+  coincideva con un chunk intero, quindi ogni chunk era un piano unico separato
+  dagli altri da una **piega secca** al confine e la città era una scala di
+  rampe da 1 km. Non alzare oltre 250 m senza rifare questa verifica.
+- **Void SRTM: col valore valido più vicino, MAI 0.** I void (`−32768`, mare) non
+  si scrivono più come 0 (= livello del mare): su ogni tile costiera quello
+  produceva una scogliera artificiale fra città e mare (Bari: 129 celle su 132 a
+  0.0 nella griglia vecchia, che al centro città dava 18 m anziché ~10 m reali).
+  `dem.fill_voids` propaga il valore valido più vicino (BFS multi-sorgente): il
+  mare aperto resta ~0 (il vicino è la costa), l'entroterra resta continuo.
+  Sotto `MIN_VALID_RATIO` (0.25) di campioni validi la griglia **non viene
+  prodotta** (tile senza `ele` → il client la tratta piatta): meglio piatto che
+  inventato.
+- La cache `dem_cache/{key}.json` è valida solo se la **firma** (versione formato,
+  passo, allineamento, forma, bbox) coincide: cambiando `HUNTIX_DEM_SPACING_M` le
+  griglie vecchie vengono ricalcolate invece di riusate in silenzio.
+- Per **rigenerare le geo già scritte** con una griglia diversa dal formato
+  corrente (cambio di passo/allineamento/void): `python3 dem_warm.py --regrid`
+  (senza `--regrid` salta le tile che hanno già `ele`).
 - Scaricare le celle SRTM locali per l'Italia: `./srtm_download.sh` (default bbox
   italia N35..N47 × E006..E018, idempotente, 4 download paralleli, le celle di mare
   danno 404 e si saltano; bbox custom: `./srtm_download.sh "latmin,lonmin,latmax,lonmax"`).
@@ -116,10 +139,11 @@
 - `cmd_index` salva `ver` anche in index.json (`tiles[i].ver`).
 - **Cache client Unity**: se cambi il formato geo/graph servito (es. aggiunta
   griglia `ele`/DEM), incrementa `TileClient.CacheVersion` in
-  `unity-project/Assets/City/Scripts/OSM/TileClient.cs` (attuale: 4 = strade
-  con bridge/tunnel, deck sospesi/tunnelizzati; 3 = geos con `ele`), altrimenti
-  i device riusano le vecchie `.v*.geo.json` (strade drappate sui rialzi,
-  niente fisica altimetrica).
+  `unity-project/Assets/City/Scripts/OSM/TileClient.cs` (attuale: **5 = griglia
+  DEM rigenerata** a 250 m allineata ai chunk con i void riempiti col vicino;
+  4 = strade con bridge/tunnel, deck sospesi/tunnelizzati; 3 = geos con `ele`),
+  altrimenti i device riusano le vecchie `.v*.geo.json` (strade drappate sui
+  rialzi, niente fisica altimetrica).
 - Processore/world: env `HUNTIX_COUNTRY` (default `italy`) seleziona i dataset
   `data/<paese>-{roads,areas,points}.pbf` (`Ctx.pbf()`); `gen-tile` on-demand per un
   paese richiede che i suoi PBF filtrati esistano (altrimenti la tile risulta vuota).
@@ -135,3 +159,46 @@
   è giudicato troncato e viene rigenerato, mai riusato. Su `wget` fallito il file parziale
   viene cancellato (un `-c` su un parziale corrotto produrrebbe un dump inutilizzabile).
   Nome PBF sorgente canonico: `data/<paese>-latest.osm.pbf` (`Ctx.pbf("latest.osm")`).
+## Vincoli del mondo OSM lato client (le trappole che hanno rotto il ramo `altitudine`)
+Regole non negoziabili emerse dal confronto `origin/unity` (funzionante, mondo
+piatto) vs `origin/altitudine` (DEM, "player sospeso/sprofondato"). **Ogni volta
+che si tocca altitudine, terreno o spawn, rileggere questa sezione.**
+
+1. **Mai prendere l'hit PIÙ ALTO di una colonna per "il terreno".** Il bug che ha
+   rotto il gioco: `if (hit.point.y > bestY) bestY = hit.point.y` piazzava il
+   player sul tetto dell'edificio più alto. Nel mondo piatto (tutto a quota 0) la
+   differenza non si vedeva; col DEM la colonna contiene strade, marciapiedi e
+   palazzi. Oggi l'unico snap consentito è
+   `CityChunkedWorld.TryGroundColumn(pos, self, clearance, maxDist, out snapped,
+   out collider)` (`Game.cs` e `CityChunkedWorld` lo usano). Regola: si prende
+   l'hit **più vicino** e la mask esclude gli edifici (`GroundSnapper.WalkableMask`
+   = tutto tranne layer 8). NB: `Physics.RaycastAll` **non** ordina i hit per
+   distanza, quindi `hits[0]` non è "il primo": prendere il min per `distance`.
+2. **Nessun "proxy altimetrico" dalle altezze edifici.** Una tile senza `ele` si
+   tratta come **piatta** (`ChunkBuilder.CollectTerrainHeights` ritorna vuoto).
+   Il proxy storico costruiva il collider del terreno con le alhezze dei palazzi
+   (scala di 10-30 m = si cammina sui tetti) e rialzava ogni edificio di un'altezza
+   di *edificio* (case sospese a 20-30 m).
+3. **Il passo di `TerrainChunk` e `TerrainChunk.DemSampleStep` devono restare
+   coerenti** (costante condivisa): il primo è il passo della mesh, il secondo il
+   passo del dizionario quote che `BuildHeightMesh` ri-interlaccia. Se divergono,
+   la mesh della mesh DEM si disallinea e il terreno scivola sotto l'asfalto o
+   copre la strada.
+4. **Il mesh passo del terreno non va alzato sopra la risoluzione del dato.** La
+   mesh è a 45 m (costante `step` in `BuildHeightMesh`) e il DEM a 250 m: la mesh
+   era a 10 m (1300× i triangoli del quad piatto del ramo unity, senza LOD →
+   510k tri in PhysX e il mondo non si caricava in tempo). Non alzare il passo
+   della mesh sopra quello del DEM: non aggiunge informazione, solo costo.
+5. **Il collider del terreno si accende solo entro `ChunkData.TerrainColliderLod`.**
+   Il chunk sotto i piedi è LOD0 (`UpdateLods`: `d<=1 ? 0`), quindi il suolo
+   calpestabile è sempre attivo; il risparmio è sugli anelli esterni.
+6. **`ChunkManager.LoadRadius` (7×7) è tornato a 3** dopo che il terreno è
+   alleggerito: con raggio corto e mondo che non finisce di caricare, il player
+   esce dal mondo caricato e cade nel vuoto.
+7. **Campionare fuori dai bordi del chunk**: `TileElevation.HeightAtWorld` ritorna
+   **0** se il punto non è coperto da una griglia caricata. I bordi del nastro
+   stradale sporgono oltre i bounds: usare `TryHeightAtWorld` e, se non coperto,
+   tenere la quota del centro (`RoadRenderer.SurfaceHeight`).
+8. **`CityConfig.WorldHeights` è l'unico interruttore** del mondo piatto/DEM
+   (default `Flat` = comportamento del ramo unity). `HeightAt` ritorna 0 in
+   `Flat`; i chunk senza `ele` restano piatti in ogni modalità.

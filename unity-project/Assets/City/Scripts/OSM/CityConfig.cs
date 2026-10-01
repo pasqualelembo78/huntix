@@ -10,10 +10,25 @@ namespace City.OSM
     /// (altitudine zero ovunque, personaggio con i piedi per terra). Il codice
     /// DEM/SRTM completo NON e' stato cancellato: resta compilato ma spento.
     ///
-    /// Per riattivare l'altitudine reale (seconda chance, ramo `altitudine`):
-    /// cambiare il valore di `WorldHeights` qui sotto e ricompilare.
-    /// Il ramo git `altitudine` (tag backup-altitudine-20260923) conserva
-    /// l'implementazione integrale della quota DEM.
+    /// 2026-09-30 — le CAUSE dei problemi sono state trovate e corrette, quindi
+    /// `Dem` e' di nuovo una scommessa sensata (non piu' un rischio):
+    ///  1. lo snap al terreno prendeva l'hit PIU' ALTO della colonna invece del
+    ///     piu' vicino (piazzava il player sui tetti) — ora un solo helper,
+    ///     `CityChunkedWorld.TryGroundColumn`;
+    ///  2. la griglia DEM era campionata ogni 1000 m, cio' una cella per chunk:
+    ///     ogni chunk era un piano con una piega secca al confine. Ora e' a
+    ///     250 m e allineata ai confini dei chunk (5x5 celle per chunk);
+    ///  3. i void SRTM finivano come 0 = livello del mare (scogliere
+    ///     artificiali sulle tile costiere). Ora si riempiono col vicino;
+    ///  4. il terreno era una mesh a 10 m (20k triangoli di collider per chunk,
+    ///     senza LOD) e le tile senza DEM costruivano il "terreno" con le
+    ///     ALTEZZE DEGLI EDIFICI. Entrambe risolte.
+    ///
+    /// Per riattivare l'altitudine reale: `WorldHeights = WorldHeightMode.Dem`
+    /// qui sotto e ricompilare. I dati lato server sono gia' rigenerati nel
+    /// formato nuovo (vedi AGENTS.md, "Griglia DEM: passo e allineamento").
+    /// Attenzione a `TileClient.CacheVersion`: cambiare formato geo senza
+    /// bumparlo fa riusare ai device le `.v*.geo.json` vecchie in memoria.
     /// </summary>
     public enum WorldHeightMode
     {
