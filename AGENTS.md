@@ -202,3 +202,42 @@ che si tocca altitudine, terreno o spawn, rileggere questa sezione.**
 8. **`CityConfig.WorldHeights` è l'unico interruttore** del mondo piatto/DEM
    (default `Flat` = comportamento del ramo unity). `HeightAt` ritorna 0 in
    `Flat`; i chunk senza `ele` restano piatti in ogni modalità.
+
+## Costi di rendering/fisica: cosa è cambiato rispetto al ramo `unity`
+Il ramo `unity` girava senza lag. Tre differenze misurabili spiegano la
+regressione; due sono già corrette nel codice, la terza è una **decisione di
+prodotto** e va presa di proposito.
+
+1. ~~`CollectJunctions` allocava un `Junction` per ogni nodo della TILE, per
+   ogni chunk~~ **CORRETTO**: due passate, si alloca solo per i nodi condivisi
+   (8× meno, risultato identico).
+2. ~~Le sonde cordolo/ostacolo di ogni auto giravano ogni frame~~ **CORRETTO**:
+   sfalsate 1 frame su 6 (`CarAgent.CurbProbeStagger`), 6× meno
+   `OverlapSphere` per frame.
+3. **Kit edifici predefinito cambiato.** `CityStyle.UseQuaternius` ha default
+   `1`: gli edifici usano i 3 modelli Quaternius (con texture) invece dei 109
+   prefab Kenney. Misurato: FBX 613 KB di mediana contro 52 KB (**11,7×**) e
+   **29,1 MB di texture** che nel ramo `unity` non esistevano. Nel ramo
+   `unity` i Quaternius non erano nemmeno nel progetto. Sono la causa più
+   probabile del lag di rendering: sono anche l'unica voce che si cambia a caldo
+   (hamburger menu → stile edifici, poi serve rigenerare i chunk).
+   Costo per città, con 49 chunk: Roma ~15.700 edifici in scena,
+   Foggia ~4.500, Perugia ~2.800.
+4. **Traffico passato da 90 a ~400 auto.** `TileRoadNetwork.CarsPerTile`
+   10 → 55 e `MaxCars` 150 → 400. Con `CheckObstacle` che scorre tutti gli NPC
+   attivi è il secondo maggior costo per frame. Riportare `CarsPerTile` a 20-25
+   riporta il traffico alla scala del ramo `unity` con un decimo delle sonde.
+5. **Decorazione per ogni edificio.** In `unity` al massimo 8 porte per chunk
+   (filtro area 40-350 m² + 1 su 3). Oggi il budget è tolto (`ResetChunkBudget`
+   è un no-op): ogni edificio ha `Porta` + `PortaSegnaposto` (un Renderer) +
+   `Interno` + `LuceInterna` (una Light), quindi **+4 GameObject, +1 Light,
+   +1 Renderer per edificio**. A Roma sono ~63.000 GameObject in più.
+   L'interno è lazy (non viene costruito se il player non entra), ma i quattro
+   oggetti vengono creati subito.
+6. `ChunkData.SetLod` chiama `GetComponentsInChildren<BoxCollider>(true)` su
+   tutto l'albero edifici a ogni cambio LOD: con la decorazione di cui al
+   punto 5 l'array da scansionare è ~2× più grande.
+
+**Regola:** quando si tocca il kit edifici o il numero di veicoli, ricordare che
+sono le due leve principali sul frame rate. Prima di alzare qualcosa, misurare
+con i dati (`tools/`), non a occhio.
