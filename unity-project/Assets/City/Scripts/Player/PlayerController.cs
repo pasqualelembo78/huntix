@@ -50,6 +50,23 @@ namespace City.Player
         private float _nextGroundLogAt;
         private const float GroundFollowClearance = 0.02f;
 
+        /// <summary>INTERRUTTORE DI VERIFICA per il follower verticale.
+        /// Messo a `false` il player si affida SOLO al CharacterController
+        /// (gravita' + isGrounded), cioe' esattamente il comportamento del ramo
+        /// `unity`, che funzionava: nessun sistema scrive piu' la Y del player.
+        ///
+        /// Serve per la prova A/B sul device: se il personaggio sembra ancora
+        /// sospeso/affondato di qualche centimetro mentre cammina, mettere qui
+        /// `false` e ricostruire. Se il difetto sparisce, il colpevole e' il
+        /// follower (unico sistema di gestione verticale nato DOPO il ramo
+        /// unity che agisce sul player ogni frame); se resta, il problema e'
+        /// altrove. Non toccarlo finche' non e' stato provato sul device.
+        /// Nota: in modalita' piatta (`CityConfig.WorldHeights == Flat`) il
+        /// follower e' gia' quasi sempre un no-op (la deadzone di 2 cm copre gli
+        /// 8 cm asfalto-terreno e i 9 cm del cordolo), quindi l'A/B dovrebbe
+        /// dare poca differenza: se ne dà tanto, quello e' il bug.</summary>
+        public const bool GroundFollowEnabled = true;
+
         private int airJumpCount;
         private const int MaxAirJumps = 1;
 
@@ -509,6 +526,7 @@ namespace City.Player
         /// </summary>
         private void GroundFollow()
         {
+            if (!GroundFollowEnabled) return;
             if (controller == null || !controller.enabled) return;
             if (City.Game.Instance != null && City.Game.Instance.IsDriving) return;
             if (flying) return;   // volo Paradiso: quota pilotata a mano
