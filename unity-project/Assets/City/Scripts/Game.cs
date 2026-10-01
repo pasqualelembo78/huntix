@@ -613,40 +613,25 @@ namespace City
         }
 
         /// <summary>Snap alla superficie del terreno usando raycast (preferito)
-/// o fallback DEM. Evita che il player finisca sotto la strada o nel terreno.</summary>
+/// o fallback DEM. Evita che il player finisca sotto la strada o nel terreno.
+///
+/// Delegato a CityChunkedWorld.TryGroundColumn: UNA sola implementazione per
+/// spawn, uscita dal veicolo e teletrasporto. Il vecchio codice qui dentro
+/// prendeva il collider PIU' ALTO della colonna (`if (hit.y &gt; bestY)`),
+/// sbagliato in ogni caso masilenziosamente corretto finche' il mondo era
+/// piatto; col DEM metteva il player sul tetto dell'edificio piu' alto.
+/// </summary>
         private Vector3 SnapToGroundForTeleport(Vector3 pos)
         {
-            Transform bridge = CityChunkedWorld.Instance != null &&
-                CityChunkedWorld.Instance.SpawnBridge != null
-                ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
-            Transform playerRoot = player != null
-                ? player.transform : null;
-
-            // raggio da 200m sopra verso il basso: colpisce la mesh terreno
-            // dall'esterno (evita la faccia interna unidirezionale)
-            Vector3 from = pos + Vector3.up * 200f;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 400f);
-            float bestY = float.MinValue;
-            for (int i = 0; i < hits.Length; i++)
+            Vector3 snapped;
+            string colName;
+            if (CityChunkedWorld.TryGroundColumn(pos, player != null
+                    ? player.transform : null, 1.2f, 400f, out snapped, out colName))
             {
-                if (hits[i].collider == null) continue;
-                var t = hits[i].collider.transform;
-                // salta player e SpawnBridge
-                if (playerRoot != null &&
-                    (t == playerRoot || t.IsChildOf(playerRoot)))
-                    continue;
-                if (bridge != null &&
-                    (t == bridge || t.IsChildOf(bridge)))
-                    continue;
-                if (hits[i].point.y > bestY)
-                    bestY = hits[i].point.y;
-            }
-            if (bestY > float.MinValue)
-            {
-                pos.y = bestY + 1.2f;
-                OsmDiag.Log("[Game][SnapTp] raycast -> y=" + pos.y.ToString("F2") +
-                    " (hits=" + hits.Length + ")");
-                return pos;
+                OsmDiag.Log("[Game][SnapTp] superficie -> y=" +
+                    snapped.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) +
+                    " (collider " + colName + ")");
+                return snapped;
             }
             // fallback: DEM
             float dem = TileElevation.HeightAtWorld(pos);
@@ -1032,37 +1017,15 @@ namespace City
         /// di sicurezza dopo l'uscita da un veicolo.</summary>
         private Vector3 SnapToGround(Vector3 pos)
         {
-            Transform bridge = CityChunkedWorld.Instance != null &&
-                CityChunkedWorld.Instance.SpawnBridge != null
-                ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
-            Transform playerRoot = player != null
-                ? player.transform : null;
-
-            // raggio da 200m sopra verso il basso: colpisce la mesh terreno
-            // dall'esterno (evita la faccia interna unidirezionale)
-            Vector3 from = pos + Vector3.up * 200f;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 400f);
-            float bestY = float.MinValue;
-            for (int i = 0; i < hits.Length; i++)
+            Vector3 snapped;
+            string colName;
+            if (CityChunkedWorld.TryGroundColumn(pos, player != null
+                    ? player.transform : null, 1.0f, 400f, out snapped, out colName))
             {
-                if (hits[i].collider == null) continue;
-                var t = hits[i].collider.transform;
-                // salta player e SpawnBridge
-                if (playerRoot != null &&
-                    (t == playerRoot || t.IsChildOf(playerRoot)))
-                    continue;
-                if (bridge != null &&
-                    (t == bridge || t.IsChildOf(bridge)))
-                    continue;
-                if (hits[i].point.y > bestY)
-                    bestY = hits[i].point.y;
-            }
-            if (bestY > float.MinValue)
-            {
-                pos.y = bestY + 1.0f;
-                OsmDiag.Log("[Game][Snap] raycast -> y=" + pos.y.ToString("F2") +
-                    " (hits=" + hits.Length + ")");
-                return pos;
+                OsmDiag.Log("[Game][Snap] superficie -> y=" +
+                    snapped.y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) +
+                    " (collider " + colName + ")");
+                return snapped;
             }
             // fallback: DEM
             float dem = TileElevation.HeightAtWorld(pos);

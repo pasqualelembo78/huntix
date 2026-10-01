@@ -975,12 +975,17 @@ private const float TerrainPhysxTimeoutS = 15f;
             return from;
         }
 
-        /// <summary>Raycast verso il basso che restituisce il primo collider di
-        /// TERRA sotto il punto, ignorando il player (e la sua gerarchia) e il
-        /// ponte di sicurezza. A differenza di RayTerrainBelow (primo hit
+        /// <summary>Raycast verso il basso che restituisce il collider di TERRA
+        /// PIU' VICINO sotto il punto, ignorando il player (e la sua gerarchia)
+        /// e il ponte di sicurezza. A differenza di RayTerrainBelow (primo hit
         /// qualsiasi) esclude anche il ponte: quando il terreno e' piatto il
         /// ponte coplanare verrebbe colpito per primo e maschererebbe il vero
-        /// terreno sottostante.</summary>
+        /// terreno sottostante.
+        ///
+        /// NB: `Physics.RaycastAll` NON restituisce i hit ordinati per distanza,
+        /// quindi prendere `hits[0]` era un bug: si poteva agganciare una
+        /// superficie lontana (o il tetto di un veicolo) invece del suolo sotto
+        /// i piedi. Qui si seleziona il minimo per `distance`.</summary>
         private bool FirstTerrainHitBelow(Vector3 from, float maxDist,
             int mask, out RaycastHit result)
         {
@@ -988,7 +993,10 @@ private const float TerrainPhysxTimeoutS = 15f;
             Transform playerRoot = City.Game.Instance != null &&
                 City.Game.Instance.player != null
                 ? City.Game.Instance.player.transform : null;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist, mask);
+            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist, mask,
+                QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            bool found = false;
             for (int i = 0; i < hits.Length; i++)
             {
                 if (hits[i].collider == null) continue;
@@ -998,10 +1006,62 @@ private const float TerrainPhysxTimeoutS = 15f;
                 if (_spawnBridge != null &&
                     (t == _spawnBridge.transform || t.IsChildOf(_spawnBridge.transform)))
                     continue;
+                if (hits[i].distance >= best) continue;
+                best = hits[i].distance;
                 result = hits[i];
-                return true;
+                found = true;
             }
-            return false;
+            return found;
+        }
+
+        /// <summary>
+        /// SNAP DI COLONNA: mette `worldPos` sulla superficie calpestabile piu'
+        /// vicina sotto di se'. Unico punto in tutto il progetto (spawn, uscita
+        /// dal veicolo, teletrasporto a un POI, soccorso) cosi' il player non
+        /// puo' finire da tre parti diverse.
+        ///
+        /// Regole (una volta sbagliata, tre volte di fila):
+        ///  - la mask esclude gli EDIFICI (layer 8): i tetti non sono terreno;
+        ///  - si prende l'hit PIU' VICINO, non il piu' ALTO. Il codice storico
+        ///    faceva `if (hit.y &gt; bestY) bestY = hit.y`, cioe' il tetto piu'
+        ///    alto della colonna: nel mondo piatto (tutto a quota 0) dava lo
+        ///    stesso risultato, ma con il DEM la colonna contiene marciapiedi,
+        ///    strade e palazzi e il player veniva piazzato sul tetto piu' alto
+        ///    (sospeso in aria, o incastrato dentro un edificio);
+        ///  - il fallback DEM non e' "meglio": e' l'ultima risorsa, quando la
+        ///    fisica non c'e' ancora (chunk non costruiti).
+        ///
+        /// Ritorna false solo se non c'e' NESSUNA superficie (il caller decide
+        /// cosa fare: DEM, SpawnBridge a 1.2 m, o blocco dello spawn).
+        /// </summary>
+        public static bool TryGroundColumn(Vector3 worldPos, Transform self,
+            float clearance, float maxDist, out Vector3 snapped,
+            out string colliderName)
+        {
+            snapped = worldPos;
+            colliderName = "";
+            Vector3 from = RayStartAboveSurface(worldPos);
+            Transform bridge = Instance != null && Instance._spawnBridge != null
+                ? Instance._spawnBridge.transform : null;
+            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist,
+                GroundSnapper.WalkableMask, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            bool found = false;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (hits[i].collider == null) continue;
+                var t = hits[i].collider.transform;
+                if (self != null && (t == self || t.IsChildOf(self))) continue;
+                if (bridge != null && (t == bridge || t.IsChildOf(bridge))) continue;
+                if (hits[i].normal.y < GroundSnapper.ShortNorm) continue;
+                if (hits[i].distance >= best) continue;
+                best = hits[i].distance;
+                snapped = new Vector3(worldPos.x,
+                    hits[i].point.y + clearance, worldPos.z);
+                colliderName = hits[i].collider.name;
+                found = true;
+            }
+            return found;
         }
 
         /// <summary>Raycast verso il basso che salta il collider del player e di
