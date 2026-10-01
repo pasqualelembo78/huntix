@@ -463,11 +463,11 @@ namespace City.OSM
         /// impronta in coordinate locali al chunk. Ritorna false se manca il
         /// prefab o il record e' degenere.
         /// </summary>
-        /// <param name="terrainHeights">Dictionary opzionale {Vector2 localPos -> altezza in metri}.
+        /// <param name="heights">Quote del terreno del chunk, gia' indicizzate.
         /// Se fornito, l'edificio viene sollevato di tale altezza sul terreno.</param>
         public static bool Place(Huntix.Core.CityKitAssetRegistry registry,
             Transform parent, TileBuildingRec b, Vector3 centerLocal,
-            Dictionary<Vector2, float> terrainHeights = null)
+            TerrainHeightField heights = null)
         {
             if (b.c == null || b.c.Length < 2 || b.d == null || b.d.Length < 2)
                 return false;
@@ -479,16 +479,16 @@ namespace City.OSM
             // l'impronta (stesso macchinario degli in-place, v. BuildingPlacer
             // ridotto: BuildingEntrance.Enter con fade). Mai edifici assenti o
             // parziali: il prefab completo resta il vero corpo dell'edificio.
-            return PlaceLegacy(registry, parent, b, centerLocal, w, d, terrainHeights);
+            return PlaceLegacy(registry, parent, b, centerLocal, w, d, heights);
         }
 
         /// <summary>Percorso legacy: prefab Kenney/Quaternius pieno. Completo e
         /// robusto (edificio chiuso non enterabile): mai parziale.</summary>
-        /// <param name="terrainHeights">Dictionary opzionale {Vector2 localPos -> altezza in metri}.
+        /// <param name="heights">Quote del terreno del chunk, gia' indicizzate.
         /// Se fornito, l'edificio viene sollevato di tale altezza sul terreno.</param>
         private static bool PlaceLegacy(Huntix.Core.CityKitAssetRegistry registry,
             Transform parent, TileBuildingRec b, Vector3 centerLocal, float w, float d,
-            Dictionary<Vector2, float> terrainHeights = null)
+            TerrainHeightField heights = null)
         {
             float h;
             // isolato ~120 m: gli edifici vicini condividono stile e fascia
@@ -604,26 +604,15 @@ namespace City.OSM
                 centerLocal.z - wb.center.z);
             inst.transform.localPosition = pos;
 
-            // Aggiungi altezza terreno se disponibile
-            if (terrainHeights != null)
+            // Solleva l'edificio alla quota del terreno sotto di lui. `heights`
+            // e' gia' indicizzato in griglia (costruito una volta per chunk),
+            // quindi la ricerca del campione piu' vicino e' O(1): il vecchio
+            // codice faceva una scansione lineare di TUTTE le quote del chunk
+            // per ogni edificio (4692 voci x ~150-5800 edifici = centinaia di
+            // milioni di confronti per citta', dentro il loop di build).
+            if (heights != null)
             {
-                // Posizione approssimativa dell'edificio (centro footprint)
-                float buildX = centerLocal.x;
-                float buildZ = centerLocal.z;
-                // Cerca l'altezza del terreno più vicina
-                float nearestHeight = 0f;
-                float nearestDistSq = float.MaxValue;
-                foreach (var kv in terrainHeights)
-                {
-                    float distSq = (buildX - kv.Key.x) * (buildX - kv.Key.x) +
-                                   (buildZ - kv.Key.y) * (buildZ - kv.Key.y);
-                    if (distSq < nearestDistSq)
-                    {
-                        nearestDistSq = distSq;
-                        nearestHeight = kv.Value;
-                    }
-                }
-                // Solleva l'edificio dall'altezza del terreno (aggiunge sopra y=0)
+                float nearestHeight = heights.HeightNear(centerLocal.x, centerLocal.z);
                 inst.transform.localPosition += new Vector3(0f, nearestHeight, 0f);
             }
 

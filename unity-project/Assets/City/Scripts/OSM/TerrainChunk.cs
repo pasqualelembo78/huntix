@@ -8,6 +8,17 @@ namespace City.OSM
         private const float Y_TERRAIN = -0.05f;
         private static Material _grassMat;
 
+        /// <summary>Passo (metri) del campionamento con cui
+        /// `ChunkBuilder.CollectDemHeights` riempie il dizionario delle quote di
+        /// un chunk. `BuildHeightMesh` DEVE usare lo stesso passo: ricostruisce
+        /// la griglia dal dizionario assumendone la regolarita' e la
+        /// interlaccia in modo che combaci con le strade (che campionano la
+        /// stessa griglia DEM). Storicamente due numeri magici separati (15 e
+        /// 15) che potevano divergere in silenzio: se divergono il terreno
+        /// comincia a scivolare sotto l'asfalto o a seppellirlo. Un unico
+        /// riferimento elimina la classe di bug.</summary>
+        public const float DemSampleStep = 15f;
+
         public static GameObject Create(Transform parent, string name, Rect area,
             Dictionary<Vector2, float> heights = null, bool demLattice = false)
         {
@@ -65,7 +76,17 @@ namespace City.OSM
         private static Mesh BuildHeightMesh(Rect area, Dictionary<Vector2, float> heights,
             bool demLattice = false)
         {
-            const float step = 10f;
+            // Passo della mesh del terreno. Storico 10 m: produceva 10404 vertici
+            // e 20402 triangoli per chunk (il ramo unity faceva 4 vertici / 2
+            // triangoli, un quad piatto: 1300x piu' geometria di collider, e il
+            // chunk non ha LOD, quindi quei 20k triangoli restavano in PhysX per
+            // sempre). Ma il DEM che alimenta la mesh e' campionato ogni ~250 m
+            // e la mesh era piu' fine di 25 volte del dato: campionare il DEM con
+            // una mesh 10 m non aggiunge informazione, aggiunge solo costo.
+            // 45 m resta sotto la cella DEM (5 celle per chunk) e sotto il passo
+            // di campionamento delle strade, quindi la superficie resta
+            // visivamente indistinguibile da quella a 10 m.
+            const float step = 45f;
             int nx = Mathf.Max(2, Mathf.CeilToInt(area.width / step));
             int nz = Mathf.Max(2, Mathf.CeilToInt(area.height / step));
 
@@ -79,7 +100,7 @@ namespace City.OSM
             //     strade (che usano la stessa bilineare DEM).
             // senno' (proxy edifici, griglia 10 m SPAZZA): restano i bucket
             //   nearest esistenti, giusti per un proxy non denso.
-            float demStep = 15f;
+            float demStep = DemSampleStep;
             int nxS = Mathf.Max(2, Mathf.CeilToInt(area.width / demStep));
             int nzS = Mathf.Max(2, Mathf.CeilToInt(area.height / demStep));
             float[,] demLat = null;

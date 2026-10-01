@@ -16,12 +16,19 @@ namespace City.OSM
     /// </summary>
     public class ChunkManager : MonoBehaviour
     {
-        public const int LoadRadius = 2;    // chunk in ogni direzione (5x5, default conservativo)
-        public const int UnloadRadius = 3;  // isteresi: un anello oltre il carico
+        // Raggio 3 (7x7 = 49 chunk) come nel ramo `unity`, che girava bene.
+        // Era stato ridotto a 2 (25 chunk) per compensare la mesh del terreno a
+        // 10 m, che costava 20402 triangoli di collider PER CHUNK senza LOD:
+        // 510k triangoli in PhysX. Con la mesh a 45 m (1058 tri/chunk, e
+        // collider spento oltre il raggio di marcia) il costo e' 26k, quindi il
+        // raggio corto non serve piu' e tornerebbe solo a far uscire il player
+        // dal mondo caricato piu' in fretta, con il vuoto davanti.
+        public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
+        public const int UnloadRadius = 4;  // isteresi: un anello oltre il carico
         private const float TickIntervalS = 0.25f;
         private const long BuildBudgetMs = 12;
 
-        /// <summary>Chunk totali dentro il raggio di carico (5x5) a fine load.</summary>
+        /// <summary>Chunk totali dentro il raggio di carico (7x7) a fine load.</summary>
         public const int ExpectedChunkCount = (2 * LoadRadius + 1) * (2 * LoadRadius + 1);
 
         /// <summary>Build coroutine attive: max 1 per volta. Senza serializzazione

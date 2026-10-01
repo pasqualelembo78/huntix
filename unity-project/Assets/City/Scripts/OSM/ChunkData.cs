@@ -35,6 +35,11 @@ namespace City.OSM
         /// loro MeshCollider (cordoli) resta attivo solo al livello 0: da
         /// lontano non serve urtare contro un cordolo invisibile, e risparmia
         /// fisica sui chunk lontani.
+        ///
+        /// Il TERRENO non si spegne mai (sotto i piedi non puo' mancare), ma il
+        /// suo collider si accende solo entro il raggio di marcia: un
+        /// MeshCollider da ~1k triangoli per 25-49 chunk e' la voce piu' grossa
+        /// del broadphase di PhysX e i chunk lontani non li tocca nessuno.
         /// </summary>
         public void SetLod(int level)
         {
@@ -43,6 +48,8 @@ namespace City.OSM
 
             if (natureGo != null) natureGo.SetActive(level <= 0);
             if (npcsGo != null) npcsGo.SetActive(level <= 1);
+            if (terrainGo != null)
+                SetTerrainCollider(terrainGo, level <= TerrainColliderLod);
             if (sidewalksGo != null)
             {
                 sidewalksGo.SetActive(level <= 1);
@@ -66,6 +73,18 @@ namespace City.OSM
                     SetBuildingColliders(buildingsGo, true);
             }
             if (airportsGo != null) airportsGo.SetActive(level <= 1);
+        }
+
+        /// <summary>LOD fino al quale il MeshCollider del terreno resta in
+        /// PhysX. Il chunk sotto i piedi e' sempre LOD0, quindi il collider
+        /// del suolo che calpesti e' SEMPRE attivo: il risparmio riguarda solo
+        /// gli anelli esterni, dove nessuno arriva a camminare.</summary>
+        public const int TerrainColliderLod = 1;
+
+        private static void SetTerrainCollider(GameObject terrainGo, bool on)
+        {
+            var col = terrainGo.GetComponent<MeshCollider>();
+            if (col != null) col.enabled = on;
         }
 
         private static void SetSidewalkCollider(GameObject sidewalksGo, bool on)

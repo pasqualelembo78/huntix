@@ -113,19 +113,23 @@ namespace City.OSM
 
             // ── terreno ──
             Section("Terreno");
-            Dictionary<Vector2, float> terrainHeights = null;
+            TerrainHeightField heights = null;
             try
             {
                 // NB: demLattice=true solo se le altezze vengono dalla griglia
-                // DEM regolare (~15 m). Col proxy edifici (sparso) il terreno
-                // resta sul nearest-bucket. La bilineare fa combaciare il
-                // terreno con le strade (stessa griglia ele) anche sui pendii.
+                // DEM regolare. La bilineare fa combaciare il terreno con le
+                // strade (stessa griglia ele) anche sui pendii. Senza DEM la
+                // raccolta torna vuota: terreno piatto, mai "proxy edifici"
+                // (vedi CollectTerrainHeights).
                 bool dem = geo != null && geo.ele != null && geo.ele.Length > 0 &&
                     geo.ele_nrow > 1 && geo.ele_ncol > 1 &&
                     geo.bbox != null && geo.bbox.Length >= 4;
-                terrainHeights = CollectTerrainHeights(geo, ToLocal, bounds, originWorld);
+                var raw = CollectTerrainHeights(geo, ToLocal, bounds, originWorld);
+                // Indicizzo una volta sola: gli edifici useranno questo
+                // (lookup O(1)) invece di riscansionare il dizionario.
+                heights = TerrainHeightField.Build(raw, bounds);
                 chunk.terrainGo = TerrainChunk.Create(chunk.root.transform, "Terreno",
-                    bounds, terrainHeights, dem);
+                    bounds, raw, dem);
             }
             catch (System.Exception e)
             {
@@ -275,7 +279,7 @@ namespace City.OSM
                         if (!bounds.Contains(new Vector2(p.x, p.z))) continue;
                         if (poiSpots != null && poiSpots.Count > 0 &&
                             IsNearPoi(poiSpots, p)) continue;
-                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p, terrainHeights))
+                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p, heights))
                             placed++;
                     }
                     catch (System.Exception e)
@@ -461,32 +465,18 @@ namespace City.OSM
                 return CollectDemHeights(geo, bounds, originWorld);
             }
 
-            // Fallback (nessun DEM): proxy altimetrico dalle altezze edifici.
-            var heights = new Dictionary<Vector2, float>();
-            if (geo == null || geo.buildings == null) return heights;
-
-            var buildings = geo.buildings;
-            for (int i = 0; i < buildings.Length; i++)
-            {
-                var b = buildings[i];
-                if (b == null || b.c == null || b.c.Length < 2) continue;
-
-                float h;
-                BuildingPlacer.PickPrefabName(b, out h, 0);
-
-                var ll = new GeoLL { a = b.c[0], o = b.c[1] };
-                var p = toLocal(ll);
-                if (p.x < bounds.xMin || p.x > bounds.xMax ||
-                    p.z < bounds.yMin || p.z > bounds.yMax) continue;
-
-                int gx = Mathf.RoundToInt(p.x / 10f) * 10;
-                int gz = Mathf.RoundToInt(p.z / 10f) * 10;
-                var key = new Vector2(gx, gz);
-                float cur;
-                if (!heights.TryGetValue(key, out cur) || h > cur)
-                    heights[key] = h;
-            }
-            return heights;
+            // NESSUN DEM nella geo: storicamente si usava un "proxy
+            // altimetrico" ricavato dalle ALTEZZE DEGLI EDIFICI (la griglia
+            // 'heights' diventava il terreno). Era un disastro: il collider
+            // del terreno risultava una scala di altezze di palazzi (10-30 m),
+            // quindi il player camminava sui tetti, e inoltre ogni edificio
+            // veniva poi sollevato di `nearestHeight` (un'altezza di edificio)
+            // finendo sospeso a 20-30 m. Una tile senza DEM e' semplicemente
+            // una tile PIATTA: si cammina e basta.
+            //
+            // Perche' capita: DEM assente finche' il backfill dem_warm non
+            // e' passato, o la tile e' in mare/vuoto (fuori coverage SRTM).
+            return new Dictionary<Vector2, float>();
         }
 
         /// <summary>Risolve l'elevazione reale (s.l.m.) su una griglia fine dentro
@@ -495,18 +485,20 @@ namespace City.OSM
         private static Dictionary<Vector2, float> CollectDemHeights(
             TileGeoDoc geo, Rect bounds, Vector3 originWorld)
         {
-            var heights = new Dictionary<Vector2, float>();
+            // Griglia di campionamento: passo condiviso con TerrainChunk, cosi'
+            // la mesh che ne deriva combacia con le strade (stessa griglia DEM).
+            // Circa 68x68 voci per chunk da ~1 km.
+            const float step = TerrainChunk.DemSampleStep;
+            int nx = Mathf.Max(2, Mathf.CeilToInt(bounds.width / step));
+            int nz = Mathf.Max(2, Mathf.CeilToInt(bounds.height / step));
+
+            var heights = new Dictionary<Vector2, float>((nx + 1) * (nz + 1));
             int nrow = geo.ele_nrow;
             int ncol = geo.ele_ncol;
             double latMin = geo.bbox[0], lonMin = geo.bbox[1];
             double latMax = geo.bbox[2], lonMax = geo.bbox[3];
             float[] ele = geo.ele;
 
-            // Griglia di campionamento ~ ogni 15 m per avere un vertice near per
-            // ogni vertice del terreno (33x33 su ~1000 m) -> interpolazione pulita.
-            const float step = 15f;
-            int nx = Mathf.Max(2, Mathf.CeilToInt(bounds.width / step));
-            int nz = Mathf.Max(2, Mathf.CeilToInt(bounds.height / step));
             for (int i = 0; i <= nx; i++)
             {
                 float x = bounds.xMin + bounds.width * i / nx;
