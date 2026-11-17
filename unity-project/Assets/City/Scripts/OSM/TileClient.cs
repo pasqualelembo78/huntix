@@ -180,6 +180,10 @@ namespace City.OSM
     {
         public static void Log(string msg)
         {
+            // Debug.Log passa da Application.logMessageReceived (ErrorSurface):
+            // senza soppressione il messaggio arriva due volte ad Android
+            // (copia col tag "OSM" qui sotto + re-forward col tag [..]/[Log]).
+            Huntix.Core.ErrorSurface.SuppressNextAndroid();
             UnityEngine.Debug.Log(msg);
             try { Huntix.Bridge.UnityBridge.LogToAndroid("OSM", msg); }
             catch (Exception) {}
@@ -210,6 +214,7 @@ namespace City.OSM
             if (_throttle.TryGetValue(key, out last) && now - last < minIntervalSec)
                 return;
             _throttle[key] = now;
+            Huntix.Core.ErrorSurface.SuppressNextAndroid();
             UnityEngine.Debug.Log(msg);
             try { Huntix.Bridge.UnityBridge.LogToAndroid(category, msg); }
             catch (Exception) {}

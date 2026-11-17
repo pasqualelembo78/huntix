@@ -1748,12 +1748,14 @@ namespace City.Interior
 
         private void Log(string msg)
         {
+            Huntix.Core.ErrorSurface.SuppressNextAndroid();
             Debug.Log("[InteriorGenerator] " + msg);
             UnityBridge.LogToAndroid("InteriorGenerator", msg);
         }
 
         private void LogW(string msg)
         {
+            Huntix.Core.ErrorSurface.SuppressNextAndroid();
             Debug.LogWarning("[InteriorGenerator] " + msg);
             UnityBridge.LogToAndroid("InteriorGenerator", "WARN: " + msg);
         }

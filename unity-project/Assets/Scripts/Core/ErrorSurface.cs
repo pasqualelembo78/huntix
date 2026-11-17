@@ -14,7 +14,20 @@ namespace Huntix.Core
         static readonly List<string> Errors = new List<string>();
         static int _repeatCount;
         [System.ThreadStatic] static bool _inLogHandler;
+        [System.ThreadStatic] static bool _skipAndroidOnce;
         static volatile bool _quitting;
+
+        /// <summary>
+        /// Mette in lista d'attesa un messaggio che NON deve essere rinviato ad
+        /// Android: OsmDiag lo invia gia' da solo (UnityBridge.LogToAndroid) e
+        /// il re-forward di Application.logMessageReceived produrrebbe DOPPIONI
+        /// nel log (una riga con tag "OSM" e una copia col tag derivato dal
+        /// prefisso [..] e pedice "[Log]"). La console Unity resta comunque.
+        /// </summary>
+        public static void SuppressNextAndroid()
+        {
+            _skipAndroidOnce = true;
+        }
 
         [Preserve]
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -44,6 +57,11 @@ namespace Huntix.Core
         {
             if (_inLogHandler || _quitting) return;
             _inLogHandler = true;
+            // se OsmDiag ha gia' inviato questo messaggio ad Android, non
+            // rieseguire il forward: la riga e' gia' nel log con tag proprio.
+            // (Un solo messaggio saltato: il flag e' thread-static one-shot.)
+            bool skipAndroid = _skipAndroidOnce;
+            _skipAndroidOnce = false;
             try
             {
                 bool isProblem = type == LogType.Error || type == LogType.Exception || type == LogType.Assert;
@@ -78,9 +96,12 @@ namespace Huntix.Core
                     int close = condition.IndexOf(']');
                     if (close > 1) tag = condition.Substring(1, close - 1);
                 }
-                UnityBridge.LogToAndroid(tag, "[" + type + "] " + (condition.Length > 300 ? condition.Substring(0, 300) + "..." : condition));
-                if (isProblem && stackTrace.Length > 0)
-                    UnityBridge.LogToAndroid(tag, "STACK: " + (stackTrace.Length > 500 ? stackTrace.Substring(0, 500) + "..." : stackTrace));
+                if (!skipAndroid)
+                {
+                    UnityBridge.LogToAndroid(tag, "[" + type + "] " + (condition.Length > 300 ? condition.Substring(0, 300) + "..." : condition));
+                    if (isProblem && stackTrace.Length > 0)
+                        UnityBridge.LogToAndroid(tag, "STACK: " + (stackTrace.Length > 500 ? stackTrace.Substring(0, 500) + "..." : stackTrace));
+                }
 
                 try
                 {
