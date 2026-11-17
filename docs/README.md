@@ -18,6 +18,7 @@ e crescendo il proprio team di creature.
 | Meccanica | Descrizione |
 |---|---|
 | 🥚 Uova rare | Uova con elementi (Acqua, Terra, Aria, Fuoco, Normale) e rarità crescenti |
+| 🗄 Uova nascoste | Uova celate nei cassetti/arredi degli edifici 3D; luogo e coordinate finiscono nel profilo ("DOVE HO TROVATO L'UOVO") |
 | 🪣 Secchielli | Strumenti di cattura con rate diversi (Base, Super, Ultra) |
 | 🏟 Palestre | Allenamento e sfida tra giocatori |
 | 🏛 Edifici | Visita luoghi con bisogni da soddisfare e ricompense |
@@ -76,6 +77,8 @@ huntix/
 │   │   ├── res/               — layout, drawable, stringhe
 │   │   └── AndroidManifest.xml
 │   └── build.gradle
+├── unity-project/              — Unity 2022.3 LTS (città OSM 3D, AR, interni, uova nei cassetti)
+├── unityLibrary/               — AAR Unity integrato nell'app Android
 ├── backend/                    — backend Python (AI, chat, auth)
 ├── functions/                  — Firebase Cloud Functions
 ├── scripts/                    — script utili (deploy regole, ricorrenze)
