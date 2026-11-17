@@ -58,6 +58,12 @@ object AppLog {
     private val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val exportSdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
 
+    /** Identificativo univoco della sessione corrente (timestamp + casuale):
+     *  serve a distinguere sessioni "identiche" nei log multi-sessione
+     *  (due avvii ravvicinati dopo un crash nativo sembrano lo stesso giro). */
+    private fun sessionId(): String =
+        java.util.UUID.randomUUID().toString().substring(0, 13)
+
     fun init(context: Context) {
         appContext = context.applicationContext
         logFile = File(context.filesDir, LOG_FILE)
@@ -71,6 +77,10 @@ object AppLog {
         log(
             Level.I, "AppLog",
             "=== NEW SESSION === ${Build.MANUFACTURER} ${Build.MODEL} (API ${Build.VERSION.SDK_INT})"
+        )
+        log(
+            Level.I, "AppLog",
+            "SESSIONE ID ${sessionId()} (start ${sdf.format(Date())})"
         )
         try {
             val pm = context.packageManager
@@ -240,8 +250,14 @@ private fun log(level: Level, tag: String, msg: String) {
     private fun sessionFiles(): List<File> {
         val ctx = appContext ?: return emptyList()
         val archives = try {
+            // Il file ATTIVO (city3d_debug.log) matcha anche il pattern
+            // "city3d_debug.*.log": va escluso dagli archivi, altrimenti la
+            // sessione corrente appare DUE volte nel log multi-sessione
+            // ("SESSIONE i" e piu' avanti "SESSIONE j" identiche, entrambe
+            // puntate al file attivo).
             ctx.filesDir.listFiles { _, name ->
-                name.startsWith("city3d_debug.") && name.endsWith(".log")
+                name.startsWith("city3d_debug.") && name.endsWith(".log") &&
+                    name != LOG_FILE
             }?.sortedByDescending { it.name } ?: emptyList()
         } catch (_: Exception) { emptyList() }
         val f = logFile

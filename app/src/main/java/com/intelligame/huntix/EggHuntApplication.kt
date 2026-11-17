@@ -156,7 +156,8 @@ class EggHuntApplication : Application() {
             }
             val signal = if (info.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
                     || info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) info.status else null
-            AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal pid=${info.pid} t=${info.timestamp} desc=${info.description}")
+            AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal" +
+                    " signame=${signalName(signal)} pid=${info.pid} t=${info.timestamp} desc=${info.description}")
             // Su API 30+ il trace nativo (stack `#00 pc ...` dei crash SIGSEGV)
             // NON passa dall'handler Java di AppLog: arriva qui tramite
             // ApplicationExitInfo.traceInputStream. Se Android lo ha popolato,
@@ -187,10 +188,29 @@ class EggHuntApplication : Application() {
             } else {
                 // Nessuno stack: tipico quando il processo è stato SIGKILLato
                 // (il motivo resta SIGNALED/SIGSEGV ma senza dump del kernel).
-                AppLog.i("AppExit", "trace: NESSUNO (traceInputStream vuoto/non disponibile - SIGKILL del processo)")
+                AppLog.i("AppExit", "trace: NESSUNO (traceInputStream vuoto/non disponibile - processo terminato senza dump)")
             }
         } catch (e: Exception) {
             Log.w("HuntixApp", "exit reason log failed: ${e.message}")
         }
+    }
+
+    /** Nome del segnale POSIX corrispondente a un exit status (SIGSEGV=11, ...). */
+    private fun signalName(signal: Int?): String? = when (signal) {
+        1 -> "SIGHUP"
+        2 -> "SIGINT"
+        3 -> "SIGQUIT"
+        4 -> "SIGILL"
+        5 -> "SIGTRAP"
+        6 -> "SIGABRT"
+        7 -> "SIGBUS"
+        8 -> "SIGFPE"
+        9 -> "SIGKILL"
+        11 -> "SIGSEGV"
+        13 -> "SIGPIPE"
+        14 -> "SIGALRM"
+        15 -> "SIGTERM"
+        31 -> "SIGSYS"
+        else -> null
     }
 }
