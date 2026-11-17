@@ -19,6 +19,15 @@ namespace Huntix.Core
         public static GameManager Instance => null;
         public CityKitAssetRegistry cityKitRegistry;
     }
+
+    // Stub dell'API di ErrorSurface: il file reale sta in Assets/Scripts/Core,
+    // fuori dallo scope di check.sh (che compila solo Assets/City/Scripts).
+    // Serve ai nuovi log City che sopprimono il re-forward ad Android dei
+    // messaggi già inviati direttamente da OsmDiag/InteriorGenerator.
+    public class ErrorSurface
+    {
+        public static void SuppressNextAndroid() { }
+    }
 }
 
 namespace City.OSM
