@@ -14,6 +14,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
 import com.intelligame.huntix.AppLog
+import com.intelligame.huntix.bridge.StoreUnityBridge
 
 /**
  * Debug log viewer.
@@ -103,6 +104,25 @@ class CityDebugLogActivity : AppCompatActivity() {
             refreshLog()
         })
         header.addView(btnRow2)
+
+        // Prova A/B del follower verticale: commuta a runtime senza ricompilare.
+        val btnRow3 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 4.dp(), 0, 0)
+            gravity = Gravity.END
+        }
+        btnRow3.addView(smallBtn("Follower ON/OFF", "#B26A00") {
+            try {
+                StoreUnityBridge.sendToUnityIfAlive(
+                    "GameManager", "OnEvent", "{\"action\":\"toggleGroundFollow\"}")
+                Toast.makeText(this, "Follower commutato: vedi [WalkDiag] nel log",
+                    Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Comando non inviato: ${e.message}",
+                    Toast.LENGTH_SHORT).show()
+            }
+        })
+        header.addView(btnRow3)
 
         // Log text
         logTextView = TextView(this).apply {

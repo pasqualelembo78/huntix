@@ -50,22 +50,50 @@ namespace City.Player
         private float _nextGroundLogAt;
         private const float GroundFollowClearance = 0.02f;
 
+        // ── Diagnostica camminata ([WalkDiag], una riga/s su AppLog Android) ──
+        private float _walkDiagNextAt;
+        private int _followCorrections;
+        private float _followMaxErr;
+        private string _followLastSource = "";
+        private float _lastTargetSpeed;
+        private float _lastDirDot;
+
         /// <summary>INTERRUTTORE DI VERIFICA per il follower verticale.
         /// Messo a `false` il player si affida SOLO al CharacterController
         /// (gravita' + isGrounded), cioe' esattamente il comportamento del ramo
         /// `unity`, che funzionava: nessun sistema scrive piu' la Y del player.
         ///
-        /// Serve per la prova A/B sul device: se il personaggio sembra ancora
-        /// sospeso/affondato di qualche centimetro mentre cammina, mettere qui
-        /// `false` e ricostruire. Se il difetto sparisce, il colpevole e' il
-        /// follower (unico sistema di gestione verticale nato DOPO il ramo
-        /// unity che agisce sul player ogni frame); se resta, il problema e'
-        /// altrove. Non toccarlo finche' non e' stato provato sul device.
+        /// Serve per la prova A/B sul device: con il follower OFF il player si
+        /// affida solo al CharacterController (comportamento del ramo `unity`).
+        /// Il valore e' in PlayerPrefs e si commuta a runtime dal pulsante nel
+        /// viewer dei log Android ("Follower ON/OFF"), senza ricompilare.
+        /// Ogni riga [WalkDiag] nel log riporta lo stato corrente.
         /// Nota: in modalita' piatta (`CityConfig.WorldHeights == Flat`) il
-        /// follower e' gia' quasi sempre un no-op (la deadzone di 2 cm copre gli
-        /// 8 cm asfalto-terreno e i 9 cm del cordolo), quindi l'A/B dovrebbe
-        /// dare poca differenza: se ne dà tanto, quello e' il bug.</summary>
-        public const bool GroundFollowEnabled = true;
+        /// follower dovrebbe essere quasi un no-op (deadzone 2 cm): se l'A/B
+        /// da' molta differenza, quello e' il bug.</summary>
+        public const string GroundFollowPrefKey = "huntix_ground_follow";
+        private static bool? _groundFollowCached;
+
+        /// <summary>Stato corrente, letto da PlayerPrefs una volta e tenuto in cache.</summary>
+        public static bool GroundFollowEnabled
+        {
+            get
+            {
+                if (!_groundFollowCached.HasValue)
+                    _groundFollowCached = PlayerPrefs.GetInt(GroundFollowPrefKey, 1) == 1;
+                return _groundFollowCached.Value;
+            }
+        }
+
+        /// <summary>Commuta il follower a runtime e ritorna il nuovo stato.</summary>
+        public static bool ToggleGroundFollow()
+        {
+            bool next = !GroundFollowEnabled;
+            _groundFollowCached = next;
+            PlayerPrefs.SetInt(GroundFollowPrefKey, next ? 1 : 0);
+            PlayerPrefs.Save();
+            return next;
+        }
 
         private int airJumpCount;
         private const int MaxAirJumps = 1;
@@ -218,6 +246,13 @@ namespace City.Player
 
                 move = dir;
                 moveDirection = dir;
+                // Diagnostica: quanto la direzione di marcia combacia con la camera.
+                if (rig != null)
+                {
+                    Vector3 camFwd = Vector3.ProjectOnPlane(rig.transform.forward, Vector3.up);
+                    if (camFwd.sqrMagnitude > 0.0001f && dir.sqrMagnitude > 0.0001f)
+                        _lastDirDot = Vector3.Dot(dir.normalized, camFwd.normalized);
+                }
                 targetSpeed = Mathf.Lerp(walkSpeed, runSpeed, Mathf.InverseLerp(0.35f, 1f, moveInput.magnitude));
 
                 // Sospensioni del corpo: si inclina lievemente seguendo il
@@ -230,6 +265,7 @@ namespace City.Player
             }
 
             if (sprintRemain > 0f) targetSpeed *= sprintBoost;
+            _lastTargetSpeed = targetSpeed; // diagnostica [WalkDiag]
 
             currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, 10f * Time.deltaTime);
             IsMoving = currentSpeed > 0.05f;
@@ -305,6 +341,34 @@ namespace City.Player
             }
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - Time.deltaTime);
             TrackWalkDistance();
+            LogWalkDiagnostics();
+        }
+
+        /// <summary>Una riga al secondo nella scatola nera Android: riunisce le
+        /// tre misure della camminata (follower, camera, input/velocita') cosi'
+        /// si possono confrontare sullo stesso intervallo di tempo.</summary>
+        private void LogWalkDiagnostics()
+        {
+            if (Time.time < _walkDiagNextAt) return;
+            _walkDiagNextAt = Time.time + 1f;
+
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            CameraRig rig = CameraRig.Instance;
+            City.OSM.OsmDiag.Log("[WalkDiag] follow=" + (GroundFollowEnabled ? "ON" : "OFF") +
+                " corr/s=" + _followCorrections +
+                " maxErr=" + _followMaxErr.ToString("F3", inv) +
+                " src=" + (string.IsNullOrEmpty(_followLastSource) ? "-" : _followLastSource) +
+                " in=" + moveInput.magnitude.ToString("F2", inv) +
+                " tgt=" + _lastTargetSpeed.ToString("F2", inv) +
+                " cur=" + currentSpeed.ToString("F2", inv) +
+                " dot=" + _lastDirDot.ToString("F2", inv) +
+                " camGap=" + (rig != null ? rig.LastSmoothGap : 0f).ToString("F2", inv) +
+                " camDist=" + (rig != null ? rig.LastTargetDistance : 0f).ToString("F2", inv) +
+                " camPush=" + (rig != null && rig.LastObstaclePull ? "Y" : "N"));
+
+            _followCorrections = 0;
+            _followMaxErr = 0f;
+            _followLastSource = "";
         }
 
         /// <summary>Caduta su un pendio troppo ripido: il personaggio scivola e
@@ -567,6 +631,14 @@ namespace City.Player
             float newFeet = GroundSnapper.Follow(ref _groundFollow, feetY,
                 targetFeet, Time.deltaTime);
             if (Mathf.Abs(newFeet - feetY) <= GroundFollowClearance) return;
+
+            // Contatore diagnostico: quante correzioni verticali al secondo
+            // vengono applicate (e quanto grandi). E' la misura decisiva
+            // dell'A/B: con follower OFF questa riga resta a corr/s=0.
+            _followCorrections++;
+            float absErr = Mathf.Abs(err);
+            if (absErr > _followMaxErr) _followMaxErr = absErr;
+            _followLastSource = s.source + "/" + s.surfaceName;
 
             // Spostare il transform di un CharacterController ATTIVO desincronizza
             // la sua sweep interna dalla posizione reale: al frame successivo

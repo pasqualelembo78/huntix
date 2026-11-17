@@ -273,9 +273,18 @@ namespace City.Player
             }
         }
 
+        // ── Diagnostica camminata ([WalkDiag] di PlayerController) ────────────
+        /// <summary>Distanza residua tra camera e punto desiderato dopo SmoothDamp.</summary>
+        public float LastSmoothGap { get; private set; }
+        /// <summary>Distanza camera ↔ player.</summary>
+        public float LastTargetDistance { get; private set; }
+        /// <summary>True se il raycast anti-ostacolo ha tirato dentro la camera.</summary>
+        public bool LastObstaclePull { get; private set; }
+
         private void LateUpdate()
         {
             if (target == null) return;
+            LastObstaclePull = false;
 
             // In guida la camera resta SEMPRE in terza persona alta dietro
             // l'auto (vede il veicolo da sopra): gli override indoor di
@@ -327,6 +336,7 @@ namespace City.Player
                 if (hitDist > MinCameraDistance + 1f)
                 {
                     desired = hit.point - offset.normalized * 0.5f;
+                    LastObstaclePull = true;
                     // Audit: la camera e' stata tirata dentro da un ostacolo
                     // (radice di "camera in prima persona" dentro un edificio).
                     if (hitDist < dist * 0.8f && Time.time >= _nextPushLog)
@@ -351,6 +361,8 @@ namespace City.Player
             Vector3 finalDesired = Vector3.Lerp(desired, firstPos, _fpBlend);
 
             transform.position = Vector3.SmoothDamp(transform.position, finalDesired, ref velocity, smoothTime);
+            LastSmoothGap = Vector3.Distance(transform.position, finalDesired);
+            LastTargetDistance = Vector3.Distance(transform.position, target.position);
             float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)
                 + (_gyroEnabled ? _gyroPitchOffset : 0f);
             transform.rotation = Quaternion.Euler(viewPitch, yaw, 0f);

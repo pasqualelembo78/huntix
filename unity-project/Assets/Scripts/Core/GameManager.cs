@@ -153,6 +153,15 @@ namespace Huntix.Core
         {
             if (string.IsNullOrEmpty(message)) return;
 
+            // Toggle diagnostico del follower verticale: inviato dal viewer dei
+            // log Android. Non e' un "action" di setMode, va intercettato qui.
+            if (message.IndexOf("toggleGroundFollow", StringComparison.Ordinal) >= 0)
+            {
+                bool on = City.Player.PlayerController.ToggleGroundFollow();
+                Debug.Log("[GameManager] GroundFollow -> " + (on ? "ON" : "OFF"));
+                return;
+            }
+
             // Formato JSON (BridgeActivity)
             if (message.Contains("\"action\"", StringComparison.Ordinal) ||
                 message.Contains("\"setMode\"", StringComparison.Ordinal))
