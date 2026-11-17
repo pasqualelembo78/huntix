@@ -51,6 +51,8 @@ namespace City.Interior
         private Transform _chosen;
         private GameObject _activeEgg;
         private bool _busy;
+        private string _placeHint = "";
+        private string _eggKey = "";
 
         private void Update()
         {
@@ -100,10 +102,39 @@ namespace City.Interior
                 return;
             }
 
-            // Deterministico per radice interna: stesso edificio, stesso
-            // contenitore a ogni ingresso/ricostruzione.
-            System.Random rng = new System.Random(root.GetInstanceID());
-            _chosen = containers[rng.Next(containers.Count)];
+            var mgr = InteriorManager.Instance;
+            BuildingEntrance entrance = mgr != null ? mgr.CurrentEntrance : null;
+            int floor = mgr != null ? mgr.GetCurrentFloor() : 0;
+            // Seed STABILE: edificio + coordinate + piano. root.GetInstanceID()
+            // cambiava a ogni ricostruzione del chunk, quindi lo stesso
+            // cassetto poteva ospitare uova diverse in sessioni diverse.
+            string buildingSeed = BuildingSeed(entrance, floor, root);
+            System.Random rng = new System.Random(StableHash(buildingSeed));
+
+            // Riflesso uova: il cassetto della cucina e' il contenitore
+            // preferito. Se l'edificio non ce l'ha (shop/apartment) resta il
+            // vecchio pool, senza rimuovere nulla.
+            List<Transform> pool = containers;
+            for (int i = 0; i < containers.Count; i++)
+            {
+                if (CleanName(containers[i].name).IndexOf("cassetto", System.StringComparison.Ordinal) < 0) continue;
+                pool = new List<Transform>();
+                for (int k = 0; k < containers.Count; k++)
+                    if (CleanName(containers[k].name).IndexOf("cassetto", System.StringComparison.Ordinal) >= 0)
+                        pool.Add(containers[k]);
+                break;
+            }
+            _chosen = pool[rng.Next(pool.Count)];
+            _eggKey = BuildingKey(entrance, floor, root, _chosen);
+            _placeHint = PlaceHint(entrance, floor, _chosen);
+
+            // Uovo gia' raccolto in questo contenitore (chiave ripristinata da
+            // Android via snapshot): non deve rinascere dopo un rebuild.
+            if (IsFound(_eggKey))
+            {
+                _busy = true;
+                return;
+            }
 
             if (rng.NextDouble() >= EggProb)
             {
@@ -134,6 +165,8 @@ namespace City.Interior
             var egg = go.AddComponent<City.Economy.EggController>();
             pos.y = Mathf.Max(pos.y, go.transform.position.y + 0.05f);
             egg.Init(pos, r, City.Economy.EggController.EggType.Edificio);
+            egg.placeHint = _placeHint;
+            egg.containerEggKey = _eggKey;
             go.SetActive(false); // nascosto fino all'avvicinamento
             _activeEgg = go;
             _busy = false;
@@ -148,6 +181,128 @@ namespace City.Interior
             return City.Economy.EggController.Rarity.Uncommon;
         }
 
+        // ── chiave stabile e ponte Android ↔ Unity ──────────────────────
+
+        private const string FoundPrefKey = "huntix_container_eggs";
+        private static List<string> _found;
+
+        private static List<string> Found
+        {
+            get
+            {
+                if (_found == null)
+                {
+                    _found = new List<string>();
+                    string raw = PlayerPrefs.GetString(FoundPrefKey, "");
+                    if (!string.IsNullOrEmpty(raw))
+                    {
+                        string[] parts = raw.Split(';');
+                        for (int i = 0; i < parts.Length; i++)
+                            if (!string.IsNullOrEmpty(parts[i]) && !_found.Contains(parts[i]))
+                                _found.Add(parts[i]);
+                    }
+                }
+                return _found;
+            }
+        }
+
+        private static void PersistFound()
+        {
+            PlayerPrefs.SetString(FoundPrefKey, string.Join(";", Found.ToArray()));
+        }
+
+        private static bool IsFound(string key)
+        {
+            return !string.IsNullOrEmpty(key) && Found.Contains(key);
+        }
+
+        /// <summary>Chiamato da Game.OnEggCollected: l'uovo del cassetto e' stato
+        /// raccolto. La chiave viaggia nello snapshot verso Android e torna con
+        /// il restore, cosi' il cassetto non ne genera un altro.</summary>
+        public static void MarkFound(City.Economy.EggController egg)
+        {
+            if (egg == null || string.IsNullOrEmpty(egg.containerEggKey)) return;
+            if (Found.Contains(egg.containerEggKey)) return;
+            Found.Add(egg.containerEggKey);
+            PersistFound();
+        }
+
+        /// <summary>Elenco delle chiavi gia' raccolte, esportato in CityWorldSync.</summary>
+        public static string ExportFound()
+        {
+            return string.Join(";", Found.ToArray());
+        }
+
+        /// <summary>Unione non distruttiva delle chiavi arrivate da Android.</summary>
+        public static void ImportFound(string keys)
+        {
+            if (string.IsNullOrEmpty(keys)) return;
+            string[] parts = keys.Split(';');
+            bool added = false;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (string.IsNullOrEmpty(parts[i]) || Found.Contains(parts[i])) continue;
+                Found.Add(parts[i]);
+                added = true;
+            }
+            if (added) PersistFound();
+        }
+
+        private static string CleanName(string n)
+        {
+            if (string.IsNullOrEmpty(n)) return "contenitore";
+            string s = n;
+            int clone = s.IndexOf("(Clone)", System.StringComparison.OrdinalIgnoreCase);
+            if (clone >= 0) s = s.Substring(0, clone);
+            return s.Trim();
+        }
+
+        private static int StableHash(string s)
+        {
+            unchecked
+            {
+                // FNV-1a: uint per poter partire dal primo primo maggiore di
+                // Int32.MaxValue senza errori di conversione in mcs/Unity.
+                uint h = 2166136261;
+                for (int i = 0; i < s.Length; i++)
+                {
+                    h ^= s[i];
+                    h *= 16777619;
+                }
+                return (int)h;
+            }
+        }
+
+        private static string BuildingSeed(BuildingEntrance e, int floor, Transform root)
+        {
+            string name = e != null && !string.IsNullOrEmpty(e.buildingName)
+                ? e.buildingName : (root != null ? root.name : "edificio");
+            string lat = "0", lng = "0";
+            if (e != null && City.OSM.WorldOrigin.Initialized)
+            {
+                var g = City.OSM.WorldOrigin.ToGeo(e.transform.position);
+                lat = g.lat.ToString("F5", System.Globalization.CultureInfo.InvariantCulture);
+                lng = g.lng.ToString("F5", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return name + "@" + lat + "," + lng + "#f" + floor;
+        }
+
+        private static string BuildingKey(BuildingEntrance e, int floor, Transform root, Transform container)
+        {
+            return BuildingSeed(e, floor, root) + "#" + CleanName(container.name);
+        }
+
+        private static string PlaceHint(BuildingEntrance e, int floor, Transform container)
+        {
+            string name = e != null && !string.IsNullOrEmpty(e.buildingName) ? e.buildingName : "Edificio";
+            string c = CleanName(container.name).ToLowerInvariant();
+            string thing = c.IndexOf("cassetto", System.StringComparison.Ordinal) >= 0 ? "cassetto2" : c;
+            bool kitchen = floor == 0 &&
+                (c.Contains("cassetto") || c.Contains("frigo") || c.Contains("forno") || c.Contains("lavello"));
+            string room = kitchen ? "cucina" : "piano" + (floor + 1);
+            return "città→" + name + "→" + room + "→" + thing;
+        }
+
         private void Reveal(Transform container, Game g)
         {
             if (_activeEgg == null) return;
@@ -158,7 +313,10 @@ namespace City.Interior
                     .ToTitleCase(container.name.ToLowerInvariant().Replace("_", " "));
                 g.ui.ShowToast("In " + nm + " c'e' qualcosa che luccica...");
             }
-            UnityBridge.LogToAndroid("ContainerEgg", "uovo rivelato in " + container.name);
+            // Log + evento uovo: il luogo testuale arriva ad Android con
+            // EggCapturedInCity (place) e finisce in EggWhereLog/profilo.
+            UnityBridge.LogToAndroid("ContainerEgg",
+                "uovo rivelato in " + (string.IsNullOrEmpty(_placeHint) ? container.name : _placeHint));
             _activeEgg = null; // una sola rivelazione: se raccolto, distrutto dal capture
             _busy = true;
         }
@@ -169,6 +327,8 @@ namespace City.Interior
             _chosen = null;
             _activeEgg = null;
             _busy = false;
+            _placeHint = "";
+            _eggKey = "";
         }
     }
 }

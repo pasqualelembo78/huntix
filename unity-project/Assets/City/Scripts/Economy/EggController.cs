@@ -14,6 +14,17 @@ namespace City.Economy
         public int value;
         public float captureMultiplier = 1f;
 
+        /// <summary>Posizione testuale del ritrovamento (es.
+        /// "città→Edificio 12→cucina→cassetto2"). Valorizzato da ContainerEgg e
+        /// spedito ad Android nel campo "place" di EggCapturedInCity: e' la
+        /// memoria "DOVE HO TROVATO L'UOVO" del Mandato.</summary>
+        public string placeHint = "";
+
+        /// <summary>Chiave stabile dell'uovo nascosto in un contenitore (edificio
+        /// + coordinate + piano + contenitore). Su questa si basa il bridge
+        /// Android→Unity per non far rinascere un uovo gia' raccolto.</summary>
+        public string containerEggKey = "";
+
         private float bobSpeed = 1.5f;
         private float bobHeight = 0.25f;
         private float rotSpeed = 40f;

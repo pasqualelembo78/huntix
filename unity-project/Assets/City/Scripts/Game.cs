@@ -427,6 +427,12 @@ namespace City
             if (first && ui != null)
                 ui.ShowToast("Nuova voce nel Bestiario: " + egg.eggType + " (" + egg.rarity + ")");
 
+            // Riflesso uova: se veniva da un contenitore, segna la chiave come
+            // trovata. Lo snapshot CityWorldSync la porta ad Android e il
+            // restore Android→Unity evita che l'uovo ricompaia nello stesso
+            // cassetto dopo una rigenerazione del chunk.
+            City.Interior.ContainerEgg.MarkFound(egg);
+
             // eco-sistema Huntix: l'uovo va anche nell'inventario uova generale
             // (collezione/evoluzione) lato Android, non solo come monete City.
             SendEggToHuntix(egg);
@@ -463,7 +469,8 @@ namespace City
             int power = Mathf.Max(1, egg.value * 3);
             int xp = Mathf.Max(10, egg.value * 6);
             // Posizione del ritrovamento: coordinate reali + luogo (per il profilo).
-            string lat = "0", lng = "0", place = egg.eggType.ToString();
+            string lat = "0", lng = "0";
+            string place = string.IsNullOrEmpty(egg.placeHint) ? egg.eggType.ToString() : egg.placeHint;
             if (City.OSM.WorldOrigin.Initialized)
             {
                 var g = City.OSM.WorldOrigin.ToGeo(egg.transform.position);
@@ -474,10 +481,18 @@ namespace City
                 "\",\"fantasyName\":\"Uovo di MiAcittà\"" +
                 ",\"power\":" + power + ",\"xpReward\":" + xp +
                 ",\"gems\":" + gems +
-                ",\"lat\":\"" + lat + "\",\"lng\":\"" + lng + "\",\"place\":\"" + place + "\"}";
+                ",\"lat\":\"" + lat + "\",\"lng\":\"" + lng + "\",\"place\":\"" + JsonEscape(place) + "\"}";
             try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("EggCapturedInCity", json); }
             catch (System.Exception e) { UnityEngine.Debug.LogWarning("EggCapturedInCity failed: " + e.Message); }
 #endif
+        }
+
+        /// <summary>Escape minimo per i campi testuali del payload uova: il nome
+        /// dell'edificio OSM puo' contenere virgolette e il place contiene "→".</summary>
+        private static string JsonEscape(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         // ── NPC missione: focus ──────────────────────────────────

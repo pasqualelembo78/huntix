@@ -24,6 +24,9 @@ namespace City.Economy
         public EggType eggType;
         public int value = 10;
         public float captureMultiplier = 1f;
+        // Campi del riflesso uova (uovo nel cassetto): usati da ContainerEgg/Game.
+        public string placeHint = "";
+        public string containerEggKey = "";
         public bool Captured => false;
         public bool PlayerNearCanRadar => true;
         public void OnCaptured() {}

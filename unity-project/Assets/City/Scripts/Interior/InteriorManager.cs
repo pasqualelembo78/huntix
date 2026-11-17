@@ -83,6 +83,11 @@ namespace City.Interior
         /// <summary>Ingresso dell'edificio in cui ci troviamo (per uscire).</summary>
         private BuildingEntrance currentEntrance;
 
+        /// <summary>Ingresso attuale, esposto in sola lettura a chi deve
+        /// identificare l'edificio in modo stabile (es. ContainerEgg: chiave
+        /// dell'uovo nel cassetto = edificio + coordinate + piano).</summary>
+        public BuildingEntrance CurrentEntrance { get { return currentEntrance; } }
+
         /// <summary>Negozio associato all'interno attuale (se commerciale).</summary>
         public Shop ActiveShop { get; private set; }
 

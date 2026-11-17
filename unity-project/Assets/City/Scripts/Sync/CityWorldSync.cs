@@ -132,6 +132,11 @@ namespace City.Sync
             if (dex != null && dex.Count > 0)
                 j.eggDex = string.Join(";", dex);
 
+            // Riflesso uova: le chiavi dei cassetti gia' raccolti viaggiano
+            // nel profilo Android e tornano con il restore (niente uova che
+            // rinascono nello stesso contenitore dopo un rebuild del chunk).
+            j.foundContainerEggs = City.Interior.ContainerEgg.ExportFound();
+
             var jobs = new List<string>();
             foreach (JobManager.JobType t in System.Enum.GetValues(typeof(JobManager.JobType)))
             {
@@ -177,6 +182,7 @@ namespace City.Sync
             public int daysThirsty;
             public int daysTired;
             public string eggDex = "";
+            public string foundContainerEggs = "";
             public string jobs = "";
             public int peopleKnown;
             public string relationships = "";
@@ -326,6 +332,10 @@ namespace City.Sync
                     EggDex.Record(entry.Substring(0, dot), entry.Substring(dot + 1));
                 }
             }
+
+            // Uova nei contenitori: unione con quelle gia' raccolte in locale.
+            // Android e' il mirror persistente; Unity non dimentica nulla.
+            City.Interior.ContainerEgg.ImportFound(j.foundContainerEggs);
 
             // XP lavori: solo se il locale è a zero (l'XP locale vince).
             if (!string.IsNullOrEmpty(j.jobs) && NoJobXpLocal())

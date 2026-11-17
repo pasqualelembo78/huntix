@@ -36,6 +36,7 @@ namespace City.Interior
             ["TV"] = "televisionModern", ["TVA"] = "televisionModern", ["TVB"] = "televisionModern",
             ["Lampada"] = "lampRoundFloor",
             ["Frigo"] = "kitchenFridge", ["Forno"] = "kitchenStove", ["Lavello"] = "kitchenSink",
+            ["Cassetto2"] = "kitchenCabinetDrawer",
             ["Tavolo"] = "table", ["TavoloUff"] = "desk",
             ["Sedia1"] = "chair", ["Sedia2"] = "chair", ["SediaScriv"] = "chairDesk", ["SediaUff"] = "chair",
             ["LettoMat"] = "bedDouble", ["LettoA"] = "bedDouble", ["LettoB"] = "bedDouble",
@@ -761,6 +762,12 @@ namespace City.Interior
                     // Lavello
                     Furniture(floorGo.transform, "Lavello", new Vector3(w * 0.3f, yBase + 0.45f, cucinaZ - d * 0.15f),
                         new Vector3(0.8f, 0.5f, 0.5f));
+
+                    // Cassetto 2: riflesso uova (Mandato). ContainerEgg preferisce
+                    // questo contenitore: il nome contiene "cassetto" ed e' nella
+                    // cucina, cosi' il profilo puo' dire "cucina -> cassetto2".
+                    Furniture(floorGo.transform, "Cassetto2", new Vector3(-w * 0.15f, yBase + 0.45f, cucinaZ - d * 0.15f),
+                        new Vector3(1.0f, 0.7f, 0.6f));
 
                     // Tavolo da pranzo
                     Furniture(floorGo.transform, "Tavolo", new Vector3(w * 0.15f, yBase + 0.38f, cucinaZ + 0.5f),

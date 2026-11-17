@@ -84,6 +84,7 @@ data class PlayerProfile(
     var cityFamily:         String  = "",    // "sposo:Giulia · figli:2" / reincarnazione
     var cityHome:           String  = "",    // casa MiCittà "nome|lat|lng|garage|garagemodel|stanze"
     var cityEggWhere:       Int     = 0,     // ritrovamenti registrati (memoria "DOVE ho trovato l'uovo")
+    var cityContainerEggs:  String  = "",    // chiavi uova nei contenitori già raccolte (Unity ↔ profilo)
 
     // ── Sync Crescita (Unity ↔ profilo generale) ─────────────────
     // Mirror della crescita fisiologica 4D applicata in Unity da
@@ -218,6 +219,7 @@ data class PlayerProfile(
         "cityMoney" to cityMoney, "cityPeopleKnown" to cityPeopleKnown,
         "cityEggDexCount" to cityEggDexCount, "cityJobs" to cityJobs, "cityFamily" to cityFamily,
         "cityHome" to cityHome, "cityEggWhere" to cityEggWhere,
+        "cityContainerEggs" to cityContainerEggs,
         // Sync Crescita
         "growthLevel" to growthLevel, "growthAge" to growthAge,
         "growthHeight" to growthHeight, "growthProportion" to growthProportion,
@@ -291,6 +293,7 @@ data class PlayerProfile(
                 cityFamily = map["cityFamily"] as? String ?: "",
                 cityHome = map["cityHome"] as? String ?: "",
                 cityEggWhere = (map["cityEggWhere"] as? Number)?.toInt() ?: 0,
+                cityContainerEggs = map["cityContainerEggs"] as? String ?: "",
                 // Sync Crescita
                 growthLevel = (map["growthLevel"] as? Number)?.toInt() ?: 0,
                 growthAge = (map["growthAge"] as? Number)?.toDouble() ?: 0.5,

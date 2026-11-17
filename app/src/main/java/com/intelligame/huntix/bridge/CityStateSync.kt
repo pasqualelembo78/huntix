@@ -119,6 +119,20 @@ object CityStateSync {
                 profile.cityHome = home
                 changed = true
             }
+            // Uova nascoste nei contenitori: unione (mai sostituzione) delle
+            // chiavi arrivate da Unity. Il profilo Android le conserva e le
+            // restituisce nello snapshot, cosi' Unity non le fa rinascere.
+            val containerEggs = j.optString("foundContainerEggs", "")
+            if (containerEggs.isNotBlank()) {
+                val merged = (profile.cityContainerEggs.split(';') + containerEggs.split(';'))
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .joinToString(";")
+                if (profile.cityContainerEggs != merged) {
+                    profile.cityContainerEggs = merged
+                    changed = true
+                }
+            }
             if (changed) {
                 PlayerProfileManager.persistMyProfile()
             }
@@ -183,15 +197,20 @@ object CityStateSync {
         val eggDex = if (eggDexStr.isNotBlank()) eggDexStr.split(';').size
             else j.optJSONArray("eggDex")?.length() ?: -1
         val money = j.optLong("money", -1L)
+        val containerEggs = j.optString("foundContainerEggs", "")
+            .split(';').count { it.isNotBlank() }
         val ok = people >= 0 || eggDex >= 0 || money >= 0
         val report = JSONObject()
         report.put("snapshot", true)
         report.put("ts", ts)
         report.put("peopleKnown", people)
         report.put("eggDex", eggDex)
+        report.put("containerEggs", containerEggs)
         report.put("money", money)
         report.put("profilePeople", PlayerProfileManager.myProfile?.cityPeopleKnown ?: 0)
         report.put("profileEggDex", PlayerProfileManager.myProfile?.cityEggDexCount ?: 0)
+        report.put("profileContainerEggs", PlayerProfileManager.myProfile?.cityContainerEggs
+            ?.split(';')?.count { it.isNotBlank() } ?: 0)
         report.put("ok", ok)
         AppLog.i(TAG, "checkSync: $report")
         return report.toString()
