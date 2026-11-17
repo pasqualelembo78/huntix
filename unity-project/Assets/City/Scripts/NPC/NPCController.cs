@@ -82,6 +82,11 @@ namespace City.NPC
         private void OnDisable()
         {
             Active.Remove(this);
+            // libera il nome appena esce di scena: niente nomi "bruciati" per
+            // tutta la sessione, e un chunk ricaricato riassegna lo stesso
+            // personaggio al loro id (v. CityCharacterDirectory.ReleaseName).
+            if (!string.IsNullOrEmpty(DisplayName))
+                CityCharacterDirectory.ReleaseName(DisplayName);
         }
 
         // ── identita' per la chat (tap-to-talk) ──

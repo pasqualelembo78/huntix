@@ -140,6 +140,13 @@ namespace City.NPC
                     float len = PathLength(path);
                     if (len < MinPathLen) continue;
                     if (!RectIntersects(path, bounds)) continue;
+                    // L'offset perpendicolare (SampleWithOffset) proietta i
+                    // punti fuori dal rettangolo del chunk quando la strada
+                    // passa vicino al bordo: il waypoint finisce in una zona
+                    // non costruita e l'NPC cammina nel vuoto (log "Hak
+                    // localPos=..."). Ritaglia i punti dentro i bounds.
+                    ClipToBounds(path, bounds);
+                    if (PathLength(path) < MinPathLen) continue;
                     paths.Add(path);
                 }
             }
@@ -210,6 +217,25 @@ namespace City.NPC
             for (int i = 0; i < p.Count; i++)
                 if (r.Contains(new Vector2(p[i].x, p[i].z))) return true;
             return false;
+        }
+
+        // Ritaglia i waypoint dentro il rettangolo del chunk (con un piccolo
+        // margine dal bordo, visto che l'NPC cammina sul marciapiede lungo la
+        // strada e il bordo stesso e' contiguo al chunk vicino). I punti gia'
+        // dentro restano identici; i proiettati fuori dall'offset vengono
+        // riportati sul limite, cosi' il percorso resta in zona costruita.
+        private static void ClipToBounds(List<Vector3> p, Rect r)
+        {
+            const float inset = 1f;
+            float xMin = r.xMin + inset, xMax = r.xMax - inset;
+            float zMin = r.yMin + inset, zMax = r.yMax - inset;
+            for (int i = 0; i < p.Count; i++)
+            {
+                Vector3 v = p[i];
+                v.x = Mathf.Clamp(v.x, xMin, xMax);
+                v.z = Mathf.Clamp(v.z, zMin, zMax);
+                p[i] = v;
+            }
         }
 
         // Sceglie una skin deterministica per un pedone: alterna maschile/
