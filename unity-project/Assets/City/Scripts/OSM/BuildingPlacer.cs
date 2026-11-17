@@ -271,6 +271,18 @@ namespace City.OSM
                 "hotel", "supermarket");
         }
 
+        /// <summary>Tipi `building` OSM che NON sono edifici calpestabili: spawnarli
+        /// come case piene con porta/interno generava palazzine fantasma
+        /// (roof=tetto isolato, ruins=rovine senza tetto, transportation=stazioni
+        /// gia' rappresentate da altri layer). Skiapparli: il chunk resta fedele
+        /// e non si generano interni/finestre su strutture a cielo aperto.</summary>
+        public static bool IsSkippableBuildingType(string t)
+        {
+            return ContainsAny(t, "roof", "ruins", "ruin", "transportation",
+                "static_caravan", "bunker", "bunker_silo",
+                "construction", "greenhouse", "slurry_tank");
+        }
+
         /// <summary>Mappa il tag OSM al costruttore interior esistente.
         /// InteriorGenerator ha gia' 10 builder (shop/apartment/bar/hospital/)
         /// dealer/repair/garage/fuel/bank/school/hotel + house di default):
@@ -471,8 +483,12 @@ namespace City.OSM
         {
             if (b.c == null || b.c.Length < 2 || b.d == null || b.d.Length < 2)
                 return false;
-            float w = Mathf.Max(b.d[0], 1.5f);
-            float d = Mathf.Max(b.d[1], 1.5f);
+            // impronta: minimo 1.5 m (edifici cosi' piccoli non sono placement
+            // validi ma i dati OSM li portano) e massimo ~90 m per lato: sopra
+            // il prefab sarebbe stirato oltre ogni guardrail e il collider
+            // coprirebbe mezzo chunk.
+            float w = Mathf.Clamp(Mathf.Max(b.d[0], 1.5f), 1.5f, 90f);
+            float d = Mathf.Clamp(Mathf.Max(b.d[1], 1.5f), 1.5f, 90f);
 
             // Ogni edificio e' esplorabile: esterno = prefab Quaternius/Kenney
             // (facciate texturizzate) + interno reale generato lazy dentro
@@ -586,6 +602,28 @@ namespace City.OSM
             Bounds baseB = UnionBounds(inst);
             float sx = w / Mathf.Max(baseB.size.x, 0.1f);
             float sz = d / Mathf.Max(baseB.size.z, 0.1f);
+            // Guardrail scale (fix #7): senza clamp un prefab piccolo sul
+            // footprint reale OSM arrivava a scale di 4-5x con aspect sbilanciato
+            // (es. `scale=4,97x2,98x2,36`). Limite massimo per lato e per
+            // rapporto XZ; sopra il tetto si scala in modo uniforme mantenendo
+            // le proporzioni del prefab invece di stirare la facciata.
+            const float MaxScale = 3f;
+            const float MaxAspect = 2.2f;
+            sx = Mathf.Clamp(sx, 0.2f, MaxScale);
+            sz = Mathf.Clamp(sz, 0.2f, MaxScale);
+            float aspect = Mathf.Max(sx, sz) / Mathf.Max(Mathf.Min(sx, sz), 1e-4f);
+            if (aspect > MaxAspect)
+            {
+                if (sx > sz) sx = sz * MaxAspect;
+                else sz = sx * MaxAspect;
+                float after = Mathf.Max(sx, sz);
+                if (after > MaxScale)
+                {
+                    float k = MaxScale / after;
+                    sx *= k; sz *= k;
+                }
+            }
+            // dopo la correzione aspect s puo' essere sceso sotto il minimo: ok
             float s = Mathf.Max(sx, sz);
             float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
             inst.transform.localScale = new Vector3(sx, sy, sz);

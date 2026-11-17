@@ -277,6 +277,9 @@ namespace City.OSM
                         var ll = new GeoLL { a = b.c[0], o = b.c[1] };
                         var p = ToLocal(ll);
                         if (!bounds.Contains(new Vector2(p.x, p.z))) continue;
+                        // Tipi `building` non abitabili (roof/ruins/etc.): saltali
+                        // PRIMA del placement cosi' niente porta/interno/prefab.
+                        if (BuildingPlacer.IsSkippableBuildingType(b.t)) { skipDegenerate++; continue; }
                         if (poiSpots != null && poiSpots.Count > 0 &&
                             IsNearPoi(poiSpots, p)) continue;
                         if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p, heights))
