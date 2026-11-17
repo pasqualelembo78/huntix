@@ -26,15 +26,19 @@ namespace City.OSM
         public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
         public const int UnloadRadius = 4;  // isteresi: un anello oltre il carico
         private const float TickIntervalS = 0.25f;
-        private const long BuildBudgetMs = 12;
+        private const long BuildBudgetMs = 24;
 
         /// <summary>Chunk totali dentro il raggio di carico (7x7) a fine load.</summary>
         public const int ExpectedChunkCount = (2 * LoadRadius + 1) * (2 * LoadRadius + 1);
 
-        /// <summary>Build coroutine attive: max 1 per volta. Senza serializzazione
+        /// <summary>Build coroutine attive: max 2 per volta. Senza serializzazione
         /// N chunk in volo consumano ognuno fino a BuildBudgetMs di main-thread
-        /// (25 x 12ms = 300ms/frame) -> frame da 2115ms e fps=0 durante la build.</summary>
+        /// (25 x 24ms = 600ms/frame) -> frame da 2115ms e fps=0 durante la build.
+        /// Con 1 solo build la coda di 49 chunk (46 pending) drena a ~1 chunk/2s.
+        /// Con 2 build in parallelo (ciascuna col budget per frame) si dimezza
+        /// la latenza di world-load mantenendo il frame-time sotto controllo.</summary>
         private int _activeBuilds;
+        private const int MaxConcurrentBuilds = 2;
 
         /// <summary>Intervallo dei report di avanzamento "CityProgress" allo
         /// splash Android (Mappa 0-40%, Costruzione 40-95%, Pronto 100%).</summary>
@@ -309,7 +313,7 @@ namespace City.OSM
             if (ready == null) return;
             foreach (var c in ready)
             {
-                if (_activeBuilds >= 1) break;
+                if (_activeBuilds >= MaxConcurrentBuilds) break;
                 _retryAt.Remove(c);
                 _inFlight.Add(c);
                 _activeBuilds++;
@@ -352,9 +356,22 @@ namespace City.OSM
         private void Update()
         {
             if (!StreamingEnabled || _pending.Count == 0) return;
+
+            // Riordina la coda per distanza dal target a ogni frame: la camera
+            // si muove mentre i chunk vengono costruiti, quindi l'ordine
+            // "piu' vicino prima" di EnqueueMissing e' gia' vecchio dopo pochi
+            // secondi. Il sort e' mero reordinamento di indici (49 voci) e
+            // risulta trascurabile rispetto a un build di chunk.
+            if (ResolveTarget() && target != null)
+            {
+                GeoCoord g = WorldOrigin.ToGeo(target.position);
+                Vector2Int cur = CityGrid.ChunkIndexOf(g.lat, g.lng);
+                _pending.Sort((a, b) => Dist2(a, cur).CompareTo(Dist2(b, cur)));
+            }
+
             int building = _pending.Count;
             var clock = Stopwatch.StartNew();
-            while (_activeBuilds < 1 && _pending.Count > 0 &&
+            while (_activeBuilds < MaxConcurrentBuilds && _pending.Count > 0 &&
                 clock.ElapsedMilliseconds < BuildBudgetMs)
             {
                 var c = _pending[0];
@@ -637,8 +654,12 @@ namespace City.OSM
             if (graph != null)
                 TileRoadNetwork.Ensure().AddTile(tileKey, graph);
             // una tile DEM nuova puo' rialzare strade gia' costruite che la
-            // build aveva campionato a y=0 (punti fuori dal registro di allora)
-            if (geo != null && TileElevation.Register(geo))
+            // build aveva campionato a y=0 (punti fuori dal registro di allora).
+            // In modalita' PIATTA il rebuild strade e' pura spesa: il terreno
+            // resta a quota 0 per scelta di prodotto (CityConfig.WorldHeights)
+            // e lo Schedule lo rifarebbe ogni volta senza alcun effetto visivo.
+            if (geo != null && TileElevation.Register(geo)
+                && CityConfig.WorldHeights != WorldHeightMode.Flat)
                 ScheduleRoadsRebuildsForTile(geo);
             OsmDiag.Log("[ChunkManager] tile " + tileKey + " caricata (graph=" +
                 (graph != null) + ", geo=" + (geo != null) + ")");

@@ -37,13 +37,16 @@ namespace City.Vehicle.Traffic
 
         // ── traffico su rete: auto in movimento che seguono la rete ──
         // Densita' del traffico IN MOVIMENTO. L'utente vuole una citta' viva:
-        // 5-6 auto per chunk che girano sulle strade (un chunk = 1 km quadrato,
+        // 2-3 auto per chunk che girano sulle strade (un chunk = 1 km quadrato,
         // una tile = 10x10 = 100 chunk). CarsPerTile e' calcolato per dare
-        // circa 5-6 auto in movimento per chunk nell'area visibile (7x7 chunk
-        // attorno al player). MaxCars e' il tetto assoluto per non saturare
-        // il device sui confini tile.
-        private const int CarsPerTile = 55;
-        private const int MaxCars = 400;
+        // quella densita' nell'area visibile (7x7 chunk attorno al player).
+        // MaxCars e' il tetto assoluto per non saturare il device sui confini
+        // tile. NB: alzare CarsPerTile e' la seconda leva sul frame rate
+        // (CheckCurb/CheckObstacle per auto per frame): 55-400 era la scala
+        // del ramo `altitudine` che regalava sonde costose, 22-180 riporta il
+        // traffico alla densita' del ramo `unity` (vedi AGENTS.md).
+        private const int CarsPerTile = 22;
+        private const int MaxCars = 180;
         private const float CullRadius = 500f;
         private const float CullInterval = 0.6f;
         private const float RouteMinLen = 100f;
