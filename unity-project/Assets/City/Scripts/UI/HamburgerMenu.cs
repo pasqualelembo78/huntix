@@ -21,6 +21,7 @@ namespace City.UI
         private GameObject skinPanel;
         private GameObject profilePanel;
         private GameObject skinSelRow;
+        private Text _styleLabel;
         private Transform _canvas;
 
         private static readonly Color Bg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
@@ -90,7 +91,7 @@ namespace City.UI
             prt.anchorMin = prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
             prt.anchoredPosition = new Vector2(-16f, 0f);
-            prt.sizeDelta = new Vector2(360f, 540f);
+            prt.sizeDelta = new Vector2(360f, 600f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -98,6 +99,7 @@ namespace City.UI
                 "Lavoro (guadagna \u20ac)",
                 "Mappa espansa",
                 "Personalizza aspetto",
+                "Stile edifici: Veloce",
                 "Profilo (Sim)",
                 "Note legali",
                 "Esci dal gioco",
@@ -122,6 +124,7 @@ namespace City.UI
                     SetVisible(false);
                     OpenSkinPanel();
                 },
+                () => ToggleBuildingStyle(),
                 () =>
                 {
                     SetVisible(false);
@@ -157,6 +160,7 @@ namespace City.UI
 
                 var lbl = NewLabel(row.transform);
                 lbl.text = labels[idx];
+                if (idx == 3) _styleLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -190,7 +194,38 @@ namespace City.UI
         private void SetVisible(bool v)
         {
             if (panel == null) return;
+            if (v) RefreshStyleLabel();
             panel.SetActive(v);
+        }
+
+        // ---- stile edifici (fluidita' / qualita') ----
+
+        private void RefreshStyleLabel()
+        {
+            if (_styleLabel == null) return;
+            _styleLabel.text = "Stile edifici: " +
+                (CityStyle.UseQuaternius ? "Qualita' (Quaternius)" : "Veloce (Kenney)");
+        }
+
+        /// <summary>Un click commuta Kenney (fluido, default) <-> Quaternius
+        /// (facciate texturizzate) e rigenera subito i chunk: la scelta viene
+        /// letta da BuildingPlacer.PlaceLegacy al prossimo build.</summary>
+        private void ToggleBuildingStyle()
+        {
+            bool next = !CityStyle.UseQuaternius;
+            CityStyle.Set(next);
+            RefreshStyleLabel();
+            Vibration.Vibrate(25);
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(next
+                    ? "Stile edifici: Qualita' (Quaternius). Mappa in ricarica..."
+                    : "Stile edifici: Veloce (Kenney). Mappa in ricarica...");
+
+            // UnloadAll svuota chunk/tile e riavvia il tick loop, che rimette
+            // in coda i chunk con il nuovo stile (stesso percorso del CENTRA GPS).
+            var cw = City.OSM.CityChunkedWorld.Instance;
+            if (cw != null && cw.Manager != null) cw.Manager.UnloadAll();
+            SetVisible(false);
         }
 
         // ---- sotto-pannelli (personalizzazione / profilo Sim) ----

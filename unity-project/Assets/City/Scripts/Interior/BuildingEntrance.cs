@@ -38,6 +38,29 @@ namespace City.Interior
 
         private bool autoEntryStarted;
         private bool _enteringPrefab;
+        private GameObject _doorMark;
+
+        /// <summary>Crea il segnaposto visivo della porta SOLO quando serve
+        /// (chiamato da InteriorGenerator.BuildInteriorNow, entro 30 m dal
+        /// player). Prima era un Quad/Renderer creato per ogni edificio della
+        /// citta' in fase di build chunk: ~15.700 Renderer in piu'.</summary>
+        public void EnsureDoorMarker()
+        {
+            if (_doorMark != null || inPlace) return;
+            var mark = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(mark.GetComponent<Collider>());
+            mark.name = "PortaSegnaposto";
+            mark.transform.SetParent(transform, false);
+            mark.transform.localPosition = Vector3.zero;
+            mark.transform.localRotation = Quaternion.identity;
+            Vector3 s = transform.lossyScale;
+            mark.transform.localScale = new Vector3(
+                s.x != 0f ? 2.3f / s.x : 2.3f,
+                s.y != 0f ? 2.1f / s.y : 2.1f, 1f);
+            mark.GetComponent<Renderer>().sharedMaterial =
+                City.OSM.BuildingPlacer.DoorMarkMaterial();
+            _doorMark = mark;
+        }
 
         private static void LogEntrance(string msg)
         {
@@ -182,6 +205,7 @@ namespace City.Interior
                 if (fader != null) fader.FadeToBlack(null);
 
                 if (!gen.InteriorBuilt) gen.BuildInteriorNow();
+                gen.SetLight(true); // subito, senza attendere il ticker 0,25s
                 gen.SetPrefabExteriorVisible(false);
 
                 // dentro l'impronta, poco oltre la soglia, rivolto verso la stanza

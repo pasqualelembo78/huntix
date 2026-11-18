@@ -19,7 +19,11 @@ namespace City.OSM
     /// </summary>
     public static class ChunkBuilder
     {
-        private const int BuildingsPerStep = 40;
+        // Controllo piu' frequente del budget per-frame: con 40 edifici per step
+        // un singolo step poteva superare i 24 ms e il frame schizzava a 400 ms
+        // (log Roma). Il yield avviene comunque solo oltre BuildBudgetMs, quindi
+        // abbassare il passo non aumenta i frame persi, limita l'overshoot.
+        private const int BuildingsPerStep = 12;
         private const int TreesPerStep = 120;
 
         /// <summary>Sezione (italiano) attualmente in costruzione nell'ultimo

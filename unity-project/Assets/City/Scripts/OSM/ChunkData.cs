@@ -27,6 +27,10 @@ namespace City.OSM
         public int lod = -1;
         public float lastTouch;
 
+        // Cache dei collider edificio: evita il GetComponentsInChildren(true)
+        // su migliaia di GameObject a OGNI cambio LOD (Roma: ~6.000 edifici).
+        private BoxCollider[] _buildingColliders;
+
         public static string KeyOf(Vector2Int c) => $"C_{c.x:0000}_{c.y:0000}";
 
         /// <summary>
@@ -93,22 +97,28 @@ namespace City.OSM
             if (col != null) col.enabled = on;
         }
 
-        private static void SetBuildingColliders(GameObject buildingsGo, bool on)
+        private void SetBuildingColliders(GameObject buildingsGo, bool on)
         {
-            var cols = buildingsGo.GetComponentsInChildren<BoxCollider>(true);
-            for (int i = 0; i < cols.Length; i++)
+            // La scansione costosa avviene UNA sola volta: ChunkBuilder chiama
+            // SetLod(0) solo a chunk finito, quindi l'albero e' completo.
+            if (_buildingColliders == null)
+                _buildingColliders = buildingsGo.GetComponentsInChildren<BoxCollider>(true);
+            for (int i = 0; i < _buildingColliders.Length; i++)
             {
+                var col = _buildingColliders[i];
+                if (col == null) continue; // interior lazy puo' aver distrutto figli
                 // I trigger porta degli edifici in-place restano SEMPRE attivi:
                 // spegnerli ai LOD>0 "mura" fisicamente l'ingresso (muri
                 // attraversabili + porta che non risponde). Il giocatore li
                 // attraversa lo stesso, quindi il ping-pong collider non serve.
-                if (cols[i].isTrigger) continue;
-                cols[i].enabled = on;
+                if (col.isTrigger) continue;
+                col.enabled = on;
             }
         }
 
         public void Destroy()
         {
+            _buildingColliders = null;
             if (root != null)
                 Object.Destroy(root);
         }

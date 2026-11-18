@@ -242,6 +242,7 @@ namespace City.OSM
         // Materiale del segnaposto porta condiviso tra tutti gli ingressi
         // (fix #3): prima ogni porta clonava un Material nuovo -> spreco GC.
         private static Material _doorMarkMat;
+        public static Material DoorMarkMaterial() { return DoorMarkMat(); }
         private static Material DoorMarkMat()
         {
             if (_doorMarkMat == null)
@@ -757,17 +758,10 @@ namespace City.OSM
             tc.center = Vector3.zero;
             tc.size = new Vector3(doorW / sx, 2.2f / sy, doorT / sz);
 
-            // segnaposto VISIVO della porta: una piastra piana verticale sul
-            // muro frontale, cosi' il giocatore sa dove passare
-            var doorMark = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            UnityEngine.Object.Destroy(doorMark.GetComponent<Collider>());
-            doorMark.name = "PortaSegnaposto";
-            doorMark.transform.SetParent(trig.transform, false);
-            doorMark.transform.localPosition = Vector3.zero;
-            doorMark.transform.localRotation = Quaternion.identity;
-            doorMark.transform.localScale = new Vector3(2.3f / sx, 2.1f / sy, 1f);
-            var r = doorMark.GetComponent<Renderer>();
-            r.sharedMaterial = DoorMarkMat();
+            // FLUIDITA': il segnaposto VISIVO della porta (Quad/Renderer) non
+            // viene piu' creato qui per OGNI edificio (~15.700 per citta').
+            // Lo crea BuildingEntrance.EnsureDoorMarker() quando l'interno viene
+            // costruito lazy, cioe' quando il player si avvicina alla soglia.
 
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
             entrance.buildingType = iType;

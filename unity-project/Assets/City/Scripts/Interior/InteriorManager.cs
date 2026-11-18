@@ -264,6 +264,7 @@ namespace City.Interior
             currentEntrance = null;
 
             var gen = e != null ? e.GetComponentInParent<InteriorGenerator>() : null;
+            if (gen != null) gen.SetLight(false); // spenta subito, non dopo il fade
             var fader = g != null ? g.fader : null;
             if (fader != null) fader.gameObject.SetActive(true);
             if (fader != null) fader.FadeToBlack(null);
@@ -486,6 +487,14 @@ namespace City.Interior
             _pendingInteriors.Remove(gen);
         }
 
+        /// <summary>Edificio di cui il player e' attualmente ospite (o null).
+        /// Usato dal ticker per tenere accesa UNA sola luce interna.</summary>
+        private InteriorGenerator InsideGenerator()
+        {
+            if (!IsInside || currentEntrance == null) return null;
+            return currentEntrance.GetComponentInParent<InteriorGenerator>();
+        }
+
         private void LateUpdate()
         {
             lazyTimer += Time.deltaTime;
@@ -499,6 +508,12 @@ namespace City.Interior
             Vector3 pp = g.player.transform.position;
             float r2 = LAZY_RADIUS * LAZY_RADIUS;
 
+            // FLUIDITA': prima OGNI edificio in lista veniva acceso a ogni tick
+            // (gen.SetLight(true) sotto): con 15.700 edifici erano migliaia di
+            // Point Light attive e il frame schizzava a 400 ms. Ora resta
+            // accesa SOLO la luce dell'edificio in cui il player e' entrato.
+            var insideGen = InsideGenerator();
+
             // Iterazione all'indietro: BuildInteriorNow può distruggere oggetti
             // del chunk; gli edifici distrutti vengono rimossi.
             for (int i = _pendingInteriors.Count - 1; i >= 0; i--)
@@ -509,10 +524,9 @@ namespace City.Interior
                     _pendingInteriors.RemoveAt(i);
                     continue;
                 }
-                // Luce interna: sempre accesa (nessun toggle distanza che
-                // causava cambi improvvisi di luminosità). Nessun Update() per
-                // edificio: il ticker unico la mantiene nello stato corretto.
-                gen.SetLight(true);
+                // Luce interna SOLO dentro l'edificio in cui sei entrato:
+                // nessun Update() per edificio, lo fa il ticker unico.
+                gen.SetLight(gen == insideGen);
                 // L'interior resta LAZY: costruito solo quando il player è
                 // entro LAZY_RADIUS. Senza questo check TUTTI gli edifici del
                 // chunk costruirebbero l'interno (arredi + materiali) appena

@@ -363,6 +363,12 @@ namespace City.Interior
                 _lazyH.ToString("F1") + " prefab=" + _prefabExterior);
             try
             {
+                // FLUIDITA': la radice contro-scalata e la luce nascono QUI,
+                // non per ogni edificio in fase di build del chunk.
+                if (_prefabExterior) EnsurePrefabInteriorRoot();
+                // Il segnaposto visivo della porta nasce pure lazy (era un
+                // Quad/Renderer per edificio, ~15.700 in citta').
+                if (Entrance != null) Entrance.EnsureDoorMarker();
                 Transform dest = _prefabExterior && _interiorRoot != null ? _interiorRoot : transform;
                 BuildInterior(dest, _lazyType, _lazyW, _lazyD, _lazyH,
                     FloorsFromHeight(_lazyH), _lazyShop);
@@ -394,9 +400,27 @@ namespace City.Interior
             _lazyShop = shop;
             _prefabCollider = buildingCollider;
 
-            // Figlio contro-scalato: neutralizza la scala non uniforme del
-            // prefab. I builder interni ragionano gia' in metri reali, quindi
-            // _interiorRoot deve avere localToWorld = identita' (scala 1).
+            // FLUIDITA': qui NON creiamo piu' il figlio "Interno" ne' la Point
+            // Light. Con ~15.700 edifici per citta' erano ~31.400 GameObject e
+            // ~15.700 Light creati DURANTE il build dei chunk (2-3 s/chunk,
+            // frame da 400 ms). Entrambi nascono LAZY in BuildInteriorNow,
+            // cioe' solo per l'edificio che il player sta per visitare.
+            Log("PreparePrefabExterior done (lazy): type=" + type +
+                " shell=" + ShellW.ToString("F1") + "x" + ShellD.ToString("F1") + "x" + ShellH.ToString("F1") +
+                " shop=" + (_lazyShop != null) + " collider=" + (_prefabCollider != null));
+        }
+
+        /// <summary>Crea il figlio contro-scalato "Interno" e la sua Point Light
+        /// solo quando l'interno viene davvero costruito (lazy, raggio 30 m).
+        /// La luce parte SPENTA: InteriorManager la accende solo per l'edificio
+        /// in cui il player e' entrato (piu' migliaia di luci attive = lag).</summary>
+        private void EnsurePrefabInteriorRoot()
+        {
+            if (_interiorRoot != null) return;
+
+            // Contro-scala: neutralizza la scala non uniforme del prefab, cosi'
+            // i builder interni (che ragionano in metri reali) non deformano
+            // pareti e arredi. localToWorld della radice resta identita'.
             var inv = new GameObject("Interno");
             inv.transform.SetParent(transform, false);
             Vector3 lossy = transform.lossyScale;
@@ -406,8 +430,6 @@ namespace City.Interior
                 lossy.z != 0f ? 1f / lossy.z : 1f);
             _interiorRoot = inv.transform;
 
-            // Luce interna: sotto _interiorRoot cosi' resta spenta/nascosta
-            // con l'interno (nessuna luce che filtra in strada col prefab).
             var lightGo = new GameObject("LuceInterna");
             lightGo.transform.SetParent(_interiorRoot, false);
             lightGo.transform.localPosition = new Vector3(0f, Mathf.Max(1.8f, ShellH - 0.6f), 0f);
@@ -418,9 +440,6 @@ namespace City.Interior
             light.range = Mathf.Max(ShellW, ShellD) * 0.7f;
             light.enabled = false;
             AttachLight(light);
-            Log("PreparePrefabExterior done: type=" + type +
-                " shell=" + ShellW.ToString("F1") + "x" + ShellD.ToString("F1") + "x" + ShellH.ToString("F1") +
-                " shop=" + (_lazyShop != null) + " collider=" + (_prefabCollider != null));
         }
 
         public bool IsPrefabExterior
