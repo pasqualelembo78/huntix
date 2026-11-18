@@ -90,6 +90,13 @@ class MainActivity : AppCompatActivity() {
         internal val ADMOB_BANNER_ID   get() = BuildConfig.ADMOB_BANNER_ID
         internal val ADMOB_REWARDED_ID get() = BuildConfig.ADMOB_REWARDED_ID
 
+        // Modalita' AR della caccia indoor. 'room_scan' abilita la scansione
+        // della stanza e il salvataggio/ripristino degli ancoraggi locali:
+        // senza questo extra il gioco partiva sempre in 'depth' e quei rami
+        // (LocalAnchorStore, GamePhase.SCAN_ROOM) non venivano mai raggiunti.
+        internal const val EXTRA_AR_MODE = "ar_mode"
+        internal const val AR_MODE_ROOM_SCAN = "room_scan"
+
         val EGG_COLORS = listOf(
             0xFFFF3366.toInt(), 0xFFFFCC00.toInt(), 0xFF7C3AED.toInt(),
             0xFF00FF88.toInt(), 0xFFFF6B35.toInt(), 0xFF00E5FF.toInt()
@@ -287,7 +294,7 @@ class MainActivity : AppCompatActivity() {
         val autoEggCount   = intent.getIntExtra(EggSetupModeActivity.EXTRA_AUTO_EGG_COUNT, 4)
         val trapEggCount   = intent.getIntExtra(EggSetupModeActivity.EXTRA_TRAP_EGG_COUNT, 0)
         val penaltySecs    = intent.getIntExtra(EggSetupModeActivity.EXTRA_PENALTY_SECS, 30)
-        val arMode         = intent.getStringExtra("ar_mode") ?: dm.getArMode()
+        val arMode         = intent.getStringExtra(EXTRA_AR_MODE) ?: dm.getArMode()
         val isMultiplayer  = intent.getBooleanExtra(MultiplayerManager.EXTRA_IS_MP, false)
         val isIndoorMp     = intent.getBooleanExtra("indoor_mp", false)
         val indoorRoomCode = intent.getStringExtra("room_code") ?: ""

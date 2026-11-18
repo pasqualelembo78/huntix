@@ -19,7 +19,9 @@ class IndoorModeSelectionActivity : BaseNavActivity() {
             UiKit.subtitle(c, "Nascondi e cerca uova in Realtà Aumentata."),
             UiKit.button(c, "🎯  Solo (contro il tempo)", UiKit.ACCENT) {
                 com.intelligame.huntix.managers.ResearchTaskManager.trackProgress(c, "play_indoor")
-                startActivity(Intent(c, MainActivity::class.java))
+                startActivity(Intent(c, MainActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_AR_MODE, MainActivity.AR_MODE_ROOM_SCAN)
+                })
             },
             UiKit.button(c, "👥  Multigiocatore Locale", UiKit.PURPLE) {
                 startActivity(Intent(c, IndoorSetupActivity::class.java).putExtra("mode", "local"))

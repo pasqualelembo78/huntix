@@ -158,6 +158,7 @@ class IndoorMultiplayerLobbyActivity : BaseNavActivity() {
                     Toast.makeText(c, "Crea o unisciti a una stanza prima", Toast.LENGTH_SHORT).show(); return@button
                 }
                 startActivity(Intent(c, MainActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_AR_MODE, MainActivity.AR_MODE_ROOM_SCAN)
                     putExtra("indoor_mp", true)
                     putExtra("room_code", roomCode)
                     putExtra("room_is_host", isHost)

@@ -130,6 +130,7 @@ class IndoorSetupActivity : AppCompatActivity() {
                     apply()
                 }
                 val intent = Intent(c, MainActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_AR_MODE, MainActivity.AR_MODE_ROOM_SCAN)
                     putExtra("turn_mode", turnMode)
                     putExtra("setup_mode", setupMode)
                     putExtra("auto_egg_count", autoEggCount)

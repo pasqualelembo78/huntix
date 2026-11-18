@@ -50,7 +50,13 @@ class GameDataManager private constructor(ctx: Context) {
     private val prefs: SharedPreferences = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
     fun getSoundEnabled(): Boolean = true
-    fun getArMode(): String = "depth"
+    /**
+     * Modalita' AR di default. MainActivity e' sempre la caccia indoor, quindi
+     * il default e' room_scan: scansione stanza + ancoraggi locali salvati.
+     * I tre ingressi indoor passano comunque [MainActivity.EXTRA_AR_MODE]
+     * esplicitamente, questo e' solo il fallback di sicurezza.
+     */
+    fun getArMode(): String = "room_scan"
     fun getRevealDistMeters(): Float = 3.0f
     fun getCatchDistMeters(): Float = 1.5f
     fun getPlayers(): List<PlayerProfile> = listOf(PlayerProfile("Giocatore"))
