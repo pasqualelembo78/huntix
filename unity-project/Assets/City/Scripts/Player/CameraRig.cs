@@ -16,6 +16,10 @@ namespace City.Player
         public float height = 1.6f;
         public float pitch = 5f;
         public float smoothTime = 0.12f;
+        /// <summary>Con frame da 400 ms SmoothDamp non converge e la camera
+        /// resta indietro anche a player fermo (camGap=0,79 misurato): oltre
+        /// questa distanza la agganciamo al punto desiderato.</summary>
+        private const float MaxSmoothGap = 0.35f;
         public float orbitSpeed = 5f;
         // Giroscopio (Android): gira la visuale ruotando il telefono, in
         // aggiunta al drag sul lato destro. Se ruota al contrario inverti
@@ -171,9 +175,8 @@ namespace City.Player
             indoorPitch = drivingMode ? drivePitch : pitch;
         }
 
-        private void UpdateIndoorBlend()
+        private void UpdateIndoorBlend(float dt)
         {
-            float dt = Time.deltaTime;
             float blendSpeed = 5f;
             if (indoorOverrideActive)
             {
@@ -221,12 +224,16 @@ namespace City.Player
 
             float rY = Mathf.Abs(rate.y) < GyroDeadzone ? 0f : rate.y;
             _gyroRateEma = Mathf.Lerp(_gyroRateEma, rY, GyroSmoothing);
-            yaw -= _gyroRateEma * GyroSensitivity * Time.deltaTime;
+            // rotationRate e' una velocita' angolare instantanea: a 5 fps un
+            // delta da 400 ms la moltiplica per 8 e la camera ruota a scatti,
+            // senza mai raggiungere il target (camGap alto anche da fermi).
+            float gyroDt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
+            yaw -= _gyroRateEma * GyroSensitivity * gyroDt;
 
             float rX = Mathf.Abs(rate.x) < GyroDeadzone ? 0f : rate.x;
             _gyroPitchEma = Mathf.Lerp(_gyroPitchEma, rX, GyroSmoothing);
             _gyroPitchOffset = Mathf.Clamp(
-                _gyroPitchOffset - _gyroPitchEma * GyroSensitivity * Time.deltaTime,
+                _gyroPitchOffset - _gyroPitchEma * GyroSensitivity * gyroDt,
                 -GyroPitchMax, GyroPitchMax);
         }
 
@@ -285,6 +292,7 @@ namespace City.Player
         {
             if (target == null) return;
             LastObstaclePull = false;
+            float dt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
 
             // In guida la camera resta SEMPRE in terza persona alta dietro
             // l'auto (vede il veicolo da sopra): gli override indoor di
@@ -294,13 +302,13 @@ namespace City.Player
             if (!drivingMode)
             {
                 if (indoorOverrideActive) InitializeIndoorBlend();
-                UpdateIndoorBlend();
+                UpdateIndoorBlend(dt);
             }
 
             // blend prima/terza persona (solo a piedi): la camera scivola
             // dolcemente alla testa del player.
             float fpTarget = (firstPerson && !drivingMode) ? 1f : 0f;
-            _fpBlend = Mathf.Lerp(_fpBlend, fpTarget, Time.deltaTime * 6f);
+            _fpBlend = Mathf.Lerp(_fpBlend, fpTarget, dt * 6f);
             if (_fpBlend < 0.01f && fpTarget == 0f) _fpBlend = 0f;
 
             float d = drivingMode ? driveDistance : distance;
@@ -360,7 +368,14 @@ namespace City.Player
             Vector3 firstPos = target.position + Vector3.up * FirstPersonHeight;
             Vector3 finalDesired = Vector3.Lerp(desired, firstPos, _fpBlend);
 
-            transform.position = Vector3.SmoothDamp(transform.position, finalDesired, ref velocity, smoothTime);
+            Vector3 smoothed = Vector3.SmoothDamp(transform.position, finalDesired,
+                ref velocity, smoothTime);
+            if (Vector3.Distance(smoothed, finalDesired) > MaxSmoothGap)
+            {
+                smoothed = finalDesired;
+                velocity = Vector3.zero;
+            }
+            transform.position = smoothed;
             LastSmoothGap = Vector3.Distance(transform.position, finalDesired);
             LastTargetDistance = Vector3.Distance(transform.position, target.position);
             float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)

@@ -50,6 +50,17 @@ namespace City.Player
         private float _nextGroundLogAt;
         private const float GroundFollowClearance = 0.02f;
 
+        /// <summary>Passo massimo di integrazione del movimento (s). Durante la
+        /// costruzione dei chunk il frame puo' salire a 400 ms: un solo
+        /// controller.Move() di 1-2 m fa "inciampare" il player sui cordoli e
+        /// lascia la camera indietro. Tutto il movimento viene integrato a
+        /// passi di al massimo 50 ms, ripartendo il delta reale su piu' step.
+        /// Condiviso con CameraRig per tenere giroscopio e smoothing coerenti.</summary>
+        public const float MaxFrameStepS = 0.05f;
+        // Oltre 250 ms un delta non e' piu' tempo di gioco ma uno stallo
+        // (GC, shader compile, swap): non lo integriamo tutto in una volta.
+        private const float MaxFrameDtS = 0.25f;
+
         // ── Diagnostica camminata ([WalkDiag], una riga/s su AppLog Android) ──
         private float _walkDiagNextAt;
         private int _followCorrections;
@@ -231,6 +242,12 @@ namespace City.Player
                 City.Economy.EggCaptureMinigame.Instance.IsActive)
                 return;
 
+            // Delta "di gioco": gli stalli lunghi (build chunk, compilazione
+            // shader, GC) non devono tradursi in un balzo del personaggio.
+            float frameDt = Mathf.Min(Time.deltaTime, MaxFrameDtS);
+            int moveSteps = Mathf.Clamp(Mathf.CeilToInt(frameDt / MaxFrameStepS), 1, 6);
+            float stepDt = frameDt / moveSteps;
+
             Vector3 move = Vector3.zero;
             float targetSpeed = 0f;
 
@@ -261,13 +278,13 @@ namespace City.Player
                 Vector3 bodyUp = TileElevation.SlopeUpAtWorld(
                     transform.position, MaxBodyInclineDeg);
                 Quaternion targetRotation = Quaternion.LookRotation(dir, bodyUp);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * frameDt);
             }
 
             if (sprintRemain > 0f) targetSpeed *= sprintBoost;
             _lastTargetSpeed = targetSpeed; // diagnostica [WalkDiag]
 
-            currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, 10f * Time.deltaTime);
+            currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, 10f * frameDt);
             IsMoving = currentSpeed > 0.05f;
 
             if (!controller.enabled) return;
@@ -285,39 +302,45 @@ namespace City.Player
 
             if (flying && Realm == AfterlifeRealm.PARADISO)
             {
-                ApplyFlight(move);
+                for (int step = 0; step < moveSteps; step++)
+                    ApplyFlight(move, stepDt);
             }
             else
             {
-                if (controller.isGrounded && velocity.y < 0f) velocity.y = -1f;
-                float g = (Realm == AfterlifeRealm.PARADISO) ? gravity * flightGravityScale : gravity;
-                velocity.y += g * Time.deltaTime;
-                if (controller.isGrounded)
+                // Substep: la distanza totale resta velocity * frameDt, ma ogni
+                // sweep del CharacterController e' corto al massimo 50 ms.
+                for (int step = 0; step < moveSteps; step++)
                 {
-                    airJumpCount = 0;
-                    flying = false;
-                    flightVertical = 0;
-                }
+                    if (controller.isGrounded && velocity.y < 0f) velocity.y = -1f;
+                    float g = (Realm == AfterlifeRealm.PARADISO) ? gravity * flightGravityScale : gravity;
+                    velocity.y += g * stepDt;
+                    if (controller.isGrounded)
+                    {
+                        airJumpCount = 0;
+                        flying = false;
+                        flightVertical = 0;
+                    }
 
-                // Dash orizzontale (Inferno): sovrascrive il componente orizzontale
-                // con l'impulso direzionale per la sua breve durata.
-                if (dashRemain > 0f)
-                {
-                    dashRemain = Mathf.Max(0f, dashRemain - Time.deltaTime);
-                    velocity.x = dashDirection.x * dashSpeed;
-                    velocity.z = dashDirection.z * dashSpeed;
-                }
+                    // Dash orizzontale (Inferno): sovrascrive il componente orizzontale
+                    // con l'impulso direzionale per la sua breve durata.
+                    if (dashRemain > 0f)
+                    {
+                        dashRemain = Mathf.Max(0f, dashRemain - stepDt);
+                        velocity.x = dashDirection.x * dashSpeed;
+                        velocity.z = dashDirection.z * dashSpeed;
+                    }
 
-                // Knockback (pericoli Inferno): spinta orizzontale breve che
-                // sovrascrive la velocita' per far spiccare il salto/scivolata.
-                if (knockbackRemain > 0f)
-                {
-                    knockbackRemain = Mathf.Max(0f, knockbackRemain - Time.deltaTime);
-                    velocity.x = knockbackVel.x;
-                    velocity.z = knockbackVel.z;
-                }
+                    // Knockback (pericoli Inferno): spinta orizzontale breve che
+                    // sovrascrive la velocita' per far spiccare il salto/scivolata.
+                    if (knockbackRemain > 0f)
+                    {
+                        knockbackRemain = Mathf.Max(0f, knockbackRemain - stepDt);
+                        velocity.x = knockbackVel.x;
+                        velocity.z = knockbackVel.z;
+                    }
 
-                controller.Move(velocity * Time.deltaTime);
+                    controller.Move(velocity * stepDt);
+                }
 
                 // Pendio troppo ripido: il personaggio scivola e cade a terra
                 // (knockdown + contusione), come su una montagna impervia. Dopo
@@ -339,8 +362,8 @@ namespace City.Player
                 walker.SetSpeed(currentSpeed);
                 walker.SetGrounded(controller.enabled && controller.isGrounded);
             }
-            if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - Time.deltaTime);
-            TrackWalkDistance();
+            if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - frameDt);
+            TrackWalkDistance(frameDt);
             LogWalkDiagnostics();
         }
 
@@ -416,7 +439,7 @@ namespace City.Player
         /// <summary>Volo (Paradiso): thrust orizzontale con il joystick + salita/
         /// discesa con i pulsanti dedicati. Gravita' quasi assente per
         /// fluttuare; si perde quota solo scendendo attivamente.</summary>
-        private void ApplyFlight(Vector3 move)
+        private void ApplyFlight(Vector3 move, float dt)
         {
             Vector3 forward = transform.forward;
             Vector3 right = transform.right;
@@ -431,10 +454,10 @@ namespace City.Player
             velocity = new Vector3(dir.x * currentSpeed, up, dir.z * currentSpeed);
 
             // galleggia: gravita' quasi assente, mai sopra -2 m/s di caduta
-            velocity.y += gravity * flightGravityScale * 0.5f * Time.deltaTime;
+            velocity.y += gravity * flightGravityScale * 0.5f * dt;
             if (velocity.y < -2f) velocity.y = -2f;
 
-            controller.Move(velocity * Time.deltaTime);
+            controller.Move(velocity * dt);
         }
 
         /// <summary>Salto: impulso verticale se il player e a terra (o a pochi
@@ -629,7 +652,7 @@ namespace City.Player
             }
 
             float newFeet = GroundSnapper.Follow(ref _groundFollow, feetY,
-                targetFeet, Time.deltaTime);
+                targetFeet, Mathf.Min(Time.deltaTime, MaxFrameStepS));
             if (Mathf.Abs(newFeet - feetY) <= GroundFollowClearance) return;
 
             // Contatore diagnostico: quante correzioni verticali al secondo
@@ -670,10 +693,10 @@ namespace City.Player
 
         /// <summary>Accumula la distanza percorsa e la consegna alle missioni
         /// a ogni metro (batching per non spammare il MissionManager a frame).</summary>
-        private void TrackWalkDistance()
+        private void TrackWalkDistance(float dt)
         {
             if (!IsMoving) return;
-            float meters = new Vector3(velocity.x, 0f, velocity.z).magnitude * Time.deltaTime;
+            float meters = new Vector3(velocity.x, 0f, velocity.z).magnitude * dt;
             if (meters <= 0f) return;
             walkTelemetry += meters;
             if (walkTelemetry >= 1f)
