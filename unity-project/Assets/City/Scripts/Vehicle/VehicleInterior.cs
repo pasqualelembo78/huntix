@@ -32,8 +32,21 @@ namespace City.Vehicle
 
         private bool built;
 
+        // Materiali CONDIVISI: prima ogni veicolo creava 3 materiali nuovi
+        // (sedili, cruscotto, acciaio) piu' 3 Shader.Find: con centinaia di
+        // auto parcheggiate sono migliaia di materiali inutili che rompono il
+        // batching e pesano sulla memoria. Gli abitacoli usano sempre gli
+        // stessi 3 colori opachi, quindi si creano una volta e si condividono.
+        // Zero differenza visiva.
+        private static readonly System.Collections.Generic.Dictionary<Color, Material>
+            OpaqueCache = new System.Collections.Generic.Dictionary<Color, Material>();
+
         private static Material NewMat(Color c, bool transparent = false)
         {
+            Material cached;
+            if (!transparent && OpaqueCache.TryGetValue(c, out cached) && cached != null)
+                return cached;
+
             var shader = Shader.Find("Standard");
             if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null) shader = Shader.Find("Diffuse");
@@ -49,6 +62,10 @@ namespace City.Vehicle
                 m.DisableKeyword("_ALPHATEST_ON");
                 m.EnableKeyword("_ALPHABLEND_ON");
                 m.renderQueue = 3000;
+            }
+            else
+            {
+                OpaqueCache[c] = m;
             }
             return m;
         }

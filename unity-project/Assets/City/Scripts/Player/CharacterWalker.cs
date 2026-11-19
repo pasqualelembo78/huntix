@@ -58,6 +58,17 @@ namespace City.Player
         private bool _diagToastShown;
         private static readonly RaycastHit[] IkHitsBuffer = new RaycastHit[8];
 
+        // ── Cache delle clip procedurali (NPC) ──
+        // Le clip walk/run/idle sono IDENTICHE per ogni pedone che condivide lo
+        // stesso scheletro (stesso prefab Kenney) e gli stessi parametri: prima
+        // se ne generavano 3 per OGNI NPC (migliaia di AnimationClip in
+        // memoria durante lo streaming). Ora si generano una volta per firma
+        // scheletro+parametri e si condividono: le clip Unity sono risorse
+        // condivise e ogni Animation tiene il proprio stato di play. Zero
+        // differenza visiva.
+        private static readonly Dictionary<string, AnimationClip> ClipCache =
+            new Dictionary<string, AnimationClip>();
+
         // ── Parametri procedural mode (NPC) ──
         private const string IdleState = "Idle";
         private const string WalkState = "Walk";
@@ -669,12 +680,13 @@ namespace City.Player
             CalibrateLimbAxes();
             anim = gameObject.GetComponent<Animation>();
             if (anim == null) anim = gameObject.AddComponent<Animation>();
-            anim.AddClip(BuildLocomotion("walk", legSwingDeg, kneeBendDeg,
-                armSwingDeg, walkCadence, walkBounceM, forwardLeanDeg * 0.4f, 3f), WalkState);
-            anim.AddClip(BuildLocomotion("run", legSwingDeg * 1.5f,
+            anim.AddClip(BuildLocomotionCached("walk", legSwingDeg, kneeBendDeg,
+                armSwingDeg, walkCadence, walkBounceM, forwardLeanDeg * 0.4f, 3f),
+                WalkState);
+            anim.AddClip(BuildLocomotionCached("run", legSwingDeg * 1.5f,
                 kneeBendDeg * 1.35f, armSwingDeg * 1.5f, runCadence, runBounceM,
                 forwardLeanDeg, 8f), RunState);
-            anim.AddClip(BuildIdle(), IdleState);
+            anim.AddClip(BuildIdleCached(), IdleState);
             current = IdleState;
             anim.Play(IdleState);
 
@@ -695,6 +707,58 @@ namespace City.Player
                     ? " -> T-POSE (hips assenti)"
                     : " -> OK"));
             ready = true;
+        }
+
+        // Firma dello scheletro: la bake legge le localRotation a runtime,
+        // quindi due rig con le stesse rest pose producono le stesse clip. La
+        // includo nella chiave cosi' un prefab con rig diverso non riusa per
+        // errore la clip di un altro.
+        private string RigSignature()
+        {
+            var sb = new System.Text.StringBuilder(96);
+            sb.Append(BoneSig(HipsPath)).Append('|')
+              .Append(BoneSig(LUpLegPath)).Append('|')
+              .Append(BoneSig(LLegPath)).Append('|')
+              .Append(BoneSig(LShoulderPath)).Append('|')
+              .Append(BoneSig(LArmPath));
+            Transform hips = transform.Find(HipsPath);
+            sb.Append('|').Append(hips != null
+                ? hips.localPosition.y.ToString("F4") : "n");
+            return sb.ToString();
+        }
+
+        private string BoneSig(string path)
+        {
+            Transform t = transform.Find(path);
+            if (t == null) return "-";
+            Quaternion r = t.localRotation;
+            return r.x.ToString("F4") + "," + r.y.ToString("F4") + "," +
+                   r.z.ToString("F4") + "," + r.w.ToString("F4");
+        }
+
+        private AnimationClip BuildLocomotionCached(string tag, float legSwing,
+            float kneeBend, float armSwing, float cadence, float bounce,
+            float leanDeg, float thighBiasDeg)
+        {
+            string key = tag + "|" + RigSignature() + "|" + legSwing + "|" +
+                kneeBend + "|" + armSwing + "|" + cadence + "|" + bounce +
+                "|" + leanDeg + "|" + thighBiasDeg;
+            AnimationClip c;
+            if (ClipCache.TryGetValue(key, out c) && c != null) return c;
+            c = BuildLocomotion(tag, legSwing, kneeBend, armSwing, cadence,
+                bounce, leanDeg, thighBiasDeg);
+            ClipCache[key] = c;
+            return c;
+        }
+
+        private AnimationClip BuildIdleCached()
+        {
+            string key = "idle|" + RigSignature();
+            AnimationClip c;
+            if (ClipCache.TryGetValue(key, out c) && c != null) return c;
+            c = BuildIdle();
+            ClipCache[key] = c;
+            return c;
         }
 
         private AnimationClip BuildLocomotion(string tag, float legSwing,

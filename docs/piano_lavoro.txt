@@ -180,6 +180,32 @@ Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Riflesso uova: il log distingue uova trovate in AR indoor da quelle
            outdoor -> scopriamo se la caccia funziona davvero.
            Gate: baseline numerica scritta, nessun crash senza trace.
+           --- IN CORSO ---
+           [FATTO] 3a - Stabilita' memoria: materiali e clip CONDIVISI.
+           Dal logcat del crash in streaming (build chunk 5,4 s, 5800+ edifici
+           per chunk, 30 NPC/chunk, ~770 auto parcheggiate) sono emerse tre
+           fonti di allocazione "per esemplare" che gonfiavano la memoria e
+           rompevano il batching. Fix a costo visivo ZERO:
+           1. NPCPopulator: UN materiale per skin (48 totali) invece di uno
+              NUOVO per ogni renderer di ogni pedone (migliaia di materiali +
+              altrettante Shader.Find). Cache SkinMaterials (lazy).
+           2. CharacterWalker: le 3 clip procedurali (walk/run/idle) ora sono
+              generate UNA volta per firma scheletro+parametri e condivise fra
+              tutti gli NPC (ClipCache); prima erano 3 AnimationClip per OGNI
+              pedone. Le clip Unity sono risorse condivise: ogni Animation
+              tiene il proprio stato di play, zero differenza visiva.
+           3. VehicleInterior: 3 materiali condivisi fra tutti gli abitacoli
+              (OpaqueCache) invece di 3 materiali nuovi per auto (migliaia,
+              con 3 Shader.Find ciascuna).
+           Compila: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+           Riflesso uova: meno hitch di GC durante lo streaming = avvicinarsi
+           alla porta del cassetto/uovo indoor senza scatti; il bridge uova e
+           l'inventario restano intatti (toccate solo le allocazioni).
+           Commit: "perf: giorno 3 - materiali e clip condivisi (memoria
+           streaming)". APK NON ricostruito: l'utente sta ancora provando
+           quello della fluidita'.
+           Resta in Giorno 3: tombstone + logcat nativo al prossimo crash,
+           docs/BASELINE.md con i numeri reali del device.
 
 --------------------------------------------------------------------------------
 FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]

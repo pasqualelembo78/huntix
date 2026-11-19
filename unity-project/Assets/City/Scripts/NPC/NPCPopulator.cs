@@ -273,32 +273,55 @@ namespace City.NPC
 
         // Stessa tecnica dello storico NPCSpawnManager: sostituisce le
         // texture dei materiali degli SkinnedMeshRenderer con la skin scelta.
+        //
+        // MEMORIA: prima nasceva un materiale NUOVO per OGNI renderer di OGNI
+        // pedone (30 pedoni/chunk x 49 chunk = migliaia di materiali, con
+        // altrettante Shader.Find e nessun batching). Le skin sono solo 48:
+        // si crea UN materiale per skin (lazy) e lo si condivide fra tutti i
+        // pedoni con quel look. Zero differenza visiva, molta memoria e draw
+        // call in meno durante lo streaming.
+        private static readonly Dictionary<string, Material> SkinMaterials =
+            new Dictionary<string, Material>();
+
         private static void ApplySkin(GameObject go, string skinName)
         {
-            var skinTex = Resources.Load<Texture2D>("Characters/Skins/" + skinName);
-            if (skinTex == null) return;
+            var mat = GetSkinMaterial(skinName);
+            if (mat == null) return;
             var renderers = go.GetComponentsInChildren<SkinnedMeshRenderer>();
             foreach (var mr in renderers)
             {
                 var mats = mr.sharedMaterials;
-                for (int m = 0; m < mats.Length; m++)
-                {
-                    var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                    if (mat.shader == null) mat = new Material(Shader.Find("Standard"));
-                    if (mat.shader.name.StartsWith("Universal Render Pipeline"))
-                    {
-                        mat.SetColor("_BaseColor", Color.white);
-                        mat.SetTexture("_BaseMap", skinTex);
-                    }
-                    else
-                    {
-                        mat.SetColor("_Color", Color.white);
-                        mat.SetTexture("_MainTex", skinTex);
-                    }
-                    mats[m] = mat;
-                }
+                for (int m = 0; m < mats.Length; m++) mats[m] = mat;
                 mr.sharedMaterials = mats;
             }
+        }
+
+        private static Material GetSkinMaterial(string skinName)
+        {
+            Material cached;
+            if (SkinMaterials.TryGetValue(skinName, out cached) && cached != null)
+                return cached;
+
+            var skinTex = Resources.Load<Texture2D>("Characters/Skins/" + skinName);
+            if (skinTex == null) return null;
+
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            if (shader == null) return null;
+
+            var mat = new Material(shader);
+            if (shader.name.StartsWith("Universal Render Pipeline"))
+            {
+                mat.SetColor("_BaseColor", Color.white);
+                mat.SetTexture("_BaseMap", skinTex);
+            }
+            else
+            {
+                mat.SetColor("_Color", Color.white);
+                mat.SetTexture("_MainTex", skinTex);
+            }
+            SkinMaterials[skinName] = mat;
+            return mat;
         }
     }
 }
