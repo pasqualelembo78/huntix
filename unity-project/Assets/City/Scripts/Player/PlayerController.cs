@@ -67,13 +67,18 @@ namespace City.Player
         private float _followMaxErr;
         private string _followLastSource = "";
 
-        // GIORNO 2: ultima superficie di appoggio rilevata dal follower.
-        // A differenza di _followLastSource NON viene azzerata dal log 1/s:
-        // la telemetria la legge ogni 2 s senza fare altri raycast.
-        private string _surfaceCurrent = "";
-        /// <summary>Ultima superficie calpestabile ("sorgente/nome"), letta
-        /// dalla telemetria. Solo diagnostica: nessun effetto sul movimento.</summary>
-        public string LastGroundSurface { get { return _surfaceCurrent; } }
+        // GIORNO 2 / REVIEW: ultima superficie di appoggio rilevata dal follower.
+        // A differenza di _followLastSource NON viene azzerata dal log 1/s.
+        // Teniamo i due valori SEPARATI: la concatenazione "sorgente/nome"
+        // avveniva ogni frame in LateUpdate (2-3 stringhe nuove a 60 fps ->
+        // GC pressure). Qui solo assegnazioni di riferimento, zero allocazioni;
+        // la stringa viene composta dalla telemetria una volta ogni 2 s.
+        private GroundSource _surfaceSource = GroundSource.None;
+        private string _surfaceName = "";
+        /// <summary>Sorgente dell'ultima superficie calpestabile (diagnostica).</summary>
+        public GroundSource LastGroundSource { get { return _surfaceSource; } }
+        /// <summary>Nome dell'ultima superficie calpestabile (diagnostica).</summary>
+        public string LastGroundName { get { return _surfaceName; } }
         private float _lastTargetSpeed;
         private float _lastDirDot;
 
@@ -637,9 +642,15 @@ namespace City.Player
             GroundSample s = GroundSnapper.SampleGround(feetPos, transform);
             if (!s.found) return;   // nessun dato: la fisica e' gia' in carico
 
-            // GIORNO 2: memorizza la superficie gia' rilevata (costo = una
-            // assegnazione di stringa). La telemetria la legge senza probe.
-            _surfaceCurrent = s.source + "/" + (s.surfaceName ?? "-");
+            // GIORNO 2 / REVIEW: salva i due valori separatamente, senza
+            // concatenare stringhe ogni frame. Il confronto e' solo tra
+            // riferimenti/enum; la telemetria compone il testo ogni 2 s.
+            string nm = s.surfaceName ?? "";
+            if (s.source != _surfaceSource || nm != _surfaceName)
+            {
+                _surfaceSource = s.source;
+                _surfaceName = nm;
+            }
 
             float targetFeet = s.height + GroundFollowClearance;
             float err = targetFeet - feetY;

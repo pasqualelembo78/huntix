@@ -50,6 +50,13 @@ namespace City.Player
         /// </summary>
         public static void Ensure(GameObject root)
         {
+            // GIORNO 1 / REVIEW: il sensore IK va installato PRIMA dell'early
+            // return. Se una scena/prefab ha gia' il rig serializzato, il corpo
+            // di Ensure non gira e il log [FootIK] non apparirebbe mai: il
+            // gate del Giorno 1 fallirebbe "a vuoto". FootIK.Ensure e'
+            // idempotente, quindi qui non puo' fare danni.
+            FootIK.Ensure(root);
+
             if (root == null || ActiveFor(root))
             {
                 OsmDiag.Log("[PlayerHeroRig][Ensure] skip: root null o rig gia' attivo (" +
@@ -115,11 +122,8 @@ namespace City.Player
             // in A-pose finche' l'animazione non prende il controllo.
             ArmsPoseFallback.Ensure(go);
 
-            // GIORNO 1: sensore IK a runtime. Verifica che l'avatar sia Humanoid
-            // e che Unity chiami OnAnimatorIK. Agganciato qui (non nel prefab,
-            // che RemyKitSetup riscrive in build) e' idempotente e non modifica
-            // ancora la posa: prepara solo il terreno per Giorno 6-8.
-            FootIK.Ensure(go);
+            // (Il sensore FootIK e' stato installato all'inizio di Ensure,
+            // prima dell'early return: vedi commento in cima al metodo.)
 
             // Crescita fisiologica (FASE 1 - test isolato): se i morph del
             // personaggio sono stati "cotti" da RemyMorphBaker installa il

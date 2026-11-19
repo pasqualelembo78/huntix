@@ -46,7 +46,10 @@ namespace City.Interior
         /// citta' in fase di build chunk: ~15.700 Renderer in piu'.</summary>
         public void EnsureDoorMarker()
         {
-            if (_doorMark != null || inPlace) return;
+            // REVIEW: non escludere gli edifici in-place: prima il Quad veniva
+            // creato per OGNI ingresso da BuildingPlacer.MaybeAddEntrance,
+            // anche in-place. Il varco geometrico e il segnaposto coesistono.
+            if (_doorMark != null) return;
             var mark = GameObject.CreatePrimitive(PrimitiveType.Quad);
             Object.Destroy(mark.GetComponent<Collider>());
             mark.name = "PortaSegnaposto";

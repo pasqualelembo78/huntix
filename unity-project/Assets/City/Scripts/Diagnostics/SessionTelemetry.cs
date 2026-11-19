@@ -28,6 +28,10 @@ namespace City.Diagnostics
         // sono un episodio o la regola. Bucket: <16 / <33 / <50 / <100 /
         // <400 / >=400 ms (ultimo = "frame mostruoso").
         private int _h16, _h33, _h50, _h100, _h400, _hOver;
+        // ATTENZIONE: e' memoria RISERVATA da Unity (managed+native), NON il
+        // RSS/PSS del processo che l'OOM killer Android guarda. Utile come
+        // contesto; per la caccia a LOW_MEMORY servira' il valore di sistema
+        // via bridge (Giorno 3 / 18).
         private long _peakRamMb;
 
         // GIORNO 2: contatore uova. indoor = contenitore/cassetto o player
@@ -168,13 +172,17 @@ namespace City.Diagnostics
                       .Append(Mathf.Repeat(
                           game.player.transform.eulerAngles.y, 360f)
                           .ToString("F0"));
-                    // GIORNO 2: superficie di appoggio letta dal follower del
-                    // player (gi' calcolata ogni frame, nessun raycast nuovo).
-                    string surf = game.player.LastGroundSurface;
-                    if (!string.IsNullOrEmpty(surf))
+                    // GIORNO 2 / REVIEW: il follower salva sorgente e nome
+                    // separati (zero allocazioni per frame); qui, ogni 2 s,
+                    // li componiamo in un'unica stringa. Nessun raycast nuovo.
+                    string surfName = game.player.LastGroundName;
+                    if (game.player.LastGroundSource != City.OSM.GroundSource.None ||
+                        !string.IsNullOrEmpty(surfName))
                     {
-                        if (surf.Length > 28) surf = surf.Substring(0, 28);
-                        sb.Append(" ground=").Append(surf);
+                        if (!string.IsNullOrEmpty(surfName) && surfName.Length > 24)
+                            surfName = surfName.Substring(0, 24);
+                        sb.Append(" ground=").Append(game.player.LastGroundSource)
+                          .Append('/').Append(string.IsNullOrEmpty(surfName) ? "-" : surfName);
                     }
                 }
                 if (game != null && game.IsDriving &&

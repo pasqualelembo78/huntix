@@ -746,6 +746,25 @@ private const float TerrainPhysxTimeoutS = 15f;
             }
         }
 
+        /// <summary>Ricarica i chunk SENZA cambiare la posizione geografica
+        /// (usata dal toggle "Stile edifici"). UnloadAll distrugge i collider
+        /// del terreno: come in Teleport() serve il ponte di sicurezza, ma qui
+        /// il player NON viene riportato a (0,1.5,0), quindi lo spostiamo sotto
+        /// di lui per non farlo cadere nel vuoto durante il rebuild.</summary>
+        public void ReloadWorld()
+        {
+            if (Manager == null) return;
+            EnsureSpawnBridge();
+            if (_spawnBridge != null && City.Game.Instance != null &&
+                City.Game.Instance.player != null)
+            {
+                Vector3 pp = City.Game.Instance.player.transform.position;
+                _spawnBridge.transform.position = new Vector3(pp.x, 0f, pp.z);
+            }
+            Manager.UnloadAll();
+            OsmDiag.Log("[CityChunkedWorld] reload chunk (ponte sotto il player)");
+        }
+
         /// <summary>Teletrasporto geografico (es. scelta citta' dal menu).</summary>
         public void Teleport(double lat, double lng)
         {

@@ -69,8 +69,13 @@ FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
            controller/applyRootMotion in Start() e conferma OnAnimatorIK
            (una volta) a runtime. Non modifica la posa: zero rischio di
            rompere l'animazione corrente. Agganciato da PlayerHeroRig.Ensure
-           subito dopo ArmsPoseFallback.Ensure(go) (NON nel prefab, che la
-           build riscrive). Log: [FootIK] VERIFICA ... / OnAnimatorIK chiamato.
+           ALL'INIZIO del metodo, prima dell'early return (REVIEW: cosi' il sensore c'e'
+           anche se il rig e' gia' serializzato in scena; prima il gate sarebbe
+           fallito a vuoto). NON nel prefab, che la build riscrive.
+           Log: [FootIK] VERIFICA ... / OnAnimatorIK chiamato.
+           Verificato IK Pass: PlayerLocomotion.controller Base Layer ha
+           m_IKPass: 1 -> OnAnimatorIK viene consegnato. FootIK.cs.meta
+           committato con GUID stabile.
            Commit: "walk: giorno 1 - verifica avatar Humanoid e sensore IK"
            (vedi git log). APK NON ricostruito:
            l'utente sta ancora provando quello della fluidita'. Gate
@@ -86,8 +91,11 @@ FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
              azzerato a ogni beacon (2 s). best/worst/ram gia' esistevano.
            - Aggiunto "peak=<MB>" (picco RAM) per la caccia a LOW_MEMORY.
            - Aggiunto "ground=<sorgente/nome>" letto da
-             PlayerController.LastGroundSurface: il follower calcola gia'
-             la superficie ogni frame, quindi ZERO raycast nuovi.
+             PlayerController.LastGroundSource/LastGroundName: il follower
+             calcola gia' la superficie ogni frame, ZERO raycast nuovi e ZERO
+             stringhe allocate per frame (REVIEW: la concatenazione in
+             LateUpdate faceva 2-3 stringhe nuove a 60 fps). La stringa del
+             log viene composta solo nel beacon, ogni 2 s.
            - Riflesso uova: "uova=I<n>/O<n>" tramite
              SessionTelemetry.EggCollected(bool) chiamato da Game.OnEggCollected.
              indoor = containerEggKey presente o player dentro edificio;
@@ -99,6 +107,40 @@ FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
            contatore uova indoor/outdoor" (vedi git log). APK NON ricostruito.
            Gate device (da validare col prossimo APK): nel log [AR] compaiono
            hist=..., ground=... (es. ColliderShort/Terreno), uova=I0/O1.
+
+--------------------------------------------------------------------------------
+REVIEW 2026-11-19 (commit "fix: review giorni 1-2 - ...")
+--------------------------------------------------------------------------------
+Review indipendente sui commit 376fbc9 / 4c178ef / b2fdb04. Verificato:
+compilazione C# OK (cscheck -define:HUNTIX_FULL), IK Pass = 1 sul Base Layer
+del controller, GUID avatar/controller corretti, nessuna regressione alle
+regole del Mandato (hit piu' vicino, no proxy altimetrico, WorldHeights.Flat,
+toggle follower, ContainerEgg, bridge uova, indoor AR intatti).
+
+Fix applicati:
+1. Menu "Stile edifici": NON chiama piu' Manager.UnloadAll() allo scoperto.
+   Nuovo CityChunkedWorld.ReloadWorld() sposta il SpawnBridge sotto il player
+   PRIMA di svuotare i chunk (come Teleport), e il menu rifiuta il cambio se
+   sei dentro un edificio o in auto: evita caduta nel vuoto e riferimenti a
+   oggetti distrutti.
+2. PlayerController: zero concatenazioni di stringhe per frame in LateUpdate
+   (sorgente e nome salvati separati; la telemetria compone ogni 2 s).
+3. FootIK.Ensure spostato prima dell'early return di PlayerHeroRig.Ensure:
+   ora il sensore c'e' anche col rig gia' serializzato in scena.
+4. FootIK.cs.meta creato con GUID stabile (convenzione repo/Unity).
+5. BuildingEntrance.EnsureDoorMarker: rimosso il guard che nascondeva il
+   segnaposto negli edifici in-place (comportamento precedente ripristinato).
+6. Cambio stile edifici tracciato anche via UnityBridge.LogToAndroid
+   (tag "CityStyle") oltre che in PlayerPrefs.
+
+Punti NOT fixati (scelte documentate, non bug):
+- "peak=<MB>" e' memoria RISERVATA da Unity, NON RSS/PSS del processo: per
+  l'OOM killer Android non e' il numero decisivo. Va affiancato con un dato
+  di sistema via bridge nel Giorno 3/18 (runbook crash).
+- Default CityStyle = Kenney (false) e' scelta esplicita dell'utente per la
+  fluidita', reversibile con un click dal menu. La preferenza resta in
+  PlayerPrefs (impostazione grafica locale, non stato di gioco); se si vuole
+  anche nel profilo Android va aggiunto un campo dedicato al bridge.
 
 Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Raccogliere tombstone e logcat nativo se si ripete.

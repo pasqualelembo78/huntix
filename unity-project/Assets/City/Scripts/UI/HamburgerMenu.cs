@@ -212,19 +212,46 @@ namespace City.UI
         /// letta da BuildingPlacer.PlaceLegacy al prossimo build.</summary>
         private void ToggleBuildingStyle()
         {
+            // REVIEW: UnloadAll distrugge i collider e i riferimenti agli edifici.
+            // Se siamo dentro un edificio o in auto, currentEntrance/CurrentVehicle
+            // resterebbero appesi a oggetti distrutti: rifiuta il cambio con un
+            // messaggio invece di lasciare uno stato inconsistente.
+            var im = City.Interior.InteriorManager.Instance;
+            if (im != null && im.IsInside)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast("Esci dall'edificio prima di cambiare stile");
+                SetVisible(false);
+                return;
+            }
+            var game = Game.Instance;
+            if (game != null && game.IsDriving)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast("Scendi dall'auto prima di cambiare stile");
+                SetVisible(false);
+                return;
+            }
+
             bool next = !CityStyle.UseQuaternius;
             CityStyle.Set(next);
             RefreshStyleLabel();
             Vibration.Vibrate(25);
+            // Traccia il cambio stile anche sul lato Android (Mandato: ponte
+            // bidirezionale) oltre che in PlayerPrefs.
+            try { Huntix.Bridge.UnityBridge.LogToAndroid("CityStyle", next
+                ? "Quaternius (qualita')" : "Kenney (veloce)"); }
+            catch (System.Exception) { }
             if (UIManager.Instance != null)
                 UIManager.Instance.ShowToast(next
                     ? "Stile edifici: Qualita' (Quaternius). Mappa in ricarica..."
                     : "Stile edifici: Veloce (Kenney). Mappa in ricarica...");
 
-            // UnloadAll svuota chunk/tile e riavvia il tick loop, che rimette
-            // in coda i chunk con il nuovo stile (stesso percorso del CENTRA GPS).
+            // ReloadWorld() mette il SpawnBridge sotto il player PRIMA di
+            // svuotare i chunk: senza ponte il player cadrebbe nel vuoto
+            // durante il rebuild (stesso motivo di Teleport()).
             var cw = City.OSM.CityChunkedWorld.Instance;
-            if (cw != null && cw.Manager != null) cw.Manager.UnloadAll();
+            if (cw != null) cw.ReloadWorld();
             SetVisible(false);
         }
 
