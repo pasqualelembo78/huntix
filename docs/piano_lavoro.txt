@@ -142,6 +142,38 @@ Punti NOT fixati (scelte documentate, non bug):
   PlayerPrefs (impostazione grafica locale, non stato di gioco); se si vuole
   anche nel profilo Android va aggiunto un campo dedicato al bridge.
 
+--------------------------------------------------------------------------------
+REVIEW 2 (2026-11-19, commit "fix: review2 - FootIK sull'eroe, non sul legacy")
+--------------------------------------------------------------------------------
+Secondo giro, mirato a lifecycle/ordinamento. Bug bloccante trovato e fixato:
+
+- FootIK veniva installato in cima a PlayerHeroRig.Ensure, PRIMA
+  dell'instantiate dell'eroe: in Awake il root Player contiene gia'
+  characterMedium col suo Animator, quindi il sensore finiva su QUEL
+  Animator (poi disattivato) e OnAnimatorIK non scattava mai su Remy.
+  Gate Giorno 1 = falso positivo, e Giorni 6-8 avrebbero lavorato sul
+  rig sbagliato. Fix: FootIK.Ensure(go) subito dopo l'instantiate; nel
+  ramo "rig gia' serializzato" si scope su existing.gameObject (l'hero
+  rig), non sul primo Animator qualsiasi sotto root.
+
+Verificati OK (nessun fix necessario):
+- ReloadWorld/SpawnBridge: y=0 corretto in Flat, ponte escluso dalle sonde
+  di terra, rimosso solo con >=25 chunk reali; UnloadAll riavvia il tick.
+- EnsureDoorMarker: unico creatore del Quad, materiale condiviso non
+  distrutto, nessun duplicato.
+- ChunkData._buildingColliders: buildingsGo guardato, lazy interior harmless.
+- Game.player e' PlayerController (tipo statico), LastGroundSource/Name
+  corretti; nessun errore C#.
+
+Note documentate (NON fixate, preesistenti / scelte):
+- HideLegacyModels salta gli SMR con Animator parent: il characterMedium
+  legacy potrebbe restare visibile insieme a Remy (doppio personaggio).
+  E' preesistente e CharacterWalker risolve ancora l'Animator con
+  GetComponentInChildren: va affrontato in un pezzo dedicato CON i log
+  del device, non a occhio, per non rompere l'animazione.
+- _eggsIndoor/_eggsOutdoor sono cumulativi per processo (SessionTelemetry
+  e' DontDestroyOnLoad): coerenti con la "scatola nera", non per-ingresso.
+
 Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Raccogliere tombstone e logcat nativo se si ripete.
            Scrivere docs/BASELINE.md con i numeri misurati.

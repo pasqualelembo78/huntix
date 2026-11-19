@@ -50,15 +50,15 @@ namespace City.Player
         /// </summary>
         public static void Ensure(GameObject root)
         {
-            // GIORNO 1 / REVIEW: il sensore IK va installato PRIMA dell'early
-            // return. Se una scena/prefab ha gia' il rig serializzato, il corpo
-            // di Ensure non gira e il log [FootIK] non apparirebbe mai: il
-            // gate del Giorno 1 fallirebbe "a vuoto". FootIK.Ensure e'
-            // idempotente, quindi qui non puo' fare danni.
-            FootIK.Ensure(root);
-
             if (root == null || ActiveFor(root))
             {
+                // REVIEW 2: il sensore IK va installato anche qui (rig gia'
+                // serializzato in scena, corpo di Ensure non eseguito), ma
+                // SOLO sull'hero rig: prendere il primo Animator sotto root
+                // potrebbe beccare il modello legacy characterMedium.
+                var existing = root != null
+                    ? root.GetComponentInChildren<PlayerHeroRig>(true) : null;
+                if (existing != null) FootIK.Ensure(existing.gameObject);
                 OsmDiag.Log("[PlayerHeroRig][Ensure] skip: root null o rig gia' attivo (" +
                     (root != null ? root.name : "null") + ")");
                 return;
@@ -122,8 +122,11 @@ namespace City.Player
             // in A-pose finche' l'animazione non prende il controllo.
             ArmsPoseFallback.Ensure(go);
 
-            // (Il sensore FootIK e' stato installato all'inizio di Ensure,
-            // prima dell'early return: vedi commento in cima al metodo.)
+            // GIORNO 1 / REVIEW 2: il sensore IK va installato QUI, sull'hero
+            // appena istanziato. Metterlo in cima a Ensure (prima dell'
+            // instantiate) lo agganciava all'Animator legacy characterMedium,
+            // che poi resta disattivato -> OnAnimatorIK mai chiamato su Remy.
+            FootIK.Ensure(go);
 
             // Crescita fisiologica (FASE 1 - test isolato): se i morph del
             // personaggio sono stati "cotti" da RemyMorphBaker installa il
