@@ -174,13 +174,13 @@ Note documentate (NON fixate, preesistenti / scelte):
 - _eggsIndoor/_eggsOutdoor sono cumulativi per processo (SessionTelemetry
   e' DontDestroyOnLoad): coerenti con la "scatola nera", non per-ingresso.
 
-Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
+[FATTO] Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Raccogliere tombstone e logcat nativo se si ripete.
            Scrivere docs/BASELINE.md con i numeri misurati.
            Riflesso uova: il log distingue uova trovate in AR indoor da quelle
            outdoor -> scopriamo se la caccia funziona davvero.
            Gate: baseline numerica scritta, nessun crash senza trace.
-           --- IN CORSO ---
+           --- COMPLETATO 2026-11-20 (3a + 3b + 3c) ---
            [FATTO] 3a - Stabilita' memoria: materiali e clip CONDIVISI.
            Dal logcat del crash in streaming (build chunk 5,4 s, 5800+ edifici
            per chunk, 30 NPC/chunk, ~770 auto parcheggiate) sono emerse tre
@@ -218,8 +218,26 @@ Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Compila: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
            Commit: "perf: giorno 3 - abitacoli lazy, costruiti all'ingresso".
            APK NON ricostruito (test fluidita' in corso).
-           Resta in Giorno 3: tombstone + logcat nativo al prossimo crash,
-           docs/BASELINE.md con i numeri reali del device.
+           [FATTO] 3c - Chiusura del Giorno 3 (2026-11-20).
+           Scritti docs/RUNBOOK.md (build, rollback, raccolta crash, albero
+           decisionale SIGSEGV/SIGABRT/ANR/LOW_MEMORY, gate di verifica) e
+           docs/BASELINE.md (numeri reali del logcat 19 Nov: fps=10,
+           frame=66,7 ms, hist 13x100-400 ms + 5x>400 ms, ram/peak=356 MB
+           riservati Unity NON PSS, 5.811/6.082 edifici per chunk, 30 NPC,
+           ~770 auto, build chunk 5,4 s, pending=40/41).
+           Aggiunto scripts/raccogli_crash.sh: legge il buffer crash (il
+           comando per azzerarlo prima di riprodurre e' nel RUNBOOK), filtra
+           i tag Huntix, salva meminfo (PSS reale), tombstone e
+           RIEPILOGO.txt. Sintassi verificata con bash -n.
+           NOTA corretta: l'APK in prova del 19 Nov CONTIENE Giorno 1+2
+           (provato da hist=/ground= e ikFired=True nel logcat) ma NON
+           contiene 3a/3b, che sono successivi alla creazione dell'AAR.
+           Gate del Giorno 3 (baseline numerica scritta, nessun crash senza
+           trace) e' chiuso sul piano; la DIAGNOSI del crash resta sospesa
+           finche' l'utente non passa RIEPILOGO.txt + crash_buffer.txt:
+           senza il segnale esatto non si sceglie il pezzo successivo.
+           Riflesso uova: BASELINE.md sez. 6 collega stabilita' e contatore
+           uova I/O; RUNBOOK sez. 6 vieta di toccare ContainerEgg/bridge.
 
 --------------------------------------------------------------------------------
 FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
