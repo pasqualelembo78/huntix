@@ -272,7 +272,12 @@ namespace City.Player
                 " groundRef=" + groundRef.ToString("F2") +
                 " grounded=" + grounded +
                 " ccGrounded=" + cc.isGrounded +
-                " feetFromPivot=" + feetFromPivot.ToString("F2"));
+                " feetFromPivot=" + feetFromPivot.ToString("F2") +
+                // GIORNO 4: velocita' EFFETTIVA consegnata all'Animator.
+                // Va confrontata con "real=" di [WalkDiag]: se combaciano il
+                // moonwalk e' finito, anche quando il player spinge un muro.
+                " spd=" + speed.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture));
             if (_diagToastShown) return;
             var g = City.Game.Instance;
             if (g == null || g.ui == null) return;

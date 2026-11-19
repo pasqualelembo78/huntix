@@ -61,6 +61,20 @@ namespace City.Player
         // (GC, shader compile, swap): non lo integriamo tutto in una volta.
         private const float MaxFrameDtS = 0.25f;
 
+        // GIORNO 4 - Camminata da gioco serio: la velocita' non e' un interruttore
+        // (input -> subito 3.2 m/s) ma uno smorzamento con tempi DEDICATI.
+        // Partenza pronta (80 ms), arresto leggermente piu' pesante (120 ms):
+        // il personaggio scatta quando premi e si ferma con un po' di inerzia,
+        // senza pero' scivolare come sul ghiaccio. Valori in secondi, usati come
+        // smoothTime di Mathf.SmoothDamp (frame-rate independent, a differenza
+        // del vecchio MoveTowards a 10 m/s^2 che a 10 fps partiva in 0,3 s).
+        private const float AccelSmoothS = 0.08f;
+        private const float BrakeSmoothS = 0.12f;
+        // Tetto di sicurezza per la velocita' MISURATA passata all'Animator:
+        // copre sprint (7.5*2.2=16.5) e dash (18) con un margine, ma taglia
+        // i picchi dovuti a un teleport/respawn (le gambe non impazziscono).
+        private const float MaxRealAnimSpeed = 25f;
+
         // ── Diagnostica camminata ([WalkDiag], una riga/s su AppLog Android) ──
         private float _walkDiagNextAt;
         private int _followCorrections;
@@ -147,6 +161,14 @@ namespace City.Player
         // gambe che "camminano a posto".
         private Vector3 moveDirection;
         private float currentSpeed;
+        // GIORNO 4: stato interno di SmoothDamp (velocita' di variazione di
+        // currentSpeed) e velocita' ORIZZONTALE effettivamente prodotta da
+        // controller.Move. Quest'ultima e' quella che comanda l'Animator:
+        // usare la velocita' richiesta faceva "camminare a posto" contro i muri.
+        private float _speedSmoothVel;
+        private Vector3 _moveStartPos;
+        private float _realHorizontalSpeed;
+        private float _realHorizontalMeters;
 
         // telemetria camminata per le missioni WalkDistance: accumula i metri
         // percorsi e li notifica a ogni metro compiuto (MissionManager mai
@@ -192,6 +214,12 @@ namespace City.Player
             moveInput = Vector2.zero;
             velocity = Vector3.zero;
             currentSpeed = 0f;
+            // Azzera anche lo slancio di SmoothDamp: senza questo, un Stop()
+            // seguito da un nuovo input ripartirebbe con la velocita' residua
+            // del frame precedente (scatto iniziale).
+            _speedSmoothVel = 0f;
+            _realHorizontalSpeed = 0f;
+            _realHorizontalMeters = 0f;
         }
 
         private void Awake()
@@ -297,10 +325,35 @@ namespace City.Player
             if (sprintRemain > 0f) targetSpeed *= sprintBoost;
             _lastTargetSpeed = targetSpeed; // diagnostica [WalkDiag]
 
-            currentSpeed = Mathf.MoveTowards(currentSpeed, targetSpeed, 10f * frameDt);
+            // GIORNO 4: smorzamento con tempi separati. SmoothDamp e'
+            // frame-rate independent e gestisce gli stalli (frameDt e' gia'
+            // clampato a MaxFrameDtS) senza il balzo del vecchio rate fisso.
+            float smoothTime = targetSpeed > currentSpeed + 0.001f
+                ? AccelSmoothS : BrakeSmoothS;
+            currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed,
+                ref _speedSmoothVel, smoothTime, Mathf.Infinity, frameDt);
+            if (currentSpeed < 0f)
+            {
+                currentSpeed = 0f;
+                _speedSmoothVel = 0f;
+            }
+            float capSpeed = runSpeed * sprintBoost;
+            if (currentSpeed > capSpeed)
+            {
+                currentSpeed = capSpeed;
+                _speedSmoothVel = 0f;
+            }
+            // IsMoving viene ricalcolato DOPO controller.Move() dalla velocita' reale:
+            // qui il vecchio valore e' solo un fallback per il frame in cui
+            // il CharacterController e' disabilitato (early return sotto).
             IsMoving = currentSpeed > 0.05f;
 
             if (!controller.enabled) return;
+
+            // GIORNO 4: punto di partenza per misurare lo spostamento REALE.
+            // Viene preso qui (non a inizio Update) per escludere qualunque
+            // altra scrittura del transform e includere solo controller.Move.
+            _moveStartPos = transform.position;
 
             // Velocita' orizzontale: default camminata, override se dash attivo.
             // moveDirection ritiene l'ultima direzione: al rilascio del
@@ -370,13 +423,30 @@ namespace City.Player
                 }
             }
 
+            // GIORNO 4 - VELOCITA' REALE: all'Animator deve arrivare lo
+            // spostamento effettivo, non l'input grezzo ne' currentSpeed
+            // (che e' la richiesta GIA' smorzata). Se il CharacterController
+            // sbatte contro un muro la richiesta resta alta ma il player e'
+            // fermo: passare currentSpeed faceva camminare le gambe a posto
+            // (il classico moonwalk). Misuriamo quindi lo spostamento
+            // orizzontale prodotto da controller.Move in questo frame.
+            Vector3 moved = transform.position - _moveStartPos;
+            _realHorizontalMeters = Mathf.Sqrt(moved.x * moved.x + moved.z * moved.z);
+            _realHorizontalSpeed = Mathf.Clamp(
+                _realHorizontalMeters / Mathf.Max(0.0001f, frameDt),
+                0f, MaxRealAnimSpeed);
+            // "In movimento" e' lo spostamento reale, non la richiesta:
+            // multiplayer e sistema energia non vedano un player fermo
+            // come se stesse correndo contro una parete.
+            IsMoving = _realHorizontalSpeed > 0.05f;
+
             if (walker != null)
             {
-                walker.SetSpeed(currentSpeed);
+                walker.SetSpeed(_realHorizontalSpeed);
                 walker.SetGrounded(controller.enabled && controller.isGrounded);
             }
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - frameDt);
-            TrackWalkDistance(frameDt);
+            TrackWalkDistance();
             LogWalkDiagnostics();
         }
 
@@ -397,6 +467,10 @@ namespace City.Player
                 " in=" + moveInput.magnitude.ToString("F2", inv) +
                 " tgt=" + _lastTargetSpeed.ToString("F2", inv) +
                 " cur=" + currentSpeed.ToString("F2", inv) +
+                // GIORNO 4: "cur" e' la richiesta smorzata, "real" lo
+                // spostamento misurato. Se real << cur il player e' contro
+                // un ostacolo (e l'Animator ora non cammina piu' a posto).
+                " real=" + _realHorizontalSpeed.ToString("F2", inv) +
                 " dot=" + _lastDirDot.ToString("F2", inv) +
                 " camGap=" + (rig != null ? rig.LastSmoothGap : 0f).ToString("F2", inv) +
                 " camDist=" + (rig != null ? rig.LastTargetDistance : 0f).ToString("F2", inv) +
@@ -716,10 +790,13 @@ namespace City.Player
 
         /// <summary>Accumula la distanza percorsa e la consegna alle missioni
         /// a ogni metro (batching per non spammare il MissionManager a frame).</summary>
-        private void TrackWalkDistance(float dt)
+        private void TrackWalkDistance()
         {
             if (!IsMoving) return;
-            float meters = new Vector3(velocity.x, 0f, velocity.z).magnitude * dt;
+            // GIORNO 4: usiamo i metri REALI percorsi, non velocity*dt.
+            // Cosi' le missioni "cammina X metri" non accreditano il player
+            // che spinge contro un muro senza muoversi.
+            float meters = _realHorizontalMeters;
             if (meters <= 0f) return;
             walkTelemetry += meters;
             if (walkTelemetry >= 1f)

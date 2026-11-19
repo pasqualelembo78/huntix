@@ -242,10 +242,44 @@ Note documentate (NON fixate, preesistenti / scelte):
 --------------------------------------------------------------------------------
 FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
 --------------------------------------------------------------------------------
-Giorno 4  - Velocita' smorzata (accel 0,08s / frenata 0,12s) + Animator guidato
-            dalla velocita' REALE, non dall'input (niente moonwalk).
-            File: PlayerController.cs / CharacterWalker.cs
-            Riflesso uova: avvicinarsi alla porta del cassetto senza scatti.
+[FATTO] Giorno 4 - Velocita' smorzata (accel 0,08s / frenata 0,12s) + Animator
+            guidato dalla velocita' REALE, non dall'input (niente moonwalk).
+            File: PlayerController.cs / cscheck/UnityStubs.cs (solo type-check).
+            Implementazione:
+            1. Sostituito il vecchio MoveTowards a 10 m/s^2 (a 10 fps la
+               partenza costava 0,3 s e sembrava un interruttore) con
+               Mathf.SmoothDamp e due smoothTime: AccelSmoothS=0,08 s quando
+               la richiesta cresce, BrakeSmoothS=0,12 s quando cala. E'
+               frame-rate independent, gestisce gli stalli perche' frameDt e'
+               gia' clampato a 0,25 s, e azzera lo slancio in Stop().
+            2. vera causa del moonwalk: all'Animator arrivava currentSpeed,
+               cioe' la velocita' RICHIESTA. Se il CharacterController sbatte
+               contro un muro la richiesta resta alta ma il player e' fermo,
+               e le gambe camminano a posto. Ora prima di controller.Move si
+               memorizza transform.position e dopo si misura lo spostamento
+               ORIZZONTALE effettivo: e' quello passato a walker.SetSpeed.
+               Stesso valore per IsMoving (multiplayer/energia) e per le
+               missioni "cammina X metri" (TrackWalkDistance usa i metri reali,
+               non velocity*dt: spingere contro un muro non accredita piu').
+            3. [WalkDiag] ora riporta anche real=<m/s> accanto a in=/tgt=/cur=:
+               se real << cur il player e' contro un ostacolo e l'Animator non
+               deve piu' camminare. Nessuna nuova stringa per frame (il log e'
+               sempre 1 riga/s).
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+            Aggiunti a UnityStubs.cs (SOLO check, mai nel progetto Unity) la
+            costante Mathf.Infinity e l'overload float di SmoothDamp.
+            Riflesso uova: avvicinarsi alla porta del cassetto (ContainerEgg)
+            senza scatti ne' gambe che slittano: il passo e' sincronizzato ai
+            metri percorsi davvero, quindi l'interazione con l'uovo indoor
+            resta leggibile anche a 10-15 fps. Nessun tocco a uova/bridge/
+            inventario/EggWhereLog/snapshot.
+            Il pulse di CharacterWalker (1 riga/2 s) riporta anche spd=<m/s>,
+            la velocita' consegnata all'Animator: va confrontata con real= di
+            [WalkDiag] (devono combaciare).
+            Gate device (da verificare con l'APK che conterra' il pezzo):
+            [WalkDiag] in=/tgt=/cur=/real= coerenti; premendo e rilasciando lo
+            stick la partenza e' pronta e l'arresto non scivola; contro un muro
+            real=0, spd=0 e il personaggio non cammina a posto.
 
 Giorno 5  - Head bob + passi audio sincronizzati al ciclo animativo.
             Riflesso uova: suono di raccolta dedicato per le uova rare.

@@ -112,6 +112,7 @@ namespace UnityEngine
 
     public static class Mathf { public const float Deg2Rad = 0.01745f; public const float Rad2Deg = 57.2958f;
         public const float PI = 3.141593f; public const float Epsilon = 1.19e-7f;
+        public const float Infinity = float.PositiveInfinity;
         public static float Cos(float f) => 0f; public static float Abs(float f) => f;
         public static int Abs(int i) => i;
         public static float Max(float a, float b) => a; public static float Min(float a, float b) => a;
@@ -130,6 +131,10 @@ namespace UnityEngine
         public static float InverseLerp(float a, float b, float t) => a;
         public static int RoundToInt(float f) => 0; public static float Atan2(float y, float x) => 0f;
         public static float MoveTowards(float a, float b, float d) => a;
+        // Solo type-check: la logica reale e' UnityEngine.Mathf.SmoothDamp.
+        // Stub mai incluso nel progetto Unity (vedi check.sh).
+        public static float SmoothDamp(float current, float target, ref float currentVelocity, float smoothTime) => current;
+        public static float SmoothDamp(float current, float target, ref float currentVelocity, float smoothTime, float maxSpeed, float deltaTime) => current;
         public static float Clamp01(float v) => v;
         public static int FloorToInt(float f) => 0; public static int CeilToInt(float f) => 0;
         public static float Acos(float f) => 0f; public static float Atan(float f) => 0f;
