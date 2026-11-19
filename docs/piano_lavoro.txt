@@ -1,0 +1,246 @@
+================================================================================
+HUNTIX - PIANO DI LAVORO "GIOCO DEGNO DI ESSERE SCARICATO"
+================================================================================
+Data: 2026-11-19
+Branch: flat-world (locale, 23 commit, NESSUN push)
+Stato: APK appena ricostruito con il fix fluidita' (376fbc9), in prova sul device
+Obiettivo: camminata e mondo allo livello dei giochi commerciali, anche
+           stravolgendo il codice, un pezzo al giorno, senza fretta.
+
+--------------------------------------------------------------------------------
+REGOLE DEL CANTIERE
+--------------------------------------------------------------------------------
+1. Un giorno = un pezzo = un commit + build + prova su device. Se un pezzo
+   rompe, si ripristina e si riprova il giorno dopo: non si accumulano rotture.
+2. NIENTE PUSH. Lavoro su flat-world con tag locali:
+      m1-walk   (fine Fase 1)
+      m2-world  (fine Fase 2)
+      m3-ar     (fine Fase 3)
+      m4-game   (fine Fase 4)
+      m5-polish (fine Fase 5)
+      m6-beta   (fine Fase 6)
+   Il push arriva SOLO con OK esplicito dell'utente.
+3. Ogni feature ha il suo "Riflesso della caccia alle uova" (Mandato): va
+   scritto PRIMA di toccare il codice.
+4. Si misura, non a occhio. Ogni pezzo ha un gate numerico (fps, frame, RAM,
+   crash) tratto dalla telemetria esistente.
+5. Nessuna regressione sulle fondamenta: WorldHeights.Flat, toggle follower,
+   menu stile edifici, uovo nel cassetto (ContainerEgg), bridge indoor AR,
+   EGG WHERE LOG, snapshot bridge. Si estendono, non si rimuovono.
+6. Il device decide: ogni gate viene validato dall'utente installando l'APK.
+   Qui non c'e' un device collegato (adb devices -l vuoto).
+7. UI e messaggi in italiano. check.sh e' solo per il backend C#, mai per Unity.
+
+--------------------------------------------------------------------------------
+COSA E' GIA' STATO FATTO (baseline di partenza)
+--------------------------------------------------------------------------------
+- 9bcfafd  uovo nel cassetto della cucina + bridge + posizione nel profilo
+- 8b7d86d  documentazione aggiornata
+- 39c5389  log diagnostici camminata ([WalkDiag]) + toggle follower runtime
+- cc05b8b  room_scan attivo in tutti gli ingressi indoor AR
+- 8c6f227  camminata/camera stabili quando il frame sale (gyroDt, substep,
+          MaxSmoothGap, clamp dt)
+- 4f61446  asset Unity rigenerati da export
+- 376fbc9  PERF: Kenney default + toggle "Stile edifici" nel menu hamburger,
+          Interno/Point Light lazy, luce solo dentro, segnaposto lazy,
+          cache collider, BuildingsPerStep 40->12
+- c8a5146  asset Unity rigenerati da export (seconda volta)
+
+APK: app/build/outputs/apk/release/app-release-signed.apk (184 MB, firmato v3,
+     DN CN=Huntix). AAR: app/libs/unityLibrary-release.aar (90 MB).
+Build: SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto
+Backend Huntix: http://localhost:5100 (tile server OK). Porta 5000 = vecchio
+chatai/aria, non toccare.
+
+--------------------------------------------------------------------------------
+FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
+--------------------------------------------------------------------------------
+Giorno 1 - Verifica Avatar Humanoid del player (PlayerHero.prefab / RemyKit)
+           e audit rig Mixamo. Se non e' Humanoid va risolto PRIMA di ogni IK.
+           Pezzi: controllo import settings, eventuale rig setup.
+           Gate: OnAnimatorIK chiamabile, avatar.isHuman == true.
+
+Giorno 2 - Telemetria potenziata: bucket frame (16/33/50/100/400 ms), RAM,
+           superficie di appoggio, contatore uova indoor vs outdoor.
+           File: unity-project/Assets/City/Scripts/Diagnostics/SessionTelemetry.cs
+           Gate: log esportabile e leggibile da CityDebugLogActivity.
+
+Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
+           Raccogliere tombstone e logcat nativo se si ripete.
+           Scrivere docs/BASELINE.md con i numeri misurati.
+           Riflesso uova: il log distingue uova trovate in AR indoor da quelle
+           outdoor -> scopriamo se la caccia funziona davvero.
+           Gate: baseline numerica scritta, nessun crash senza trace.
+
+--------------------------------------------------------------------------------
+FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
+--------------------------------------------------------------------------------
+Giorno 4  - Velocita' smorzata (accel 0,08s / frenata 0,12s) + Animator guidato
+            dalla velocita' REALE, non dall'input (niente moonwalk).
+            File: PlayerController.cs / CharacterWalker.cs
+            Riflesso uova: avvicinarsi alla porta del cassetto senza scatti.
+
+Giorno 5  - Head bob + passi audio sincronizzati al ciclo animativo.
+            Riflesso uova: suono di raccolta dedicato per le uova rare.
+
+Giorno 6  - Sonda a 5 punti (centro + 4 angoli della capsula), sphere-cast
+            corto, hit PIU' VICINO per raggio, WalkableMask intatto (no layer 8),
+            TYPE mantenuto: CityChunkedWorld.TryGroundColumn resta l'unico
+            punto di snap.
+            Riflesso uova: uova a terra non affondano nei cordoli.
+
+Giorno 7  - Step assist: salita <= 0,35 m smorzata, magnetismo a terra in
+            discesa. Niente teletrasporto sul marciapiede.
+            Riflesso uova: contenitori sui marciapiedi raggiungibili.
+
+Giorno 8  - FootIK.cs con OnAnimatorIK: piedi piantati sugli hit della sonda,
+            compensazione del bacino. 2 raycast/frame.
+            Riflesso uova: dentro l'edificio ci si piega davanti al cassetto.
+
+Giorno 9  - Camera spring arm: collisione, smoothing separato posizione e
+            rotazione, giroscopio non sommato al movimento.
+            File: Player/CameraRig.cs
+            Riflesso uova: in AR indoor la camera non taglia l'uovo.
+
+Giorno 10 - Integrazione, tuning, test 20 min di camminata sul device.
+            GATE: frame < 33 ms, camGap stabile, 0 sobbalzi, 3 uova outdoor
+            + 1 uovo cassetto catturati senza errori.
+
+--------------------------------------------------------------------------------
+FASE 2 - IL MONDO REGGE (giorni 11-20)  [tag m2-world]
+--------------------------------------------------------------------------------
+Giorno 11 - Profiling su device: render / physics / GC / build separati.
+            Serve per decidere dove spendere i 9 giorni successivi.
+
+Giorno 12 - LOD edifici: box/billboard oltre il primo anello invece dei prefab
+            pieni a 7 chunk di distanza.
+            Riflesso uova: le uova non spawnano dentro i volumi semplificati.
+
+Giorno 13 - Texture atlas e materiali condivisi per il kit Kenney
+            (uccidere i draw call residui).
+            Riflesso uova: materiale uovo unico, nessun texture swap.
+
+Giorno 14 - Collision proxy: guscio semplice per camminare, mesh visiva
+            separata. Non usare piu' i MeshCollider di strade/marciapiedi
+            come superficie calpestabile.
+            Riflesso uova: contenitori ancorati al proxy, non alla mesh.
+
+Giorno 15 - Chunk build su worker thread; main thread solo aggregazione.
+            File: OSM/ChunkManager.cs, OSM/ChunkBuilder.cs
+            Riflesso uova: uova outdoor pronte quando il chunk arriva.
+
+Giorno 16 - Streaming predittivo davanti alla direzione di marcia + unload
+            con cap memoria.
+            Riflesso uova: niente zone "vuote" appena caricate.
+
+Giorno 17 - Device tier automatico (basso/medio/alto): regola LOD, luci,
+            numero auto, qualita' texture.
+            Riflesso uova: stessa caccia, qualita' adattata al telefono.
+
+Giorno 18 - Stabilita': teardown, pool, GC, fix LOW_MEMORY / SIGSEGV.
+            Riflesso uova: nessuna perdita di uova trovate per riavvio.
+
+Giorni 19-20 - Test 45 min su Roma, Foggia, Perugia e rientro a Foggia.
+            GATE: frame < 16-33 ms, RAM entro budget, 0 OOM,
+            cold start < 8 s, tile/POI server su 5100 ok.
+
+--------------------------------------------------------------------------------
+FASE 3 - AR INDOOR DEGNO (giorni 21-30)  [tag m3-ar]
+--------------------------------------------------------------------------------
+Giorno 21 - Audit room_scan / LocalAnchorStore / salvataggio e ripristino
+            ancoraggi locali (oggi attivi ma da rifinire).
+Giorno 22 - Feedback di scan: piano, griglia, indicatori di fiducia.
+Giorno 23 - Uova ancorate con ombre e occlusione reale.
+Giorno 24 - Mini-gioco indoor: caccia al container/cassetto in stanza.
+Giorno 25 - Sync bridge bidirezionale: uovo indoor -> profilo -> mondo outdoor.
+Giorno 26 - Onboarding AR: permessi, calibrazione, prima caccia guidata.
+Giorno 27 - Multiplayer locale nella stessa stanza (SharedRoomMate).
+Giorni 28-30 - Test in casa/ufficio, drift, riavvio, ancoraggi persistenti.
+
+            Riflesso uova trasversale: l'uovo indoor sopravvive al riavvio
+            ed e' visibile nel profilo come quello outdoor.
+            GATE: ritrovi l'uovo dopo aver chiuso e riaperto l'app.
+
+--------------------------------------------------------------------------------
+FASE 4 - LOOP DI GIOCO E CONTENUTO (giorni 31-45)  [tag m4-game]
+--------------------------------------------------------------------------------
+Pezzi giornalieri:
+- rarita' e radar uova
+- inventario e progressione
+- missioni giornaliere
+- POI reali: dealer, repair, garage, ospedale, scuola, bar, rampa
+- negozi ed economia
+- mini-giochi esistenti collegati al mondo
+- eventi live
+
+Riflesso uova: ogni nuovo POI e ogni evento genera il suo uovo-tematico
+tracciato in EggWhereLog.
+GATE: sessione da 30 min con loop completo (esci -> cammina -> trova ->
+cattura -> profilo) senza un solo errore.
+
+--------------------------------------------------------------------------------
+FASE 5 - FINITURA PERCEPITA (giorni 46-60)  [tag m5-polish]
+--------------------------------------------------------------------------------
+Pezzi giornalieri:
+- audio e musiche
+- VFX e feedback aptico
+- HUD e transizioni UI
+- onboarding completo
+- impostazioni (hamburger menu + SettingsActivity)
+- accessibilita'
+- localizzazione IT / EN
+- store listing: icona, screenshot, testo, privacy, permessi minimi
+
+Riflesso uova: schermata di cattura con effetto e suono dedicati per rarita'.
+GATE checklist "degno di essere scaricato":
+  installo -> primo avvio -> 10 minuti di gioco -> nessun crash ->
+  disinstallo e reinstallo -> progressi e uova intatti.
+
+--------------------------------------------------------------------------------
+FASE 6 - BETA E RILASCIO (giorno 61 in poi)  [tag m6-beta]
+--------------------------------------------------------------------------------
+- Beta chiusa su 5-10 device reali.
+- Crash reporting e funnel gia' collegati (Sentry / Crashlytics).
+- Push SOLO dopo OK esplicito, con changelog e versione.
+- Cadenza: un pezzo/giorno, build automatica ogni notte, test ogni settimana.
+
+--------------------------------------------------------------------------------
+TEMPI REALISTICI
+--------------------------------------------------------------------------------
+~1 settimana   camminata non piu' da prototipo
+~3 settimane   mondo solido e veloce
+~2 mesi        prodotto completo, AR indoor incluso
+~3 mesi        pronto per lo store
+
+--------------------------------------------------------------------------------
+TRAPPOLE DA NON RIENTRARE (Mandato, sezione "Vincoli del mondo OSM")
+--------------------------------------------------------------------------------
+- MAI prendere l'hit PIU' ALTO di una colonna per "il terreno": si finisce
+  sul tetto degli edifici. Solo hit piu' vicino + mask che esclude layer 8.
+- Nessun proxy altimetrico dalle altezze degli edifici (case sospese, tetti
+  calpestabili).
+- TerrainChunk.DemSampleStep e passo mesh devono restare coerenti.
+- Mesh del terreno non sopra la risoluzione del dato DEM (45 m, DEM 250 m).
+- Collider terreno solo entro ChunkData.TerrainColliderLod (chunk sotto i
+  piedi sempre LOD0).
+- ChunkManager.LoadRadius resta 3 (7x7).
+- TileElevation.HeightAtWorld ritorna 0 fuori griglia: usare TryHeightAtWorld.
+- CityConfig.WorldHeights e' l'unico interruttore piatto/DEM (default Flat).
+- Se cambia il formato geo/graph servito, alzare TileClient.CacheVersion
+  (oggi 5).
+
+--------------------------------------------------------------------------------
+COMANDI UTILI
+--------------------------------------------------------------------------------
+Build AAR+APK:
+  SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto
+Log camminata:
+  adb logcat | grep -E '\[WalkDiag\]|\[AR\].*(fps=|LAG)|camGap'
+Aggiornamento mappa (solo su richiesta esplicita):
+  vedi AGENTS.md - "aggiorna tile italia" / "regione" / "citta'" / "nazione"
+Backend:
+  http://localhost:5100  (porta 5000 = vecchio progetto, non usare)
+
+================================================================================
+FINE PIANO
+================================================================================
