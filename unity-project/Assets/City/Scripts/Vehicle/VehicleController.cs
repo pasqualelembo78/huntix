@@ -325,6 +325,20 @@ namespace City.Vehicle
             if (Damage == VehicleDamage.Wrecked || Damage == VehicleDamage.Fire)
                 return false;
 
+            // Abitacolo LAZY: le auto parcheggiate non lo costruiscono (vedi
+            // VehicleSpawnManager.BuildVehicle); qui il player e' a bordo e
+            // puo' vederlo davvero. BuildIfNeeded e' idempotente.
+            try
+            {
+                var interior = GetComponent<VehicleInterior>();
+                if (interior != null) interior.BuildIfNeeded();
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[VehicleInterior] costruzione abitacolo fallita su " +
+                    name + ": " + e.Message);
+            }
+
             IsDriving = true;
             rb.isKinematic = false;
             currentSpeed = 0f;

@@ -299,9 +299,13 @@ namespace City.Vehicle
             // Attiva il danno per singola parte meccanica (motore, cambio,
             // giunto, gomme, freni, sospensioni, ecc.)
             vc.SetupStandardPartDamage(def.name);
-            // Abitacolo visibile (sedili, cruscotto, volante, specchietto)
-            var interior = go.AddComponent<VehicleInterior>();
-            interior.BuildIfNeeded();
+            // Abitacolo visibile (sedili, cruscotto, volante, specchietto).
+            // Il componente resta attachato ma NON costruisce qui: con ~770
+            // auto parcheggiate per citta' erano ~8.500 GameObject e 3
+            // Shader.Find per auto, quasi sempre invisibili (carrozzeria
+            // opaca). Lo costruisce VehicleController.StartDriving, cioe'
+            // solo quando il player entra davvero e puo' vederlo.
+            go.AddComponent<VehicleInterior>();
 
             // Trigger interazione (avvolge il veicolo)
             var triggerGo = new GameObject("Trigger");

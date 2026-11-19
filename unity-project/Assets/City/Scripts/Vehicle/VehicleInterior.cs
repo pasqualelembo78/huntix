@@ -162,6 +162,9 @@ namespace City.Vehicle
             mirror.transform.localScale = new Vector3(0.3f, 0.12f, 0.03f);
             var mR = mirror.GetComponent<Renderer>();
             if (mR != null) mR.sharedMaterial = dashMat;
+
+            City.OSM.OsmDiag.Log("[VehicleInterior] abitacolo costruito lazy su " +
+                (transform.parent != null ? transform.parent.name : name));
         }
     }
 }

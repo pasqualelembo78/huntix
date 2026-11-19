@@ -204,6 +204,20 @@ Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Commit: "perf: giorno 3 - materiali e clip condivisi (memoria
            streaming)". APK NON ricostruito: l'utente sta ancora provando
            quello della fluidita'.
+           [FATTO] 3b - Abitacoli LAZY: l'auto parcheggiata non costruisce
+           l'interno. VehicleSpawnManager.BuildVehicle aggiunge il componente
+           VehicleInterior ma non chiama piu' BuildIfNeeded: lo fa
+           VehicleController.StartDriving (unico ingresso a bordo, usato solo
+           da Game.EnterRoutine -- il traffico AI ha CarAgent, non chiama
+           StartDriving). Con ~770 auto parcheggiate/citta' sono ~8.500
+           GameObject e 3 Shader.Find per auto in meno, quasi sempre
+           invisibili perche' le carrozzerie Kenney hanno tetto e finestrini
+           opachi (verificato: nessuna impostazione alpha sugli FBX).
+           BuildIfNeeded resta idempotente e logga
+           "[VehicleInterior] abitacolo costruito lazy su <nome>".
+           Compila: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+           Commit: "perf: giorno 3 - abitacoli lazy, costruiti all'ingresso".
+           APK NON ricostruito (test fluidita' in corso).
            Resta in Giorno 3: tombstone + logcat nativo al prossimo crash,
            docs/BASELINE.md con i numeri reali del device.
 
