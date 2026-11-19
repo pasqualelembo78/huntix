@@ -21,7 +21,35 @@ namespace City.Diagnostics
         private float worstFrameMs;
         private bool started;
         private readonly System.Text.StringBuilder sb =
-            new System.Text.StringBuilder(256);
+            new System.Text.StringBuilder(512); // Giorno 2: beacon piu' lungo
+
+        // GIORNO 2: istogramma dei frame. best/worst non dicono QUANTO SPESSO
+        // il frame e' cattivo: con questi bucket si vede subito se i 400 ms
+        // sono un episodio o la regola. Bucket: <16 / <33 / <50 / <100 /
+        // <400 / >=400 ms (ultimo = "frame mostruoso").
+        private int _h16, _h33, _h50, _h100, _h400, _hOver;
+        private long _peakRamMb;
+
+        // GIORNO 2: contatore uova. indoor = contenitore/cassetto o player
+        // dentro un edificio; outdoor = uova sparse nei chunk. Riflesso uova
+        // del Mandato: distingue finalmente le due cacce.
+        private static int _eggsIndoor;
+        private static int _eggsOutdoor;
+
+        /// <summary>Chiamato da Game.OnEggCollected per l'istogramma uova.
+        /// Statico perche' la cattura puo' avvenire prima che il beacon parta:
+        /// se Instance e' null il conteggio resta in memoria e appare al
+        /// primo beacon utile.</summary>
+        public static void EggCollected(bool indoor)
+        {
+            if (indoor) _eggsIndoor++;
+            else _eggsOutdoor++;
+        }
+
+        private void ResetFrameBuckets()
+        {
+            _h16 = _h33 = _h50 = _h100 = _h400 = _hOver = 0;
+        }
 
         public static SessionTelemetry Ensure()
         {
@@ -83,6 +111,14 @@ namespace City.Diagnostics
             if (ms < bestFrameMs || frameCount == 1) bestFrameMs = ms;
             if (ms > worstFrameMs) worstFrameMs = ms;
 
+            // GIORNO 2: un solo confronto per frame, costo trascurabile.
+            if (ms < 16f) _h16++;
+            else if (ms < 33f) _h33++;
+            else if (ms < 50f) _h50++;
+            else if (ms < 100f) _h100++;
+            else if (ms < 400f) _h400++;
+            else _hOver++;
+
             beaconTimer -= dt;
             if (beaconTimer <= 0f)
             {
@@ -105,10 +141,22 @@ namespace City.Diagnostics
                   .Append("ms");
                 sb.Append(" best=").Append(bestFrameMs.ToString("F2"));
                 sb.Append(" worst=").Append(worstFrameMs.ToString("F1"));
-                sb.Append(" ram=")
-                  .Append((UnityEngine.Profiling.Profiler
-                      .GetTotalReservedMemoryLong() / 1048576L)
-                      .ToString("F0")).Append("MB");
+                long ramMb = UnityEngine.Profiling.Profiler
+                    .GetTotalReservedMemoryLong() / 1048576L;
+                if (ramMb > _peakRamMb) _peakRamMb = ramMb;
+                sb.Append(" ram=").Append(ramMb).Append("MB")
+                  .Append(" peak=").Append(_peakRamMb).Append("MB");
+
+                // GIORNO 2: istogramma + contatore uova (vede anche le uova
+                // catturate prima che il beacon partisse).
+                sb.Append(" hist=16:").Append(_h16)
+                  .Append("/33:").Append(_h33)
+                  .Append("/50:").Append(_h50)
+                  .Append("/100:").Append(_h100)
+                  .Append("/400:").Append(_h400)
+                  .Append("/X:").Append(_hOver);
+                sb.Append(" uova=I").Append(_eggsIndoor)
+                  .Append("/O").Append(_eggsOutdoor);
 
                 var game = City.Game.Instance;
                 if (game != null && game.player != null)
@@ -120,6 +168,14 @@ namespace City.Diagnostics
                       .Append(Mathf.Repeat(
                           game.player.transform.eulerAngles.y, 360f)
                           .ToString("F0"));
+                    // GIORNO 2: superficie di appoggio letta dal follower del
+                    // player (gi' calcolata ogni frame, nessun raycast nuovo).
+                    string surf = game.player.LastGroundSurface;
+                    if (!string.IsNullOrEmpty(surf))
+                    {
+                        if (surf.Length > 28) surf = surf.Substring(0, 28);
+                        sb.Append(" ground=").Append(surf);
+                    }
                 }
                 if (game != null && game.IsDriving &&
                     game.CurrentVehicle != null)
@@ -150,6 +206,7 @@ namespace City.Diagnostics
                 frameCount = 0;
                 bestFrameMs = float.MaxValue;
                 worstFrameMs = 0f;
+                ResetFrameBuckets();
             }
             catch (System.Exception e)
             {
@@ -158,6 +215,7 @@ namespace City.Diagnostics
                 frameCount = 0;
                 bestFrameMs = float.MaxValue;
                 worstFrameMs = 0f;
+                ResetFrameBuckets();
             }
         }
 

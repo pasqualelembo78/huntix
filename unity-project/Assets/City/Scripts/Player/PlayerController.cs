@@ -66,6 +66,14 @@ namespace City.Player
         private int _followCorrections;
         private float _followMaxErr;
         private string _followLastSource = "";
+
+        // GIORNO 2: ultima superficie di appoggio rilevata dal follower.
+        // A differenza di _followLastSource NON viene azzerata dal log 1/s:
+        // la telemetria la legge ogni 2 s senza fare altri raycast.
+        private string _surfaceCurrent = "";
+        /// <summary>Ultima superficie calpestabile ("sorgente/nome"), letta
+        /// dalla telemetria. Solo diagnostica: nessun effetto sul movimento.</summary>
+        public string LastGroundSurface { get { return _surfaceCurrent; } }
         private float _lastTargetSpeed;
         private float _lastDirDot;
 
@@ -628,6 +636,10 @@ namespace City.Player
 
             GroundSample s = GroundSnapper.SampleGround(feetPos, transform);
             if (!s.found) return;   // nessun dato: la fisica e' gia' in carico
+
+            // GIORNO 2: memorizza la superficie gia' rilevata (costo = una
+            // assegnazione di stringa). La telemetria la legge senza probe.
+            _surfaceCurrent = s.source + "/" + (s.surfaceName ?? "-");
 
             float targetFeet = s.height + GroundFollowClearance;
             float err = targetFeet - feetY;

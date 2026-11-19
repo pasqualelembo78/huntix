@@ -433,6 +433,14 @@ namespace City
             // cassetto dopo una rigenerazione del chunk.
             City.Interior.ContainerEgg.MarkFound(egg);
 
+            // GIORNO 2 - riflesso uova: conta le uova indoor (cassetto o
+            // player dentro un edificio) vs outdoor (chunk). La telemetria
+            // lo riporta nel beacon [AR] come uova=I<indoor>/O<outdoor>.
+            bool eggIndoor = !string.IsNullOrEmpty(egg.containerEggKey) ||
+                (City.Interior.InteriorManager.Instance != null &&
+                 City.Interior.InteriorManager.Instance.IsInside);
+            City.Diagnostics.SessionTelemetry.EggCollected(eggIndoor);
+
             // eco-sistema Huntix: l'uovo va anche nell'inventario uova generale
             // (collezione/evoluzione) lato Android, non solo come monete City.
             SendEggToHuntix(egg);

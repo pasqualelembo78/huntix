@@ -76,10 +76,29 @@ FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
            l'utente sta ancora provando quello della fluidita'. Gate
            definitivo (device): log [FootIK] con isHuman=True.
 
-Giorno 2 - Telemetria potenziata: bucket frame (16/33/50/100/400 ms), RAM,
+[FATTO] Giorno 2 - Telemetria potenziata: bucket frame (16/33/50/100/400 ms), RAM,
            superficie di appoggio, contatore uova indoor vs outdoor.
            File: unity-project/Assets/City/Scripts/Diagnostics/SessionTelemetry.cs
            Gate: log esportabile e leggibile da CityDebugLogActivity.
+           --- COMPLETATO 2026-11-19 ---
+           - SessionTelemetry: istogramma frame <16/<33/<50/<100/<400/>=400
+             nel beacon [AR] come "hist=16:n/33:n/50:n/100:n/400:n/X:n",
+             azzerato a ogni beacon (2 s). best/worst/ram gia' esistevano.
+           - Aggiunto "peak=<MB>" (picco RAM) per la caccia a LOW_MEMORY.
+           - Aggiunto "ground=<sorgente/nome>" letto da
+             PlayerController.LastGroundSurface: il follower calcola gia'
+             la superficie ogni frame, quindi ZERO raycast nuovi.
+           - Riflesso uova: "uova=I<n>/O<n>" tramite
+             SessionTelemetry.EggCollected(bool) chiamato da Game.OnEggCollected.
+             indoor = containerEggKey presente o player dentro edificio;
+             outdoor = uova nei chunk. Contatore statico, sopravvive all'
+             avvio del beacon.
+           - Nessun comportamento di gioco toccato: solo log. Il beacon e'
+             esportabile da CityDebugLogActivity (AppLog.diskLog).
+           Commit: "telemetria: giorno 2 - bucket frame, RAM peak, superficie,
+           contatore uova indoor/outdoor" (vedi git log). APK NON ricostruito.
+           Gate device (da validare col prossimo APK): nel log [AR] compaiono
+           hist=..., ground=... (es. ColliderShort/Terreno), uova=I0/O1.
 
 Giorno 3 - Runbook build/rollback + caccia al crash SIGSEGV / LOW_MEMORY.
            Raccogliere tombstone e logcat nativo se si ripete.
