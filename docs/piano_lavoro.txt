@@ -55,10 +55,26 @@ chatai/aria, non toccare.
 --------------------------------------------------------------------------------
 FASE 0 - BASELINE E RETE DI SICUREZZA (giorni 1-3)
 --------------------------------------------------------------------------------
-Giorno 1 - Verifica Avatar Humanoid del player (PlayerHero.prefab / RemyKit)
+[FATTO] Giorno 1 - Verifica Avatar Humanoid del player (PlayerHero.prefab / RemyKit)
            e audit rig Mixamo. Se non e' Humanoid va risolto PRIMA di ogni IK.
            Pezzi: controllo import settings, eventuale rig setup.
            Gate: OnAnimatorIK chiamabile, avatar.isHuman == true.
+           --- COMPLETATO 2026-11-19 ---
+           Verifica: Assets/Art/Mixamo/Remy.fbx.meta -> animationType: 3
+           (Humanoid), avatarSetup: 1, mapping Hips/LeftFoot/RightFoot/Toes
+           completo. PlayerHero.prefab usa avatar guid
+           c89d5f3f41a5bb88aa8ef53c68210c33 + controller
+           b694efb7821056e7a9241ea4fa6b8151. PREREQUISITO OK.
+           Aggiunto FootIK.cs: sensore runtime che logga avatar/isHuman/
+           controller/applyRootMotion in Start() e conferma OnAnimatorIK
+           (una volta) a runtime. Non modifica la posa: zero rischio di
+           rompere l'animazione corrente. Agganciato da PlayerHeroRig.Ensure
+           subito dopo ArmsPoseFallback.Ensure(go) (NON nel prefab, che la
+           build riscrive). Log: [FootIK] VERIFICA ... / OnAnimatorIK chiamato.
+           Commit: "walk: giorno 1 - verifica avatar Humanoid e sensore IK"
+           (vedi git log). APK NON ricostruito:
+           l'utente sta ancora provando quello della fluidita'. Gate
+           definitivo (device): log [FootIK] con isHuman=True.
 
 Giorno 2 - Telemetria potenziata: bucket frame (16/33/50/100/400 ms), RAM,
            superficie di appoggio, contatore uova indoor vs outdoor.

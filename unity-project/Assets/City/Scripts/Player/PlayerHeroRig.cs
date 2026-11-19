@@ -115,6 +115,12 @@ namespace City.Player
             // in A-pose finche' l'animazione non prende il controllo.
             ArmsPoseFallback.Ensure(go);
 
+            // GIORNO 1: sensore IK a runtime. Verifica che l'avatar sia Humanoid
+            // e che Unity chiami OnAnimatorIK. Agganciato qui (non nel prefab,
+            // che RemyKitSetup riscrive in build) e' idempotente e non modifica
+            // ancora la posa: prepara solo il terreno per Giorno 6-8.
+            FootIK.Ensure(go);
+
             // Crescita fisiologica (FASE 1 - test isolato): se i morph del
             // personaggio sono stati "cotti" da RemyMorphBaker installa il
             // GrowthMorphController sull'hero rig. Guardato e idempotente:
