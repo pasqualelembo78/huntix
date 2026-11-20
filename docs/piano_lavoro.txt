@@ -689,10 +689,43 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             al cassetto (Giorno 8) vadano all'Animator di Remy, non al legacy;
             nessun comportamento uovo/bridge/minigioco modificato.
 
-Giorno 9  - Camera spring arm: collisione, smoothing separato posizione e
-            rotazione, giroscopio non sommato al movimento.
-            File: Player/CameraRig.cs
-            Riflesso uova: in AR indoor la camera non taglia l'uovo.
+[FATTO] Giorno 9 - Camera spring arm: collisione, smoothing separato posizione
+            e rotazione, giroscopio non sommato al movimento.
+            File: Player/CameraRig.cs, Player/PlayerController.cs.
+            1. Collisione: il vecchio Raycast partiva 5 m SOPRA il player e
+               andava nella direzione della camera, quindi bucava muri di
+               taglio e cornici. Ora Physics.SphereCastNonAlloc con raggio
+               0,22 m dal torace (1,4 m), buffer di 4 hit riusato, scelto
+               l'hit PIU' VICINO (regola del Mandato), self-hit escluso,
+               mask ~(1<<8) e QueryTriggerInteraction.Ignore invariati.
+               Stesso gate hitDist > 5,5 m, skin 0,5 m e log [Audit] con
+               throttling 15 s: 1 query/frame, zero allocazioni.
+            2. Smoothing separato: la posizione resta SmoothDamp 0,12 s con
+               snap a 0,35 m e clamp MinCameraDistance 4,5 m (diagnostiche
+               camGap/camDist/camPush misurate PRIMA del bob, invariate).
+               La rotazione ha ora un suo smoothing a 12/s con LerpAngle
+               (no giro lungo 359°->1°) e Lerp sul pitch; Start e SetYaw
+               (teleport, auto, uscita edificio) agganciano subito la vista
+               via _snapView, senza scivolamento.
+            3. Giroscopio: non piu' integrato in `yaw` (che e' la base di marcia),
+               ma in `_gyroYawOffset` di sola vista, avvolto in [-180,180].
+               Nuova proprieta' read-only MovementBasis = Euler(0, yaw, 0):
+               PlayerController la usa per la direzione del joystick, il dot
+               diagnostico e il dash. Muovere il telefono gira la vista senza
+               cambiare da solo la strada del personaggio. Toggle GIRO,
+               GyroSensitivity/Deadzone/Smoothing/PitchMax invariati.
+            4. Riflesso uova: in AR indoor la camera NON taglia l'uovo. Oltre
+               a mantenere MinCameraDistance 4,5 m e il gate a 5,5 m (l'uovo
+               del cassetto si rivela a 2,4 m, quindi non puo' innescare il
+               pull), gli hit della spring arm entro 2,4 m dal contenitore
+               scelto vengono IGNORATI. Usa ContainerEgg.DistanceToChosen,
+               sola lettura: non rivela l'uovo, non sposta il contenitore e
+               non tocca il mini-gioco. Estensione, non rimozione.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning invariati).
+            Gate device: [WalkDiag] camGap stabile e camPush=Y solo dietro
+            muri veri (mai davanti al cassetto), dot~1 con joystick dritto,
+            GIRO ON/OFF ruota solo la vista, follow ON/OFF invariato, 0
+            sobbalzi; uovo cassetto catturato senza errori.
 
 Giorno 10 - Integrazione, tuning, test 20 min di camminata sul device.
             GATE: frame < 33 ms, camGap stabile, 0 sobbalzi, 3 uova outdoor

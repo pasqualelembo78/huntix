@@ -64,6 +64,31 @@ namespace City.Player
         private Vector3 velocity;
         private float _nextPushLog;
 
+        // ── GIORNO 9: spring arm ──
+        // La collisione usa una SFERA, non un raggio: un muro visto di taglio
+        // o il bordo di un cassetto non bucano piu' la camera. Un solo query
+        // fisico per frame, buffer riusato, nessuna allocazione.
+        private const float ArmRadius = 0.22f;
+        private const float ArmPivotHeight = 1.4f;
+        private const int ArmHitSlots = 4;
+        private readonly RaycastHit[] _armHits = new RaycastHit[ArmHitSlots];
+        // Distanza di protezione dell'uovo del cassetto (RevealDist di
+        // ContainerEgg): la camera non si avvicina abbastanza da tagliarlo.
+        private const float EggArmClearance = 2.4f;
+        // Smoothing separato: la vista segue piu' veloce del corpo, ma con
+        // LerpAngle (no giro lungo 359° -> 1°).
+        private const float RotationFollow = 12f;
+        private float _viewYaw;
+        private float _viewPitch;
+        private bool _snapView = true;
+        // Giroscopio: solo vista, MAI base di marcia (MovementBasis qui sotto).
+        private float _gyroYawOffset;
+
+        /// <summary>GIORNO 9 - base di marcia del joystick: solo lo yaw del
+        /// drag/teleport. Il giroscopio muove la vista, non la direzione con
+        /// cui il personaggio cammina.</summary>
+        public Quaternion MovementBasis { get { return Quaternion.Euler(0f, yaw, 0f); } }
+
         // ── GIORNO 5: head bob ──
         // Piccolo offset della camera pilota dalla FASE DEL PASSO del
         // CharacterWalker (la stessa che genera i passi audio): niente timer
@@ -119,6 +144,8 @@ namespace City.Player
             if (target != null)
             {
                 yaw = target.eulerAngles.y;
+                _viewYaw = yaw;
+                _snapView = true;
                 _walker = target.GetComponent<CharacterWalker>();
             }
             _headBobEnabled = PlayerPrefs.GetInt(HeadBobPrefKey, 1) == 1;
@@ -139,6 +166,9 @@ namespace City.Player
         public void SetYaw(Quaternion lookRotation)
         {
             yaw = lookRotation.eulerAngles.y;
+            // Teleport/ingresso auto/uscita edificio: la vista si aggancia
+            // subito, senza scivolare per 80 ms dal vecchio angolo.
+            _snapView = true;
         }
 
         public void ToggleFirstPerson()
@@ -261,7 +291,12 @@ namespace City.Player
             // delta da 400 ms la moltiplica per 8 e la camera ruota a scatti,
             // senza mai raggiungere il target (camGap alto anche da fermi).
             float gyroDt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
-            yaw -= _gyroRateEma * GyroSensitivity * gyroDt;
+            // GIORNO 9: il giroscopio NON tocca yaw (base di marcia del
+            // joystick), ma solo l'offset di vista. Prima ruotava la spring
+            // arm e di conseguenza anche la direzione del personaggio:
+            // muovendo il telefono il player cambiava strada da solo.
+            _gyroYawOffset -= _gyroRateEma * GyroSensitivity * gyroDt;
+            _gyroYawOffset = Mathf.Repeat(_gyroYawOffset + 180f, 360f) - 180f;
 
             float rX = Mathf.Abs(rate.x) < GyroDeadzone ? 0f : rate.x;
             _gyroPitchEma = Mathf.Lerp(_gyroPitchEma, rX, GyroSmoothing);
@@ -284,6 +319,7 @@ namespace City.Player
             _gyroRateEma = 0f;
             _gyroPitchEma = 0f;
             _gyroPitchOffset = 0f;
+            _gyroYawOffset = 0f;
         }
 
         private void HandlePinchZoom()
@@ -370,31 +406,55 @@ namespace City.Player
             Vector3 desired = target.position + offset;
             float dist = offset.magnitude;
 
-            RaycastHit hit;
             if (_fpBlend < 0.5f)
             {
-            Vector3 start = target.position + Vector3.up * RayOriginHeight;
-            float rayMaxDist = dist + RayOriginHeight;
-            int mask = ~(1 << 8);
-            if (Physics.Raycast(start, offset.normalized, out hit, rayMaxDist, mask))
-            {
-                float hitDist = Vector3.Distance(target.position, hit.point);
-                if (hitDist > MinCameraDistance + 1f)
+                // GIORNO 9: sphere-cast dal torace, non un raggio sin sottile
+                // partito 5 m sopra il player (bucava muri di taglio e cornici).
+                // Un solo query/frame, buffer riusato, hit PIU' VICINO (regola
+                // del Mandato: mai il piu' alto/ultimo di RaycastAll).
+                Vector3 armDir = offset.normalized;
+                Vector3 start = target.position + Vector3.up * ArmPivotHeight;
+                int mask = ~(1 << 8);   // layer 8 = edifici, invariato
+                int found = Physics.SphereCastNonAlloc(start, ArmRadius, armDir,
+                    _armHits, dist + ArmRadius, mask, QueryTriggerInteraction.Ignore);
+                RaycastHit best = default(RaycastHit);
+                float bestDist = float.MaxValue;
+                bool blocked = false;
+                for (int i = 0; i < found && i < ArmHitSlots; i++)
                 {
-                    desired = hit.point - offset.normalized * 0.5f;
-                    LastObstaclePull = true;
-                    // Audit: la camera e' stata tirata dentro da un ostacolo
-                    // (radice di "camera in prima persona" dentro un edificio).
-                    if (hitDist < dist * 0.8f && Time.time >= _nextPushLog)
+                    RaycastHit hitInfo = _armHits[i];
+                    if (hitInfo.collider == null || hitInfo.distance <= 0f) continue;
+                    if (hitInfo.collider.transform == target) continue;   // self-hit
+                    // RIFLESSO UOVA: in AR indoor la camera non taglia l'uovo
+                    // del cassetto. La distanza e' sola lettura, NON rivela
+                    // l'uovo e NON tocca il mini-gioco.
+                    if (City.Interior.ContainerEgg.DistanceToChosen(hitInfo.point) <= EggArmClearance)
+                        continue;
+                    if (hitInfo.distance < bestDist)
                     {
-                        _nextPushLog = Time.time + 15f;
-                        OsmDiag.Log("[Audit] Camera tirata dentro: " +
-                            target.name + " dist " + dist.ToString("F1") + " -> " +
-                            hitDist.ToString("F1") + "m hit=" + hit.collider.name);
+                        bestDist = hitInfo.distance;
+                        best = hitInfo;
+                        blocked = true;
                     }
                 }
-            }
-
+                if (blocked)
+                {
+                    float hitDist = Vector3.Distance(target.position, best.point);
+                    if (hitDist > MinCameraDistance + 1f)
+                    {
+                        desired = best.point - armDir * 0.5f;
+                        LastObstaclePull = true;
+                        // Audit: la camera e' stata tirata dentro da un ostacolo
+                        // (radice di "camera in prima persona" dentro un edificio).
+                        if (hitDist < dist * 0.8f && Time.time >= _nextPushLog)
+                        {
+                            _nextPushLog = Time.time + 15f;
+                            OsmDiag.Log("[Audit] Camera tirata dentro: " +
+                                target.name + " dist " + dist.ToString("F1") + " -> " +
+                                hitDist.ToString("F1") + "m hit=" + best.collider.name);
+                        }
+                    }
+                }
             }
 
             Vector3 toDesired = desired - target.position;
@@ -441,12 +501,29 @@ namespace City.Player
                 transform.position += _bobApplied;
             }
 
+            float targetYaw = yaw + (_gyroEnabled ? _gyroYawOffset : 0f);
             float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)
                 + (_gyroEnabled ? _gyroPitchOffset : 0f);
+            // GIORNO 9: smoothing della ROTAZIONE separato da quello della
+            // posizione (che resta SmoothDamp 0,12 s + snap 0,35 m). La vista
+            // segue a 12/s, piu' rapida del corpo, senza trascinare la spring
+            // arm: posizione e rotazione non si inseguono piu' a vicenda.
+            if (_snapView)
+            {
+                _viewYaw = targetYaw;
+                _viewPitch = viewPitch;
+                _snapView = false;
+            }
+            else
+            {
+                float rotBlend = Mathf.Clamp01(dt * RotationFollow);
+                _viewYaw = Mathf.LerpAngle(_viewYaw, targetYaw, rotBlend);
+                _viewPitch = Mathf.Lerp(_viewPitch, viewPitch, rotBlend);
+            }
             float bobRoll = _bobWeight > 0.001f
                 ? Mathf.Cos(_walker.StepPhase * BobTwoPi) * bobRollDeg * _bobWeight
                 : 0f;
-            transform.rotation = Quaternion.Euler(viewPitch, yaw, -bobRoll);
+            transform.rotation = Quaternion.Euler(_viewPitch, _viewYaw, -bobRoll);
         }
     }
 }

@@ -306,7 +306,9 @@ namespace City.Player
             {
                 CameraRig rig = CameraRig.Instance;
                 Vector3 forward = rig != null
-                    ? Vector3.ProjectOnPlane(rig.transform.forward, Vector3.up).normalized
+                    // GIORNO 9: base di marcia = solo yaw del drag, non la
+                    // vista smorzata ne' il giroscopio.
+                    ? Vector3.ProjectOnPlane(rig.MovementBasis * Vector3.forward, Vector3.up).normalized
                     : transform.forward;
                 Vector3 right = Vector3.Cross(Vector3.up, forward);
                 Vector3 dir = forward * moveInput.y + right * moveInput.x;
@@ -322,7 +324,8 @@ namespace City.Player
                 // Diagnostica: quanto la direzione di marcia combacia con la camera.
                 if (rig != null)
                 {
-                    Vector3 camFwd = Vector3.ProjectOnPlane(rig.transform.forward, Vector3.up);
+                    Vector3 camFwd = Vector3.ProjectOnPlane(
+                        rig.MovementBasis * Vector3.forward, Vector3.up);
                     if (camFwd.sqrMagnitude > 0.0001f && dir.sqrMagnitude > 0.0001f)
                         _lastDirDot = Vector3.Dot(dir.normalized, camFwd.normalized);
                 }
@@ -676,7 +679,9 @@ namespace City.Player
             {
                 CameraRig rig = CameraRig.Instance;
                 Vector3 forward = rig != null
-                    ? Vector3.ProjectOnPlane(rig.transform.forward, Vector3.up).normalized
+                    // GIORNO 9: base di marcia = solo yaw del drag, non la
+                    // vista smorzata ne' il giroscopio.
+                    ? Vector3.ProjectOnPlane(rig.MovementBasis * Vector3.forward, Vector3.up).normalized
                     : transform.forward;
                 Vector3 right = Vector3.Cross(Vector3.up, forward);
                 dashDirection = (forward * moveInput.y + right * moveInput.x).normalized;
