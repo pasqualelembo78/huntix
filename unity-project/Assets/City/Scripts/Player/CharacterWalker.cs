@@ -367,7 +367,7 @@ namespace City.Player
         {
             if (animator == null) return;
             // Il controller Mixamo usa SOLO "Speed" e "IsGrounded": il vecchio
-            // SetBool("IsMoving", ...) era un no-op (il parametro non esiste
+            // flag booleano "IsMoving" era un no-op (il parametro non esiste
             // neppure in RemyKitSetup.cs). Rimosso per non far credere che
             // ci sia un secondo canale di animazione. Fallback Kenney:
             // SetFloat/SetBool su parametri inesistenti restano no-op.

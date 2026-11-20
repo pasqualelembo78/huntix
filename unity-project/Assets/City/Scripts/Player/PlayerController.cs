@@ -485,6 +485,12 @@ namespace City.Player
         /// <summary>Una riga al secondo nella scatola nera Android: riunisce le
         /// tre misure della camminata (follower, camera, input/velocita') cosi'
         /// si possono confrontare sullo stesso intervallo di tempo.</summary>
+        private string EggDiagDistance(System.Globalization.CultureInfo inv)
+        {
+            float d = City.Interior.ContainerEgg.DistanceToChosen(transform.position);
+            return d > 999f ? "-" : d.ToString("F1", inv);
+        }
+
         private void LogWalkDiagnostics()
         {
             if (Time.time < _walkDiagNextAt) return;
@@ -510,9 +516,9 @@ namespace City.Player
                 // RIFLESSO UOVA (sola lettura): distanza dal contenitore scelto
                 // nell'intero corrente. Non rivela l'uovo, non tocca il
                 // mini-gioco: serve solo a leggere l'avvicinamento al cassetto
-                // sulla stessa riga in=/tgt=/cur=/real= (MaxValue fuori interni).
-                " eggD=" + City.Interior.ContainerEgg.DistanceToChosen(
-                    transform.position).ToString("F1", inv));
+                // sulla stessa riga in=/tgt=/cur=/real=. Fuori interni
+                // DistanceToChosen da' MaxValue: stampare "-", non 39 cifre.
+                " eggD=" + EggDiagDistance(inv));
 
             _followCorrections = 0;
             _followMaxErr = 0f;

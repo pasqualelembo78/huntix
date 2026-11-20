@@ -242,3 +242,42 @@ NON toccare (regole del Mandato, vedi AGENTS.md):
   - passo mesh DEM > risoluzione dato
   - WorldHeights.Flat e toggle follower
   - ContainerEgg, bridge uova, indoor AR, snapshot bridge
+
+--------------------------------------------------------------------------------
+7. GATE DEVICE DEL GIORNO 10 - DA ESEGUIRE (non eseguiti il 20 Nov)
+--------------------------------------------------------------------------------
+
+Il gate statico si lancia SENZA device:
+
+    ./scripts/verifica_integrazione.sh
+
+Deve finire con "INTEGRAZIONE OK" e "185 warning" invariati. Non misura
+fps/camGap/uova: per quelli serve la build normale (bash build_release.sh,
+scelta 1; aggiornamento mappa -> Invio) e un test di 20 min sul device.
+
+Raccolta log (telefono collegato):
+
+    adb logcat -c
+    adb logcat -b crash -c
+    adb logcat -b crash -d > crash_buffer.txt
+    adb logcat -v threadtime -d > logcat_full.txt
+    adb logcat -v threadtime | grep -E '\[WalkDiag\]|\[FootIK\]|\[CharacterWalker\]|\[GroundFollow\]|\[Camera\]\[Gyro\]|\[Audit\]|\[AR\].*(fps=|LAG)'
+
+Valori attesi (camminata su terreno piano, 20 min):
+
+    [CharacterWalker][Start] animatorGO=PlayerHero     # NON characterMedium
+    [CharacterWalker][Animator] Controller assegnato: PlayerLocomotion ... isHuman=True
+    [FootIK] VERIFICA ... isHuman=True / OnAnimatorIK chiamato
+    [WalkDiag] in=0,50 -> tgt=cur=real=3,13             # era real=2,10
+    [WalkDiag] in=1,00 -> tgt=cur=real=7,50             # Run solo a fondo
+    [WalkDiag] in=0,15 -> real=0,07                     # niente salto 0->3,2
+    [WalkDiag] real=0 con cur=3,13 contro un muro       # anti-moonwalk vivo
+    [WalkDiag] dot=~1,00 con joystick dritto            # marcia non segue il gyro
+    [WalkDiag] camGap stabile, camDist 4,5-12, camPush=Y solo dietro muri veri
+    [WalkDiag] eggD= decrescente avvicinandosi al cassetto ("-" fuori interni)
+    nessuna clip Jump salendo/scendendo marciapiedi     # FIX B
+    [AR] ... frame<33 ms, hist senza picchi >100 ms     # gate Giorno 10
+    uova=I3/O? + 1 uovo cassetto catturato, 0 crash     # gate Giorno 10
+
+Se il frame resta sopra 33 ms, NON riscrivere la build a occhio: confrontare
+hist/ram/peak con docs/BASELINE.md e decidere il pezzo con i numeri.

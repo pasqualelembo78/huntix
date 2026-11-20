@@ -727,9 +727,33 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             GIRO ON/OFF ruota solo la vista, follow ON/OFF invariato, 0
             sobbalzi; uovo cassetto catturato senza errori.
 
-Giorno 10 - Integrazione, tuning, test 20 min di camminata sul device.
-            GATE: frame < 33 ms, camGap stabile, 0 sobbalzi, 3 uova outdoor
-            + 1 uovo cassetto catturati senza errori.
+[FATTO] Giorno 10 (2026-11-20) - INTEGRAZIONE E TUNING STATICI.
+            Eseguito SENZA build e SENZA test su device, per richiesta
+            esplicita: i gate device qui sotto restano DA ESEGUIRE, non sono
+            stati misurati e NON sono dichiarati superati.
+            1. Review incrociata dei tre pezzi (FIX A, FIX B, Giorno 9):
+               - la rampa di velocita' e' allineata ai threshold del
+                 BlendTree (3,2/7,5) e all'anti-moonwalk del Giorno 4;
+               - Speed/IsGrounded vanno all'Animator di Remy, FootIK e' sullo
+                 stesso GO, il Jump e' solo quello richiesto;
+               - la base di marcia del joystick e' MovementBasis (solo yaw)
+                 in marcia, dot diagnostico e dash, non la vista smorzata.
+            2. Ritocchi di integrazione:
+               - CameraRig.OnEnable() aggancia subito la vista quando
+                 RealmSceneManager riattiva il rig (cambio regno).
+               - [WalkDiag] eggD= stampa "-" invece di float.MaxValue
+                 (39 cifre) quando non si e' in un interno: log leggibile.
+               - riformulato il commento su IsMoving nel walker per non
+                 lasciare il vecchio nome nel codice sorgente.
+            3. Gate STATICO ripetibile: scripts/verifica_integrazione.sh
+               controlla 21 invarianti (catena input->Animator->camera,
+               assenza dei vecchi codici, threshold dell'asset) e lancia
+               cscheck -define:HUNTIX_FULL. Esito: 21/21 OK + 185 warning
+               invariati. Si puo' lanciare a ogni commit senza device.
+            4. GATE DEVICE - NON ESEGUITI (vedi RUNBOOK sez. 7):
+               frame < 33 ms, camGap stabile, 0 sobbalzi, 3 uova outdoor
+               + 1 uovo cassetto catturati senza errori. Servono build
+               normale (scelta 1) e test di 20 min dell'utente.
 
 --------------------------------------------------------------------------------
 FASE 2 - IL MONDO REGGE (giorni 11-20)  [tag m2-world]

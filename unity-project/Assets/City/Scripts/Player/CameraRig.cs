@@ -134,6 +134,14 @@ namespace City.Player
             DontDestroyOnLoad(gameObject);
         }
 
+        /// <summary>GIORNO 10: RealmSceneManager disattiva/riattiva il rig
+        /// quando si cambia regno. Al ritorno la vista deve agganciarsi
+        /// subito allo yaw corrente, non scivolare dall'angolo vecchio.</summary>
+        private void OnEnable()
+        {
+            _snapView = true;
+        }
+
         private void Start()
         {
             if (target == null)
