@@ -661,6 +661,34 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             l'uovo e non tocca il mini-gioco; avvicinandosi al cassetto il
             valore scende senza scatti.
 
+[FATTO] FIX B (2026-11-20) - Cause 1, 3, 4 dell'ANALISI: Animator sbagliato,
+            Jump fantasma, parametro morto. File: Player/CharacterWalker.cs,
+            Player/PlayerController.cs.
+            1. CharacterWalker.ResolveAnimator(): se esiste un PlayerHeroRig,
+               l'Animator viene cercato SOLO sotto di esso (Remy), con
+               fallback al vecchio GetComponentInChildren per NPC/legacy.
+               GetComponentInChildren(true) poteva prendere il characterMedium
+               inattivo e scrivere Speed/IsGrounded sull'Animator sbagliato:
+               da device [CharacterWalker][Start] animatorGO deve dire
+               PlayerHero, non characterMedium. Nessun sistema rimosso.
+            2. Rimosso SetBool("IsMoving", ...): il parametro non esiste nel
+               controller Mixamo (ha solo Speed, IsGrounded, Act_*), quindi
+               era un no-op. Speed e IsGrounded invariati.
+            3. Jump fantasma: DoJump imposta _jumpAnimHoldUntil = now + 0,8 s
+               SOLO quando il salto e' davvero partito (anche doppio salto).
+               walker.SetGrounded riceve "in aria" solo con salto reale
+               (velocity.y>0,5 oppure finestra attiva): cadere da un cordolo
+               dopo il magnete non manda piu' l'Animator nella clip Jump,
+               che ha hasExitTime=0 e partiva senza salto. La finestra
+               GroundGraceS resta alla FISICA del follower, non all'anim.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning invariati).
+            Gate device: animatorGO=PlayerHero; mixamoCtrl=PlayerLocomotion;
+            nessuna clip Jump salendo/scendendo marciapiedi; il Jump parte
+            subito quando si preme salto; [FootIK] isHuman=True.
+            Riflesso uova: il fix garantisce che Foot IK e la postura davanti
+            al cassetto (Giorno 8) vadano all'Animator di Remy, non al legacy;
+            nessun comportamento uovo/bridge/minigioco modificato.
+
 Giorno 9  - Camera spring arm: collisione, smoothing separato posizione e
             rotazione, giroscopio non sommato al movimento.
             File: Player/CameraRig.cs

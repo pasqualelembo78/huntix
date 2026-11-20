@@ -49,6 +49,11 @@ namespace City.Player
         private GroundFollowState _groundFollow;
         private float _nextGroundLogAt;
         private float _lastGroundedAt = -10f;   // Giorno 7: finestra del magnete in discesa
+        // FIX B: l'Animator deve mostrare il salto SOLO quando il salto e'
+        // stato davvero chiesto. Senza questo, cadere da un cordolo dopo la
+        // finestra del magnete faceva partire la clip Jump (hasExitTime=0).
+        private float _jumpAnimHoldUntil = -10f;
+        private const float JumpAnimHoldS = 0.8f;
         private const float GroundFollowClearance = 0.02f;
 
         /// <summary>Passo massimo di integrazione del movimento (s). Durante la
@@ -458,18 +463,16 @@ namespace City.Player
             if (walker != null)
             {
                 walker.SetSpeed(_realHorizontalSpeed);
-                // Giorno 8 (analisi causa 3): lo step assist del Giorno 7 muove
-                // il CC in LateUpdate e puo' lasciare isGrounded=false per
-                // 1-3 frame sui cordoli. La transizione del controller Mixamo
-                // `IfNot IsGrounded -> Jump` (hasExitTime=0) farebbe partire la
-                // clip di salto senza salto. Teniamo "a terra" per la stessa
-                // finestra GroundGraceS del magnete, ma NON durante un salto
-                // vero (velocity.y>0.5): li' il Jump deve scattare subito.
-                bool animGrounded = controller.enabled &&
-                    (controller.isGrounded ||
-                     (velocity.y <= 0.5f &&
-                      Time.time - _lastGroundedAt <= GroundSnapper.GroundGraceS));
-                walker.SetGrounded(animGrounded);
+                // Giorno 8 + FIX B: il controller Mixamo entra in Jump con
+                // `IfNot IsGrounded` e hasExitTime=0. Lo step assist e le
+                // cadute dai cordoli facevano quindi partire la clip di salto
+                // senza che l'utente salitasse. Ora l'Animator e' "in aria"
+                // SOLO per un salto davvero richiesto (DoJump), fino a
+                // JumpAnimHoldS o fino all'atterraggio. La finestra del
+                // magnete del Giorno 7 resta per la FISICA, non per l'anim.
+                bool animAir = !controller.isGrounded &&
+                    (velocity.y > 0.5f || Time.time < _jumpAnimHoldUntil);
+                walker.SetGrounded(controller.enabled && !animAir);
             }
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - frameDt);
             TrackWalkDistance();
@@ -611,7 +614,11 @@ namespace City.Player
             {
                 LogJumpReject("non a terra (cc.isGrounded=" + controller.isGrounded +
                     ", sonda=" + FeetProbeGrounded() + ")");
+                return;
             }
+            // Solo un salto REALE mette l'Animator in aria: il Jump fantasma
+            // sui marciapiedi non ha piu' modo di innescarsi.
+            _jumpAnimHoldUntil = Time.time + JumpAnimHoldS;
         }
 
         /// <summary>Sonda del suolo sotto i piedi: il CharacterController

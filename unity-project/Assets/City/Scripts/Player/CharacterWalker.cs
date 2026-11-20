@@ -158,9 +158,24 @@ namespace City.Player
                    transform.Find(LUpLegPath) != null;
         }
 
+        /// <summary>FIX B: GetComponentInChildren prende il PRIMO Animator in
+        /// gerarchia, che puo' essere il characterMedium legacy invece di
+        /// Remy. Se c'e' l'hero rig restringo la ricerca a lui; per NPC e
+        /// fallback legacy (nessun rig) il comportamento resta identico.</summary>
+        private Animator ResolveAnimator()
+        {
+            var heroRig = GetComponentInChildren<PlayerHeroRig>(true);
+            if (heroRig != null)
+            {
+                var heroAnimator = heroRig.GetComponentInChildren<Animator>(true);
+                if (heroAnimator != null) return heroAnimator;
+            }
+            return GetComponentInChildren<Animator>(true);
+        }
+
         private void Start()
         {
-            animator = GetComponentInChildren<Animator>(true);
+            animator = ResolveAnimator();
             cc = GetComponentInParent<CharacterController>();
             City.OSM.OsmDiag.Log("[CharacterWalker][Start] GO=" + gameObject.name +
                 " animator=" + (animator != null) +
@@ -351,11 +366,12 @@ namespace City.Player
         private void UpdateAnimatorMode()
         {
             if (animator == null) return;
-            // Il controller Mixamo usa "Speed"/"IsGrounded"; il fallback Kenney
-            // usa "IsMoving". SetFloat/SetBool su parametri inesistenti sono
-            // no-op (sicuri).
+            // Il controller Mixamo usa SOLO "Speed" e "IsGrounded": il vecchio
+            // SetBool("IsMoving", ...) era un no-op (il parametro non esiste
+            // neppure in RemyKitSetup.cs). Rimosso per non far credere che
+            // ci sia un secondo canale di animazione. Fallback Kenney:
+            // SetFloat/SetBool su parametri inesistenti restano no-op.
             animator.SetFloat("Speed", speed);
-            animator.SetBool("IsMoving", speed > 0.15f);
             animator.SetBool("IsGrounded", grounded);
         }
 
