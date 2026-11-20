@@ -54,6 +54,21 @@ Installazione sul device:
 
     adb install -r app/build/outputs/apk/release/app-release-signed.apk
 
+Build + installazione ULTRA LIGHT (solo test, mai per lo store):
+
+    SKIP_MAP_UPDATE=1 ./build_release.sh --ultra-light
+
+  - sostituisce temporaneamente le 303 creature_*.png del modulo legacy (61 MB
+    nell'APK, "Stored") con PNG 1x1: i riferimenti R.drawable restano validi e
+    l'APK passa da ~184 MB a ~130 MB. Gli originali tornano sempre da trap,
+    anche se la build fallisce; dopo la firma vengono ripristinati subito.
+  - SALVA l'APK buono precedente in app/build/outputs/apk/backups/ con timestamp.
+  - a fine build installa da solo con `adb install -r` sul primo device connesso.
+    HUNTIX_ADB_TARGET=serial sceglie il device; SKIP_INSTALL=1 salta l'installazione;
+    HUNTIX_INSTALL=1 installa anche in una build normale (`--install`).
+  - ATTENZIONE: nell'APK ultra-light le figure del bestiario LEGACY sono 1x1.
+    Uova, bridge, inventario, mini-giochi e indoor AR restano tutti presenti.
+
 Note: il build e' lento (export Unity + Il2Cpp + Gradle). Il log del buildup
 fluidita' e' in /tmp/build_release_fluidita.log; non lanciare due build
 in parallelo (Unity Hub e Gradle si contendono lock e licenza).
@@ -88,8 +103,10 @@ Il repo lavora su flat-world con commit locali piccoli e reversibili.
 NON eseguire git push (blocco esplicito dell'utente).
 
 Rollback SOLO dell'APK (senza toccare il sorgente):
-  - l'APK precedente NON viene conservato dallo script di build: viene
-    sovrascritto. PRIMA di una build che si teme possa rompere, copiarlo:
+  - le build `--ultra-light` conservano da sole l'APK precedente in
+    app/build/outputs/apk/backups/ (nome con timestamp).
+  - le build normali sovrascrivono l'APK: PRIMA di una build che si teme possa
+    rompere, copiarlo a mano:
 
         cp app/build/outputs/apk/release/app-release-signed.apk \
            /tmp/huntix_apk_buono_<data>.apk

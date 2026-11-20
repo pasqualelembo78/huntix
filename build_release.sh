@@ -52,9 +52,45 @@
 #   ./build_release.sh            # interattivo (chiede password/alias)
 #   ./build_release.sh --auto     # usa valori di default per il nuovo keystore
 #
+# MODALITA' ULTRA LIGHT (SOLO TEST — non usare per lo store):
+#   ./build_release.sh --ultra-light          # build leggera + install su device
+#   ULTRA_LIGHT=1 SKIP_MAP_UPDATE=1 ./build_release.sh --auto
+#   ./build_release.sh --install              # build normale + install su device
+#
+#   Cosa fa --ultra-light:
+#   1) sostituisce TEMPORANEAMENTE le 303 immagini creatura_*.png del modulo
+#      legacy (61 MB, Stored nell'APK) con PNG 1x1 gli stessi nomi: i riferimenti
+#      R.drawable.creatura_N restano validi, quindi la build compila lo stesso.
+#      L'APK passa da ~183 MiB a ~125 MiB. Gli originali vengono ripristinati
+#      subito dopo la firma e comunque da trap EXIT/INT/TERM se la build fallisce.
+#   2) salva una copia datata dell'APK firmato precedente in
+#      app/build/outputs/apk/backups/ PRIMA di sovrascriverlo.
+#   3) a fine build installa con `adb install -r` sul device connesso.
+#      Opzioni: HUNTIX_ADB_TARGET=serial (sceglie il device), SKIP_INSTALL=1
+#      (non installa), HUNTIX_INSTALL=1 (installa anche senza ultra-light).
+#
+#   ATTENZIONE: nell'APK ultra-light le figure del bestiario LEGACY sono 1x1.
+#   E' pensata per testare citta'/camminata/uova, NON il bestiario. I sistemi
+#   (uova, bridge, inventario, mini-giochi, indoor AR) restano tutti presenti.
+#
 set -euo pipefail
 
 cd "$(dirname "$0")"
+
+# ── Flag CLI (gli ENV conservano la priorita' sui default) ──────
+ULTRA_LIGHT="${ULTRA_LIGHT:-0}"
+HUNTIX_INSTALL="${HUNTIX_INSTALL:-0}"
+for arg in "$@"; do
+    case "$arg" in
+        --ultra-light) ULTRA_LIGHT=1; HUNTIX_INSTALL=1 ;;
+        --install)     HUNTIX_INSTALL=1 ;;
+        --auto)        ;;  # compatibile con la documentazione storica
+        *) echo ">> [args] argomento ignorato: $arg" ;;
+    esac
+done
+if [ "$ULTRA_LIGHT" = "1" ] && [ "${SKIP_INSTALL:-0}" != "1" ]; then
+    HUNTIX_INSTALL=1
+fi
 
 # ── Permessi di esecuzione (self-heal, idempotente) ──────────────
 # Dopo clone/zip/import i bit '+x' possono sparire: ristabiliamoli qui,
@@ -595,6 +631,63 @@ else
     fi
 fi
 
+# ════════════════════════════════════════════════════════════════
+#  ULTRA LIGHT — artwork legacy 1x1 per la sola durata della build
+# ════════════════════════════════════════════════════════════════
+# PNG 1x1 trasparente (70 byte), valido per aapt2.
+ULTRA_PNG_1X1="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+ULTRA_ART_DIR="huntix/src/main/res/drawable"
+ULTRA_BACKUP=""
+ULTRA_LIST=""
+
+# Ripristina gli originali. Idempotente: se non ci sono (gia' ripristinati,
+# oppure ultra-light disattivato) non fa niente. Chiamato da trap EXIT/INT/TERM.
+restore_creatura_art() {
+    [ -n "$ULTRA_BACKUP" ] || return 0
+    [ -d "$ULTRA_BACKUP" ] || { ULTRA_BACKUP=""; ULTRA_LIST=""; return 0; }
+    if [ -f "$ULTRA_LIST" ]; then
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            rm -f "$ULTRA_ART_DIR/$name"
+            [ -f "$ULTRA_BACKUP/$name" ] && mv "$ULTRA_BACKUP/$name" "$ULTRA_ART_DIR/$name"
+        done < "$ULTRA_LIST"
+    fi
+    rm -f "$ULTRA_LIST"
+    rmdir "$ULTRA_BACKUP" 2>/dev/null || true
+    ULTRA_BACKUP=""
+    ULTRA_LIST=""
+    echo ">> [ultra-light] Artwork creature legacy RIPRISTINATO (originali intatti)."
+}
+ultra_light_abort() { restore_creatura_art; exit 130; }
+trap restore_creatura_art EXIT
+trap ultra_light_abort INT TERM
+
+# Sostituisce i PNG grandi con 1x1 tenendo gli stessi nomi, cosi' i riferimenti
+# R.drawable.creatura_N compilano senza toccare una riga del codice legacy.
+apply_ultra_light() {
+    [ "$ULTRA_LIGHT" = "1" ] || return 0
+    [ -d "$ULTRA_ART_DIR" ] || { echo "!! [ultra-light] $ULTRA_ART_DIR non trovata." >&2; return 1; }
+    ULTRA_BACKUP="$(mktemp -d "${TMPDIR:-/tmp}/huntix-ultra-light.XXXXXX")"
+    ULTRA_LIST="$ULTRA_BACKUP/.huntix-files.txt"
+    : > "$ULTRA_LIST"
+    local n=0 f name
+    for f in "$ULTRA_ART_DIR"/creatura_*.png; do
+        [ -f "$f" ] || continue
+        name="${f##*/}"
+        mv "$f" "$ULTRA_BACKUP/$name"
+        printf '%s' "$ULTRA_PNG_1X1" | base64 -d > "$f"
+        printf '%s\n' "$name" >> "$ULTRA_LIST"
+        n=$((n+1))
+    done
+    if [ "$n" -eq 0 ]; then
+        echo "!! [ultra-light] Nessuna creatura_*.png in $ULTRA_ART_DIR: annullo." >&2
+        restore_creatura_art
+        return 1
+    fi
+    echo ">> [ultra-light] $n artwork creature -> PNG 1x1 (backup: $ULTRA_BACKUP)."
+    echo ">> [ultra-light] Bestiario legacy vuoto in questo APK; uova/bridge/inventario intatti."
+}
+
 # ── Build APK (logica da build_app.sh) ─────────
 chmod +x gradlew
 
@@ -628,44 +721,60 @@ for pair in \
 done
 
 APK_DIR="app/build/outputs/apk/release"
+# Ultra light: metti al sicuro l'APK firmato buono PRIMA della pulizia/output.
+if [ "$ULTRA_LIGHT" = "1" ] && [ -f "$APK_DIR/app-release-signed.apk" ]; then
+    ULTRA_APK_BACKUP_DIR="app/build/outputs/apk/backups"
+    mkdir -p "$ULTRA_APK_BACKUP_DIR"
+    ULTRA_TS="$(date +%Y%m%d-%H%M%S)"
+    cp -p "$APK_DIR/app-release-signed.apk" \
+        "$ULTRA_APK_BACKUP_DIR/app-release-signed.pre-ultralight-$ULTRA_TS.apk"
+    echo ">> [ultra-light] APK precedente salvato: $ULTRA_APK_BACKUP_DIR/app-release-signed.pre-ultralight-$ULTRA_TS.apk"
+fi
 # Pulisci eventuali output di build precedenti (evita zipalign input==output)
 rm -f "$APK_DIR"/*.apk
+
+# Ultra light: gli artwork tornano originali anche se la build muore qui.
+apply_ultra_light
 
 echo ">> Building APK (assembleRelease)..."
 ./gradlew -Dorg.gradle.jvmargs="-Xmx6144M" assembleRelease -PkeystorePropsFile="$GRADLE_KEYSTORE_PROPS" $GRADLE_ENV_PROPS --console=auto
 UNSIGNED_APK="${APK_DIR}/app-release-unsigned.apk"
 
-if [ -z "$UNSIGNED_APK" ]; then
+if [ ! -f "$UNSIGNED_APK" ]; then
     echo "!! APK non trovato dopo la build." >&2
     exit 1
 fi
 
-# ── Verifica se è già firmato ──────────────────────────────
-if "$APKSIGNER" verify "$UNSIGNED_APK" >/dev/null 2>&1; then
-    echo ">> $UNSIGNED_APK è già firmato. Nessuna azione necessaria."
-    exit 0
-fi
-
-# ── Allinea e firma a parte (logica originale huntix) ──────
+# ── Allinea e firma (se gradle non l'ha già firmato) ───────
 ALIGNED_APK="${APK_DIR}/app-release-aligned.apk"
 SIGNED_APK="${APK_DIR}/app-release-signed.apk"
 
-echo ">> Allineo con zipalign..."
-"$ZIPALIGN" -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+if "$APKSIGNER" verify "$UNSIGNED_APK" >/dev/null 2>&1; then
+    # Prima si usciva qui: ora si prosegue fino all'installazione su device.
+    echo ">> $UNSIGNED_APK è già firmato. Nessuna azione necessaria."
+    SIGNED_APK="$UNSIGNED_APK"
+else
+    echo ">> Allineo con zipalign..."
+    "$ZIPALIGN" -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
 
-echo ">> Firma con apksigner..."
-"$APKSIGNER" sign \
-    --ks "$KEYSTORE_FILE" \
-    --ks-key-alias "$KEY_ALIAS" \
-    --ks-pass pass:"$STORE_PASS" \
-    --key-pass pass:"$KEY_PASS" \
-    --out "$SIGNED_APK" \
-    "$ALIGNED_APK"
+    echo ">> Firma con apksigner..."
+    "$APKSIGNER" sign \
+        --ks "$KEYSTORE_FILE" \
+        --ks-key-alias "$KEY_ALIAS" \
+        --ks-pass pass:"$STORE_PASS" \
+        --key-pass pass:"$KEY_PASS" \
+        --out "$SIGNED_APK" \
+        "$ALIGNED_APK"
 
-echo ">> Verifica firma..."
-"$APKSIGNER" verify "$SIGNED_APK"
+    echo ">> Verifica firma..."
+    "$APKSIGNER" verify "$SIGNED_APK"
+fi
 
-echo ">> APK firmato: $SIGNED_APK"
+echo ">> APK firmato: $SIGNED_APK ($(du -h "$SIGNED_APK" | cut -f1))"
+
+# Ultra light: rimetti subito gli artwork originali (il trap resta come rete
+# di sicurezza per eventuali errori nelle fasi seguenti).
+restore_creatura_art
 
 # Pulisci il file temporaneo keyless (se creato)
 [ -n "${TMP_PROPS:-}" ] && rm -f "$TMP_PROPS"
@@ -909,3 +1018,37 @@ start_huntix_backend() {
     cd ..
 }
 start_huntix_backend || echo "!! Fase backend terminata con errori (vedi /tmp/huntix_backend.log)."
+
+# ════════════════════════════════════════════════════════════════
+#  INSTALLAZIONE SU DEVICE (--ultra-light / --install)
+# ════════════════════════════════════════════════════════════════
+install_on_device() {
+    [ "$HUNTIX_INSTALL" = "1" ] || return 0
+    if [ "${SKIP_INSTALL:-0}" = "1" ]; then
+        echo ">> SKIP_INSTALL=1 — installazione su device saltata."
+        return 0
+    fi
+    if ! command -v adb >/dev/null 2>&1; then
+        echo "!! adb non trovato: APK pronto ma NON installato."
+        echo "   Installa a mano: adb install -r $SIGNED_APK"
+        return 0
+    fi
+
+    local ADB=(adb) target="${HUNTIX_ADB_TARGET:-}"
+    if [ -z "$target" ]; then
+        # Senza target esplicito scegliamo il primo device con stato 'device'.
+        target=$("${ADB[@]}" devices 2>/dev/null | awk 'NR>1 && $2=="device" {print $1; exit}')
+    fi
+    if [ -z "$target" ]; then
+        echo "!! Nessun device Android connesso: APK pronto ma NON installato."
+        echo "   Collega il device (o avvia l'emulatore) e poi: adb install -r $SIGNED_APK"
+        return 0
+    fi
+    ADB+=( -s "$target" )
+
+    echo ">> Installazione su device $target (APK: $(du -h "$SIGNED_APK" | cut -f1))..."
+    "${ADB[@]}" install -r "$SIGNED_APK" \
+        && echo ">> Installazione completata: com.intelligame.huntix" \
+        || { echo "!! Installazione fallita. Prova: adb install -r $SIGNED_APK" >&2; return 1; }
+}
+install_on_device || echo "!! Fase installazione con errori (APK comunque pronto: $SIGNED_APK)."
