@@ -14,6 +14,7 @@ CAMERA="unity-project/Assets/City/Scripts/Player/CameraRig.cs"
 EGG="unity-project/Assets/City/Scripts/Interior/ContainerEgg.cs"
 CTRL="unity-project/Assets/Resources/Mixamo/PlayerLocomotion.controller"
 NPC="unity-project/Assets/City/Scripts/NPC/NPCController.cs"
+WORLD="unity-project/Assets/City/Scripts/OSM/CityChunkedWorld.cs"
 
 FAIL=0
 ok()   { printf 'OK   %s\n' "$1"; }
@@ -46,6 +47,14 @@ has  "indice NPC normalizzato in Init" \
      "((startIndex % waypoints.Length + waypoints.Length) % waypoints.Length)" "$NPC"
 has  "invariante indice in Update" \
      "if (currentTarget < 0 || currentTarget >= waypoints.Length)" "$NPC"
+
+# Fluttuazione iniziale: pivot calcolato dalla capsula, non 1,5 m fissi
+has  "pivot da CharacterController" \
+     "private static float FeetFromPivot(City.Player.PlayerController player)" "$WORLD"
+hasnt "spawn a 1,5 m rimosso"       "new Vector3(0f, 1.5f, 0f)"       "$WORLD"
+atleast "snap DEM prima e dopo il gate" "SnapPlayerToTerrain(Manager" "$WORLD" 2
+has  "spawn su collider con pivot reale" "p.y = hit.point.y + feetFromPivot;" "$WORLD"
+has  "spawn su DEM con pivot reale"      "p.y = elev + feetFromPivot;"      "$WORLD"
 
 # Fix A: stick analogico, una sola magnitudo, rampa continua
 has  "deadzone condivisa"            "moveInput.sqrMagnitude > MoveDeadzoneSqr" "$PLAYER"

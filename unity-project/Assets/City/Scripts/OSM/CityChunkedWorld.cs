@@ -442,7 +442,20 @@ private const float TerrainPhysxTimeoutS = 15f;
                 Manager.target = ResolvePlayer();
             }
             if (Manager.target != null)
-                Manager.target.position = new Vector3(0f, 1.5f, 0f);   // origine = punto GPS
+            {
+                // Il pivot del player NON e' a 1,5 m: la capsula e' alta 2 m
+                // con center.y=0, quindi i piedi stanno a pivot - 1. Lasciare
+                // 1,5 significava tenerlo 0,5 m sopra il SpawnBridge per tutti
+                // i secondi del gate di spawn (log: y=1,50 -> y=1,00).
+                var pl0 = City.Game.Instance != null ? City.Game.Instance.player : null;
+                Manager.target.position = new Vector3(0f, FeetFromPivot(pl0), 0f);
+
+                // Snap subito sull'altimetria/terreno: il CC e' ancora spento,
+                // quindi scrivere il transform qui non litiga con la fisica.
+                // Dopo il gate SnapPlayerToTerrain viene richiamato per
+                // affinare sul collider reale quando e' registrato in PhysX.
+                SnapPlayerToTerrain(Manager.target);
+            }
 
             // Attendi il refresh dei veicoli posseduti prima di partire coi
             // chunk: altrimenti i primi chunk popolano il parcheggio con
@@ -547,6 +560,16 @@ private const float TerrainPhysxTimeoutS = 15f;
             if (game != null && game.player != null) return game.player.transform;
             if (Camera.main != null) return Camera.main.transform;
             return null;
+        }
+
+        /// <summary>Distanza verticale fra il pivot del player e la suola dei
+        /// piedi. PlayerHeroRig riallinea la capsula al modello, quindi non
+        /// usare mai un costante (1,0/1,5): uno spawn sbagliato di 0,5 m si
+        /// vede come personaggio sospeso per tutti i secondi del gate.</summary>
+        private static float FeetFromPivot(City.Player.PlayerController player)
+        {
+            var cc = player != null ? player.GetComponent<CharacterController>() : null;
+            return cc != null ? cc.height * 0.5f - cc.center.y : 1f;
         }
 
         /// <summary>Legge il GPS del dispositivo (bridge Android): accetta il
@@ -779,7 +802,10 @@ private const float TerrainPhysxTimeoutS = 15f;
                 EnsureSpawnBridge();
                 Manager.UnloadAll();
                 if (Manager.target != null)
-                    Manager.target.position = new Vector3(0f, 1.5f, 0f);
+                {
+                    var plt = City.Game.Instance != null ? City.Game.Instance.player : null;
+                    Manager.target.position = new Vector3(0f, FeetFromPivot(plt), 0f);
+                }
             }
             // persisti subito il nuovo punto: alla prossima apertura si riparte
             // da qui (es. geoport dopo CENTRA GPS / cambio citta' dal menu)
@@ -852,6 +878,11 @@ private const float TerrainPhysxTimeoutS = 15f;
 
             Vector3 p = target.position;
             float yBefore = p.y;
+            // Il pivot non e' sempre 1 m sopra i piedi: PlayerHeroRig
+            // allinea la capsula ai piedi visuali del modello, e in futuro
+            // quel valore puo' cambiare. Calcolarlo dal CharacterController
+            // evita di rispawnare il player mezzo metro sopra/sotto il suolo.
+            float feetFromPivot = FeetFromPivot(pl);
             // prova il collider del terreno sotto il player: il raggio parte
             // 200 m SOPRA il player (per colpire la superficie dall'esterno e
             // non la faccia interna della mesh), e deve IGNORARE il collider
@@ -868,7 +899,7 @@ private const float TerrainPhysxTimeoutS = 15f;
             if (FirstTerrainHitBelow(RayStartAboveSurface(p), 600f,
                 GroundSnapper.WalkableMask, out hit))
             {
-                p.y = hit.point.y + 1.0f;
+                p.y = hit.point.y + feetFromPivot;
                 pl.transform.position = p;
                 OsmDiag.Log("[CityChunkedWorld] spawn sul terreno: y=" +
                     p.y.ToString("F1", CultureInfo.InvariantCulture) +
@@ -881,7 +912,7 @@ private const float TerrainPhysxTimeoutS = 15f;
             // fallback: altimetria da TileElevation (terra piena)
             if (Manager != null) Manager.DiagnoseTerrain(p);
             float elev = TileElevation.HeightAt(startLat, startLng);
-            p.y = elev + 1.0f;
+            p.y = elev + feetFromPivot;
             pl.transform.position = p;
             OsmDiag.Log("[CityChunkedWorld] spawn su altimetria DEM: y=" +
                 p.y.ToString("F1", CultureInfo.InvariantCulture) +
@@ -1250,6 +1281,8 @@ private const float TerrainPhysxTimeoutS = 15f;
             // alla superficie DEM, altrimenti si precipita per 1200m nel vuoto
             // prima del salvataggio.
             float demBelow = TileElevation.HeightAtWorld(p);
+            var plRescue = City.Game.Instance != null ? City.Game.Instance.player : null;
+            float feetUp = FeetFromPivot(plRescue);
             float fallenThreshold = demBelow > 0f ? demBelow - 20f : -15f;
 
             // Sprofondato nel terreno fisico senza collider vicino ai piedi
@@ -1259,7 +1292,7 @@ private const float TerrainPhysxTimeoutS = 15f;
             // il player sta attraversando la superficie. In questo caso si
             // riporta subito sulla superficie (niente attesa da -20 m).
             bool fellThrough = demBelow > 0f
-                && p.y - 1f < demBelow - 1.2f
+                && p.y - feetUp < demBelow - 1.2f
                 && City.Game.Instance != null && !City.Game.Instance.IsDriving;
 
             // caduto sotto il mondo, oppure attraversamento della superficie?
@@ -1275,7 +1308,7 @@ private const float TerrainPhysxTimeoutS = 15f;
                     && Mathf.Abs(hit.point.y - demBelow) <= 30f;
                 if (foundTerrain)
                 {
-                    dest = hit.point + Vector3.up * 1.0f;
+                    dest = hit.point + Vector3.up * feetUp;
                     how = "superficie=" + hit.collider.name;
                 }
                 else
@@ -1290,13 +1323,13 @@ private const float TerrainPhysxTimeoutS = 15f;
                     // alla rete certa: il ponte 400x400 a y=0 all'origine.
                     if (demBelow > 0f)
                     {
-                        dest = new Vector3(p.x, demBelow + 1.0f, p.z);
+                        dest = new Vector3(p.x, demBelow + feetUp, p.z);
                         how = "DEM (quota " + demBelow.ToString("F0",
                             CultureInfo.InvariantCulture) + "m)";
                     }
                     else
                     {
-                        dest = new Vector3(0f, 1.0f, 0f);
+                        dest = new Vector3(0f, feetUp, 0f);
                         EnsureSpawnBridge();
                         how = "ponte-origine";
                     }
