@@ -111,7 +111,16 @@ namespace City.NPC
         public void Init(Vector3[] path, System.Random rng, string npcId, int startIndex = 0)
         {
             waypoints = path;
-            currentTarget = startIndex;
+            // RADICE dell'IndexOutOfRangeException segnalata 46 volte in
+            // Update(): NPCPopulator passa l'indice di spawn (0..29) anche
+            // quando il percorso ha meno waypoint (spesso 2-4, perche'
+            // SampleWithOffset campiona ogni 8-13 m con.MinPathLen=18).
+            // Le righe seguenti usano gia' startIndex % waypoints.Length:
+            // qui mancava. Normalizzare con modulo positivo, non nascondere
+            // l'errore con un catch in Update().
+            currentTarget = (waypoints != null && waypoints.Length > 0)
+                ? ((startIndex % waypoints.Length + waypoints.Length) % waypoints.Length)
+                : 0;
             walking = false;
             pauseTimer = Random.Range(0.5f, 2f);
             _shopper = rng != null && rng.NextDouble() < 0.45;
@@ -864,6 +873,13 @@ namespace City.NPC
             }
 
             if (waypoints == null || waypoints.Length < 2) return;
+            // Invariante difensiva: il percorso viene sostituito a runtime
+            // dalle tappe lavoro/casa/bar/POI. Se un agente esterno lo
+            // accorza, riporta l'indice dentro PRIMA di indicizzarlo
+            // (waypoints[currentTarget] piu' sotto). La causa primaria
+            // (startIndex non normalizzato) e' corretta in Init().
+            if (currentTarget < 0 || currentTarget >= waypoints.Length)
+                currentTarget = 0;
             MaybeDailyLife();
 
             // Elevazione: sempre aggiornata (anche da fermo), cosi' i pedoni

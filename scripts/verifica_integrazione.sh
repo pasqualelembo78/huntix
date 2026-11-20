@@ -13,6 +13,7 @@ PLAYER="unity-project/Assets/City/Scripts/Player/PlayerController.cs"
 CAMERA="unity-project/Assets/City/Scripts/Player/CameraRig.cs"
 EGG="unity-project/Assets/City/Scripts/Interior/ContainerEgg.cs"
 CTRL="unity-project/Assets/Resources/Mixamo/PlayerLocomotion.controller"
+NPC="unity-project/Assets/City/Scripts/NPC/NPCController.cs"
 
 FAIL=0
 ok()   { printf 'OK   %s\n' "$1"; }
@@ -39,6 +40,12 @@ atleast() {
 }
 
 echo "=== Giorno 10 - integrazione statica ==="
+
+# Errore rosso: IndexOutOfRangeException in NPCController.Update()
+has  "indice NPC normalizzato in Init" \
+     "((startIndex % waypoints.Length + waypoints.Length) % waypoints.Length)" "$NPC"
+has  "invariante indice in Update" \
+     "if (currentTarget < 0 || currentTarget >= waypoints.Length)" "$NPC"
 
 # Fix A: stick analogico, una sola magnitudo, rampa continua
 has  "deadzone condivisa"            "moveInput.sqrMagnitude > MoveDeadzoneSqr" "$PLAYER"
