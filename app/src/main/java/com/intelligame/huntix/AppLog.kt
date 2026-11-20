@@ -265,23 +265,32 @@ private fun log(level: Level, tag: String, msg: String) {
         return listOf(f) + archives
     }
 
-    /** Legge l'INIZIO di un file di sessione (mai la coda): cosi' l'inizio di
-     * ogni sessione resta visibile per intero, anche dopo un crash. Se la
-     * sessione e' enorme, mostra le prime maxBytes con marcatore di taglio. */
-    private fun readSessionHead(f: File, maxBytes: Long): String {
+    /** Legge INIZIO e CODA di un file di sessione: l'inizio serve a capire
+     * come e' partita la sessione, la coda e' fondamentale per il crash nativo
+     * (il SIGSEGV arriva dopo minuti di costruzione chunk e il contesto immediato
+     * precedente era sempre tagliato via leggendo solo la testa). Il budget
+     * maxBytes viene diviso a meta' tra testa e coda, con un marcatore che
+     * dichiara quanti byte sono stati omessi. */
+    private fun readSessionHeadTail(f: File, maxBytes: Long): String {
         try {
             if (!f.exists()) return ""
             val len = f.length()
             if (len == 0L) return ""
             if (len <= maxBytes) return f.readText()
-            val n = maxBytes.toInt()
+            val half = (maxBytes / 2).toInt()
             val raf = java.io.RandomAccessFile(f, "r")
-            val buf = ByteArray(n)
-            val read = raf.read(buf)
+            val head = ByteArray(half)
+            raf.seek(0)
+            val headRead = raf.read(head)
+            val tail = ByteArray(half)
+            raf.seek(len - half)
+            val tailRead = raf.read(tail)
             raf.close()
-            return String(buf, 0, read, Charsets.UTF_8) +
-                    "\n...[inizio di questa sessione mostrato fino a $maxBytes byte," +
-                    " il file continua piu' avanti]..."
+            val omitted = len - headRead - tailRead
+            return String(head, 0, headRead, Charsets.UTF_8) +
+                    "\n...[taglio: $omitted byte omessi; qui sotto la CODA della sessione" +
+                    " (fondamentale per il contesto del crash)]...\n" +
+                    String(tail, 0, tailRead, Charsets.UTF_8)
         } catch (_: Exception) {
             return ""
         }
@@ -290,7 +299,8 @@ private fun log(level: Level, tag: String, msg: String) {
     /**
      * "Log disco" = MULTI-SESSIONE. Compone le ultime DISK_SESSIONS sessioni
      * (la corrente + gli archivi di quelle precedenti), almeno 3 se esistono,
-     * in ordine cronologico (vecchia -> corrente), LEGGENDO L'INIZIO di ognuna.
+     * in ordine cronologico (vecchia -> corrente), leggendo INIZIO e CODA di
+     * ognuna (la coda porta il contesto del crash).
      * Preferisce le sessioni piu' recenti (il crash e' nell'ultima); il resto
      * del budget totale viene diviso in parti uguali per non ANR il viewer.
      */
@@ -306,7 +316,7 @@ private fun log(level: Level, tag: String, msg: String) {
             val f = shown[i]
             if (sb.isNotEmpty()) sb.append('\n')
             sb.append("\u2550\u2550\u2550 SESSIONE $idx/${shown.size}: ${f.name} \u2550\u2550\u2550\n")
-            sb.append(readSessionHead(f, perSession))
+            sb.append(readSessionHeadTail(f, perSession))
             idx++
         }
         if (dropped > 0) {
