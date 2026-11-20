@@ -5,7 +5,6 @@ package com.intelligame.huntix
 
 import android.app.Application
 import android.os.Build
-import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import io.sentry.Sentry
@@ -24,51 +23,61 @@ class EggHuntApplication : Application() {
         logPreviousExitReason()
         AppLog.risorse(this, "avvio")
 
-        // Firebase
+        // Firebase. Gli errori di init vanno in AppLog (viewer in-app), non
+        // solo in logcat: e' l'unico modo per vedere perche' un SIGSEGV nativo
+        // non arriva a Crashlytics senza usare adb/logcat.
         try {
             FirebaseApp.initializeApp(this)
+            AppLog.i("CrashReport", "Firebase inizializzato")
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Firebase init failed: ${e.message}")
+            AppLog.e("CrashReport", "Firebase init failed: ${e.message}", e)
         }
 
         // Crashlytics (native + Java/Kotlin crash reporting)
         try {
             FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(true)
+            AppLog.i("CrashReport", "Crashlytics: raccolta abilitata (Java + NDK)")
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Crashlytics init failed: ${e.message}")
+            AppLog.e("CrashReport", "Crashlytics init failed: ${e.message}", e)
         }
 
         // MapLibre non richiede init globale (init in MapView.onCreate)
 
         // Sentry (crash reporting) — DSN from manifest meta-data
-        try {
-            val manifestDsn = packageManager.getApplicationInfo(packageName,
+        val manifestDsn = try {
+            packageManager.getApplicationInfo(packageName,
                 android.content.pm.PackageManager.GET_META_DATA)
                 .metaData?.getString("io.sentry.dsn") ?: ""
+        } catch (e: Throwable) {
+            AppLog.e("CrashReport", "Sentry DSN non leggibile: ${e.message}", e)
+            ""
+        }
+        try {
             if (manifestDsn.isBlank()) {
-                Log.w("HuntixApp", "Sentry DSN not configured — crash reporting disabled")
+                AppLog.w("CrashReport", "Sentry DSN assente: crash reporting Sentry disattivato")
             } else {
                 Sentry.init { options ->
                     options.dsn = manifestDsn
                     options.isEnableAutoSessionTracking = true
                     options.tracesSampleRate = 0.1
                 }
+                AppLog.i("CrashReport", "Sentry inizializzato (DSN configurato)")
             }
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Sentry init failed: ${e.message}")
+            AppLog.e("CrashReport", "Sentry init failed: ${e.message}", e)
         }
 
         // Huntix Legacy: fornisce il context per il DB SQLite del gioco
         try {
             com.intelligame.huntix.legacy.Util.MyApp.initContext(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Huntix legacy context init failed: ${e.message}")
+            AppLog.e("HuntixApp", "Huntix legacy context init failed: ${e.message}")
         }
 
         try {
             com.intelligame.huntix.legacy.poi.creature.Persistence.init(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Persistence init failed: ${e.message}")
+            AppLog.e("HuntixApp", "Persistence init failed: ${e.message}")
         }
 
         // Registra il sender Unity (compatibile con GameManager.OnEvent).
@@ -93,7 +102,7 @@ class EggHuntApplication : Application() {
                 }
             )
         } catch (e: Exception) {
-            Log.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
+            AppLog.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
         }
 
 // Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
@@ -117,7 +126,7 @@ class EggHuntApplication : Application() {
             BillingManager.init(this)
             VipManager.syncVipStatus(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Billing init failed: ${e.message}")
+            AppLog.e("HuntixApp", "Billing init failed: ${e.message}")
         }
 
         // MVC passivi: bonus installazione + mining dalle uova schiuse
@@ -125,14 +134,14 @@ class EggHuntApplication : Application() {
             SavedManager.accrueInstallRewards(this)
             SavedManager.accrueMiningRewards(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
+            AppLog.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
         }
 
         // Starter kit cibo: 5 Mele + 3 Peperoncini (una tantum)
         try {
             EggNutrimentManager.giveStarterKit(this)
         } catch (e: Exception) {
-            Log.e("HuntixApp", "Starter kit failed: ${e.message}")
+            AppLog.e("HuntixApp", "Starter kit failed: ${e.message}")
         }
     }
 
@@ -144,54 +153,65 @@ class EggHuntApplication : Application() {
         if (Build.VERSION.SDK_INT < 30) return
         try {
             val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            val info = am.getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull() ?: return
-            val reasonName = when (info.reason) {
-                android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVO"
-                android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
-                android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
-                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
-                android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
-                android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
-                else -> "other(${info.reason})"
+            // Fino a 3 uscite: un SIGSEGV intermittente non e' distinguibile
+            // da un EXIT_SELF se si vede solo l'ultima voce dello storico.
+            val infos = am.getHistoricalProcessExitReasons(packageName, 0, 3)
+            if (infos.isEmpty()) {
+                AppLog.i("AppExit", "nessuna uscita precedente registrata")
+                return
             }
-            val signal = if (info.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
-                    || info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) info.status else null
-            AppLog.i("AppExit", "uscita precedente: reason=$reasonName signal=$signal" +
-                    " signame=${signalName(signal)} pid=${info.pid} t=${info.timestamp} desc=${info.description}")
-            // Su API 30+ il trace nativo (stack `#00 pc ...` dei crash SIGSEGV)
-            // NON passa dall'handler Java di AppLog: arriva qui tramite
-            // ApplicationExitInfo.traceInputStream. Se Android lo ha popolato,
-            // contiene esattamente il frame di crash da leggere in AppLog.
-            val trace = try {
-                info.traceInputStream?.use { input ->
-                    input.readBytes().decodeToString()
+            AppLog.i("AppExit", "storico uscite disponibili: ${infos.size}")
+            for ((index, info) in infos.withIndex()) {
+                val reasonName = when (info.reason) {
+                    android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVO"
+                    android.app.ApplicationExitInfo.REASON_CRASH -> "CRASH"
+                    android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
+                    android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+                    android.app.ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+                    android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+                    else -> "other(${info.reason})"
                 }
-            } catch (t: Throwable) {
-                Log.w("HuntixApp", "exit trace read failed: ${t.message}")
-                null
-            }
-            if (!trace.isNullOrBlank()) {
-                AppLog.i("AppExit", "trace (nativo, ${trace.length} byte):")
-                // Suddivido in blocchi ~8KB a fine riga: nel viewer AppLog un
-                // messaggio unico di decine di KB sarebbe illeggibile, e spezzare
-                // a meta' riga perderebbe i frame `#00 pc ...`.
-                val lines = trace.split("\n")
-                val sb = StringBuilder()
-                for (l in lines) {
-                    if (sb.length > 0 && sb.length + l.length > 8192) {
-                        AppLog.i("AppExit", sb.toString())
-                        sb.setLength(0)
+                val signal = if (info.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
+                        || info.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) info.status else null
+                val hasTrace = try { info.traceInputStream != null } catch (_: Throwable) { false }
+                AppLog.i("AppExit", "uscita ${index + 1}/${infos.size}: reason=$reasonName signal=$signal" +
+                        " signame=${signalName(signal)} pid=${info.pid} t=${info.timestamp}" +
+                        " desc=${info.description} dump=$hasTrace")
+
+                // Il trace va solo per l'uscita piu' recente: tre trace da
+                // decine di KB renderebbero illeggibile il viewer in-app.
+                if (index != 0) continue
+                // Su API 30+ lo stack nativo (`#00 pc ...`) NON passa
+                // dall'handler Java: arriva da traceInputStream. Se Android non
+                // l'ha popolato, Crashlytics/Sentry non hanno nulla da inviare.
+                val trace = try {
+                    info.traceInputStream?.use { input ->
+                        input.readBytes().decodeToString()
                     }
-                    sb.append(l).append('\n')
+                } catch (t: Throwable) {
+                    AppLog.w("HuntixApp", "exit trace read failed: ${t.message}")
+                    null
                 }
-                if (sb.isNotEmpty()) AppLog.i("AppExit", sb.toString())
-            } else {
-                // Nessuno stack: tipico quando il processo è stato SIGKILLato
-                // (il motivo resta SIGNALED/SIGSEGV ma senza dump del kernel).
-                AppLog.i("AppExit", "trace: NESSUNO (traceInputStream vuoto/non disponibile - processo terminato senza dump)")
+                if (!trace.isNullOrBlank()) {
+                    AppLog.i("AppExit", "trace (nativo, ${trace.length} byte):")
+                    // Blocchi ~8KB a fine riga: una riga unica di decine di KB
+                    // sarebbe illeggibile e spezzarla perderebbe i frame.
+                    val lines = trace.split("\n")
+                    val sb = StringBuilder()
+                    for (l in lines) {
+                        if (sb.length > 0 && sb.length + l.length > 8192) {
+                            AppLog.i("AppExit", sb.toString())
+                            sb.setLength(0)
+                        }
+                        sb.append(l).append('\n')
+                    }
+                    if (sb.isNotEmpty()) AppLog.i("AppExit", sb.toString())
+                } else {
+                    AppLog.i("AppExit", "trace: NESSUNO (traceInputStream vuoto/non disponibile - processo terminato senza dump)")
+                }
             }
         } catch (e: Exception) {
-            Log.w("HuntixApp", "exit reason log failed: ${e.message}")
+            AppLog.w("HuntixApp", "exit reason log failed: ${e.message}")
         }
     }
 
