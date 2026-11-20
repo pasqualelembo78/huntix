@@ -636,6 +636,31 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             Estensione, non rimozione: ContainerEgg/bridge/inventario/
             EggWhereLog/snapshot/indoor AR restano intatti.
 
+[FATTO] FIX A (2026-11-20) - Causa 2 dell'ANALISI: doppia magnitudo dello
+            stick. File: Player/PlayerController.cs.
+            1. `dir` (forward*stick.y + right*stick.x) viene Normalizzato per
+               ogni input valido, non solo quando |dir|>1: |dir| passa da
+               |stick| a 1, quindi la velocita' reale e' currentSpeed e non
+               |stick|*currentSpeed. Stessa correzione in ApplyFlight (volo
+               del Paradiso), che ricalcola `dir` a parte.
+            2. targetSpeed = runSpeed * InverseLerp(sqrt(MoveDeadzoneSqr), 1,
+               |stick|) con MoveDeadzoneSqr = 0,02 (gia' usato dal gate):
+               rampa continua da 0 a 7,5. A meta' stick la velocita' e'
+               3,13 m/s (~threshold Walk 3,2), a fondo 7,5 (Run). Sparisce
+               il salto 0 -> 3,2 all'uscita dal centro.
+            3. L'anti-moonwalk del Giorno 4 e' intatto: Speed all'Animator
+               resta la velocita' MISURATA; a meta' stick `real` ora combacia
+               con `cur` (~3,1), contro un muro resta 0.
+            4. walkSpeed (3,2) resta dichiarato per conservazione: i threshold
+               del BlendTree non si toccano (li usa anche RemotePlayer).
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning invariati).
+            Gate device [WalkDiag]: a in=0,50 -> tgt=cur=real=3,13; a in=1,00
+            -> 7,50; in=0,15 -> 0,07; contro muro real=0 con cur=3,13.
+            Riflesso uova: aggiunto `eggD=` alla riga [WalkDiag] (1 riga/s)
+            tramite ContainerEgg.DistanceToChosen: sola lettura, non rivela
+            l'uovo e non tocca il mini-gioco; avvicinandosi al cassetto il
+            valore scende senza scatti.
+
 Giorno 9  - Camera spring arm: collisione, smoothing separato posizione e
             rotazione, giroscopio non sommato al movimento.
             File: Player/CameraRig.cs

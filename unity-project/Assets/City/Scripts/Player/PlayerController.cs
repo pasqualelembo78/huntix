@@ -71,6 +71,10 @@ namespace City.Player
         // del vecchio MoveTowards a 10 m/s^2 che a 10 fps partiva in 0,3 s).
         private const float AccelSmoothS = 0.08f;
         private const float BrakeSmoothS = 0.12f;
+        // Deadzone del joystick, condivisa fra il gate di movimento e la rampa
+        // di velocita': cosi' all'uscita dal centro la Speed parte da 0 invece
+        // di saltare a walkSpeed (3,2 m/s) in un frame.
+        private const float MoveDeadzoneSqr = 0.02f;
         // Tetto di sicurezza per la velocita' MISURATA passata all'Animator:
         // copre sprint (7.5*2.2=16.5) e dash (18) con un margine, ma taglia
         // i picchi dovuti a un teleport/respawn (le gambe non impazziscono).
@@ -293,7 +297,7 @@ namespace City.Player
             Vector3 move = Vector3.zero;
             float targetSpeed = 0f;
 
-            if (moveInput.sqrMagnitude > 0.02f)
+            if (moveInput.sqrMagnitude > MoveDeadzoneSqr)
             {
                 CameraRig rig = CameraRig.Instance;
                 Vector3 forward = rig != null
@@ -301,7 +305,12 @@ namespace City.Player
                     : transform.forward;
                 Vector3 right = Vector3.Cross(Vector3.up, forward);
                 Vector3 dir = forward * moveInput.y + right * moveInput.x;
-                if (dir.sqrMagnitude > 1f) dir.Normalize();
+                // FIX: la magnitudo NON deve moltiplicare anche lo spostamento.
+                // forward/right sono ortonormali, quindi |dir| = |stick|: senza
+                // questa normalize la velocita' reale era |stick|*currentSpeed
+                // (doppia magnitudo) e l'Animator, che riceve la velocita'
+                // misurata, restava vicino a Idle anche a mezza corsia.
+                if (dir.sqrMagnitude > 0.0001f) dir.Normalize();
 
                 move = dir;
                 moveDirection = dir;
@@ -312,7 +321,12 @@ namespace City.Player
                     if (camFwd.sqrMagnitude > 0.0001f && dir.sqrMagnitude > 0.0001f)
                         _lastDirDot = Vector3.Dot(dir.normalized, camFwd.normalized);
                 }
-                targetSpeed = Mathf.Lerp(walkSpeed, runSpeed, Mathf.InverseLerp(0.35f, 1f, moveInput.magnitude));
+                // Rampa continua dalla deadzone al fondo corsa: a meta' stick
+                // la velocita' reale e' ~3,2 m/s, esattamente il threshold
+                // Walk del BlendTree; a fondo e' 7,5 (Run). Nessun salto
+                // 0 -> 3,2 appena il dito esce dal centro.
+                targetSpeed = runSpeed * Mathf.InverseLerp(
+                    Mathf.Sqrt(MoveDeadzoneSqr), 1f, moveInput.magnitude);
 
                 // Sospensioni del corpo: si inclina lievemente seguendo il
                 // pendio (pitch/roll) ma mai oltre MaxBodyInclineDeg, cosi' su
@@ -486,7 +500,13 @@ namespace City.Player
                 " dot=" + _lastDirDot.ToString("F2", inv) +
                 " camGap=" + (rig != null ? rig.LastSmoothGap : 0f).ToString("F2", inv) +
                 " camDist=" + (rig != null ? rig.LastTargetDistance : 0f).ToString("F2", inv) +
-                " camPush=" + (rig != null && rig.LastObstaclePull ? "Y" : "N"));
+                " camPush=" + (rig != null && rig.LastObstaclePull ? "Y" : "N") +
+                // RIFLESSO UOVA (sola lettura): distanza dal contenitore scelto
+                // nell'intero corrente. Non rivela l'uovo, non tocca il
+                // mini-gioco: serve solo a leggere l'avvicinamento al cassetto
+                // sulla stessa riga in=/tgt=/cur=/real= (MaxValue fuori interni).
+                " eggD=" + City.Interior.ContainerEgg.DistanceToChosen(
+                    transform.position).ToString("F1", inv));
 
             _followCorrections = 0;
             _followMaxErr = 0f;
@@ -543,7 +563,9 @@ namespace City.Player
             Vector3 forward = transform.forward;
             Vector3 right = transform.right;
             Vector3 dir = forward * moveInput.y + right * moveInput.x;
-            if (dir.sqrMagnitude > 1f) dir.Normalize();
+            // Stessa correzione del movimento a terra: in volo la magnitudo
+            // non deve essere applicata due volte.
+            if (dir.sqrMagnitude > 0.0001f) dir.Normalize();
 
             float up;
             if (flightVertical > 0) up = flightUpSpeed;
