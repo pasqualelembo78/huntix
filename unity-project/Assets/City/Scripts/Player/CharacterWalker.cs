@@ -68,6 +68,10 @@ namespace City.Player
         private float _hipsBaseY = float.NaN;
         private float _legSpanRest = float.NaN;
         private float _groundDiagAt;
+        // Il ray e il riepilogo IK hanno throttle SEPARATI: prima condividevano
+        // _groundDiagAt e il ray (chiamato prima) consumava sempre lo slot,
+        // quindi [Ground] con hipsY/applied/legSpanRest non scriveva MAI.
+        private float _groundRayDiagAt;
         private float _pulseAt;
         private float _ikFiredAt = float.MinValue;
         private bool _diagToastShown;
@@ -472,14 +476,16 @@ namespace City.Player
         /// <summary>Diagnostica del raycast che rileva il terreno sotto il
         /// piede (stesso throttle per-istanza di DiagGround): mostra origine,
         /// numero di hit, quota del punto migliore vs groundRef e peso IK,
-        /// cosi' si vede subito se il ray parte sottoterra o non trova il suolo.</summary>
+        /// cosi' si vede subito se il ray parte sottoterra o non trova il suolo.
+        /// Throttle dedicato (non condiviso con DiagGround): entrambi i diag
+        /// devono poter scrivere nello stesso istante di campionamento.</summary>
         private void DiagGroundRay(AvatarIKGoal goal, Vector3 origin, int hits,
             Vector3 hitPoint, Vector3 hitNormal, float groundRef,
             float weight, float gap)
         {
             float now = UnityEngine.Time.time;
-            if (now < _groundDiagAt) return;
-            _groundDiagAt = now + 2f;
+            if (now < _groundRayDiagAt) return;
+            _groundRayDiagAt = now + 2f;
             City.OSM.OsmDiag.Log("[CharacterWalker][GroundRay][" +
                 (goal == AvatarIKGoal.LeftFoot ? "L" : "R") + "] " +
                 gameObject.name + " originY=" + origin.y.ToString("F2") +

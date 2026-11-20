@@ -64,6 +64,8 @@ namespace City.Player
         private float _lastFootBoneMax = float.NaN;
         private float _lastHipsBoneY = float.NaN;
         private float _lastBodyY = float.NaN;
+        private float _lastSmrMinY = float.NaN;
+        private float _lastSmrMaxY = float.NaN;
 
         public static GroundDiag Ensure(GameObject root)
         {
@@ -165,6 +167,28 @@ namespace City.Player
             _lastFootBoneMax = float.NaN;
             _lastHipsBoneY = float.NaN;
             _lastBodyY = float.NaN;
+            _lastSmrMinY = float.NaN;
+            _lastSmrMaxY = float.NaN;
+
+            // Bounds REALI degli SkinnedMeshRenderer: e' qui che LayFootOnAnchor
+            // appoggia il modello (b.min.y -> feetAnchor). Confrontarli con
+            // footBoneY (caviglia IK) e con i collider dice se il "galleggia"
+            // nasce dal bounds (suola visiva sopra la caviglia) o dall'IK.
+            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            bool anySmr = false;
+            for (int i = 0; i < smrs.Length; i++)
+            {
+                if (smrs[i] == null || !smrs[i].gameObject.activeInHierarchy) continue;
+                float mn = smrs[i].bounds.min.y;
+                float mx = smrs[i].bounds.max.y;
+                if (!anySmr) { _lastSmrMinY = mn; _lastSmrMaxY = mx; anySmr = true; }
+                else
+                {
+                    if (mn < _lastSmrMinY) _lastSmrMinY = mn;
+                    if (mx > _lastSmrMaxY) _lastSmrMaxY = mx;
+                }
+            }
+
             if (_heroAnimator == null)
                 _heroAnimator = GetComponentInChildren<Animator>(true);
             if (_heroAnimator != null && _heroAnimator.avatar != null &&
@@ -221,7 +245,8 @@ namespace City.Player
                 " colliders=" + _lastColliderStack +
                 " footBoneY=" + F(_lastFootBoneMin) + ".." + F(_lastFootBoneMax) +
                 " hipsY=" + F(_lastHipsBoneY) +
-                " bodyY=" + F(_lastBodyY));
+                " bodyY=" + F(_lastBodyY) +
+                " smrY=" + F(_lastSmrMinY) + ".." + F(_lastSmrMaxY));
         }
 
         private void OnGUI()
