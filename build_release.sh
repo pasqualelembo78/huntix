@@ -49,8 +49,9 @@
 #   - firma APK con apksigner / zipalign
 #
 # Uso:
-#   ./build_release.sh            # interattivo (chiede password/alias)
-#   ./build_release.sh --auto     # usa valori di default per il nuovo keystore
+#   ./build_release.sh            # interattivo: CHIEDE "normale o ultra light?"
+#   ./build_release.sh --auto     #usa valori di default per il nuovo keystore
+#                                 # (senza flag chiede comunque la modalita')
 #
 # MODALITA' ULTRA LIGHT (SOLO TEST — non usare per lo store):
 #   ./build_release.sh --ultra-light          # build leggera + install su device
@@ -77,19 +78,62 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# ── Flag CLI (gli ENV conservano la priorita' sui default) ──────
+# ── Flag CLI + scelta interattiva della modalita' ───────────────
+# Se non e' gia' stata decisa da flag/ENV, e la stdin e' un terminale,
+# la PRIMA cosa che lo script chiede e' "normale o ultra light?".
+BUILD_MODE_EXPLICIT=0
+# Attenzione: ${VAR+x} e' vuoto solo se la variabile NON e' stata impostata,
+# e va controllato PRIMA di assegnare i default "0" qui sotto (che altrimenti
+# risulterebbero comunque "impostati" e sopprimerebbero la domanda).
+[ -n "${ULTRA_LIGHT+x}" ] && BUILD_MODE_EXPLICIT=1
+[ -n "${HUNTIX_INSTALL+x}" ] && BUILD_MODE_EXPLICIT=1
+[ "${SKIP_INSTALL:-0}" = "1" ] && BUILD_MODE_EXPLICIT=1
 ULTRA_LIGHT="${ULTRA_LIGHT:-0}"
 HUNTIX_INSTALL="${HUNTIX_INSTALL:-0}"
+
 for arg in "$@"; do
     case "$arg" in
-        --ultra-light) ULTRA_LIGHT=1; HUNTIX_INSTALL=1 ;;
-        --install)     HUNTIX_INSTALL=1 ;;
+        --ultra-light) ULTRA_LIGHT=1; HUNTIX_INSTALL=1; BUILD_MODE_EXPLICIT=1 ;;
+        --install)     HUNTIX_INSTALL=1; BUILD_MODE_EXPLICIT=1 ;;
         --auto)        ;;  # compatibile con la documentazione storica
         *) echo ">> [args] argomento ignorato: $arg" ;;
     esac
 done
 if [ "$ULTRA_LIGHT" = "1" ] && [ "${SKIP_INSTALL:-0}" != "1" ]; then
     HUNTIX_INSTALL=1
+fi
+
+if [ "$BUILD_MODE_EXPLICIT" = "0" ]; then
+    if [ -t 0 ]; then
+        echo "============================================================"
+        echo " Modalita' di build / installazione"
+        echo "   1) normale     -> APK completo (~183 MiB) + installazione"
+        echo "   2) ultra light -> APK test (~125 MiB) + installazione"
+        echo "   3) solo build  -> APK completo, NESSUNA installazione"
+        echo "============================================================"
+        printf "Vuoi installazione normale o ultra light? [1/2/3, invio=1]: "
+        MODE_RAW=""
+        read -r MODE_RAW || true
+        MODE_CHOICE="$(printf '%s' "$MODE_RAW" | tr '[:upper:]' '[:lower:]')"
+        case "$MODE_CHOICE" in
+            2|ultra|"ultra light"|ultralight|u)
+                ULTRA_LIGHT=1; HUNTIX_INSTALL=1
+                echo ">> Scelta: ULTRA LIGHT (build leggera + installazione a fine build)."
+                ;;
+            3|solo|"solo build"|build|skip|no|n)
+                ULTRA_LIGHT=0; HUNTIX_INSTALL=0
+                echo ">> Scelta: SOLO BUILD (nessuna installazione)."
+                ;;
+            *)
+                ULTRA_LIGHT=0
+                if [ "${SKIP_INSTALL:-0}" = "1" ]; then HUNTIX_INSTALL=0; else HUNTIX_INSTALL=1; fi
+                echo ">> Scelta: NORMALE (APK completo + installazione a fine build)."
+                ;;
+        esac
+    else
+        echo ">> Stdin non interattivo: modalita' NORMALE senza installazione."
+        echo "   Per scegliere in automatico: --ultra-light | --install | ULTRA_LIGHT=1 | HUNTIX_INSTALL=1"
+    fi
 fi
 
 # ── Permessi di esecuzione (self-heal, idempotente) ──────────────

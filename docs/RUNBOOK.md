@@ -54,6 +54,15 @@ Installazione sul device:
 
     adb install -r app/build/outputs/apk/release/app-release-signed.apk
 
+Se lanci `bash build_release.sh` senza flag, la PRIMA domanda e':
+
+    Vuoi installazione normale o ultra light? [1/2/3, invio=1]
+
+  1 = APK completo + installazione, 2 = ultra light + installazione,
+  3 = solo build (nessuna installazione). La domanda appare solo su terminale
+  interattivo: con stdin piping/CRON resta il comportamento storico (build
+  normale senza installazione) e si usano i flag qui sotto.
+
 Build + installazione ULTRA LIGHT (solo test, mai per lo store):
 
     SKIP_MAP_UPDATE=1 ./build_release.sh --ultra-light
