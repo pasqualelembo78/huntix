@@ -820,14 +820,25 @@ namespace City.Player
             float newFeet = GroundSnapper.Follow(ref _groundFollow, feetY,
                 targetFeet, Mathf.Min(Time.deltaTime, MaxFrameStepS));
             float deltaY = newFeet - feetY;
-            if (Mathf.Abs(deltaY) <= GroundFollowClearance) return;
+            // FIX GALLEGGIAMENTO: il vecchio gate confrontava lo STEP SMORZATO
+            // (deltaY) con GroundFollowClearance (2 cm). Ma Follow() smorza
+            // apposta: con err=3 cm e alpha~0.23 il delta e' ~7 mm -> sempre
+            // sotto 2 cm -> la correzione veniva scartata OGNI frame e il CC
+            // restava a riposo fino a ~9 cm sopra la superficie. Ora blocca
+            // solo il rumore numerico; e' FollowDeadzone (in Follow) a dire
+            // quando siamo a posto, senza creare una zona morta persistente.
+            if (Mathf.Abs(deltaY) <= 0.0005f) return;
 
             // GIORNO 7: step assist (salita <= 0,35 m) e magnete in discesa
             // passano dal CharacterController, NON da transform.position: il
             // passo e' gia' smorzato da GroundSnapper.Follow e la sweep interna
             // del CC resta sincronizzata. Niente teletrasporto sul marciapiede.
+            // Esteso alle correzioni PICCOLE in discesa: prima, essendo
+            // err<0 e grounded, finivano nel ramo teleport (disable/enable)
+            // per pochi millimetri. Anche quelle vanno in sweep.
             bool stepAssist = err > 0f && err <= GroundSnapper.StepAssistHeight;
-            if (stepAssist || magnet)
+            bool smallCorrection = Mathf.Abs(err) <= GroundSnapper.StepAssistHeight;
+            if (stepAssist || magnet || smallCorrection)
             {
                 controller.Move(new Vector3(0f, deltaY, 0f));
                 // La gravita' non deve accumularsi nei ~10 frame dello step:

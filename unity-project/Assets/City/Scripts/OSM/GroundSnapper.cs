@@ -94,7 +94,12 @@ namespace City.OSM
         public const float AboveFeetTolerance = 0.6f; // superfici sopra i piedi escluse (tetti/deck in volo)
 
         // ── Follower verticale ──
-        public const float FollowDeadzone = 0.02f;
+        // 2 cm di deadzone SOMMATI ai 2 cm di GroundFollowClearance lasciavano
+        // il collider fino a 4 cm sopra la superficie (galleggiamento). La
+        // smorzatura di Follow() gia' evita il jitter: bastano 5 mm per dire
+        // "a posto" e il CC arriva a 2,5 cm dalla superficie (che SoleTouchDrop
+        // di 0,03 compensa portando la suola 5 mm sotto l'asfalto).
+        public const float FollowDeadzone = 0.005f;
         public const float SmoothRate = 12f;        // /s: inseguimento esponenziale smussato
         public const float MaxClimbSpeed = 10f;     // m/s in salita (dolce)
         public const float MaxDescendSpeed = 30f;   // m/s in discesa (veloce ma controllata)
