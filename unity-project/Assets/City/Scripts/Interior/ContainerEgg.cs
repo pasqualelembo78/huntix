@@ -36,6 +36,18 @@ namespace City.Interior
             _instance = go.AddComponent<ContainerEgg>();
         }
 
+        /// <summary>GIORNO 8 - riflesso uova: distanza dal contenitore scelto
+        /// per l'intero corrente. Sola lettura: NON rivela ne' sposta l'uovo e
+        /// NON tocca il mini-gioco. Ritorna MaxValue fuori dagli interni o se
+        /// l'edificio non ha un contenitore, cosi' il caller puo' usare la
+        /// distanza senza conoscere lo stato interno di ContainerEgg.</summary>
+        public static float DistanceToChosen(Vector3 point)
+        {
+            var inst = _instance;
+            if (inst == null || inst._chosen == null) return float.MaxValue;
+            return Vector3.Distance(point, inst._chosen.position);
+        }
+
         // Probabilita' che l'edificio abbia l'uovo in un contenitore (50%).
         private const float EggProb = 0.5f;
         private const float RevealDist = 2.4f;

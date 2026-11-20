@@ -444,7 +444,18 @@ namespace City.Player
             if (walker != null)
             {
                 walker.SetSpeed(_realHorizontalSpeed);
-                walker.SetGrounded(controller.enabled && controller.isGrounded);
+                // Giorno 8 (analisi causa 3): lo step assist del Giorno 7 muove
+                // il CC in LateUpdate e puo' lasciare isGrounded=false per
+                // 1-3 frame sui cordoli. La transizione del controller Mixamo
+                // `IfNot IsGrounded -> Jump` (hasExitTime=0) farebbe partire la
+                // clip di salto senza salto. Teniamo "a terra" per la stessa
+                // finestra GroundGraceS del magnete, ma NON durante un salto
+                // vero (velocity.y>0.5): li' il Jump deve scattare subito.
+                bool animGrounded = controller.enabled &&
+                    (controller.isGrounded ||
+                     (velocity.y <= 0.5f &&
+                      Time.time - _lastGroundedAt <= GroundSnapper.GroundGraceS));
+                walker.SetGrounded(animGrounded);
             }
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - frameDt);
             TrackWalkDistance();

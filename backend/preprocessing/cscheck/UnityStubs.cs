@@ -342,6 +342,7 @@ namespace UnityEngine
         public Avatar avatar { get; set; }
         public AnimatorControllerParameter[] parameters => new AnimatorControllerParameter[0];
         public float speed { get; set; }
+        public Vector3 bodyPosition { get; set; }   // Giorno 8: compensazione bacino FootIK
         public void SetFloat(string n, float v) {} public void SetBool(string n, bool v) {} public void SetTrigger(string n) {}
         public Transform GetBoneTransform(HumanBodyBones humanBoneId) => null;
         public bool hasTransformHierarchy => true;

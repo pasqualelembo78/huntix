@@ -874,6 +874,12 @@ namespace City.Player
             this.grounded = grounded;
         }
 
+        /// <summary>Giorno 8: stato a terra "stabile" consegnato da
+        /// PlayerController (tiene conto della finestra del magnete del
+        /// Giorno 7). FootIK lo usa per non piantare i piedi in aria quando
+        /// isGrounded fa flip per un frame sui cordoli.</summary>
+        public bool Grounded { get { return grounded; } }
+
         /// <summary>GIORNO 5 - Aggiorna fase e contatore passi leggendo la
         /// FONTE dell'animazione: normalizedTime dello stato Animator per il
         /// player (Mixamo), fase della clip procedurale per gli NPC. Due

@@ -240,6 +240,122 @@ Note documentate (NON fixate, preesistenti / scelte):
            uova I/O; RUNBOOK sez. 6 vieta di toccare ContainerEgg/bridge.
 
 --------------------------------------------------------------------------------
+ANALISI - Perche' idle / camminata / corsa non sono "sani" anche con tutti i
+          file e i dettagli inseriti (scritta 2026-11-20, prima del Giorno 8)
+--------------------------------------------------------------------------------
+Fonti: codice e file su disco, NON device. Serve a non "aggiungere altri file"
+a un problema che e' di cablaggio/parametri. Aggiornare col logcat quando
+arriva la build normale con Giorno 6+7.
+
+PREMESSA - cio' che e' GIA' CABLATO BENE (non toccare alla cieca):
+- Corrispondenza dei GUID: PlayerHero.prefab:45-46 usa avatar
+  c89d5f3f41a5bb88aa8ef53c68210c33 e controller
+  b694efb7821056e7a9241ea4fa6b8151; entrambi coincidono con i .meta
+  (Remy.fbx, PlayerLocomotion.controller) e con piano_lavoro.txt:65-67.
+- Il parametro e' `Speed` Float in codice (CharacterWalker.cs:357) e nel
+  controller (PlayerLocomotion.controller:1466-1467): NON e' un mismatch
+  di nome.
+- Il BlendTree `LocomotionBlend` e' lo stato di default (controller:544,
+  2312) con figli Idle=0, Walk=3.2, Run=7.5 (363-380) e
+  m_BlendParameter: Speed (386). Non esistono stati separati Idle/Walk/Run:
+  e' un unico stato con blend, quindi le "transizioni" non le comanda Speed.
+- Le clip FBX esistono e sono retargettate: Idle.fbx, Walking.fbx, Run.fbx,
+  Jump.fbx (guid nei .meta corrispondenti ai figli del BlendTree). Il
+  fallback `idle = walk` di RemyKitSetup.cs:644 NON ha scatterato: il
+  figlio Idle ha il GUID del vero Idle.fbx, non quello di Walking.fbx.
+- Avatar Humanoid (animationType 3), m_IKPass: 1 (controller:1740),
+  m_ApplyRootMotion: 0 (prefab:49, CharacterWalker.cs:321): corretti, perche'
+  il movimento lo fa il CharacterController, non il root motion.
+- Un solo Animator nel prefab (PlayerHero.prefab:36); nessun
+  AnimatorOverrideController e nessun `animator.speed=0` sul player (l'unico
+  e' NPCController.cs:988, per gli NPC fuori raggio).
+
+CAUSE CONCRETE (ordine di probabilita'/impatto):
+
+1. ANIMATOR RISOLTO CON GetComponentInChildren<Animator>(true).
+   CharacterWalker.cs:163 prende il PRIMO Animator sotto la radice del
+   player, compresi figli inattivi. Al risveglio la scena contiene ancora
+   il modello legacy `characterMedium` con il suo Animator. REVIEW 2
+   (piano_lavoro.txt:168-173) dichiara esplicitamente il punto NON fixato:
+   HideLegacyModels.cs:158-175 salta gli SMR che hanno un Animator parent,
+   quindi il legacy puo' restare attivo accanto a Remy. Se il walker scrive
+   Speed/IsGrounded su QUEL Animator, Remy resta in bind pose (T-pose o
+   posa fissa) e qualsiasi file MixamoAggiunto sembra "ignorato".
+   LOG DECISIVO: `[CharacterWalker][Start] animatorGO=` (165-168) deve
+   dire `PlayerHero`, non `characterMedium`; confrontare con
+   `[PlayerHeroRig][Ensure]`.
+
+2. NON ESISTE UN REGIME "WALK" STABILE NELLA MAPPA DELLE VELOCITA'.
+   PlayerController.cs:17-18: walkSpeed=3.2, runSpeed=7.5 — sono ESATTAMENTE
+   i due threshold del BlendTree. Ma :315 calcola
+   `targetSpeed = Lerp(3.2, 7.5, InverseLerp(0.35, 1, |stick|))`: con stick
+   digitale o a fondo scala si e' sempre a 7.5 (Run); con |stick|<=0.35 non
+   ci si muove; il 3.2 (Walk) esiste solo in una fascia stretta di analogico.
+   In pratica il player e' IDLE o RUN, senza una camminata intermedia
+   stabile, anche se la clip Walk e' presente e correttamente collegata.
+   Inoltre sprintBoost=2.2 (:22) porta a 16,5 m/s, oltre l'ultimo threshold:
+   il blend satura a Run e non differenzia piu' niente (MaxRealAnimSpeed=25,
+   :77, non limita).
+
+3. IsGrounded PUO' FLIPPARE SUI CORDOLI E INNESCLARE LO STATO JUMP.
+   CharacterWalker.cs:359 scrive `SetBool("IsGrounded", grounded)` e
+   PlayerController.cs:447 gli passa `controller.isGrounded`. La transizione
+   LocomotionBlend -> Jump e' `IfNot IsGrounded` con hasExitTime=0 e
+   duration=0,08 (controller:2414-2438, 2422-2423): basta UN frame a terra
+   falso per entrare nella clip di salto. Dopo il Giorno 7 lo step assist
+   muove il CharacterController con `controller.Move` in LateUpdate e
+   riporta velocity.y=-1: isGrounded puo' restare false per 1-3 frame
+   salendo/scendendo dal marciapiede => il player "salta" senza aver premuto
+   salto e lo stato Idle/Walk si interrompe. E' una regressione plausibile
+   del Giorno 7, da verificare col log `modo=step/magnet` di [GroundFollow].
+
+4. SetBool("IsMoving") E' UN NO-OP SUL CONTROLLER MIXAMO.
+   CharacterWalker.cs:358 lo scrive, ma il controller ha solo Speed,
+   IsGrounded e 44 trigger Act_* (1466-1478): non ha IsMoving. Sul player
+   non fa danno perche' Speed basta; se pero' `Resources.Load` di
+   PlayerLocomotion fallisse (strip IL2CPP) e si cadesse sul controller
+   Kenney di fallback (:187-192), Speed resterebbe a 0 e il modello resterebbe
+   fermo in idle/T-pose. LOG: `[CharacterWalker][Start] mixamoCtrl=` (167-170).
+
+5. 44 TRANSIZIONI AnyState Act_* POSSONO INTERROMPERE LA LOCOMOZIONE.
+   controller:2262; PlayerActions.Trigger (PlayerActions.cs:46) e' chiamato
+   solo da eventi multiplayer (MultiplayerManager.cs:463,
+   RemotePlayer.cs:197): in single player NON e' la causa, ma in sessione
+   multiplayer un emote puo' strappare il player fuori da LocomotionBlend.
+
+6. ANOMALIA DA VALIDARE: m_MaxThreshold: 1 (controller:389) mentre i figli
+   sono a 0/3.2/7.5 e m_UseAutomaticThresholds: 0 (390). Con automatic
+   thresholds disattivato Unity dovrebbe usare i threshold dei figli, quindi
+   il valore 1 e' probabilmente un cache stale di RemyKitSetup.cs:702-707;
+   NON e' una causa provata. Se a runtime venisse usato per normalizzare,
+   taglierebbe fuori Walk e Run: controllare con spd a 3.2 e 7.5.
+
+IPOTESI ESCLUSE DAI FATTI (non perseguire):
+- Mismatch del nome del parametro Speed (escluso, vedi premessa).
+- Clip mancanti o T-pose per idle sintetico vuoto (escluso: il True Idle.fbx
+  e' collegato, il fallback di RemyKitSetup.cs:644 non ha agito).
+- Avatar non Humanoid / IK Pass spento / root motion attivo (esclusi).
+- Animator duplicati nel prefab (escluso: uno solo).
+- Velocita' all'Animator azzerata da `animator.speed=0` (escluso: solo NPC).
+
+COME VALIDARE SUL DEVICE (build normale con Giorno 6+7):
+- `[CharacterWalker][Start] animatorGO=PlayerHero` e
+  `[CharacterWalker][Animator] Controller assegnato: PlayerLocomotion ...
+  isHuman=True`. Se dice characterMedium, la causa e' la n.1.
+- `[WalkDiag] in=/tgt=/cur=/real=` e `[CharacterWalker] spd=` devono
+  combaciare (Giorno 4: anti-moonwalk).
+- Con stick tenuto a meta' spd dovrebbe stare fra 3.2 e 7.5; a riposo ~0.
+  Se salta da 0 a 7.5, la causa e' la n.2.
+- Sui cordoli non deve partire la clip di Jump senza salto: se succede,
+  la causa e' la n.3.
+
+IMPLICAZIONE PER IL GIORNO 8: l'IK va scritto sull'Animator giusto (gia'
+garantito da FootIK.Ensure(go) dopo l'instantiate) e NON deve piegare le
+gambe quando IsGrounded fa flip per lo step assist: il rimedio alla causa n.3
+va messo nello stesso pezzo, altrimenti il Giorno 8 amplificherebbe il
+problema invece di risolverlo.
+
+--------------------------------------------------------------------------------
 FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
 --------------------------------------------------------------------------------
 [FATTO] Giorno 4 - Velocita' smorzata (accel 0,08s / frenata 0,12s) + Animator
@@ -393,9 +509,47 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             senza scatti ne' salti: nessuna modifica a ContainerEgg, solo
             conseguenza del passo assistito.
 
-Giorno 8  - FootIK.cs con OnAnimatorIK: piedi piantati sugli hit della sonda,
-            compensazione del bacino. 2 raycast/frame.
-            Riflesso uova: dentro l'edificio ci si piega davanti al cassetto.
+[FATTO] Giorno 8 - FootIK.cs con OnAnimatorIK: piedi piantati sugli hit della
+            sonda, compensazione del bacino. 2 raycast/frame.
+            File: Player/FootIK.cs, Player/CharacterWalker.cs,
+            Player/PlayerController.cs, Interior/ContainerEgg.cs (sola lettura),
+            cscheck/UnityStubs.cs (solo type-check: Animator.bodyPosition).
+            Implementazione:
+            1. FootIK.OnAnimatorIK (layer 0, una sola volta per frame):
+               due raycast corti, uno per osso del piede (ProbeUp 0,45 +
+               ProbeDown 0,85 m), con GroundSnapper.WalkableMask (mai layer 8)
+               e QueryTriggerInteraction.Ignore. Lo scarto MaxPlant = 0,35 m
+               e' lo stesso dello step assist: oltre quel dislivello la gamba
+               NON si piega, ci pensa il Giorno 7 a salirci. Rotazione del
+               piede ricalcolata dalla normale della superficie (peso 0,45).
+               Peso posizione 0,85, smorzamento 12/s, seed al primo frame.
+            2. Compensazione del bacino: need = -min(0, offsetSinistro,
+               offsetDestro), cio' che serve al piede piu' basso; clamp a
+               0,18 m. bodyPosition viene LETTO a ogni OnAnimatorIK e
+               riscritto col solo delta, quindi non si accumula frame su
+               frame. IK disattivato in guida, minigioco, CC disabilitato o
+               in aria (walker.Grounded).
+            3. Fix della causa n.3 dell'ANALISI qui sopra: PlayerController
+               passa a walker.SetGrounded uno stato "stabile" che tiene il
+               magnete GroundGraceS 0,25 s quando isGrounded fa flip sui
+               cordoli, ma NON quando velocity.y > 0,5 (salto vero: il Jump
+               deve partire subito). CharacterWalker espone la proprieta'
+               Grounded in sola lettura, usata da FootIK per non piantare i
+               piedi in aria.
+            4. Budget: 2 raycast/frame totali, zero allocazioni, nessun
+               GetComponent per frame (riferimenti in Awake). Nessun root
+               motion, nessun tocco a CharacterController.Move.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+            Gate device: piedi appoggiati sulla superficie reale salendo e
+            scendendo cordoli (nessun piede sospeso/affondato); nessuna clip
+            di salto che parte sui marciapiedi senza salto; [FootIK] VERIFICA
+            isHuman=True e OnAnimatorIK chiamato; frame rate invariato.
+            Riflesso uova: ContainerEgg.DistanceToChosen e' una nuova API DI
+            SOLA LETTURA (non rivela l'uovo, non tocca il mini-gioco): quando
+            il player e' entro 1,8 m dal cassetto scelto, il bacino scende
+            fino a 0,12 m in piu', cioe' ci si piega davanti al cassetto.
+            Estensione, non rimozione: ContainerEgg/bridge/inventario/
+            EggWhereLog/snapshot/indoor AR restano intatti.
 
 Giorno 9  - Camera spring arm: collisione, smoothing separato posizione e
             rotazione, giroscopio non sommato al movimento.
