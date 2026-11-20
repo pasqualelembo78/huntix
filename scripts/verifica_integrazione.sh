@@ -15,6 +15,8 @@ EGG="unity-project/Assets/City/Scripts/Interior/ContainerEgg.cs"
 CTRL="unity-project/Assets/Resources/Mixamo/PlayerLocomotion.controller"
 NPC="unity-project/Assets/City/Scripts/NPC/NPCController.cs"
 WORLD="unity-project/Assets/City/Scripts/OSM/CityChunkedWorld.cs"
+FOOTIK="unity-project/Assets/City/Scripts/Player/FootIK.cs"
+ARMS="unity-project/Assets/City/Scripts/Player/ArmsPoseFallback.cs"
 
 FAIL=0
 ok()   { printf 'OK   %s\n' "$1"; }
@@ -31,6 +33,17 @@ hasnt() {
     local desc="$1" pattern="$2" file="$3"
     if grep -Fq -- "$pattern" "$file" 2>/dev/null; then bad "$desc" "$file" "NON deve esserci: $pattern"
     else ok "$desc"; fi
+}
+# pattern ASSENTE nel codice attivo: le righe di commento non contano, cosi'
+# i commenti che spiegano perche' una guardia e' stata rimossa non falsano
+# il gate.
+hasnt_code() {
+    local desc="$1" pattern="$2" file="$3"
+    if grep -F -- "$pattern" "$file" 2>/dev/null | grep -qv '^[[:space:]]*//'; then
+        bad "$desc" "$file" "NON deve esserci nel codice: $pattern"
+    else
+        ok "$desc"
+    fi
 }
 # occurrences minime
 atleast() {
@@ -55,6 +68,17 @@ hasnt "spawn a 1,5 m rimosso"       "new Vector3(0f, 1.5f, 0f)"       "$WORLD"
 atleast "snap DEM prima e dopo il gate" "SnapPlayerToTerrain(Manager" "$WORLD" 2
 has  "spawn su collider con pivot reale" "p.y = hit.point.y + feetFromPivot;" "$WORLD"
 has  "spawn su DEM con pivot reale"      "p.y = elev + feetFromPivot;"      "$WORLD"
+
+# Commit C: un solo owner IK per piedi/pelvis (entrambi i componenti restano)
+has  "coordinatore IK presente"        "internal static class PlayerIkCoordinator" "$FOOTIK"
+has  "owner DedicatedFootIK"           "Owner.DedicatedFootIK"                    "$FOOTIK"
+has  "owner Walker"                    "Owner.Walker"                             "$WALKER"
+has  "walker cede piedi/pelvis"        "PlayerIkCoordinator.Resolve(animator) !="  "$WALKER"
+has  "sensore cede se non e' owner"    "PlayerIkCoordinator.Resolve(_anim) !="     "$FOOTIK"
+# Latch braccia: il falso negativo hasTransformHierarchy e' rimosso
+has  "latch Animator guida il rig"     "animatorSeenDriving"                      "$ARMS"
+hasnt_code "falso negativo hasTransformHierarchy" "!animator.hasTransformHierarchy" "$ARMS"
+hasnt_code "fullPathHash non e' piu' usato" "fullPathHash"                        "$ARMS"
 
 # Fix A: stick analogico, una sola magnitudo, rampa continua
 has  "deadzone condivisa"            "moveInput.sqrMagnitude > MoveDeadzoneSqr" "$PLAYER"

@@ -4,6 +4,35 @@ using City.OSM;
 namespace City.Player
 {
     /// <summary>
+    /// Coordinatore dei DUE sistemi IK del player ( entrambi conservati ):
+    /// il sensore dedicato FootIK, che vive sull'Animator dell'hero e
+    /// pianta i piedi con la sonda corta piu' il riflesso uova del cassetto,
+    /// e il fallback storico CharacterWalker.RunFootIK, richiamato dal relay
+    /// sullo stesso Animator. Finora scrivevano entrambi SetIKPosition e
+    /// spostavano la pelvi (uno via bodyPosition, l'altro via hipsBone),
+    /// con il risultato di una posa instabile e di un'ombra non coerente.
+    /// Il coordinatore assegna la proprieta' di piedi/pelvis a UNO solo per
+    /// frame: il sensore dedicato ha priorita' quando e' presente; il
+    /// walker subentra solo se il sensore non c'e' (NPC/legacy). Nessun
+    /// componente viene rimosso o disabilitato.
+    /// </summary>
+    internal static class PlayerIkCoordinator
+    {
+        internal enum Owner { DedicatedFootIK, Walker }
+
+        internal static Owner Current { get; private set; } = Owner.DedicatedFootIK;
+
+        internal static Owner Resolve(Animator anim)
+        {
+            var dedicated = anim != null ? anim.GetComponent<FootIK>() : null;
+            Current = dedicated != null && dedicated.enabled
+                ? Owner.DedicatedFootIK
+                : Owner.Walker;
+            return Current;
+        }
+    }
+
+    /// <summary>
     /// GIORNO 1 del piano di lavoro: sensore che verifica a runtime che
     /// l'avatar del player sia Humanoid e che Unity chiami davvero
     /// OnAnimatorIK. Gate gia' verificato (isHuman=True, m_IKPass:1).
@@ -47,6 +76,7 @@ namespace City.Player
         private float _leftOff, _rightOff;
         private bool _seeded;
         private float _pelvis;
+        private bool _ownerLogged;
 
         /// <summary>Aggancia il sensore all'Animator dell'hero, se presente.
         /// Idempotente; ritorna false se non c'e' un Animator (caso in cui
@@ -104,6 +134,23 @@ namespace City.Player
             // due volte nello stesso frame: il budget resta 2 raycast/frame.
             if (_lastFrame == Time.frameCount) return;
             _lastFrame = Time.frameCount;
+
+            // Un solo owner per piedi/pelvis. Se il coordinatore assegna il
+            // rig al walker, il sensore NON scrive nulla: due owner diversi
+            // sulla stessa pelvi producevano il "corpo sospeso/affondato".
+            if (PlayerIkCoordinator.Resolve(_anim) !=
+                PlayerIkCoordinator.Owner.DedicatedFootIK)
+            {
+                Weight(AvatarIKGoal.LeftFoot, 0f);
+                Weight(AvatarIKGoal.RightFoot, 0f);
+                return;
+            }
+            if (!_ownerLogged)
+            {
+                _ownerLogged = true;
+                OsmDiag.Log("[FootIK] coordinatore IK: owner=DedicatedFootIK" +
+                    " (CharacterWalker cede piedi/pelvis)");
+            }
 
             if (!Active())
             {

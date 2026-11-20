@@ -392,6 +392,17 @@ namespace City.Player
             if (!useAnimator || !footIKEnabled || animator == null) return;
             _ikFiredAt = UnityEngine.Time.time;
 
+            // Coordinatore IK: sul player il sensore dedicato FootIK e'
+            // l'owner di piedi e pelvis. Qui il relay resta attivo (la
+            // diagnostica _ikFiredAt continua a vedere il callback) ma non
+            // scrive piu' IK: prima i due owner si contrastavano sulla
+            // stessa pelvi, uno alzandola fino a 0,25 m e l'altro
+            // abbassandola di 0,18 m -> posa instabile, ombra sbagliata.
+            // Se il sensore non c'e' (NPC/legacy) subentra questo IK.
+            if (PlayerIkCoordinator.Resolve(animator) !=
+                PlayerIkCoordinator.Owner.Walker)
+                return;
+
             FootIKStep(AvatarIKGoal.LeftFoot, ref _ikWeightL, ref _ikPosL, ref _ikRotL);
             FootIKStep(AvatarIKGoal.RightFoot, ref _ikWeightR, ref _ikPosR, ref _ikRotR);
 
