@@ -678,11 +678,14 @@ fi
 # ════════════════════════════════════════════════════════════════
 #  ULTRA LIGHT — artwork legacy 1x1 per la sola durata della build
 # ════════════════════════════════════════════════════════════════
-# PNG 1x1 trasparente (70 byte), valido per aapt2.
-ULTRA_PNG_1X1="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+# PNG 1x1 trasparente generato con zlib+CRC corretti e verificato con
+# `aapt2 compile --dir` (il vecchio base64 aveva l'IDAT con CRC sbagliato: `file`
+# lo accettava ma AAPT2 rifiutava i file con "file failed to compile").
+ULTRA_PNG_1X1="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="
 ULTRA_ART_DIR="huntix/src/main/res/drawable"
 ULTRA_BACKUP=""
 ULTRA_LIST=""
+ULTRA_APK_BACKUP_FILE=""
 
 # Ripristina gli originali. Idempotente: se non ci sono (gia' ripristinati,
 # oppure ultra-light disattivato) non fa niente. Chiamato da trap EXIT/INT/TERM.
@@ -703,7 +706,22 @@ restore_creatura_art() {
     echo ">> [ultra-light] Artwork creature legacy RIPRISTINATO (originali intatti)."
 }
 ultra_light_abort() { restore_creatura_art; exit 130; }
-trap restore_creatura_art EXIT
+
+# In caso di build fallita, rimette l'APK buono anche nel percorso canonico
+# (lo script inizia cancellando outputs/apk/release/*.apk).
+ultra_light_on_exit() {
+    local rc=$?
+    restore_creatura_art
+    if [ "$rc" -ne 0 ] && [ -n "${ULTRA_APK_BACKUP_FILE:-}" ] \
+       && [ -f "$ULTRA_APK_BACKUP_FILE" ] \
+       && [ ! -f "${SIGNED_APK:-app/build/outputs/apk/release/app-release-signed.apk}" ]; then
+        cp -p "$ULTRA_APK_BACKUP_FILE" \
+            "${SIGNED_APK:-app/build/outputs/apk/release/app-release-signed.apk}"
+        echo ">> [ultra-light] Build fallita: APK buono RIPRISTINATO in ${SIGNED_APK:-app/build/outputs/apk/release/app-release-signed.apk}"
+    fi
+    return "$rc"
+}
+trap ultra_light_on_exit EXIT
 trap ultra_light_abort INT TERM
 
 # Sostituisce i PNG grandi con 1x1 tenendo gli stessi nomi, cosi' i riferimenti
@@ -714,6 +732,37 @@ apply_ultra_light() {
     ULTRA_BACKUP="$(mktemp -d "${TMPDIR:-/tmp}/huntix-ultra-light.XXXXXX")"
     ULTRA_LIST="$ULTRA_BACKUP/.huntix-files.txt"
     : > "$ULTRA_LIST"
+
+    # Controllo UNICO (non 303): il PNG deve avere CRC validi per aapt2.
+    # Se e' rotto, meglio fallire in 1 secondo che dopo 5 minuti di AAR.
+    local png_tmp="$ULTRA_BACKUP/.huntix-pixel.png"
+    printf '%s' "$ULTRA_PNG_1X1" | base64 -d > "$png_tmp"
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "!! [ultra-light] python3 mancante: impossibile validare il PNG 1x1." >&2
+        restore_creatura_art
+        return 1
+    fi
+    if ! python3 - "$png_tmp" <<'PY'
+import struct, sys, zlib
+d = open(sys.argv[1], "rb").read()
+assert d[:8] == b"\x89PNG\r\n\x1a\n", "firma PNG sbagliata"
+i = 8
+while i < len(d):
+    n = struct.unpack(">I", d[i:i+4])[0]
+    t = d[i+4:i+8]
+    body = d[i+8:i+8+n]
+    crc = struct.unpack(">I", d[i+8+n:i+12+n])[0]
+    assert crc == zlib.crc32(t + body) & 0xffffffff, "CRC sbagliato: " + t.decode("latin1")
+    i += 12 + n
+assert i == len(d), "byte extra"
+PY
+    then
+        echo "!! [ultra-light] PNG 1x1 non valido: annullo prima di toccare gli artwork." >&2
+        restore_creatura_art
+        return 1
+    fi
+    rm -f "$png_tmp"
+
     local n=0 f name
     for f in "$ULTRA_ART_DIR"/creatura_*.png; do
         [ -f "$f" ] || continue
@@ -770,9 +819,9 @@ if [ "$ULTRA_LIGHT" = "1" ] && [ -f "$APK_DIR/app-release-signed.apk" ]; then
     ULTRA_APK_BACKUP_DIR="app/build/outputs/apk/backups"
     mkdir -p "$ULTRA_APK_BACKUP_DIR"
     ULTRA_TS="$(date +%Y%m%d-%H%M%S)"
-    cp -p "$APK_DIR/app-release-signed.apk" \
-        "$ULTRA_APK_BACKUP_DIR/app-release-signed.pre-ultralight-$ULTRA_TS.apk"
-    echo ">> [ultra-light] APK precedente salvato: $ULTRA_APK_BACKUP_DIR/app-release-signed.pre-ultralight-$ULTRA_TS.apk"
+    ULTRA_APK_BACKUP_FILE="$ULTRA_APK_BACKUP_DIR/app-release-signed.pre-ultralight-$ULTRA_TS.apk"
+    cp -p "$APK_DIR/app-release-signed.apk" "$ULTRA_APK_BACKUP_FILE"
+    echo ">> [ultra-light] APK precedente salvato: $ULTRA_APK_BACKUP_FILE"
 fi
 # Pulisci eventuali output di build precedenti (evita zipalign input==output)
 rm -f "$APK_DIR"/*.apk
