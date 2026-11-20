@@ -356,6 +356,91 @@ va messo nello stesso pezzo, altrimenti il Giorno 8 amplificherebbe il
 problema invece di risolverlo.
 
 --------------------------------------------------------------------------------
+AGGIORNAMENTO ALL'ANALISI (2026-11-20, prima del Giorno 9) - percorso REALE
+dell'input e CORREZIONE della causa 2
+--------------------------------------------------------------------------------
+Approfondimento fatto dopo il commit 4532824, seguendo lo stick dal tocco
+fino all'Animator. NON e' una nuova ipotesi: e' una correzione documentata
+di una causa gia' scritta, con numeri alla mano. Nessun codice toccato.
+
+IL JOYSTICK E' ANALOGICO (quindi la causa 2 come scritta era sbagliata):
+- Il gioco 3D e' UIManager.cs:667 -> player.SetMoveInput(joystick.Value).
+  Lo joystick e' quello creato in UIManager.cs:923-931 (DynamicJoystick),
+  NON quello Android di CityActivity.kt:674 (che muove il vecchio player 2D
+  e non parla a Unity).
+- DynamicJoystick.cs:61-65: `delta` e' la distanza del dito dal centro,
+  clampata a `radius` (120); `Value = delta / radius`. La magnitudo e' quindi
+  CONTINUA da 0 a 1: tenere il dito a meta' del cerchio da' |Value|=0,5.
+  Non esiste una digitalizzazione a 0/1 ne' un deadzone nel joystick.
+
+LA CAUSA VERA: LA MAGNITUDO VIENE APPLICATA DUE VOLTE.
+- PlayerController.cs:315: targetSpeed = Lerp(3.2, 7.5,
+  InverseLerp(0.35, 1, m)); con m=|moveInput|. Fin qui e' corretto.
+- PlayerController.cs:303: `dir = forward*moveInput.y + right*moveInput.x`.
+  forward/right sono ortonormali, quindi |dir| = m esattamente; il
+  Normalize di :304 non scatta mai (|dir|<=1).
+- PlayerController.cs:361: `velocity.x/z = (dir * currentSpeed).x/z`:
+  lo spostamento reale e' quindi m * currentSpeed, NON currentSpeed. La
+  magnitudo moltiplica la velocita' una seconda volta.
+- PlayerController.cs:430-441 (anti-moonwalk del Giorno 4): all'Animator
+  arriva `_realHorizontalSpeed`, cioe' lo spostamento MISURATO, non
+  currentSpeed. Quindi il parametro Speed del BlendTree e' m*currentSpeed,
+  mentre i suoi threshold sono 0 / 3.2 / 7.5 (calibrati su currentSpeed).
+
+TABELLA DEI REGIMI (m = frazione di corsia del joystick):
+
+    m     targetSpeed   velocita' reale  BlendTree (Idle 0 / Walk 3,2 / Run 7,5)
+   0,15      3,20           0,48          Idle->Walk 15%  (striscio)
+   0,20      3,20           0,64          Idle->Walk 20%
+   0,35      3,20           1,12          Idle->Walk 35%
+   0,50      4,19           2,10          Idle->Walk 66%
+   0,60      4,85           2,91          Idle->Walk 91%
+   0,65      5,18           3,37          Walk appena iniziato (4%)
+   0,70      5,52           3,86          Walk->Run 15%
+   0,80      6,18           4,94          Walk->Run 41%
+   1,00      7,50           7,50          Run pieno
+
+CONSEGUENZE (spiegano esattamente il sintomo dell'utente):
+- La camminata "sana" esiste solo in una finestra strettissima: serve
+  m ~= 0,63-0,68 per toccare il threshold 3,2 della clip Walk. Sotto, il
+  personaggio SI MUOVE (0,5-3 m/s) ma l'Animator e' ancora quasi in Idle:
+  scivola con le gambe ferme. Sopra, passa subito a Run.
+- Il "run" funziona solo a stick completamente a fondo (m=1): e' l'unico
+  punto in cui reale == target == 7,5.
+- L'idle "non sano" e' lo stesso fenomeno: appena il dito supera il
+  deadzone (PlayerController.cs:296, |m|>0,141) il player si muove gia'
+  a ~0,45 m/s con Animator a 0,45 -> 14% verso Walk: un idle che scivola,
+  non un idle fermo.
+- Questa e' una REGRESSIONE del Giorno 4 (anti-moonwalk), non un difetto
+  degli asset Mixamo: prima l'Animator riceveva currentSpeed (3,2/7,5,
+  allineato ai threshold); dopo ha ricevuto la velocita' reale, che a
+  stick parziale e' m volte piu' piccola. Aggiungere altri file o rietichettare
+  le clip NON puo' risolverlo: e' un disallineamento di scala fra la
+  velocita' misurata e i threshold del BlendTree.
+
+CORREZIONE TESTUALE ALLA CAUSA 2: non e' "stick digitale che manda subito a
+7,5". Lo stick e' analogico; il difetto e' la doppia magnitudo + Speed
+all'Animator letto come velocita' reale. La fascia 0,141-0,35 dove
+targetSpeed e' piano a 3,2 esiste, ma produce una camminata lenta di
+0,45-1,12 m/s che l'Animator mostra come Idle.
+
+IPOTESI ORA CHIARITA (non e' una causa): `m_MaxThreshold: 1` del BlendTree
+e' irrilevante perche' `m_UseAutomaticThresholds: 0`: Unity usa i threshold
+espliciti dei figli (0/3.2/7.5). Da considerare chiusa.
+
+OPZIONI PER IL GIORNO 9+ (NON implementate qui, serve scelta):
+ a) normalizzare `moveDirection` a |dir|=1 prima di moltiplicare currentSpeed:
+    la velocita' reale torna ad essere currentSpeed e i threshold 3,2/7,5
+    tornano corretti; l'anti-moonwalk del Giorno 4 resta intatto (la Speed
+    misurata e' ancora reale, solo che non e' piu' scaleata due volte).
+ b) lasciare la doppia magnitudo (utile per lo stick precisione) e
+    riscrivere i threshold del BlendTree / mappare la Speed all'Animator
+    in modo coerente: piu' invasivo, tocca l'editor RemyKitSetup.cs.
+ La (a) e' la minima e coerente con cio' che e' gia' committato: va pero'
+ validata su device con [WalkDiag] `in=/tgt=/cur=/real=` (a meta' stick
+ `real` deve essere ~3,2, non ~2,1) e con la clip Walk che parte davvero.
+
+--------------------------------------------------------------------------------
 FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
 --------------------------------------------------------------------------------
 [FATTO] Giorno 4 - Velocita' smorzata (accel 0,08s / frenata 0,12s) + Animator
