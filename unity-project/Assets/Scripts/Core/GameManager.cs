@@ -162,6 +162,16 @@ namespace Huntix.Core
                 return;
             }
 
+            // GIORNO 5: toggle del head bob dal viewer dei log Android (utile
+            // per chi soffre il motion sickness). Stesso canale del follower.
+            if (message.IndexOf("toggleHeadBob", StringComparison.Ordinal) >= 0)
+            {
+                var rig = City.Player.CameraRig.Instance;
+                bool on = rig != null && rig.ToggleHeadBob();
+                Debug.Log("[GameManager] HeadBob -> " + (on ? "ON" : "OFF"));
+                return;
+            }
+
             // Formato JSON (BridgeActivity)
             if (message.Contains("\"action\"", StringComparison.Ordinal) ||
                 message.Contains("\"setMode\"", StringComparison.Ordinal))

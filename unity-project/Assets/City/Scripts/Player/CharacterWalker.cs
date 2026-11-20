@@ -27,6 +27,21 @@ namespace City.Player
         private Animator animator;
         private CharacterController cc;
 
+        // ── GIORNO 5: fase del ciclo di locomozione ──
+        // UN'unica sorgente per head bob (CameraRig) e passi audio: se i due
+        // usassero timer separati, a 10 fps scivolerebbero via. Due appoggi
+        // per ciclo di clip: StepPhase 0..1 = UN passo, StepCount conta i passi.
+        private const float TwoPi = 6.2831853f;
+        public float StepPhase { get; private set; }
+        public int StepCount { get; private set; }
+        /// <summary>Velocita' REALE consegnata all'Animator (Giorno 4).</summary>
+        public float Speed { get { return speed; } }
+        private int _lastStepIndex = -1;
+        private float _procPhase;
+        private int _lastAudioStep;
+        private AudioSource _stepAudio;
+        private static AudioClip[] _stepClips;
+
         // ── Parametri Animator mode ──
         [Header("Animator Mode (player)")]
         public float walkSpeed = 3.2f;
@@ -859,6 +874,106 @@ namespace City.Player
             this.grounded = grounded;
         }
 
+        /// <summary>GIORNO 5 - Aggiorna fase e contatore passi leggendo la
+        /// FONTE dell'animazione: normalizedTime dello stato Animator per il
+        /// player (Mixamo), fase della clip procedurale per gli NPC. Due
+        /// appoggi per ciclo, rilevati sul cambio di meta-ciclo (0 -> 1).
+        /// A 10 fps la fase salta di ~0,2 per frame: il cambio e' comunque
+        /// visibile, quindi il passo non viene perso.</summary>
+        private void UpdateStepCycle()
+        {
+            // Solo il player: con 270 NPC per chunk calcolare la fase per
+            // tutti sarebbe costo sprecato (nessuno di loro ha camera/audio).
+            if (cc == null) return;
+
+            float phase;
+            if (useAnimator && animator != null &&
+                animator.runtimeAnimatorController != null && speed > 0.15f)
+            {
+                float norm = animator.GetCurrentAnimatorStateInfo(0).normalizedTime;
+                phase = norm - Mathf.Floor(norm);
+            }
+            else if (!useAnimator && anim != null && current != IdleState &&
+                     speed > 0.15f)
+            {
+                float cad = current == RunState ? runCadence : walkCadence;
+                _procPhase += Mathf.Min(Time.deltaTime, 0.1f) * cad;
+                _procPhase -= Mathf.Floor(_procPhase);
+                phase = _procPhase;
+            }
+            else
+            {
+                phase = 0f;
+            }
+
+            float p = phase * 2f;
+            int idx = Mathf.FloorToInt(p); // 0 oppure 1: un passo ciascuno
+            if (speed > 0.6f)
+            {
+                if (idx != _lastStepIndex)
+                {
+                    if (_lastStepIndex >= 0) StepCount++;
+                    _lastStepIndex = idx;
+                }
+                StepPhase = p - Mathf.Floor(p);
+            }
+            else
+            {
+                StepPhase = 0f;
+                _lastStepIndex = -1;
+            }
+
+            if (StepCount == _lastAudioStep) return;
+            _lastAudioStep = StepCount;
+            if (grounded && speed > 0.6f) PlayFootstep();
+        }
+
+        /// <summary>Passo corto generato a runtime (4 varianti) senza nuovi
+        /// asset audio, sullo stesso pattern del clacson di VehicleController:
+        /// rumore filtrato + thump a 88-109 Hz, inviluppo quadratico.</summary>
+        private void PlayFootstep()
+        {
+            if (_stepAudio == null)
+            {
+                _stepAudio = GetComponent<AudioSource>();
+                if (_stepAudio == null) _stepAudio = gameObject.AddComponent<AudioSource>();
+                _stepAudio.playOnAwake = false;
+                _stepAudio.loop = false;
+                _stepAudio.spatialBlend = 0f; // 2D: il passo del player e' sempre udibile
+                _stepAudio.volume = 0.32f;
+            }
+            if (_stepClips == null) _stepClips = BuildFootstepClips();
+            _stepAudio.PlayOneShot(_stepClips[StepCount & 3], 0.75f);
+        }
+
+        private static AudioClip[] BuildFootstepClips()
+        {
+            const int sampleRate = 22050;
+            const float lenS = 0.085f;
+            int n = Mathf.RoundToInt(sampleRate * lenS);
+            var clips = new AudioClip[4];
+            for (int k = 0; k < clips.Length; k++)
+            {
+                var data = new float[n];
+                var rnd = new System.Random(1701 + k * 313);
+                float lp = 0f;
+                for (int i = 0; i < n; i++)
+                {
+                    float t = i / (float)sampleRate;
+                    float env = 1f - i / (float)n;
+                    env *= env;
+                    float noise = (float)(rnd.NextDouble() * 2.0 - 1.0);
+                    lp = lp * 0.55f + noise * 0.45f;
+                    float thump = Mathf.Sin(TwoPi * (88f + k * 7f) * t) * 0.35f;
+                    data[i] = (lp * 0.55f + thump) * env * 0.5f;
+                }
+                var clip = AudioClip.Create("Passo_" + k, n, 1, sampleRate, false);
+                clip.SetData(data, 0);
+                clips[k] = clip;
+            }
+            return clips;
+        }
+
         private void Update()
         {
             if (!ready) return;
@@ -872,6 +987,7 @@ namespace City.Player
                 UpdateProceduralMode();
             }
 
+            UpdateStepCycle();
             DiagPlayerPulse();
         }
 

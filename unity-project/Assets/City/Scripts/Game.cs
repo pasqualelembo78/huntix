@@ -407,6 +407,56 @@ namespace City
 
         // ── Uova ─────────────────────────────────────────────────
 
+        // GIORNO 5 - riflesso uova: le uova rare/epiche/leggendarie hanno un
+        // suono di raccolta DEDICATO, generato a runtime (nessun asset audio
+        // nuovo) sullo stesso pattern del clacson di VehicleController.
+        private static AudioClip _rareChimeClip;
+        private static AudioSource _eggChimeSource;
+
+        /// <summary>Nota doppia (A5 -> E6) con inviluppo quadratico: suono
+        /// riconoscibile anche a volume basso e distinto dal "trovato" generico
+        /// di Android (SoundManager.playEggFound).</summary>
+        private static AudioClip BuildRarityChime()
+        {
+            const int sampleRate = 22050;
+            const float lenS = 0.42f;
+            int n = Mathf.RoundToInt(sampleRate * lenS);
+            var data = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)sampleRate;
+                float env = 1f - t / lenS;
+                env *= env;
+                float f = t < 0.16f ? 880f : 1320f;
+                float tone = Mathf.Sin(2f * 3.14159265f * f * t) +
+                             0.25f * Mathf.Sin(2f * 3.14159265f * f * 2f * t);
+                data[i] = tone * env * 0.22f;
+            }
+            var clip = AudioClip.Create("UovoRaro", n, 1, sampleRate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static void PlayRarityChime(EggController.Rarity rarity)
+        {
+            if (rarity != EggController.Rarity.Rare &&
+                rarity != EggController.Rarity.Epic &&
+                rarity != EggController.Rarity.Legendary) return;
+            if (Instance == null) return;
+            if (_eggChimeSource == null)
+            {
+                _eggChimeSource = Instance.GetComponent<AudioSource>();
+                if (_eggChimeSource == null)
+                    _eggChimeSource = Instance.gameObject.AddComponent<AudioSource>();
+                _eggChimeSource.playOnAwake = false;
+                _eggChimeSource.spatialBlend = 0f; // 2D: feedback immediato
+                _eggChimeSource.volume = 0.4f;
+            }
+            if (_rareChimeClip == null) _rareChimeClip = BuildRarityChime();
+            _eggChimeSource.PlayOneShot(_rareChimeClip, 1f);
+            OsmDiag.Log("[EggChime] suono dedicato per uovo " + rarity);
+        }
+
         public void OnEggCollected(EggController egg)
         {
             int reward = Mathf.Max(1, Mathf.RoundToInt(egg.value * egg.captureMultiplier));
@@ -417,6 +467,10 @@ namespace City
 
             if (ui != null)
                 ui.ShowToast("Uova raccolta! +" + reward + " €");
+
+            // GIORNO 5 - riflesso uova: solo rare e superiori ricevono il
+            // chime dedicato; comuni/non comuni restano come prima.
+            PlayRarityChime(egg.rarity);
 
             if (EggSpawnManager.Instance != null)
                 EggSpawnManager.Instance.RemoveEgg(egg.gameObject);

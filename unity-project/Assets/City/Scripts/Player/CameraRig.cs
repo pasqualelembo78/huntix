@@ -64,6 +64,34 @@ namespace City.Player
         private Vector3 velocity;
         private float _nextPushLog;
 
+        // ── GIORNO 5: head bob ──
+        // Piccolo offset della camera pilota dalla FASE DEL PASSO del
+        // CharacterWalker (la stessa che genera i passi audio): niente timer
+        // parallelo che a 10 fps si disallinea. L'offset si applica DOPO
+        // SmoothDamp e si sottrae all'inizio del frame successivo, per non
+        // inquinare velocity/LastSmoothGap ne' il raycast anti-ostacolo.
+        public const string HeadBobPrefKey = "huntix_head_bob";
+        private bool _headBobEnabled = true;
+        public bool HeadBobEnabled { get { return _headBobEnabled; } }
+        public float bobVerticalM = 0.035f;
+        public float bobHorizontalM = 0.018f;
+        public float bobRollDeg = 0.35f;
+        private CharacterWalker _walker;
+        private float _bobWeight;
+        private Vector3 _bobApplied;
+        private const float BobTwoPi = 6.2831853f;
+
+        /// <summary>Commuta il bob a runtime (dal viewer log Android) e lo
+        /// persiste, come il toggle del follower verticale.</summary>
+        public bool ToggleHeadBob()
+        {
+            _headBobEnabled = !_headBobEnabled;
+            PlayerPrefs.SetInt(HeadBobPrefKey, _headBobEnabled ? 1 : 0);
+            PlayerPrefs.Save();
+            OsmDiag.Log("[Camera][Bob] head bob -> " + (_headBobEnabled ? "ON" : "OFF"));
+            return _headBobEnabled;
+        }
+
         private const float MinCameraDistance = 4.5f;
         private const float MaxCameraDistance = 30f;
         private const float RayOriginHeight = 5f;
@@ -88,7 +116,12 @@ namespace City.Player
                 GameObject p = GameObject.FindGameObjectWithTag("Player");
                 if (p != null) target = p.transform;
             }
-            if (target != null) yaw = target.eulerAngles.y;
+            if (target != null)
+            {
+                yaw = target.eulerAngles.y;
+                _walker = target.GetComponent<CharacterWalker>();
+            }
+            _headBobEnabled = PlayerPrefs.GetInt(HeadBobPrefKey, 1) == 1;
             if (SystemInfo.supportsGyroscope)
             {
                 _gyroEnabled = PlayerPrefs.GetInt("gyroCam", 1) == 1;
@@ -291,6 +324,11 @@ namespace City.Player
         private void LateUpdate()
         {
             if (target == null) return;
+            // GIORNO 5: tolgo il bob del frame precedente PRIMA di SmoothDamp.
+            // Altrimenti la camera "insegue" il proprio bob, velocity si sporca
+            // e LastSmoothGap non misura piu' il ritardo reale della camera.
+            transform.position -= _bobApplied;
+            _bobApplied = Vector3.zero;
             LastObstaclePull = false;
             float dt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
 
@@ -376,11 +414,39 @@ namespace City.Player
                 velocity = Vector3.zero;
             }
             transform.position = smoothed;
+            // Diagnostiche PRIMA del bob: devono misurare il ritardo della
+            // camera rispetto al punto desiderato, non il tremolio del passo.
             LastSmoothGap = Vector3.Distance(transform.position, finalDesired);
             LastTargetDistance = Vector3.Distance(transform.position, target.position);
+
+            // GIORNO 5 - HEAD BOB: la fase viene dal CharacterWalker, quindi
+            // e' la stessa del passo audio. Peso azzerato a piedi fermi, in
+            // guida e graduale in prima persona (dove il bob e' piu' visibile).
+            float bobTarget = 0f;
+            if (_headBobEnabled && !drivingMode && _walker != null)
+                // Soglia 0.6 = stessa del rilevamento passi: sotto quella il
+                // walker azzera StepPhase e il bob non deve restare "appeso".
+                bobTarget = Mathf.Clamp01((_walker.Speed - 0.6f) / 1.6f) *
+                            (1f - 0.35f * _fpBlend);
+            _bobWeight = Mathf.Lerp(_bobWeight, bobTarget, Mathf.Min(1f, dt * 9f));
+            if (_bobWeight > 0.001f)
+            {
+                float phase = _walker.StepPhase * BobTwoPi;
+                Vector3 localBob = new Vector3(
+                    Mathf.Cos(phase) * bobHorizontalM,
+                    Mathf.Sin(phase) * bobVerticalM, 0f) * _bobWeight;
+                // Solo yaw: l'offset resta orizzontale/verticale e non viene
+                // ruotato dal pitch della camera (ne' dal giroscopio).
+                _bobApplied = Quaternion.Euler(0f, yaw, 0f) * localBob;
+                transform.position += _bobApplied;
+            }
+
             float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)
                 + (_gyroEnabled ? _gyroPitchOffset : 0f);
-            transform.rotation = Quaternion.Euler(viewPitch, yaw, 0f);
+            float bobRoll = _bobWeight > 0.001f
+                ? Mathf.Cos(_walker.StepPhase * BobTwoPi) * bobRollDeg * _bobWeight
+                : 0f;
+            transform.rotation = Quaternion.Euler(viewPitch, yaw, -bobRoll);
         }
     }
 }

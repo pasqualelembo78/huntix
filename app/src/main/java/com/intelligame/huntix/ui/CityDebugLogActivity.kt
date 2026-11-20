@@ -122,6 +122,18 @@ class CityDebugLogActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT).show()
             }
         })
+        // Giorno 5: disattiva il head bob dal viewer log (motion sickness).
+        btnRow3.addView(smallBtn("BOB ON/OFF", "#B26A00") {
+            try {
+                StoreUnityBridge.sendToUnityIfAlive(
+                    "GameManager", "OnEvent", "{\"action\":\"toggleHeadBob\"}")
+                Toast.makeText(this, "Head bob commutato: vedi [Camera][Bob] nel log",
+                    Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Comando non inviato: ${e.message}",
+                    Toast.LENGTH_SHORT).show()
+            }
+        })
         header.addView(btnRow3)
 
         // Log text

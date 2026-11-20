@@ -351,7 +351,8 @@ namespace UnityEngine
         public void SetIKRotation(AvatarIKGoal goal, Quaternion rot) {}
         public void SetIKPositionWeight(AvatarIKGoal goal, float w) {}
         public void SetIKRotationWeight(AvatarIKGoal goal, float w) {} }
-    public struct AnimatorStateInfo { public int fullPathHash => 0; }
+    // Solo type-check: la logica reale e' UnityEngine.AnimatorStateInfo.
+    public struct AnimatorStateInfo { public int fullPathHash => 0; public float normalizedTime => 0f; }
     public struct AnimationClipInfo { }
 
     public enum AvatarIKGoal { LeftFoot, RightFoot, LeftHand, RightHand }

@@ -281,8 +281,43 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             stick la partenza e' pronta e l'arresto non scivola; contro un muro
             real=0, spd=0 e il personaggio non cammina a posto.
 
-Giorno 5  - Head bob + passi audio sincronizzati al ciclo animativo.
-            Riflesso uova: suono di raccolta dedicato per le uova rare.
+[FATTO] Giorno 5 - Head bob + passi audio sincronizzati al ciclo animativo.
+            File: CharacterWalker.cs, CameraRig.cs, Game.cs, GameManager.cs,
+            CityDebugLogActivity.kt, cscheck/UnityStubs.cs (solo type-check).
+            Implementazione:
+            1. CharacterWalker espone StepPhase (0..1 = un passo), StepCount e
+               Speed. La fase viene dalla FONTE dell'animazione: normalizedTime
+               dello stato Animator per il player (Mixamo LocomotionBlend),
+               fase della clip procedurale per gli NPC. Due appoggi per ciclo
+               di clip, rilevati sul cambio di meta-ciclo (idx 0<->1): a 10 fps
+               la fase salta ~0,2/frame e il passo non viene perso.
+            2. Head bob in CameraRig.LateUpdate: offset verticale 3,5 cm,
+               orizzontale 1,8 cm e roll 0,35°, pesati dalla velocita' reale
+               (zero sotto 0,6 m/s, ridotto in prima persona, spento in guida).
+               L'offset si applica DOPO SmoothDamp e si SOTTRAE all'inizio del
+               frame dopo: velocity/LastSmoothGap e il raycast anti-ostacolo
+               restano puliti. Diagnostiche lette prima del bob.
+            3. Passi audio: 4 clip da 85 ms generate a runtime (rumore
+               filtrato + thump 88-109 Hz, inviluppo quadratico, nessun asset
+               nuovo), una AudioSource 2D lazy SOLO sul player (gli NPC non
+               fanno rumore). Il colpo e' comandato dallo StepCount, quindi e'
+               agganciato alla stessa fase del bob.
+            4. Toggle anti-motion-sickness: PlayerPrefs huntix_head_bob,
+               CameraRig.ToggleHeadBob(), azione bridge toggleHeadBob in
+               GameManager.OnEvent e pulsante "BOB ON/OFF" nel viewer log.
+            NOTA: la fase e' agganciata al ciclo della clip, ma lo sfasamento
+            costante rispetto all'istante esatto del foot strike non e'
+            calibrato (servirebbero Animation Events nel controller Mixamo).
+            Riflesso uova: Game.OnEggCollected suona un chime dedicato
+            (A5->E6, generato runtime, log "[EggChime]") per Rare/Epic/
+            Legendary; comuni e non comuni restano invariati. Il cassetto
+            (ContainerEgg) passa dallo stesso OnEggCollected, quindi anche
+            l'uovo indoor riceve il suono. Nessun tocco a bridge, inventario,
+            EggWhereLog o snapshot.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+            Gate device: camGap stabile rispetto alla baseline (il bob non
+            entra nelle diagnostiche), passi udibili solo in movimento,
+            "[Camera][Bob]" al toggle, "[EggChime]" solo su uova rare+.
 
 Giorno 6  - Sonda a 5 punti (centro + 4 angoli della capsula), sphere-cast
             corto, hit PIU' VICINO per raggio, WalkableMask intatto (no layer 8),
