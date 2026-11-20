@@ -319,10 +319,32 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             entra nelle diagnostiche), passi udibili solo in movimento,
             "[Camera][Bob]" al toggle, "[EggChime]" solo su uova rare+.
 
-Giorno 6  - Sonda a 5 punti (centro + 4 angoli della capsula), sphere-cast
-            corto, hit PIU' VICINO per raggio, WalkableMask intatto (no layer 8),
-            TYPE mantenuto: CityChunkedWorld.TryGroundColumn resta l'unico
-            punto di snap.
+[FATTO] Giorno 6 - Sonda a 5 punti con sphere-cast corto.
+            File: OSM/GroundSnapper.cs, OSM/CityChunkedWorld.cs,
+            cscheck/UnityStubs.cs (solo type-check).
+            Implementazione:
+            1. GroundSnapper.ProbeFootprint: 5 sphere-cast (centro + 4 angoli
+               del footprint, ShortSpread 0,28 m, raggio 0,22 m, profondita'
+               3,40 m = 0,65 di partenza + 2,6 m utili come prima). La sfera
+               non entra nelle fessure fra MeshCollider adiacenti (giunti di
+               chunk/cordolo) dove passava il raggio sottile; i 4 angoli
+               coprono anche l'asse avanti/indietro, che il vecchio grappolo
+               a 3 raggi (centro + sinistra + destra) non copriva.
+            2. Per ogni sonda si prende l'hit PIU' VICINO (PickBest, min
+               distance); fra i 5 si prende la quota piu' alta, che e' il
+               piano di appoggio del footprint. NON e' il vecchio errore
+               "hit piu' alto della colonna": layer 8 escluso da WalkableMask
+               (intatto) e ShortMaxRise 0,35 m scarta paraurti/cofani.
+            3. Buffer RaycastHit[24] condiviso e SphereCastNonAlloc: zero
+               allocazioni per frame nonostante 5 query invece di 3.
+               SyncOnce() resta una sincronizzazione PhysX per frame.
+            4. CityChunkedWorld.TryGroundColumn (spawn, uscita veicolo,
+               teletrasporto) usa la STESSA sonda con la firma invariata:
+               resta l'unico punto di snap del progetto. Nessun secondo
+               sistema di snap, nessuna modifica a DEM/WorldHeights/toggle.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+            Gate device: camGap stabile sui giunti di chunk, nessun sobbalzo
+            salendo sui cordoli, uova deposte vicino a un cordolo non affondano.
             Riflesso uova: uova a terra non affondano nei cordoli.
 
 Giorno 7  - Step assist: salita <= 0,35 m smorzata, magnetismo a terra in

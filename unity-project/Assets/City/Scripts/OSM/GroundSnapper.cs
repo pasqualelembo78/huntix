@@ -45,11 +45,12 @@ namespace City.OSM
     /// Pattern usato dai giochi open-world terza persona per i personaggi su
     /// mondi heightfield/OSM fatti di collider separati:
     ///
-    /// 1. PROBE CORTO (3 raggi a grappolo) dai piedi verso il basso: trova il
-    ///    piano su cui il personaggio CAMMINA DAVVERO (strade, marciapiedi,
-    ///    deck dei viadotti, rampe, fallback B3). Il grappolo (raggio centrale
-    ///    + laterali) non scivola nello spiraglio fra due MeshCollider
-    ///    adiacenti (giunti di chunk).
+    /// 1. PROBE CORTO (5 punti: centro + 4 angoli della capsula, ognuno con
+    ///    sphere-cast) dai piedi verso il basso: trova il piano su cui il
+    ///    personaggio CAMMINA DAVVERO (strade, marciapiedi, deck dei viadotti,
+    ///    rampe, fallback B3). La sfera non riesce a infilarsi nello spiraglio
+    ///    fra due MeshCollider adiacenti e i 4 angoli coprono tutto il
+    ///    footprint: il suolo non sfugge piu' in nessuna direzione.
     /// 2. PROBE LUNGO (RaycastAll dall'alto, ancorato al DEM): solo se il
     ///    corto fallisce (terreno lontano sotto, es. dislivello/valle). Le
     ///    superfici SOPRA il livello piedi vengono escluse (ponte che passa
@@ -71,13 +72,19 @@ namespace City.OSM
         public const int BuildingLayer = 8;
         public const int WalkableMask = ~(1 << BuildingLayer);
 
-        // ── Sonda corta ──
-        public const float ShortStartAbove = 0.30f; // partenza sopra il livello piedi (caviglia)
-        public const float ShortDepth = 2.6f;       // guarda al massimo fino a ~2.6m sotto i piedi
+        // ── Sonda corta (Giorno 6: 5 punti + sphere-cast) ──
+        public const float ShortRadius = 0.22f;     // raggio della sfera: non entra nelle fessure
+                                                    // fra due MeshCollider adiacenti (giunti chunk)
+        public const float ShortStartAbove = 0.65f; // origine sopra i piedi: 0,65 - 0,22 = 0,43 m
+                                                    // sopra la suola, abbastanza per non partire
+                                                    // DENTRO un cordolo alto fino a ShortMaxRise
+        public const float ShortDepth = 3.40f;      // 0,65 di partenza + 2,6 m sotto i piedi
+                                                    // (portata utile invariata rispetto al passato)
         public const float ShortNorm = 0.1f;        // normale minimo (esclude pareti/soffitti)
-        public const float ShortSpread = 0.28f;     // semibraccio del grappolo di raggi: con 3 raggi
-                                                    // laterali il suolo NON sfugge nello spiraglio fra
-                                                    // due MeshCollider adiacenti (giunti chunk)
+        public const float ShortSpread = 0.28f;     // semibraccio del footprint: centro + 4 angoli
+        public const float ShortMaxRise = 0.35f;    // superfici piu' alte di 0,35 m sopra i piedi
+                                                    // vengono scartate (cordoli si, paraurti no;
+                                                    // lo step assist e' il Giorno 7)
 
         // ── Sonda lunga ──
         public const float LongRise = 200f;         // partenza dal tetto del mondo in cima alla colonna
@@ -116,6 +123,67 @@ namespace City.OSM
             catch (System.Exception) { }
         }
 
+        // Buffer CONDIVISO e riutilizzato: 5 sphere-cast per chiamata, zero
+        // allocazioni per frame. Non e' rientrante (nessun callback gira
+        // durante la sonda), quindi e' sicuro usalo per player e NPC.
+        private static readonly RaycastHit[] _probeHits = new RaycastHit[24];
+
+        private static Vector3 FootprintPoint(Vector3 center, Vector3 side,
+            Vector3 fwd, int i)
+        {
+            switch (i)
+            {
+                case 0: return center;
+                case 1: return center + side + fwd;
+                case 2: return center + side - fwd;
+                case 3: return center - side + fwd;
+                default: return center - side - fwd;
+            }
+        }
+
+        /// <summary>
+        /// Sonda il footprint dell'attore in 5 punti (centro + 4 angoli).
+        /// Ogni punto e' uno SPHERE-CAST corto: la sfera, avendo un raggio,
+        /// non riesce a infilarsi nello spiraglio fra due MeshCollider
+        /// adiacenti dove passava invece il raggio sottile. Per ogni punto
+        /// si prende l'hit PIU' VICINO (PickBest); fra i 5 si prende la quota
+        /// piu' alta, che e' il piano di appoggio dell'intero footprint.
+        ///
+        /// Attenzione: NON e' il vecchio errore "hit piu' alto della colonna".
+        /// Qui ogni sonda ha gia' scartato i collider sopra di se' (e gli
+        /// edifici layer 8 sono esclusi da WalkableMask); maxSurfaceY scarta
+        /// ulteriormente tutto cio' che sta troppo sopra i piedi.
+        ///
+        /// Usata sia dalla sonda corta (SampleGround) sia dallo snap di
+        /// spawn/teletrasporto (CityChunkedWorld.TryGroundColumn): una sola
+        /// implementazione di "dove poggia l'attore".
+        /// </summary>
+        public static bool ProbeFootprint(Vector3 center, Vector3 side,
+            Vector3 fwd, float radius, float depth, Transform self,
+            float maxSurfaceY, out RaycastHit best)
+        {
+            best = default(RaycastHit);
+            Transform bridge = CityChunkedWorld.Instance != null &&
+                CityChunkedWorld.Instance.SpawnBridge != null
+                ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
+            bool found = false;
+            for (int i = 0; i < 5; i++)
+            {
+                Vector3 origin = FootprintPoint(center, side, fwd, i);
+                int n = Physics.SphereCastNonAlloc(origin, radius, Vector3.down,
+                    _probeHits, depth, WalkableMask, QueryTriggerInteraction.Ignore);
+                RaycastHit local;
+                if (!PickBest(_probeHits, n, self, bridge, out local)) continue;
+                if (local.point.y > maxSurfaceY) continue;
+                if (!found || local.point.y > best.point.y)
+                {
+                    best = local;
+                    found = true;
+                }
+            }
+            return found;
+        }
+
         /// <summary>Sonda del piano di appoggio sotto il livello piedi `pos`
         /// (world). `self` = radice dell'attore (player/NPC): i suoi collider
         /// e lo SpawnBridge di sicurezza vengono esclusi dalla misura.</summary>
@@ -128,19 +196,13 @@ namespace City.OSM
                 CityChunkedWorld.Instance.SpawnBridge != null
                 ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
 
-            // ── 1. Sonda corta: la superficie su cui camminiamo davvero ──
+            // ── 1. Sonda corta a 5 punti: la superficie su cui camminiamo davvero ──
             Vector3 feet = new Vector3(pos.x, feetY + ShortStartAbove, pos.z);
             Vector3 side = self != null ? self.right * ShortSpread : Vector3.right * ShortSpread;
-            RaycastHit[] n3 = Physics.RaycastAll(feet, Vector3.down, ShortDepth,
-                WalkableMask, QueryTriggerInteraction.Ignore);
-            RaycastHit[] nL = Physics.RaycastAll(feet - side, Vector3.down, ShortDepth,
-                WalkableMask, QueryTriggerInteraction.Ignore);
-            RaycastHit[] nR = Physics.RaycastAll(feet + side, Vector3.down, ShortDepth,
-                WalkableMask, QueryTriggerInteraction.Ignore);
+            Vector3 fwd = self != null ? self.forward * ShortSpread : Vector3.forward * ShortSpread;
             RaycastHit near;
-            if (PickBest(n3, self, bridge, out near) ||
-                PickBest(nL, self, bridge, out near) ||
-                PickBest(nR, self, bridge, out near))
+            if (ProbeFootprint(feet, side, fwd, ShortRadius, ShortDepth, self,
+                    feetY + ShortMaxRise, out near))
             {
                 float surfY = near.point.y;
                 return SampleFrom(surfY, GroundSource.ColliderShort, true,
@@ -207,17 +269,16 @@ namespace City.OSM
             return t == bridge || t.IsChildOf(bridge);
         }
 
-        /// <summary>Sceglie l'hit del grappolo PIU' VICINO ai piedi, scartando
-        /// i collider dell'attore (il suo CharacterController/capsula) e dello
-        /// SpawnBridge di sicurezza. Il grappolo a 3 raggi serve a non perdere
-        /// il suolo nello spiraglio fra due MeshCollider adiacenti (giunti di
-        /// chunk): se il raggio centrale passa di lato, i laterali lo trovano.</summary>
-        private static bool PickBest(RaycastHit[] hits, Transform self,
+        /// <summary>Sceglie, dentro UNA singola sonda, l'hit PIU' VICINO
+        /// (min distance), scartando i collider dell'attore (CharacterController/
+        /// capsula), lo SpawnBridge di sicurezza e le pareti. La scelta fra i
+        /// 5 punti del footprint avviene in ProbeFootprint, non qui.</summary>
+        private static bool PickBest(RaycastHit[] hits, int count, Transform self,
             Transform bridge, out RaycastHit best)
         {
             best = default(RaycastHit);
             int idx = -1;
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < count && i < hits.Length; i++)
             {
                 var h = hits[i];
                 if (h.collider == null) continue;

@@ -1050,6 +1050,12 @@ private const float TerrainPhysxTimeoutS = 15f;
         ///  - il fallback DEM non e' "meglio": e' l'ultima risorsa, quando la
         ///    fisica non c'e' ancora (chunk non costruiti).
         ///
+        /// GIORNO 6: la colonna viene sondata con la STESSA sonda a 5 punti
+        /// del camminatore (GroundSnapper.ProbeFootprint): un singolo raggio
+        /// poteva cadere in una fessura fra MeshCollider e restituire "nessuna
+        /// superficie", mandando lo spawn sul fallback DEM. Resta l'unico
+        /// punto di snap del progetto; la firma e' invariata.
+        ///
         /// Ritorna false solo se non c'e' NESSUNA superficie (il caller decide
         /// cosa fare: DEM, SpawnBridge a 1.2 m, o blocco dello spawn).
         /// </summary>
@@ -1060,27 +1066,18 @@ private const float TerrainPhysxTimeoutS = 15f;
             snapped = worldPos;
             colliderName = "";
             Vector3 from = RayStartAboveSurface(worldPos);
-            Transform bridge = Instance != null && Instance._spawnBridge != null
-                ? Instance._spawnBridge.transform : null;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist,
-                GroundSnapper.WalkableMask, QueryTriggerInteraction.Ignore);
-            float best = float.MaxValue;
-            bool found = false;
-            for (int i = 0; i < hits.Length; i++)
-            {
-                if (hits[i].collider == null) continue;
-                var t = hits[i].collider.transform;
-                if (self != null && (t == self || t.IsChildOf(self))) continue;
-                if (bridge != null && (t == bridge || t.IsChildOf(bridge))) continue;
-                if (hits[i].normal.y < GroundSnapper.ShortNorm) continue;
-                if (hits[i].distance >= best) continue;
-                best = hits[i].distance;
-                snapped = new Vector3(worldPos.x,
-                    hits[i].point.y + clearance, worldPos.z);
-                colliderName = hits[i].collider.name;
-                found = true;
-            }
-            return found;
+            Vector3 side = self != null ? self.right * GroundSnapper.ShortSpread
+                : Vector3.right * GroundSnapper.ShortSpread;
+            Vector3 fwd = self != null ? self.forward * GroundSnapper.ShortSpread
+                : Vector3.forward * GroundSnapper.ShortSpread;
+            RaycastHit best;
+            if (!GroundSnapper.ProbeFootprint(from, side, fwd,
+                    GroundSnapper.ShortRadius, maxDist, self,
+                    float.PositiveInfinity, out best))
+                return false;
+            snapped = new Vector3(worldPos.x, best.point.y + clearance, worldPos.z);
+            colliderName = best.collider.name;
+            return true;
         }
 
         /// <summary>Raycast verso il basso che salta il collider del player e di

@@ -544,6 +544,8 @@ namespace UnityEngine
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Vector3 origin, Vector3 dir, float maxDist, int mask, QueryTriggerInteraction q) => new RaycastHit[0];
         public static RaycastHit[] RaycastAll(Ray ray, float maxDist) => new RaycastHit[0];
+        // Giorno 6: sphere-cast del footprint (5 punti) — usato da GroundSnapper.
+        public static int SphereCastNonAlloc(Vector3 origin, float radius, Vector3 dir, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) => 0;
         public static Collider[] OverlapBox(Vector3 center, Vector3 halfExtents, Quaternion rotation, int mask, QueryTriggerInteraction q) => new Collider[0];
         public static int RaycastNonAlloc(Ray ray, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) { if (results != null) for (int i = 0; i < results.Length; i++) results[i] = default(RaycastHit); return 0; } }
 

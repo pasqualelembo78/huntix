@@ -10,7 +10,8 @@ namespace City.Player
     /// l'animazione esistente.
     ///
     /// Nei giorni successivi qui entreranno, in ordine:
-    ///   Giorno 6  - sonda a 5 punti (hit piu' vicino, WalkableMask)
+    ///   Giorno 6  - sonda a 5 punti: FATTA in OSM/GroundSnapper.ProbeFootprint
+    ///              (non qui), usata anche da TryGroundColumn
     ///   Giorno 7  - step assist (salita smorzata, magnetismo in discesa)
     ///   Giorno 8  - foot IK vero: piedi piantati + compensazione bacino
     ///
