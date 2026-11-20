@@ -32,10 +32,6 @@ namespace City.Player
         private Quaternion lDelta = Quaternion.identity;
         private Quaternion rDelta = Quaternion.identity;
         private bool ready;
-        // Latch: appena l'Animator ha valutato una clip, il fallback non
-        // deve piu' toccare le spalle (nemmeno durante un AnyState o una
-        // transizione in cui il clip info puo' essere vuoto per un frame).
-        private bool animatorSeenDriving;
 
         /// <summary>Attacca il fallback alla root del rig (se non già presente).</summary>
         public static void Ensure(GameObject root)
@@ -101,27 +97,18 @@ namespace City.Player
         /// <summary>True se l'Animator sta davvero muovendo il rig (niente fold).</summary>
         private bool AnimatorDrives()
         {
-            if (animatorSeenDriving) return true;
             if (animator == null || !animator.enabled) return false;
             if (animator.runtimeAnimatorController == null) return false;
             if (animator.avatar == null || !animator.avatar.isValid) return false;
             if (!animator.gameObject.activeInHierarchy) return false;
-            // ATTENZIONE: la vecchia guardia `!animator.hasTransformHierarchy`
-            // era un FALSO NEGATIVO sui rig Humanoid con "Optimize Game
-            // Objects": il fallback scriveva l'A-pose sulle spalle in
-            // LateUpdate anche mentre la clip Walk muoveva le braccia.
-            // Risultato: gambe che camminano e "tronco con le gambe".
-            // Allo stesso modo fullPathHash puo' essere 0 per un frame in
-            // una transizione AnyState: il segnale affidabile e' solo la
-            // presenza di clip valutate, con latch permanente.
+            // Rig Humanoid ottimizzato: le ossa non sono scrivibili, e se
+            // l'animazione gira il fallback non serve. Con "Optimize Game
+            // Objects" i bone Transform non hanno gerarchia e sono read-only.
+            if (!animator.hasTransformHierarchy) return false;
             try
             {
-                if (animator.GetCurrentAnimatorClipInfo(0).Length == 0) return false;
-                animatorSeenDriving = true;
-                OsmDiag.Log("[ArmsPoseFallback] Animator guida il rig: " +
-                    "fallback A-pose disattivato definitivamente su " +
-                    gameObject.name);
-                return true;
+                if (animator.GetCurrentAnimatorStateInfo(0).fullPathHash == 0) return false;
+                return animator.GetCurrentAnimatorClipInfo(0).Length > 0;
             }
             catch (System.Exception) { return false; }
         }
