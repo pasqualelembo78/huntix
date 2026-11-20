@@ -12,7 +12,8 @@ namespace City.Player
     /// Nei giorni successivi qui entreranno, in ordine:
     ///   Giorno 6  - sonda a 5 punti: FATTA in OSM/GroundSnapper.ProbeFootprint
     ///              (non qui), usata anche da TryGroundColumn
-    ///   Giorno 7  - step assist (salita smorzata, magnetismo in discesa)
+    ///   Giorno 7  - step assist: FATTO in OSM/GroundSnapper.Follow (regimi
+    ///              step/magnet) e PlayerController.GroundFollow (Move del CC)
     ///   Giorno 8  - foot IK vero: piedi piantati + compensazione bacino
     ///
     /// Il componente viene agganciato a runtime da PlayerHeroRig.Ensure

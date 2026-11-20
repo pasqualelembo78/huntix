@@ -58,10 +58,10 @@ namespace City.OSM
     /// 3. FALLBACK DEM (TileElevation): se nessun collider esiste ancora
     ///    (tile in generazione, offline), l'altimetria tiene comunque i piedi
     ///    a quota.
-    /// 4. FOLLOW VERTICALE smussato e a velocita' limitata (salita piu' dolce
-    ///    della discesa, discesa clamperizzata): niente teleport, niente
-    ///    "saltelli" in montagna, niente affondo/volo se il terreno arriva
-    ///    o viene ricostruito sotto di noi.
+    /// 4. FOLLOW VERTICALE smussato e a velocita' limitata: salita di scalino
+    ///    (<= 0,35 m) LENTA, discesa MAGNETICA, dislivelli veri al ritmo
+    ///    storico. Niente teleport, niente "saltelli" in montagna, niente
+    ///    affondo/volo se il terreno arriva o viene ricostruito sotto di noi.
     ///
     /// La mask esclude gli EDIFICI (layer 8): non si cammina sui tetti e, se
     /// il personaggio finisse per inerzia su un tetto, il sistema NON lo
@@ -100,6 +100,16 @@ namespace City.OSM
         public const float MaxDescendSpeed = 30f;   // m/s in discesa (veloce ma controllata)
         public const float FallGraceM = 1.5f;       // oltre questo gap sotto i piedi la fisica si fa carico
         public const float PushUpGraceM = 1.5f;     // oltre questo gap sopra i piedi si rialza (sepolto)
+
+        // ── Step assist / magnetismo (Giorno 7) ──
+        public const float StepAssistHeight = 0.35f; // = ShortMaxRise: oltre e' un dislivello vero,
+                                                     // non uno scalino da salire da fermi
+        public const float StepAssistRate = 5f;      // /s: salita di scalino LENTA e smorzata
+                                                     // (SmoothRate=12 dava lo "scatto" sul cordolo)
+        public const float MaxStepSpeed = 2f;        // m/s: tetto duro dello step assist
+        public const float MagnetRate = 18f;         // /s: discesa "magnetica", piu' rapida del climb
+        public const float MagnetRange = 0.5f;       // m: cadute piu' grandi restano alla gravita'
+        public const float GroundGraceS = 0.25f;     // s: tolleranza dopo isGrounded=false (cordoli)
 
         private static bool IsSelf(Transform t, Transform self)
         {
@@ -307,8 +317,30 @@ namespace City.OSM
                 st.vel = 0f;
                 return feetY;
             }
-            float alpha = (SmoothRate * dt) / (1f + SmoothRate * dt);
-            float maxV = err > 0f ? MaxClimbSpeed : MaxDescendSpeed;
+            // GIORNO 7: tre regimi, tutti inseguimento esponenziale + clamp
+            // (mai salti del target in un solo frame):
+            //  - salita di uno scalino (<= 0,35 m): LENTA e smorzata, sembra
+            //    un passo sul marciapiede, non un "teletrasporto" di 35 cm;
+            //  - discesa: MAGNETICA, piu' rapida del climb ma limitata, cosi'
+            //    il player resta incollato al cordolo invece di fare un salto;
+            //  - dislivelli veri (> 0,35 m o risalita DEM): follower storico.
+            float rate, maxV;
+            if (err > 0f && err <= StepAssistHeight)
+            {
+                rate = StepAssistRate;
+                maxV = MaxStepSpeed;
+            }
+            else if (err < 0f)
+            {
+                rate = MagnetRate;
+                maxV = MaxDescendSpeed;
+            }
+            else
+            {
+                rate = SmoothRate;
+                maxV = MaxClimbSpeed;
+            }
+            float alpha = (rate * dt) / (1f + rate * dt);
             float delta = Mathf.Clamp(err * alpha, -maxV * dt, maxV * dt);
             st.vel = delta / dt;
             return feetY + delta;

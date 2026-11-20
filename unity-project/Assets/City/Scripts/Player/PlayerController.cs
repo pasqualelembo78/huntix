@@ -48,6 +48,7 @@ namespace City.Player
         // ── Binding professionale al terreno (GroundSnapper, condiviso NPC) ──
         private GroundFollowState _groundFollow;
         private float _nextGroundLogAt;
+        private float _lastGroundedAt = -10f;   // Giorno 7: finestra del magnete in discesa
         private const float GroundFollowClearance = 0.02f;
 
         /// <summary>Passo massimo di integrazione del movimento (s). Durante la
@@ -706,15 +707,35 @@ namespace City.Player
             if (flying) return;   // volo Paradiso: quota pilotata a mano
             if (City.Economy.EggCaptureMinigame.Instance != null &&
                 City.Economy.EggCaptureMinigame.Instance.IsActive) return;
-            if (!(controller.isGrounded || FeetProbeGrounded())) return; // aria
+            if (velocity.y > 0.5f) return;  // Giorno 7: salto/impulso in corso,
+                                            // il follower non deve contrastarlo
 
             Vector3 pos = transform.position;
             float feetFromPivot = controller.height * 0.5f - controller.center.y;
             float feetY = pos.y - feetFromPivot;
             Vector3 feetPos = new Vector3(pos.x, feetY, pos.z);
 
+            // GIORNO 7: il magnete puo' agire per una finestra breve anche se
+            // il CharacterController dice "aria": e' il caso tipico della
+            // discesa da un cordolo, dove isGrounded resta false per 2-3 frame
+            // e il player faceva un saltellino prima di riattaccarsi al suolo.
+            bool grounded = controller.isGrounded || FeetProbeGrounded();
+            if (grounded) _lastGroundedAt = Time.time;
+
             GroundSample s = GroundSnapper.SampleGround(feetPos, transform);
             if (!s.found) return;   // nessun dato: la fisica e' gia' in carico
+
+            float targetFeet = s.height + GroundFollowClearance;
+            float err = targetFeet - feetY;
+
+            // Magnetismo in discesa: solo subito dopo un appoggio, su una
+            // superficie VICINA (s.near), senza salto in corso e per cadute
+            // modiche. Un burrone (> MagnetRange) resta alla gravita': il
+            // magnete non deve "incollare" il player durante un volo vero.
+            bool magnet = !grounded && s.near &&
+                Time.time - _lastGroundedAt <= GroundSnapper.GroundGraceS &&
+                err < 0f && -err <= GroundSnapper.MagnetRange;
+            if (!grounded && !magnet) return; // aria vera: niente follower
 
             // GIORNO 2 / REVIEW: salva i due valori separatamente, senza
             // concatenare stringhe ogni frame. Il confronto e' solo tra
@@ -725,9 +746,6 @@ namespace City.Player
                 _surfaceSource = s.source;
                 _surfaceName = nm;
             }
-
-            float targetFeet = s.height + GroundFollowClearance;
-            float err = targetFeet - feetY;
 
             if (s.near)
             {
@@ -750,7 +768,36 @@ namespace City.Player
 
             float newFeet = GroundSnapper.Follow(ref _groundFollow, feetY,
                 targetFeet, Mathf.Min(Time.deltaTime, MaxFrameStepS));
-            if (Mathf.Abs(newFeet - feetY) <= GroundFollowClearance) return;
+            float deltaY = newFeet - feetY;
+            if (Mathf.Abs(deltaY) <= GroundFollowClearance) return;
+
+            // GIORNO 7: step assist (salita <= 0,35 m) e magnete in discesa
+            // passano dal CharacterController, NON da transform.position: il
+            // passo e' gia' smorzato da GroundSnapper.Follow e la sweep interna
+            // del CC resta sincronizzata. Niente teletrasporto sul marciapiede.
+            bool stepAssist = err > 0f && err <= GroundSnapper.StepAssistHeight;
+            if (stepAssist || magnet)
+            {
+                controller.Move(new Vector3(0f, deltaY, 0f));
+                // La gravita' non deve accumularsi nei ~10 frame dello step:
+                // senza questo velocity.y scende sotto -3 m/s e il Move di
+                // Update annulla la salita (il player "bobbia" sul cordolo).
+                // -1 e' lo stesso ground-stick gia' usato in Update.
+                velocity.y = -1f;
+            }
+            else
+            {
+                // Correzione grande (sepolti / catch-up DEM): qui serve il
+                // disable/enable storico, perche' uno sweep non puo' attraversare
+                // un collider alto 1 m in un solo frame. Il costo e' trascurabile
+                // perche' si verifica solo su eventi rari.
+                Vector3 corrected = new Vector3(pos.x, newFeet + feetFromPivot, pos.z);
+                controller.enabled = false;
+                transform.position = corrected;
+                controller.enabled = true;
+                try { Physics.SyncTransforms(); }
+                catch (System.Exception) { }
+            }
 
             // Contatore diagnostico: quante correzioni verticali al secondo
             // vengono applicate (e quanto grandi). E' la misura decisiva
@@ -760,28 +807,16 @@ namespace City.Player
             if (absErr > _followMaxErr) _followMaxErr = absErr;
             _followLastSource = s.source + "/" + s.surfaceName;
 
-            // Spostare il transform di un CharacterController ATTIVO desincronizza
-            // la sua sweep interna dalla posizione reale: al frame successivo
-            // Move() riparte da uno stato interno vecchio e puo' attraversare un
-            // collider o sbilanciarsi di qualche centimetro (il classico
-            // "sprofonda/rimbalza a ogni correzione"). E' la stessa ragione per
-            // cui il resto del progetto (Game.SetPlayerPosition,
-            // ChunkManager.OnRebased, CityOSMWorld, DeathDirector) spegne il CC,
-            // sposta e riaccende. Qui la scrittura avviene solo quando la
-            // correzione supera GroundFollowClearance, quindi il costo della
-            // sequenza e' trascurabile.
-            Vector3 corrected = new Vector3(pos.x, newFeet + feetFromPivot, pos.z);
-            controller.enabled = false;
-            transform.position = corrected;
-            controller.enabled = true;
-            try { Physics.SyncTransforms(); }
-            catch (System.Exception) { }
-
-            // Diagnostica throttled: solo correzioni significative
-            if (Time.time >= _nextGroundLogAt && Mathf.Abs(err) > 0.35f)
+            // Diagnostica throttled: solo correzioni significative. `modo`
+            // distingue step / magnet / climb / down per il gate su device.
+            if (Time.time >= _nextGroundLogAt &&
+                (Mathf.Abs(err) > 0.35f || stepAssist || magnet))
             {
                 _nextGroundLogAt = Time.time + 6f;
-                City.OSM.OsmDiag.Log("[GroundFollow] player fonte=" + s.source +
+                string modo = stepAssist ? "step" : (magnet ? "magnet"
+                    : (err > 0f ? "climb" : "down"));
+                City.OSM.OsmDiag.Log("[GroundFollow] player modo=" + modo +
+                    " fonte=" + s.source +
                     " su='" + s.surfaceName + "' h=" + s.height.ToString("F2") +
                     " err=" + err.ToString("F2") + " -> piedi=" +
                     newFeet.ToString("F2"));

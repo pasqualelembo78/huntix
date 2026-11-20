@@ -347,9 +347,51 @@ FASE 1 - CAMMINATA DA GIOCO SERIO (giorni 4-10)  [tag m1-walk]
             salendo sui cordoli, uova deposte vicino a un cordolo non affondano.
             Riflesso uova: uova a terra non affondano nei cordoli.
 
-Giorno 7  - Step assist: salita <= 0,35 m smorzata, magnetismo a terra in
-            discesa. Niente teletrasporto sul marciapiede.
-            Riflesso uova: contenitori sui marciapiedi raggiungibili.
+[FATTO] Giorno 7 - Step assist: salita <= 0,35 m smorzata, magnetismo a terra
+            in discesa. Niente teletrasporto sul marciapiede.
+            File: OSM/GroundSnapper.cs, Player/PlayerController.cs,
+            Player/FootIK.cs (solo commento).
+            Implementazione:
+            1. GroundSnapper.Follow ha tre regimi, tutti inseguimento
+               esponenziale + clamp (mai il target raggiunto in un frame):
+               - salita di scalino (err > 0 e <= 0,35 m): StepAssistRate 5/s
+                 e tetto MaxStepSpeed 2 m/s. A 60 fps uno scalino da 35 cm
+                 sale in ~0,22 s (SmoothRate 12 lo faceva in ~0,1 s, sembrava
+                 uno scatto);
+               - discesa: MagnetRate 18/s, piu' rapida del climb ma limitata
+                 da MaxDescendSpeed, cosi' il player resta attaccato al suolo;
+               - dislivelli veri (> 0,35 m / catch-up DEM): follower storico
+                 SmoothRate 12, MaxClimbSpeed 10.
+            2. PlayerController.GroundFollow: il vecchio guard
+               `if (!isGrounded && !FeetProbeGrounded()) return` interrompeva
+               il follower per 2-3 frame scendendo da un cordolo (saltellino).
+               Ora il follower puo' operare per GroundGraceS 0,25 s dopo
+               l'ultimo appoggio, solo se s.near, velocity.y <= 0,5 (nessun
+               salto in corso) e la caduta e' <= MagnetRange 0,5 m. Burroni e
+               salti veri restano alla gravita'.
+            3. Applicazione: step assist e magnete passano da
+               `controller.Move(0, deltaY, 0)` invece di
+               disable/enable/transform.position. Niente teletrasporto sul
+               marciapiede e la sweep interna del CC resta sincronizzata. Il
+               disable/enable resta solo per le correzioni grandi (sepolti/
+               catch-up DEM). Dopo il Move, velocity.y viene riportato a -1
+               (lo ground-stick gia' usato in Update): altrimenti la gravita'
+               si accumulerebbe nei ~10 frame dello step e il player bobbiasse
+               sul cordolo invece di salirci.
+            4. [GroundFollow] in logcat riporta `modo=step|magnet|climb|down`
+               per il gate; la soglia di log e' stata allargata perche' gli
+               step hanno errore <= 0,35 m e prima non venivano mai stampati.
+            Verifica: cscheck -define:HUNTIX_FULL OK (185 warning, invariati).
+            Nessun tocco a uova/bridge/inventario/EggWhereLog/snapshot/indoor
+            AR, nessun DEM forzato, WorldHeights e toggle follower intatti.
+            Gate device: salendo su un cordolo da 0,35 m la salita e' smorzata
+            (no teletrasporto, no bobbiamento); scendendo il player resta a
+            terra (nessun saltellino); camGap stabile; [GroundFollow] mostra
+            modo=step/magnet ai cordoli.
+            Riflesso uova: i contenitori/cassetto raggiungibili sui marciapiedi
+            restano accessibili perche' il player sale e scende dal cordolo
+            senza scatti ne' salti: nessuna modifica a ContainerEgg, solo
+            conseguenza del passo assistito.
 
 Giorno 8  - FootIK.cs con OnAnimatorIK: piedi piantati sugli hit della sonda,
             compensazione del bacino. 2 raycast/frame.
