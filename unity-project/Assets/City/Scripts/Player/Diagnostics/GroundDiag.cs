@@ -44,9 +44,26 @@ namespace City.Player
         private float _lastVisGap;
         private bool _lastNear;
 
-        // l'asfalto (roadsGo) non ha collider: e' drappato su TileElevation
-        // + Y_ROAD (0.03), mentre il collider fisico e' il Terreno geo.ele.
+        // Stima dell'asfalto quando la mesh stradale non e' ancora stata
+        // generata: Y_ROAD (0.03) sopra il DEM. NON e' una misura: la mesh
+        // stradale vera ha un MeshCollider (ChunkBuilder), quindi [Chain]
+        // legge le quote reali dei collider e le riporta a schermo/log.
         private const float AsphaltLift = 0.03f;
+
+        // ── Catena visiva: SOLO lettura, nessuna correzione di posa ──
+        // Serve a distinguere tre cause che nei log precedenti erano
+        // indistinguibili: (a) collider del suolo PIU' ALTO della mesh visiva,
+        // (b) piedi dell'avatar IK che non raggiungono il collider, (c) bacino
+        // sollevato oltre lo span anatomico delle gambe.
+        private const float ChainTop = 3f;
+        private const float ChainDepth = 6f;
+        private Animator _heroAnimator;
+        private int _lastChainFrame = -1;
+        private string _lastColliderStack = "";
+        private float _lastFootBoneMin = float.NaN;
+        private float _lastFootBoneMax = float.NaN;
+        private float _lastHipsBoneY = float.NaN;
+        private float _lastBodyY = float.NaN;
 
         public static GroundDiag Ensure(GameObject root)
         {
@@ -104,8 +121,79 @@ namespace City.Player
             _lastNear = s.near;
         }
 
+        /// <summary>Misura la catena visiva completa una volta per frame di log:
+        /// tutti i collider calpestabili della colonna (nome + quota reale) e le
+        /// quote vere dei piedi IK, del bacino e di bodyPosition. Nessuna scrittura
+        /// su transform/bone: se il personaggio galleggia, qui si vede SE il
+        /// collider e' sopra la mesh oppure se e' l'avatar a non toccarlo.</summary>
+        private void MeasureVisualChain()
+        {
+            if (_lastChainFrame == Time.frameCount) return;
+            _lastChainFrame = Time.frameCount;
+
+            float feetFromPivot = _cc.height * 0.5f - _cc.center.y;
+            Vector3 feetPos = new Vector3(transform.position.x,
+                transform.position.y - feetFromPivot, transform.position.z);
+
+            // Tutti i collider calpestabili della colonna, ordinati per
+            // distanza dal livello-piedi: "Strade@0.03,Terreno@-0.05,..."
+            // dice esattamente quale superficie fisica sta sotto/sopra i piedi.
+            RaycastHit[] hits = Physics.RaycastAll(
+                feetPos + Vector3.up * ChainTop, Vector3.down, ChainDepth,
+                GroundSnapper.WalkableMask, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, delegate(RaycastHit a, RaycastHit b)
+            {
+                return Mathf.Abs(a.point.y - feetPos.y)
+                    .CompareTo(Mathf.Abs(b.point.y - feetPos.y));
+            });
+            var sb = new System.Text.StringBuilder();
+            int shown = 0;
+            for (int i = 0; i < hits.Length && shown < 6; i++)
+            {
+                RaycastHit h = hits[i];
+                if (h.collider == null || h.normal.y < GroundSnapper.ShortNorm) continue;
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(h.collider.name).Append('@').Append(h.point.y.ToString(
+                    "F2", System.Globalization.CultureInfo.InvariantCulture));
+                shown++;
+            }
+            _lastColliderStack = sb.Length > 0 ? sb.ToString() : "(nessuno)";
+
+            // Quote dell'avatar: osso piede (dove l'IK porta davvero la suola),
+            // bacino e bodyPosition (che il secondo IK sposta in giu').
+            _lastFootBoneMin = float.NaN;
+            _lastFootBoneMax = float.NaN;
+            _lastHipsBoneY = float.NaN;
+            _lastBodyY = float.NaN;
+            if (_heroAnimator == null)
+                _heroAnimator = GetComponentInChildren<Animator>(true);
+            if (_heroAnimator != null && _heroAnimator.avatar != null &&
+                _heroAnimator.avatar.isHuman)
+            {
+                Transform lf = _heroAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                Transform rf = _heroAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
+                Transform hips = _heroAnimator.GetBoneTransform(HumanBodyBones.Hips);
+                float lo = lf != null ? lf.position.y : float.NaN;
+                float ro = rf != null ? rf.position.y : float.NaN;
+                if (!float.IsNaN(lo) && !float.IsNaN(ro))
+                {
+                    _lastFootBoneMin = Mathf.Min(lo, ro);
+                    _lastFootBoneMax = Mathf.Max(lo, ro);
+                }
+                if (hips != null) _lastHipsBoneY = hips.position.y;
+                _lastBodyY = _heroAnimator.bodyPosition.y;
+            }
+        }
+
+        private static string F(float v)
+        {
+            return float.IsNaN(v) ? "NA"
+                : v.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         private void LogLine(bool summary)
         {
+            MeasureVisualChain();
             string name = gameObject.name;
             string demStr = float.IsNaN(_lastDem)
                 ? "NA" : _lastDem.ToString("F1",
@@ -128,6 +216,12 @@ namespace City.Player
                     ? "NA" : (_lastSurfaceY - _lastFeetY).ToString("F2",
                         System.Globalization.CultureInfo.InvariantCulture)) +
                 (summary ? " [SUMMARY]" : ""));
+            OsmDiag.Log("[GroundDiag][Chain] " + name +
+                " feetY=" + F(_lastFeetY) +
+                " colliders=" + _lastColliderStack +
+                " footBoneY=" + F(_lastFootBoneMin) + ".." + F(_lastFootBoneMax) +
+                " hipsY=" + F(_lastHipsBoneY) +
+                " bodyY=" + F(_lastBodyY));
         }
 
         private void OnGUI()
