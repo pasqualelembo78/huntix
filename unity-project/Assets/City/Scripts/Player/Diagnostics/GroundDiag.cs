@@ -33,6 +33,7 @@ namespace City.Player
         private CharacterController _cc;
         private float _nextLogAt;
         private int _logCount;
+        private float _nextSoleCheckAt;
 
         // ultimo campione misurato (per il riassunto periodico)
         private float _lastFeetY;
@@ -96,6 +97,64 @@ namespace City.Player
                 _logCount++;
                 LogLine(_logCount % SummaryEveryS == 0);
             }
+        }
+
+        /// <summary>
+        /// PROVA DECISIVA sul galleggiamento: misura in LateUpdate, cioe' DOPO
+        /// animazione e AfterAnimator IK, la suola VISIVA (bounds reali degli
+        /// SkinnedMeshRenderer) e il piede FISICO (CharacterController).
+        ///Il [GroundDiag][Chain] di Update viene campionato prima che l'IK
+        /// venga applicato, quindi puo' mostrare il bacino alto anche quando
+        /// il frame renderizzato e' corretto: qui si legge lo stesso frame che
+        /// va a schermo. Se delta resta ~0,47 m l'IK viene annullato a valle;
+        /// se delta ~0 il personaggio e' a terra e l'ombra staccata e' un
+        /// artefatto di un build vecchio.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (Time.time < _nextSoleCheckAt) return;
+            _nextSoleCheckAt = Time.time + LogEveryS;
+
+            if (_cc == null)
+            {
+                _cc = GetComponent<CharacterController>();
+                if (_cc == null) return;
+            }
+
+            float feetFromPivot = _cc.height * 0.5f - _cc.center.y;
+            float feetY = transform.position.y - feetFromPivot;
+
+            float smrMin = float.NaN;
+            var smrs = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            for (int i = 0; i < smrs.Length; i++)
+            {
+                if (smrs[i] == null || !smrs[i].gameObject.activeInHierarchy) continue;
+                float mn = smrs[i].bounds.min.y;
+                if (float.IsNaN(smrMin) || mn < smrMin) smrMin = mn;
+            }
+
+            float hipsY = float.NaN;
+            if (_heroAnimator == null)
+                _heroAnimator = GetComponentInChildren<Animator>(true);
+            if (_heroAnimator != null && _heroAnimator.avatar != null &&
+                _heroAnimator.avatar.isHuman)
+            {
+                Transform hips = _heroAnimator.GetBoneTransform(HumanBodyBones.Hips);
+                if (hips != null) hipsY = hips.position.y;
+            }
+
+            string d = float.IsNaN(smrMin) ? "NA"
+                : (smrMin - feetY).ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture);
+            OsmDiag.Log("[SoleCheck] frame=" + Time.frameCount +
+                " smrMin=" + (float.IsNaN(smrMin) ? "NA" : smrMin.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture)) +
+                " feetY=" + feetY.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture) +
+                " delta=" + d +
+                " hipsY=" + (float.IsNaN(hipsY) ? "NA" : hipsY.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture)) +
+                " ccGrounded=" + _cc.isGrounded);
         }
 
         private void Sample()
