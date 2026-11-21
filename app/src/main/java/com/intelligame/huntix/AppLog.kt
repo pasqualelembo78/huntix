@@ -71,7 +71,13 @@ object AppLog {
      *  a vicenda le sessioni, proprio quelle serve leggere dopo un crash. */
     fun init(context: Context, suffix: String = "", rotate: Boolean = true) {
         appContext = context.applicationContext
-        logFile = File(context.filesDir, LOG_FILE + suffix)
+        // Il suffisso va prima dell'estensione: LOG_FILE e' "city3d_debug.log",
+        // quindi "_unity" darebbe "city3d_debug.log_unity" che il viewer non
+        // trova (cerca UNITY_LOG_FILE = "city3d_debug_unity.log").
+        logFile = File(
+            context.filesDir,
+            if (suffix.isEmpty()) LOG_FILE else LOG_FILE.removeSuffix(".log") + suffix + ".log"
+        )
         // Ruota la sessione precedente in archivio PRIMA di partire: il file
         // attivo inizia sempre dall'inizio della sessione corrente (niente
         // cumulo inter-sessione che "taglia" il principio del log).
