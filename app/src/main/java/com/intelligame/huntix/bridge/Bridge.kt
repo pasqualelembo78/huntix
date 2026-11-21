@@ -19,17 +19,46 @@ object Bridge {
 
     @JvmStatic
     fun openUnityActivity(context: Context, mode: String, poiData: String?) {
+        // Dopo l'uscita il self-kill di Unity chiude :unity e il binding AIDL
+        // si scioglie: va ristabilito prima della prossima sessione, altrimenti
+        // i messaggi dell'app (POI/ GPS) verrebbero scartati per sempre.
+        if (!UnityIpc.isUnity) UnityIpc.bindApp(context)
+
         val intent = Intent(context, BridgeActivity::class.java)
         intent.putExtra(BridgeActivity.EXTRA_MODE, mode)
         if (!poiData.isNullOrEmpty()) intent.putExtra(BridgeActivity.EXTRA_POI_DATA, poiData)
+
+        // Le Activity Unity girano in :unity: non possono leggere le prefs reali
+        // dell'app, quindi gli passiamo lo stato negli extra (le prefs restano
+        // solo un fallback dentro BridgeActivity). Tutto letto nel processo app.
+        val appCtx = context.applicationContext
+        val huntixPrefs = appCtx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        val worldPrefs = appCtx.getSharedPreferences("world_game_prefs", Context.MODE_PRIVATE)
+        huntixPrefs.getString("city_skin", null)?.let {
+            intent.putExtra(BridgeActivity.EXTRA_SKIN, it)
+        }
+        huntixPrefs.getString("pet_skin", null)?.let {
+            intent.putExtra(BridgeActivity.EXTRA_PET, it)
+        }
+        intent.putExtra(BridgeActivity.EXTRA_SPAWN_LAT, worldPrefs.getFloat("spawnLat", 0f))
+        intent.putExtra(BridgeActivity.EXTRA_SPAWN_LNG, worldPrefs.getFloat("spawnLng", 0f))
+        // StoreUnityBridge e' il proprietario del valore scritto da Unity; nel
+        // processo app legge le stesse prefs senza passare dal Binder.
+        val tileDir = StoreUnityBridge.getSharedPreference("tile_cache_dir")
+        if (tileDir.isNotEmpty()) intent.putExtra(BridgeActivity.EXTRA_TILE_CACHE_DIR, tileDir)
+
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
 
     @JvmStatic
     fun showToast(message: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
-        ctx.runOnUiThread { Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show() }
+        // Nel processo app UnityPlayer.currentActivity e' sempre null: serve il
+        // contesto cachato dall'Application di entrambi i processi.
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
+        }
     }
 
     @JvmStatic
@@ -42,7 +71,7 @@ object Bridge {
 
     @JvmStatic
     fun getCurrentLocation(): String {
-        val ctx = UnityPlayer.currentActivity ?: return "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}"
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return "{\"lat\":0.0,\"lng\":0.0,\"mock\":false}"
         val loc = OutdoorManager.get(ctx).currentLocationSync()
         val mock = OutdoorManager.get(ctx).isMockMode()
         return if (loc != null)
@@ -52,7 +81,7 @@ object Bridge {
 
     @JvmStatic
     fun setMockWalk(enable: Boolean) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
         val outdoor = OutdoorManager.get(ctx)
         if (enable) {
             outdoor.enableMockWalk(true)
@@ -63,6 +92,18 @@ object Bridge {
 
     @JvmStatic
     fun onUnityMessage(eventName: String, jsonData: String) {
+        // In :unity solo gli eventi che toccano lo STATO dell'app (profilo,
+        // uova, prefs, POI) passano dal Binder: il router gira nel processo app
+        // dove gli singleton sono reali (UnityIpc.isUnity == false, no loop).
+        // Gli eventi di UI (CityReady/CityProgress/Indoor*/OutdoorNPC*) e le
+        // startActivity RESTANO in :unity: li' vivono BridgeActivity e
+        // IndoorActivity, quindi il processo app non ha istanze da aggiornare.
+        if (UnityIpc.isUnity) {
+            if (UnityIpc.APP_EVENTS.contains(eventName)) {
+                UnityIpc.forwardUnityEvent(eventName, jsonData)
+            }
+            return
+        }
         when (eventName) {
             "CatchRequest" -> {
                 val id = extractJsonField(jsonData, "storeId")
@@ -82,7 +123,7 @@ object Bridge {
             "CityProgress" -> StoreUnityBridge.onCityProgress(jsonData)
             // ── Miacitta: posizione di gioco corrente (Unity) → prefs + Google ──
             "PlayerPosition" -> {
-                val ctx = UnityPlayer.currentActivity ?: return
+                val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
                 val j = try { JSONObject(jsonData) } catch (_: Exception) { return }
                 val lat = j.optString("lat").toDoubleOrNull() ?: return
                 val lng = j.optString("lng").toDoubleOrNull() ?: return
@@ -111,7 +152,7 @@ object Bridge {
             //    reale con ARCore; il mondo OSM viene ancorato al piano
             //    inquadrato. Posizione VIRTUALE del player, MAI il GPS reale. ──
             "ArCityRequest" -> {
-                val ctx = UnityPlayer.currentActivity ?: return
+                val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
                 val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
                 val lat = j.optDouble("lat", 0.0)
                 val lng = j.optDouble("lng", 0.0)
@@ -140,7 +181,7 @@ object Bridge {
                 val id = extractJsonField(jsonData, "characterId")
                     ?: extractJsonField(jsonData, "npcId") ?: ""
                 val name = extractJsonField(jsonData, "name") ?: "Cittadino"
-                val ctx = UnityPlayer.currentActivity ?: return
+                val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
                 val intent = Intent(ctx, com.intelligame.huntix.ui.RealLifeChatActivity::class.java).apply {
                     putExtra("CHAR_ID", id)
                     putExtra("CHAR_NAME", name)
@@ -240,7 +281,7 @@ object Bridge {
      * profilo, perché Android conosca il ritrovamento anche fuori da Unity.
      */
     private fun handleCityEggCaptured(jsonData: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
         val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
 
         val rarityId = j.optString("rarityId", "common")
@@ -295,7 +336,7 @@ object Bridge {
      * XP/MVC aggiuntivi: il donatore li ha già spesi in codesto regalo).
      */
     private fun handleGiftClaimed(jsonData: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
         val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
 
         val kind = j.optString("kind", "")
@@ -342,7 +383,7 @@ object Bridge {
 
     @JvmStatic
     fun tryCatch(storeId: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
         val outdoor = OutdoorManager.get(ctx)
         val repo = PoiRepository(ctx)
         val controller = CatchController(outdoor, repo)
@@ -358,7 +399,7 @@ object Bridge {
 
     private fun openPlayerChat(toUserId: String, name: String, level: Int, skin: String) {
         if (toUserId.isBlank()) return
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = (UnityPlayer.currentActivity ?: UnityAppContext.context) ?: return
         val intent = Intent(ctx, com.intelligame.huntix.ui.PlayerChatActivity::class.java).apply {
             putExtra("TO_USER_ID", toUserId)
             putExtra("NAME", name)

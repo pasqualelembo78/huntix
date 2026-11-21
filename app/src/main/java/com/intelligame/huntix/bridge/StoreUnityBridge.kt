@@ -61,6 +61,10 @@ object StoreUnityBridge {
      *  della sezione MiAcitma che vive interamente in Unity. */
     @JvmStatic
     fun logFromUnity(tag: String, message: String) {
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("logFromUnity", JSONArray().put(tag).put(message).toString())
+            return
+        }
         AppLog.d(tag, message)
     }
 
@@ -132,14 +136,53 @@ object StoreUnityBridge {
     @Suppress("unused")
     @JvmStatic
     fun setTileCacheDir(path: String) {
+        if (UnityIpc.isUnity) {
+            // La prefs va scritta nel processo app: e' li' che CityTilePreloader
+            // la legge per scrivere le tile nella cache di Unity.
+            UnityIpc.callApp("setTileCacheDir", JSONArray().put(path).toString())
+            return
+        }
         try {
-            val ctx = UnityPlayer.currentActivity?.applicationContext
+            val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
             ctx?.getSharedPreferences("world_game_prefs", android.content.Context.MODE_PRIVATE)?.edit()
                 ?.putString("tile_cache_dir", path)
                 ?.apply()
             AppLog.d(TAG, "setTileCacheDir: $path")
         } catch (e: Exception) {
             AppLog.w(TAG, "setTileCacheDir failed: ${e.message}")
+        }
+    }
+
+    /** Prefs lette da Unity (UnityBridge.GetSharedPreference): in :unity non
+     *  esistono, quindi la lettura viene delegata al processo app. */
+    @JvmStatic
+    fun getSharedPreference(key: String): String {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("getSharedPreference", JSONArray().put(key).toString())
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return ""
+        return ctx.getSharedPreferences("huntix_prefs", android.content.Context.MODE_PRIVATE)
+            .getString(key, null)
+            ?: ctx.getSharedPreferences("world_game_prefs", android.content.Context.MODE_PRIVATE)
+                .getString(key, null)
+            ?: ""
+    }
+
+    /** Scrittura simmetrica di [getSharedPreference], sempre nel processo app. */
+    @JvmStatic
+    fun setSharedPreference(key: String, value: String) {
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("setSharedPreference", JSONArray().put(key).put(value).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
+        try {
+            ctx.getSharedPreferences("huntix_prefs", android.content.Context.MODE_PRIVATE)
+                .edit().putString(key, value).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "setSharedPreference failed: ${e.message}")
         }
     }
 
@@ -164,6 +207,11 @@ object StoreUnityBridge {
     @JvmStatic
     fun endUnitySession() {
         synchronized(unitySendLock) { shuttingDown = true }
+        if (UnityIpc.isUnity) {
+            // Il tracking GPS vive nel processo app: fermarlo li', altrimenti
+            // resta attivo dopo la chiusura di Miacitta.
+            UnityIpc.callApp("stopLocationTracking")
+        }
         stopLocationTrackingInternal()
     }
 
@@ -174,6 +222,7 @@ object StoreUnityBridge {
     private fun stopLocationTrackingInternal() {
         try {
             val ctx = trackedAppContext ?: UnityPlayer.currentActivity?.applicationContext
+                ?: UnityAppContext.context
             if (ctx != null) {
                 com.intelligame.huntix.legacy.poi.gps.OutdoorManager.get(ctx).stop()
                 AppLog.d(TAG, "stopLocationTracking: tracking GPS fermato")
@@ -188,12 +237,24 @@ object StoreUnityBridge {
      *  esterni a StoreUnityBridge (messenger POI, Indoor, eventi legacy). */
     @JvmStatic
     fun sendToUnityIfAlive(gameObject: String, method: String, arg: String) {
+        if (UnityIpc.isUnity) {
+            sendLocalToUnity(gameObject, method, arg)
+        } else {
+            // Nel processo app non c'e' runtime Unity: passa dal Service :unity.
+            UnityIpc.sendToUnity(gameObject, method, arg)
+        }
+    }
+
+    /** Invio REALE a Unity: va eseguito solo dentro :unity. Lock + flag di
+     *  shutdown restano qui, cosi' check e UnitySendMessage sono atomici. */
+    @JvmStatic
+    fun sendLocalToUnity(gameObject: String, method: String, arg: String) {
         synchronized(unitySendLock) {
             if (shuttingDown) return
             try {
                 UnityPlayer.UnitySendMessage(gameObject, method, arg)
             } catch (e: Exception) {
-                AppLog.w(TAG, "sendToUnityIfAlive($method): ${e.message}")
+                AppLog.w(TAG, "sendLocalToUnity($method): ${e.message}")
             }
         }
     }
@@ -283,48 +344,51 @@ object StoreUnityBridge {
     /** Chiamato da Unity quando un NPC è lontano (outdoor). */
     @JvmStatic
     fun onOutdoorNPCFar(json: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
-        ctx.runOnUiThread {
-            val name = extractJsonField(json, "name") ?: "La guida"
-            android.widget.Toast.makeText(ctx, "$name si allontana", android.widget.Toast.LENGTH_SHORT).show()
-        }
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val name = extractJsonField(json, "name") ?: "La guida"
+        postToast(ctx, "$name si allontana", long = false)
     }
 
     /** Chiamato da Unity quando un NPC parla (outdoor) — mostra dialogo come toast lungo. */
     @JvmStatic
     fun onOutdoorNPCDialogue(json: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
         val name = extractJsonField(json, "name") ?: "Guida"
         val dialogue = extractJsonField(json, "dialogue") ?: ""
         val poiName = extractJsonField(json, "poiName") ?: ""
-        ctx.runOnUiThread {
-            val msg = if (poiName.isNotEmpty()) "$name: $dialogue" else "$name dice: $dialogue"
-            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
-        }
+        val msg = if (poiName.isNotEmpty()) "$name: $dialogue" else "$name dice: $dialogue"
+        postToast(ctx, msg, long = true)
     }
 
     /** Chiamato da Unity quando un NPC è vicino (outdoor) — mostra notifica breve. */
     @JvmStatic
     fun onOutdoorNPCNearby(json: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
         val name = extractJsonField(json, "name") ?: "La guida"
         val emoji = extractJsonField(json, "emoji") ?: ""
         val poiName = extractJsonField(json, "poiName") ?: ""
         val msg = if (poiName.isNotEmpty()) "$emoji  $name — vicino a $poiName" else "$emoji  $name"
-        ctx.runOnUiThread {
-            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
-        }
+        postToast(ctx, msg, long = false)
     }
 
     /** Chiamato da Unity per info su un NPC/POI (outdoor). */
     @JvmStatic
     fun onOutdoorNPCInfo(json: String) {
-        val ctx = UnityPlayer.currentActivity ?: return
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
         val poiName = extractJsonField(json, "poiName") ?: "luogo"
         val category = extractJsonField(json, "category") ?: ""
         val msg = "📍  Info su: $poiName${if (category.isNotEmpty()) " ($category)" else ""}"
-        ctx.runOnUiThread {
-            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
+        postToast(ctx, msg, long = true)
+    }
+
+    /** Toast sul main thread dell'app: qui il contesto puo' essere quello
+     *  dell'Application perche' il router gira nel processo app. */
+    private fun postToast(ctx: android.content.Context, msg: String, long: Boolean) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(
+                ctx, msg,
+                if (long) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -334,8 +398,10 @@ object StoreUnityBridge {
     // ── Esplora (Unity) ─────────────────────────────────────────────
     /** Posizione corrente reale/mock, JSON {"lat":..,"lng":..,"mock":bool}. */
     @JvmStatic
-    fun getCurrentLocation(): String =
-        com.intelligame.huntix.bridge.Bridge.getCurrentLocation()
+    fun getCurrentLocation(): String {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getCurrentLocation")
+        return com.intelligame.huntix.bridge.Bridge.getCurrentLocation()
+    }
 
     /**
      * Avvia il tracking GPS (legacy OutdoorManager, FusedLocationProviderClient)
@@ -347,7 +413,14 @@ object StoreUnityBridge {
         // Nuova sessione City: il flag di shutdown della scorsa uscita non deve
         // bloccare gli invii a Unity di questa sessione.
         shuttingDown = false
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        if (UnityIpc.isUnity) {
+            // Il GPS e' letto dall'app (Bridge.getCurrentLocation gira li'):
+            // avviare OutdoorManager in :unity creerebbe un tracker cieco.
+            UnityIpc.callApp("startLocationTracking")
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
         trackedAppContext = ctx   // serve a stopLocationTracking dopo la distruzione dell'Activity
         AppLog.d(TAG, "startLocationTracking: avvio tracking GPS MiAcitma")
         try {
@@ -373,8 +446,13 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun requestOsmCity(lat: Double, lng: Double, radiusMeters: Int) {
-        val activity = UnityPlayer.currentActivity ?: return
-        val ctx = activity.applicationContext
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("requestOsmCity",
+                JSONArray().put(lat).put(lng).put(radiusMeters).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
         if (shuttingDown) return
         AppLog.d(TAG, "requestOsmCity: richiesta (${lat},${lng}) r=${radiusMeters}m")
         // ACK immediato: informa Unity che la richiesta è stata ricevuta e che il
@@ -412,14 +490,21 @@ object StoreUnityBridge {
      *  Usato dall'HUD bisogni di Esplora per mostrare le barre. */
     @JvmStatic
     fun getNeedsJson(): String {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{}"
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getNeedsJson")
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return "{}"
         return needsJson(com.intelligame.huntix.reallife.LocalNeeds.load(ctx))
     }
 
     /** Applica un'azione ai bisogni locali (needKey + gain) e restituisce il JSON aggiornato. */
     @JvmStatic
     fun applyNeedAction(needKey: String, gain: Float): String {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{}"
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("applyNeedAction",
+                JSONArray().put(needKey).put(gain.toDouble()).toString())
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return "{}"
         return needsJson(com.intelligame.huntix.reallife.LocalNeeds.applyAction(ctx, needKey, gain))
     }
 
@@ -441,8 +526,13 @@ object StoreUnityBridge {
      *  risponde subito senza rifare la query Overpass. */
     @JvmStatic
     fun requestPoisNearby(lat: Double, lng: Double, radiusMeters: Int) {
-        val activity = UnityPlayer.currentActivity ?: return
-        val ctx = activity.applicationContext
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("requestPoisNearby",
+                JSONArray().put(lat).put(lng).put(radiusMeters).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
         if (shuttingDown) return
 
         // Cache in-memory: stessa zona recente → risposta immediata (niente Overpass)
@@ -534,9 +624,10 @@ object StoreUnityBridge {
      *  Lock congiunto con endUnitySession: nessun invio puo' partire dopo la
      *  fissazione del flag (check+invio atomici). */
     private fun sendToUnity(method: String, arg: String) {
-        synchronized(unitySendLock) {
-            if (shuttingDown) return
-            UnityPlayer.UnitySendMessage("GameManager", method, arg)
+        if (UnityIpc.isUnity) {
+            sendLocalToUnity("GameManager", method, arg)
+        } else {
+            UnityIpc.sendToUnity("GameManager", method, arg)
         }
     }
 
@@ -595,7 +686,8 @@ object StoreUnityBridge {
 
     /** Fallback offline: mini-chunk pre-inserito nell'APK (se Overpass fallisce). */
     private fun miniChunkEnvelope(lat: Double, lng: Double): String? {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return null
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return null
         try {
             OsmClient.init(ctx)
             val data = OsmClient.loadMiniChunk(lat, lng) ?: return null
@@ -651,21 +743,35 @@ object StoreUnityBridge {
     /** Saldo MVC (Huntix Coins) attuale, gestito dall'app esterna. */
     @JvmStatic
     fun getMvcBalance(): Double {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0.0
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("getMvcBalance").toDoubleOrNull() ?: 0.0
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return 0.0
         return com.intelligame.huntix.managers.SavedManager.getMvcBalance(ctx)
     }
 
     /** Tenta di spendere [amount] MVC. True se il saldo bastava, false altrimenti. */
     @JvmStatic
     fun spendMvc(amount: Double): Boolean {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return false
+        if (UnityIpc.isUnity) {
+            val r = UnityIpc.callApp("spendMvc", JSONArray().put(amount).toString())
+            return r.toBooleanStrictOrNull() ?: (r == "true")
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return false
         return com.intelligame.huntix.managers.SavedManager.spendMvc(ctx, amount)
     }
 
     /** Accredita [amount] MVC (es. scambio da soldi citta a MVC). Ritorna il nuovo saldo. */
     @JvmStatic
     fun addMvc(amount: Double): Double {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0.0
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("addMvc", JSONArray().put(amount).toString())
+                .toDoubleOrNull() ?: 0.0
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return 0.0
         if (amount <= 0) return getMvcBalance()
         return com.intelligame.huntix.managers.SavedManager.addMvc(ctx, amount)
     }
@@ -680,48 +786,62 @@ object StoreUnityBridge {
 
     /** Nome del player Huntix (Unified profile). */
     @JvmStatic
-    fun getPlayerName(): String =
-
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.name ?: "Giocatore"
+    fun getPlayerName(): String {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerName")
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.name ?: "Giocatore"
+    }
     /** JWT di accesso corrente (identita' autentica del player nel multiplayer
      *  della citta'). Vuoto se l'utente non e' autenticato. Restituito a Unity
      *  via il ponte StoreUnityBridge. NON persisterlo lato Unity. */
     @JvmStatic
     fun getAccessToken(): String {
-        val ctx = UnityPlayer.currentActivity ?: return ""
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getAccessToken")
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return ""
         return com.intelligame.huntix.reallife.RealLifeAuth.getAccessToken(ctx)
     }
 
 
     /** XP totale cumulato del player (Unity non ha un proprio XP separato). */
     @JvmStatic
-    fun getPlayerXp(): Long =
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.xp ?: 0L
+    fun getPlayerXp(): Long {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerXp").toLongOrNull() ?: 0L
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.xp ?: 0L
+    }
 
     /** Livello calcolato dalla XP cumulata (getter PlayerProfile.level). */
     @JvmStatic
-    fun getPlayerLevel(): Int =
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.level ?: 1
+    fun getPlayerLevel(): Int {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerLevel").toIntOrNull() ?: 1
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.level ?: 1
+    }
 
     /** Potere totale del player. */
     @JvmStatic
-    fun getPlayerPower(): Long =
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.power ?: 0L
+    fun getPlayerPower(): Long {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerPower").toLongOrNull() ?: 0L
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.power ?: 0L
+    }
 
     /** Gemme premium del player. */
     @JvmStatic
-    fun getPlayerGems(): Int =
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.gems ?: 0
+    fun getPlayerGems(): Int {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerGems").toIntOrNull() ?: 0
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.gems ?: 0
+    }
 
     /** Energia corrente del player (0..100). */
     @JvmStatic
-    fun getPlayerEnergy(): Int =
-        com.intelligame.huntix.PlayerProfileManager.myProfile?.energy ?: 100
+    fun getPlayerEnergy(): Int {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerEnergy").toIntOrNull() ?: 100
+        return com.intelligame.huntix.PlayerProfileManager.myProfile?.energy ?: 100
+    }
 
     /** Inventario uova del player (conteggio totale). */
     @JvmStatic
     fun getEggCount(): Int {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return 0
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getEggCount").toIntOrNull() ?: 0
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return 0
         return com.intelligame.huntix.EggInventoryManager.getInventoryCount(ctx)
     }
 
@@ -732,10 +852,11 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun getPlayerProfileJson(): String {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getPlayerProfileJson")
         val p = com.intelligame.huntix.PlayerProfileManager.myProfile
         if (p == null)
             return "{\"name\":\"Giocatore\",\"xp\":0,\"level\":1,\"power\":0,\"gems\":0,\"energy\":100,\"eggCount\":0,\"eggsFound\":0}"
-        val ctx = UnityPlayer.currentActivity?.applicationContext
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
         val eggCount = ctx?.let { com.intelligame.huntix.EggInventoryManager.getInventoryCount(it) } ?: 0
         val j = org.json.JSONObject()
         try {
@@ -765,6 +886,10 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun addXpFromCity(xpAmount: Long): Long {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("addXpFromCity", JSONArray().put(xpAmount).toString())
+                .toLongOrNull() ?: 0L
+        }
         if (xpAmount <= 0) return getPlayerXp()
         val pm = com.intelligame.huntix.PlayerProfileManager
         val p = pm.myProfile ?: return 0L
@@ -781,6 +906,10 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun addPowerFromCity(powerAmount: Long): Long {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("addPowerFromCity", JSONArray().put(powerAmount).toString())
+                .toLongOrNull() ?: 0L
+        }
         if (powerAmount <= 0) return getPlayerPower()
         val pm = com.intelligame.huntix.PlayerProfileManager
         val p = pm.myProfile ?: return 0L
@@ -796,6 +925,10 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun addGemsFromCity(amount: Int): Int {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("addGemsFromCity", JSONArray().put(amount).toString())
+                .toIntOrNull() ?: 0
+        }
         if (amount <= 0) return getPlayerGems()
         val pm = com.intelligame.huntix.PlayerProfileManager
         val p = pm.myProfile ?: return 0
@@ -810,6 +943,10 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun syncEnergyFromCity(energy: Int): Int {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("syncEnergyFromCity", JSONArray().put(energy).toString())
+                .toIntOrNull() ?: energy.coerceIn(0, 100)
+        }
         val pm = com.intelligame.huntix.PlayerProfileManager
         val p = pm.myProfile ?: return energy.coerceIn(0, 100)
         val clamped = energy.coerceIn(0, 100)
@@ -828,6 +965,10 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun setPlayerNameFromCity(newName: String): Boolean {
+        if (UnityIpc.isUnity) {
+            val r = UnityIpc.callApp("setPlayerNameFromCity", JSONArray().put(newName).toString())
+            return r.toBooleanStrictOrNull() ?: (r == "true")
+        }
         if (newName.isBlank()) return false
         val pm = com.intelligame.huntix.PlayerProfileManager
         val p = pm.myProfile ?: return false
@@ -844,7 +985,12 @@ object StoreUnityBridge {
      *  conserva + allinea il profilo generale (riepiloghi city*). */
     @JvmStatic
     fun onCityStateSync(json: String) {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("onCityStateSync", JSONArray().put(json).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
         CityStateSync.onCitySnapshot(ctx, json)
     }
 
@@ -863,7 +1009,14 @@ object StoreUnityBridge {
      */
     @JvmStatic
     fun onGrowthStateSync(json: String) {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return
+        if (UnityIpc.isUnity) {
+            // Qui vengono schiuse le uova della crescita: devono arrivare al
+            // profilo dell'app, altrimenti il Riflesso uova si perde.
+            UnityIpc.callApp("onGrowthStateSync", JSONArray().put(json).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
         if (json.isBlank()) return
         val j = try { org.json.JSONObject(json) } catch (_: Exception) { return }
         val level = j.optInt("level", 1)
@@ -951,7 +1104,9 @@ object StoreUnityBridge {
      *  locale è vergine. */
     @JvmStatic
     fun getCityStateSync(): String {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return ""
+        if (UnityIpc.isUnity) return UnityIpc.callApp("getCityStateSync")
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return ""
         return CityStateSync.getSnapshot(ctx)
     }
 
@@ -959,7 +1114,9 @@ object StoreUnityBridge {
      *  snapshot (evento "CityStateCheck" da Unity). */
     @JvmStatic
     fun checkCityStateSync(): String {
-        val ctx = UnityPlayer.currentActivity?.applicationContext ?: return "{\"ok\":false}"
+        if (UnityIpc.isUnity) return UnityIpc.callApp("checkCityStateSync")
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return "{\"ok\":false}"
         return CityStateSync.checkSync(ctx)
     }
 
@@ -967,8 +1124,8 @@ object StoreUnityBridge {
      *  Unity attiva). Best-effort e non bloccante. */
     @JvmStatic
     fun applyStoredCityStateToProfile(): Boolean {
-        val activity = UnityPlayer.currentActivity ?: return false
-        val ctx = activity.applicationContext ?: return false
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return false
         return try {
             CityStateSync.startupSync(ctx)
             true
