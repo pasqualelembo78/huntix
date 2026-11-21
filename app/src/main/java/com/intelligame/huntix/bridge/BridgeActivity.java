@@ -24,6 +24,13 @@ public class BridgeActivity extends UnityPlayerActivity {
 
     public static final String EXTRA_MODE = "unity_mode";
     public static final String EXTRA_POI_DATA = "POI_DATA";
+    // Stato letto dall'app prima di lanciare Unity: in :unity le prefs dell'app
+    // non sono la fonte di verita', quindi gli extra hanno priorita'.
+    public static final String EXTRA_SKIN = "unity_skin";
+    public static final String EXTRA_PET = "unity_pet";
+    public static final String EXTRA_SPAWN_LAT = "unity_spawn_lat";
+    public static final String EXTRA_SPAWN_LNG = "unity_spawn_lng";
+    public static final String EXTRA_TILE_CACHE_DIR = "unity_tile_cache_dir";
     public static final String MODE_OUTDOOR = "outdoor";
     public static final String MODE_REALLIFE = "reallife";
     public static final String MODE_INDOOR = "indoor";
@@ -67,25 +74,39 @@ public class BridgeActivity extends UnityPlayerActivity {
             try {
                 j.put("action", "setMode");
                 j.put("mode", mode);
-                // Fase 6: skin personaggio scelta nel profilo (cache locale)
-                String skin = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
-                        .getString("city_skin", null);
+                // Fase 6: skin personaggio scelta nel profilo. prima gli extra
+                // passati dall'app, poi le prefs come fallback.
+                String skin = getIntent().getStringExtra(EXTRA_SKIN);
+                if (skin == null || skin.isEmpty()) {
+                    skin = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getString("city_skin", null);
+                }
                 if (skin != null && !skin.isEmpty()) j.put("skin", skin);
-                // Pet di compagnia scelto nel profilo (cache locale)
-                String pet = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
-                        .getString("pet_skin", null);
+                // Pet di compagnia scelto nel profilo (stessa priorita').
+                String pet = getIntent().getStringExtra(EXTRA_PET);
+                if (pet == null || pet.isEmpty()) {
+                    pet = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getString("pet_skin", null);
+                }
                 if (pet != null && !pet.isEmpty()) j.put("pet", pet);
                 // Miacitta: punto di spawn DECISO dal selettore (citta' o ultima
                 // posizione salvata su Google). Il GPS del device non si usa mai.
                 if (MODE_MIACITTA.equals(mode)) {
                     android.content.SharedPreferences wp = getSharedPreferences("world_game_prefs", MODE_PRIVATE);
-                    float slat = wp.getFloat("spawnLat", 0f);
-                    float slng = wp.getFloat("spawnLng", 0f);
+                    float slat = getIntent().getFloatExtra(EXTRA_SPAWN_LAT, 0f);
+                    if (slat == 0f) slat = wp.getFloat("spawnLat", 0f);
+                    float slng = getIntent().getFloatExtra(EXTRA_SPAWN_LNG, 0f);
+                    if (slng == 0f) slng = wp.getFloat("spawnLng", 0f);
                     if (Math.abs(slat) > 0.001f && Math.abs(slng) > 0.001f) {
                         java.util.Locale L = java.util.Locale.US;
                         j.put("spawnLat", String.format(L, "%.6f", slat));
                         j.put("spawnLng", String.format(L, "%.6f", slng));
                     }
+                    String tileDir = getIntent().getStringExtra(EXTRA_TILE_CACHE_DIR);
+                    if (tileDir == null || tileDir.isEmpty()) {
+                        tileDir = wp.getString("tile_cache_dir", null);
+                    }
+                    if (tileDir != null && !tileDir.isEmpty()) j.put("tileCacheDir", tileDir);
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());
@@ -283,7 +304,8 @@ public class BridgeActivity extends UnityPlayerActivity {
         // e' SIGSEGV del processo (che resta vivo per la Home).
         dismissCityLoading();
         StoreUnityBridge.endUnitySession();
-        UnityExitKillGuard.disableSelfKill(mUnityPlayer);
+        // UnityExitKillGuard non si chiama piu': il self-kill di Unity ora uccide
+        // solo il processo :unity, la Home resta viva. Vedi UnityBridgeService.
         super.onDestroy();
     }
 }

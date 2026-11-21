@@ -239,20 +239,25 @@
         <activity android:name=".ui.POIWebViewActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.POICustomPageActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.StoreIndoorActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <!-- Runtime Unity isolato in :unity: il self-kill di Unity alla chiusura
+             uccide solo questo processo, lasciando viva la Home. -->
         <activity android:name=".ui.IndoorActivity"
             android:exported="false"
+            android:process=":unity"
             android:screenOrientation="portrait"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
         <!-- Minigioco Unity normale (Laugh Little Lamb) -->
         <activity android:name=".ui.UnityGameActivity"
             android:exported="false"
+            android:process=":unity"
             android:screenOrientation="sensorLandscape"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
         <!-- Minigioco Unity in AR (AR-Dice) -->
         <activity android:name=".ui.UnityARGameActivity"
             android:exported="false"
+            android:process=":unity"
             android:screenOrientation="portrait"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
@@ -482,12 +487,20 @@
         <receiver android:name=".gamification.DailyEventReceiver"
             android:exported="false"/>
 
-        <!-- ── Unity Bridge Activities ── -->
+        <!-- ── Unity Bridge Activities (processo :unity) ── -->
         <activity android:name=".bridge.BridgeActivity"
             android:exported="false"
+            android:process=":unity"
             android:screenOrientation="portrait"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale"
             android:theme="@style/Theme.ARProto"/>
+
+        <!-- Endpoint AIDL del runtime Unity: riceve i messaggi dall'app e
+             richiama il callback AIDL dell'app per profilo/prefs/uova. -->
+        <service
+            android:name=".bridge.UnityBridgeService"
+            android:exported="false"
+            android:process=":unity"/>
 
 
 

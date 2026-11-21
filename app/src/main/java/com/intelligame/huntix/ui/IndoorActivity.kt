@@ -315,7 +315,8 @@ class IndoorActivity : UnityPlayerActivity() {
     }
 
     override fun onDestroy() {
-        com.intelligame.huntix.bridge.UnityExitKillGuard.disableSelfKill(mUnityPlayer)
+        // UnityExitKillGuard non si chiama piu': il self-kill di Unity ora uccide
+        // solo il processo :unity, la Home resta viva. Vedi UnityBridgeService.
         super.onDestroy()
         handler.removeCallbacks(joystickTick)
         if (instance === this) instance = null

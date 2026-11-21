@@ -140,6 +140,8 @@ compileOptions {
     buildFeatures {
         viewBinding true
         buildConfig true
+        // IPC Unity ↔ app: AIDL genera Stub/Proxy per IUnityBridge e IUnityCallback
+        aidl true
     }
 
     packaging {

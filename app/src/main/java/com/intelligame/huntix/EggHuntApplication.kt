@@ -10,6 +10,8 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 import io.sentry.Sentry
 import com.intelligame.huntix.billing.BillingManager
 import com.intelligame.huntix.billing.VipManager
+import com.intelligame.huntix.bridge.UnityAppContext
+import com.intelligame.huntix.bridge.UnityIpc
 import com.intelligame.huntix.managers.SavedManager
 
 class EggHuntApplication : Application() {
@@ -17,11 +19,30 @@ class EggHuntApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // AppLog — must be first so all other init logs are captured
-        AppLog.init(this)
+        // Il runtime Unity gira in :unity: li' NON devono partire i gestori
+        // dell'app (profilo, prefs, billing, preload), che restano nel processo
+        // principale. Entrambi i processi hanno pero' bisogno del contesto.
+        val isUnity = try {
+            android.os.Process.myProcessName().endsWith(":unity")
+        } catch (_: Throwable) {
+            false
+        }
+        UnityAppContext.context = applicationContext
+
+        // AppLog — must be first so all other init logs are captured.
+        // Il processo Unity ha un file dedicato: nessuna rotazione, altrimenti
+        // i due processi si cancellerebbero a vicenda le sessioni.
+        AppLog.init(this, if (isUnity) "_unity" else "", rotate = !isUnity)
         AppLog.installCrashHandler()
         logPreviousExitReason()
         AppLog.risorse(this, "avvio")
+        if (isUnity) {
+            AppLog.i("UnityIpc", "processo unity avviato")
+        } else {
+            // Connessione AIDL verso il Service in :unity; il callback dell'app
+            // viene registrato dentro onServiceConnected.
+            UnityIpc.bindApp(this)
+        }
 
         // Firebase. Gli errori di init vanno in AppLog (viewer in-app), non
         // solo in logcat: e' l'unico modo per vedere perche' un SIGSEGV nativo
@@ -80,68 +101,72 @@ class EggHuntApplication : Application() {
             AppLog.e("HuntixApp", "Persistence init failed: ${e.message}")
         }
 
-        // Registra il sender Unity (compatibile con GameManager.OnEvent).
-        // Gli invii passano dalla guardia di shutdown: con l'engine Unity in
-        // smontaggio (uscita da MiAcitma/Indoor) un UnitySendMessage e' crash
-        // nativo del processo.
-        try {
-            com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.registerMessenger(
-                object : com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.Messenger {
-                    override fun sendEvent(event: String, data: String) {
-                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnEvent", "$event|$data")
+        // Tutto cio' che tocca profilo/prefs/uova/billing gira SOLO nel processo
+        // app: in :unity gli invii verso Unity passano per l'AIDL del Service.
+        if (!isUnity) {
+            // Registra il sender Unity (compatibile con GameManager.OnEvent).
+            // Gli invii passano dalla guardia di shutdown: con l'engine Unity in
+            // smontaggio (uscita da MiAcitma/Indoor) un UnitySendMessage e' crash
+            // nativo. Ora la guardia e' varcata solo dal processo app via IPC.
+            try {
+                com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.registerMessenger(
+                    object : com.intelligame.huntix.legacy.poi.unity.PoiUnityBridge.Messenger {
+                        override fun sendEvent(event: String, data: String) {
+                            com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnEvent", "$event|$data")
+                        }
+                        override fun openStoreJson(storeId: String, json: String) {
+                            com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnStoreOpened", json)
+                        }
+                        override fun openStoreUrl(storeId: String, url: String) {
+                            com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OpenStoreUrl", url)
+                        }
+                        override fun onPoiSelected(storeId: String, lat: Double, lng: Double) {
+                            com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnPoiSelected", "{\"id\":\"$storeId\",\"lat\":$lat,\"lng\":$lng}")
+                        }
                     }
-                    override fun openStoreJson(storeId: String, json: String) {
-                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnStoreOpened", json)
-                    }
-                    override fun openStoreUrl(storeId: String, url: String) {
-                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OpenStoreUrl", url)
-                    }
-                    override fun onPoiSelected(storeId: String, lat: Double, lng: Double) {
-                        com.intelligame.huntix.bridge.StoreUnityBridge.sendToUnityIfAlive("GameManager", "OnPoiSelected", "{\"id\":\"$storeId\",\"lat\":$lat,\"lng\":$lng}")
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            AppLog.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
-        }
+                )
+            } catch (e: Exception) {
+                AppLog.e("HuntixApp", "PoiUnityBridge register failed: ${e.message}")
+            }
 
-// Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
-        try {
-            com.intelligame.huntix.manager.PoiMapBridge.feed(this)
-        } catch (e: Exception) {
-            AppLog.e("HuntixApp", "PoiMapBridge prefeed failed: ${e.message}")
-        }
+            // Pre-carica i POI reali Huntix (OSM) per la mappa del gioco in background
+            try {
+                com.intelligame.huntix.manager.PoiMapBridge.feed(this)
+            } catch (e: Exception) {
+                AppLog.e("HuntixApp", "PoiMapBridge prefeed failed: ${e.message}")
+            }
 
-        // Preload tile Miacitta in background fin dall'avvio: la geo della tile
-        // di spawn viene generata/scaricata mentre l'utente e' in Home, cosi'
-        // all'ingresso in Miacitta il primo chunk e' gia' visibile (cache-first).
-        try {
-            com.intelligame.huntix.bridge.CityTilePreloader.preload(this)
-        } catch (e: Exception) {
-            AppLog.w("HuntixApp", "CityTilePreloader preload failed: ${e.message}")
-        }
+            // Preload tile Miacitta in background fin dall'avvio: la geo della tile
+            // di spawn viene generata/scaricata mentre l'utente e' in Home, cosi'
+            // all'ingresso in Miacitta il primo chunk e' gia' visibile (cache-first).
+            try {
+                com.intelligame.huntix.bridge.CityTilePreloader.preload(this)
+            } catch (e: Exception) {
+                AppLog.w("HuntixApp", "CityTilePreloader preload failed: ${e.message}")
+            }
 
-        // Billing: inizializza il client e sincronizza lo stato VIP all'avvio
-        try {
-            BillingManager.init(this)
-            VipManager.syncVipStatus(this)
-        } catch (e: Exception) {
-            AppLog.e("HuntixApp", "Billing init failed: ${e.message}")
-        }
+            // Billing: inizializza il client e sincronizza lo stato VIP all'avvio
+            try {
+                BillingManager.init(this)
+                VipManager.syncVipStatus(this)
+            } catch (e: Exception) {
+                AppLog.e("HuntixApp", "Billing init failed: ${e.message}")
+            }
 
-        // MVC passivi: bonus installazione + mining dalle uova schiuse
-        try {
-            SavedManager.accrueInstallRewards(this)
-            SavedManager.accrueMiningRewards(this)
-        } catch (e: Exception) {
-            AppLog.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
-        }
+            // MVC passivi: bonus installazione + mining dalle uova schiuse
+            try {
+                SavedManager.accrueInstallRewards(this)
+                SavedManager.accrueMiningRewards(this)
+            } catch (e: Exception) {
+                AppLog.e("HuntixApp", "MVC passive accrual failed: ${e.message}")
+            }
 
-        // Starter kit cibo: 5 Mele + 3 Peperoncini (una tantum)
-        try {
-            EggNutrimentManager.giveStarterKit(this)
-        } catch (e: Exception) {
-            AppLog.e("HuntixApp", "Starter kit failed: ${e.message}")
+            // Starter kit cibo: 5 Mele + 3 Peperoncini (una tantum)
+            try {
+                EggNutrimentManager.giveStarterKit(this)
+            } catch (e: Exception) {
+                AppLog.e("HuntixApp", "Starter kit failed: ${e.message}")
+            }
         }
     }
 

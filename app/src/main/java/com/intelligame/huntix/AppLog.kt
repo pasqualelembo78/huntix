@@ -35,6 +35,8 @@ object AppLog {
 
     private const val MAX_ENTRIES = 5000
     private const val LOG_FILE = "city3d_debug.log"
+    /** File di log del runtime Unity isolato (processo :unity). */
+    private const val UNITY_LOG_FILE = "city3d_debug_unity.log"
     private const val MAX_LOG_FILE_BYTES = 16 * 1024 * 1024L
     /** Taglia il file alla meta' quando supera il limite (~8 MB dopo il taglio). */
     private const val TRUNCATE_TO_BYTES = MAX_LOG_FILE_BYTES / 2
@@ -64,13 +66,16 @@ object AppLog {
     private fun sessionId(): String =
         java.util.UUID.randomUUID().toString().substring(0, 13)
 
-    fun init(context: Context) {
+    /** [suffix] separa il file del processo Unity (`:unity`) da quello
+     *  dell'app: due processi che ruotano lo stesso file si cancellerebbero
+     *  a vicenda le sessioni, proprio quelle serve leggere dopo un crash. */
+    fun init(context: Context, suffix: String = "", rotate: Boolean = true) {
         appContext = context.applicationContext
-        logFile = File(context.filesDir, LOG_FILE)
+        logFile = File(context.filesDir, LOG_FILE + suffix)
         // Ruota la sessione precedente in archivio PRIMA di partire: il file
         // attivo inizia sempre dall'inizio della sessione corrente (niente
         // cumulo inter-sessione che "taglia" il principio del log).
-        rotateToArchive()
+        if (rotate) rotateToArchive()
         try {
             truncateIfNeeded(logFile)
         } catch (_: Exception) {}
@@ -261,8 +266,15 @@ private fun log(level: Level, tag: String, msg: String) {
             }?.sortedByDescending { it.name } ?: emptyList()
         } catch (_: Exception) { emptyList() }
         val f = logFile
-        if (f == null || !f.exists() || f.length() < 2L) return archives
-        return listOf(f) + archives
+        val active = if (f != null && f.exists() && f.length() >= 2L) listOf(f) else emptyList()
+        // Il viewer gira nel processo app ma deve mostrare anche la coda del
+        // log di :unity: e' li' che finisce il SIGSEGV nativo del self-kill.
+        val unity = if (f?.name == UNITY_LOG_FILE) emptyList()
+        else {
+            val uf = File(ctx.filesDir, UNITY_LOG_FILE)
+            if (uf.exists() && uf.length() >= 2L) listOf(uf) else emptyList()
+        }
+        return active + unity + archives
     }
 
     /** Legge INIZIO e CODA di un file di sessione: l'inizio serve a capire
