@@ -52,7 +52,7 @@ namespace City.Player
         public bool footIKEnabled = true;
         public float ikRayDistance = 1.5f;
         public float ikSmoothSpeed = 12f;
-        public float ikMaxOffset = 0.3f;
+        public float ikMaxOffset = 0.6f;
         // FIX fluttuazione: prima 1.6 m, il bacino poteva essere sollevato di
         // oltre un metro sopra i piedi ancorati a terra (look "sospeso in
         // aria"). Il tetto è ora 0.25 m: compensa l'affondamento del clip
@@ -421,15 +421,24 @@ namespace City.Player
                 _legSpanRest = MeasureLegSpan();
             if (_legSpanRest <= 0.05f || _legSpanRest > 3f) _legSpanRest = 1f;
 
-            // lift dai piedi IK (curb/step: il piede appoggia sopra il livello
-            // di riferimento) e corpo affondato: massimo dei due, solo positivo;
-            // il negativo (davanti a un gradino) resta limitato a ikMaxOffset.
+            // FIX GALLEGGIAMENTO IK: il bacino deve scendere a
+            // (groundRef + legSpanRest). Il vecchio Mathf.Max(footLift,
+            // bodySinkLift) scartava il valore NEGATIVO di bodySinkLift:
+            // con hipsY=1.50 e legSpan=1.04 serviva -0.47, ma max(-0.03,
+            // -0.47) = -0.03 -> il bacino restava in alto e i piedi IK
+            // (e la scarpa visiva) restavano ~0,45 m sopra il terreno.
+            // Ora: se i fianchi sono SOTTO lo span serve salire (positivo),
+            // se sono SOPRA serve scendere (negativo) — si prende il valore
+            // con il SEGNO GIUSTO, e il clamp simmetrico lo consente.
+            // footLift resta un eventuale rialzo da gradino (curb/step).
             float footLift = Mathf.Min(_ikPosL.y, _ikPosR.y) - groundRef;
             float bodySinkLift = 0f;
             Transform hipsBone = animator.GetBoneTransform(HumanBodyBones.Hips);
             if (hipsBone != null && grounded)
                 bodySinkLift = (groundRef + _legSpanRest) - hipsBone.position.y;
-            float target = Mathf.Max(footLift, bodySinkLift);
+            float target = (bodySinkLift < 0f)
+                ? bodySinkLift               // bacino troppo alto -> SCENDI
+                : Mathf.Max(footLift, bodySinkLift);
             float offset = Mathf.Clamp(target, -ikMaxOffset, ikMaxLift);
             _hipOffsetY = Mathf.Lerp(_hipOffsetY, offset, ikSmoothSpeed * Time.deltaTime);
 
@@ -439,8 +448,23 @@ namespace City.Player
                 // avere un'altezza pelvi diversa; fissarla al primo frame
                 // (idle) rendeva la camminata piu' bassa dell'originale.
                 _hipsBaseY = hipsBone.localPosition.y;
+
+                // _hipOffsetY e' in METRI MONDO (bodySinkLift/footLift lo
+                // sono), mentre localPosition.y e' nelle unita' del parent
+                // dell'osso. Il modello e' scalato (~0.43): scrivere -0.47
+                // direttamente in locale abbasserebbe il bacino di soli
+                // ~0,20 m, lasciando i piedi sospesi. Convertiamo quindi
+                // l'offset mondo -> locale dividendo per la scala Y del
+                // parent (guardia contro scale nulle/degenerate).
+                float worldToLocalY = 1f;
+                Transform hipsParent = hipsBone.parent;
+                float scaleY = hipsParent != null
+                    ? hipsParent.lossyScale.y
+                    : hipsBone.lossyScale.y;
+                if (Mathf.Abs(scaleY) > 1e-4f) worldToLocalY = 1f / scaleY;
+
                 Vector3 hp = hipsBone.localPosition;
-                hp.y = _hipsBaseY + _hipOffsetY;
+                hp.y = _hipsBaseY + _hipOffsetY * worldToLocalY;
                 hipsBone.localPosition = hp;
             }
 
