@@ -97,13 +97,21 @@ object Bridge {
         // dove gli singleton sono reali (UnityIpc.isUnity == false, no loop).
         // Gli eventi di UI (CityReady/CityProgress/Indoor*/OutdoorNPC*) e le
         // startActivity RESTANO in :unity: li' vivono BridgeActivity e
-        // IndoorActivity, quindi il processo app non ha istanze da aggiornare.
-        if (UnityIpc.isUnity) {
-            if (UnityIpc.APP_EVENTS.contains(eventName)) {
-                UnityIpc.forwardUnityEvent(eventName, jsonData)
-            }
+        // IndoorActivity, quindi VANNO GESTITI QUI, non soltanto instradati.
+        // Il vecchio return incondizionato gettava via CityReady: Unity lo
+        // mandava, ma l'overlay di caricamento restava bloccato finche'
+        // l'utente non premeva "Salta attesa".
+        if (UnityIpc.isUnity && UnityIpc.APP_EVENTS.contains(eventName)) {
+            UnityIpc.forwardUnityEvent(eventName, jsonData)
             return
         }
+        routeUnityEvent(eventName, jsonData)
+    }
+
+    /** Router degli eventi non-forwarded: gira in :unity per la UI
+     *  (BridgeActivity/IndoorActivity) e nel processo app per gli eventi di
+     *  stato che arrivano dal Binder. */
+    private fun routeUnityEvent(eventName: String, jsonData: String) {
         when (eventName) {
             "CatchRequest" -> {
                 val id = extractJsonField(jsonData, "storeId")
