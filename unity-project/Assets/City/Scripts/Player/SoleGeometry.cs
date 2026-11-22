@@ -19,6 +19,10 @@ namespace City.Player
     {
         public float SoleBelowAnkle { get; private set; } = float.NaN;
         public float HipsToSole { get; private set; } = float.NaN;
+        /// <summary>Altezza dell'osso testa rispetto alla suola vera, misurata
+        /// sulla posa bind. Usata dalla prima persona come altezza occhio:
+        /// nessuna costante "1,55 m" inventata, segue l'armatura reale.</summary>
+        public float HeadToSole { get; private set; } = float.NaN;
 
         private Animator _anim;
         private Transform _rigRoot;
@@ -55,6 +59,8 @@ namespace City.Player
                 ? _anim.GetBoneTransform(HumanBodyBones.RightFoot) : null;
             Transform hips = _anim != null
                 ? _anim.GetBoneTransform(HumanBodyBones.Hips) : null;
+            Transform head = _anim != null
+                ? _anim.GetBoneTransform(HumanBodyBones.Head) : null;
 
             float ankle = float.MaxValue;
             if (lf != null) ankle = Mathf.Min(ankle, lf.position.y);
@@ -64,12 +70,15 @@ namespace City.Player
                 SoleBelowAnkle = Mathf.Max(0f, ankle - sole);
             if (hips != null)
                 HipsToSole = Mathf.Max(0f, hips.position.y - sole);
+            if (head != null)
+                HeadToSole = Mathf.Max(0f, head.position.y - sole);
 
             City.OSM.OsmDiag.Log("[SoleGeometry] suola=" + sole.ToString("F3") +
                 " caviglia=" + (ankle < float.MaxValue
                     ? ankle.ToString("F3") : "NA") +
                 " spessoreScarpa=" + F(SoleBelowAnkle) +
-                " bacinoSuola=" + F(HipsToSole));
+                " bacinoSuola=" + F(HipsToSole) +
+                " testaSuola=" + F(HeadToSole));
         }
 
         /// <summary>Suola vera = vertice skinnato piu' basso fra tutti gli

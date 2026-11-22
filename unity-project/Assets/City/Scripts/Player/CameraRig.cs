@@ -36,11 +36,30 @@ namespace City.Player
         private float _gyroPitchEma;
         private float _gyroPitchOffset;
         public bool GyroEnabled { get { return _gyroEnabled; } }
+        /// <summary>Modalita' davvero attiva: in guida la camera resta terza
+        /// persona anche se la preferenza e' impostata sulla prima.</summary>
+        public bool IsFirstPerson { get { return firstPerson && !drivingMode; } }
         // Prima persona stile Brookhaven (icona camera): la camera sale alla
         // testa del player. Vale solo a piedi: in auto resta terza persona.
+        // La preferenza sopravvive al reload della scena (PlayerPrefs).
         public bool firstPerson = false;
-        public const float FirstPersonHeight = 1.55f;
+        private const string CameraModePrefKey = "cameraFirstPerson";
         private float _fpBlend = 0f;
+
+        // Riferimenti risolti lazy: il modello visivo (PlayerHeroRig) puo'
+        // arrivare dopo lo Start del rig (istanziamento città asincrono).
+        // Nascondere i Renderer NON disattiva il GameObject: Animator, FootIK,
+        // SoleGeometry, CharacterController e diagnostica restano attivi.
+        private Transform _cachedTarget;
+        private PlayerHeroRig _heroRig;
+        private Renderer[] _heroRenderers;
+        private bool[] _heroRendererWasEnabled;
+        private Transform _headBone;
+        private bool _headBoneSearched;
+        private SoleGeometry _soleProbe;
+        private bool _modelHidden;
+        private bool _fallbackHeightLogged;
+        private float _nextHeroSearch;
 
         private bool drivingMode;
         private readonly float driveDistance = 12f;
@@ -156,6 +175,12 @@ namespace City.Player
                 _snapView = true;
                 _walker = target.GetComponent<CharacterWalker>();
             }
+            // Modalita' camera persistente (bottone in-game e bridge Android).
+            firstPerson = PlayerPrefs.GetInt(CameraModePrefKey, 0) == 1;
+            RefreshHeroReferences();
+            ApplyModelVisibility();
+            OsmDiag.Log("[Camera][Mode] avvio -> " +
+                (firstPerson ? "PRIMA persona" : "TERZA persona"));
             _headBobEnabled = PlayerPrefs.GetInt(HeadBobPrefKey, 1) == 1;
             if (SystemInfo.supportsGyroscope)
             {
@@ -181,18 +206,129 @@ namespace City.Player
 
         public void ToggleFirstPerson()
         {
-            firstPerson = !firstPerson;
-            City.OSM.OsmDiag.Log("[Brookhaven][Camera] ToggleFirstPerson -> " + firstPerson);
+            SetFirstPerson(!firstPerson);
         }
 
         public void SetFirstPerson(bool on)
         {
             firstPerson = on;
+            PlayerPrefs.SetInt(CameraModePrefKey, on ? 1 : 0);
+            PlayerPrefs.Save();
+            RefreshHeroReferences();
+            ApplyModelVisibility();
+            string msg = (on ? "PRIMA" : "TERZA") + " persona" +
+                " (occhio=" + FirstPersonEyeHeight().ToString("F2") + "m dal pivot)";
+            City.OSM.OsmDiag.Log("[Camera][Mode] " + msg);
+            // Ponte Unity -> Android: la scelta finisce nel viewer dei log
+            // dell'app (nessun logcat), coerente con il comando inverso
+            // GameManager.OnEvent("toggleCameraMode").
+            Huntix.Bridge.UnityBridge.LogToAndroid("[Camera][Mode]", msg);
         }
 
         public void SetDrivingMode(bool driving)
         {
+            if (drivingMode == driving) return;
             drivingMode = driving;
+            ApplyModelVisibility();
+        }
+
+        /// <summary>Risolve il modello visivo e l'osso testa. Non nasconde
+        /// nulla: i Renderer vengono solo memorizzati con il loro stato
+        /// originale, cosi' la rimozione in prima persona e' reversibile.</summary>
+        private void RefreshHeroReferences()
+        {
+            if (target == null) return;
+            if (_cachedTarget != target)
+            {
+                _cachedTarget = target;
+                _heroRig = null;
+                _heroRenderers = null;
+                _heroRendererWasEnabled = null;
+                _headBone = null;
+                _headBoneSearched = false;
+                _soleProbe = null;
+                _modelHidden = false;
+            }
+
+            if (_heroRig == null)
+                _heroRig = target.GetComponentInChildren<PlayerHeroRig>(true);
+            if (_heroRig != null)
+            {
+                if (_heroRenderers == null)
+                {
+                    var all = _heroRig.GetComponentsInChildren<Renderer>(true);
+                    _heroRenderers = new Renderer[all.Length];
+                    _heroRendererWasEnabled = new bool[all.Length];
+                    for (int i = 0; i < all.Length; i++)
+                    {
+                        _heroRenderers[i] = all[i];
+                        _heroRendererWasEnabled[i] = all[i] != null && all[i].enabled;
+                    }
+                }
+                if (_headBone == null && !_headBoneSearched)
+                {
+                    var anim = _heroRig.GetComponentInChildren<Animator>(true);
+                    if (anim != null) _headBone = anim.GetBoneTransform(HumanBodyBones.Head);
+                    _headBoneSearched = _headBone != null;
+                }
+                if (_soleProbe == null) _soleProbe = _heroRig.GetComponent<SoleGeometry>();
+                return;
+            }
+
+            // Fallback avatar legacy (senza PlayerHeroRig): prova comunque
+            // l'osso testa dell'Animator, mai una costante inventata.
+            if (_headBone == null && !_headBoneSearched)
+            {
+                var anim = target.GetComponentInChildren<Animator>(true);
+                if (anim != null) _headBone = anim.GetBoneTransform(HumanBodyBones.Head);
+                _headBoneSearched = true;
+            }
+        }
+
+        private void ApplyModelVisibility()
+        {
+            if (target == null || _heroRig == null || _heroRenderers == null) return;
+            bool hide = firstPerson && !drivingMode;
+            if (_modelHidden == hide) return;
+            _modelHidden = hide;
+            for (int i = 0; i < _heroRenderers.Length; i++)
+            {
+                var r = _heroRenderers[i];
+                if (r != null) r.enabled = _heroRendererWasEnabled[i] && !hide;
+            }
+            City.OSM.OsmDiag.Log("[Camera][Mode] modello visivo " +
+                (hide ? "nascosto" : "ripristinato") +
+                ": solo Renderer — Animator/FootIK/SoleGeometry/CC attivi");
+        }
+
+        /// <summary>Altezza della camera in prima persona rispetto al pivot
+        /// del player. Primaria: posa dell'osso Head (segue IK e animazione).
+        /// Secondaria: HeadToSole misurato sui vertici, meno l'offset noto del
+        /// pivot (feetAnchor + SoleTouchDrop). Niente costanti numeriche nuove.
+        /// </summary>
+        private float FirstPersonEyeHeight()
+        {
+            if (target == null) return 0f;
+            if (_headBone == null) RefreshHeroReferences();
+            if (_headBone != null)
+            {
+                float h = _headBone.position.y - target.position.y;
+                if (h > 0.3f && h < 3f) return h;
+            }
+            if (_soleProbe == null) RefreshHeroReferences();
+            if (_soleProbe != null && !float.IsNaN(_soleProbe.HeadToSole) && _heroRig != null)
+            {
+                float pivotAboveSole = -_heroRig.feetAnchor.y + PlayerHeroRig.SoleTouchDrop;
+                float h = _soleProbe.HeadToSole - pivotAboveSole;
+                if (h > 0.3f && h < 3f) return h;
+            }
+            if (!_fallbackHeightLogged)
+            {
+                _fallbackHeightLogged = true;
+                City.OSM.OsmDiag.Log("[Camera][Mode] WARNING: armatura/testa non "
+                    + "disponibili, camera al pivot del player (occhio=0)");
+            }
+            return 0f;
         }
 
         /// <summary>
@@ -368,6 +504,20 @@ namespace City.Player
         private void LateUpdate()
         {
             if (target == null) return;
+            if (_cachedTarget != target)
+            {
+                RefreshHeroReferences();
+                ApplyModelVisibility();
+            }
+            // L'hero puo' essere instanziato dopo lo Start (chunk asincroni):
+            // riprovo una volta al secondo finche' non lo trovo, senza costi
+            // per frame e senza toccare il giogo di fisica/IK.
+            if (_heroRig == null && Time.time >= _nextHeroSearch)
+            {
+                _nextHeroSearch = Time.time + 1f;
+                RefreshHeroReferences();
+                ApplyModelVisibility();
+            }
             // GIORNO 5: tolgo il bob del frame precedente PRIMA di SmoothDamp.
             // Altrimenti la camera "insegue" il proprio bob, velocity si sporca
             // e LastSmoothGap non misura piu' il ritardo reale della camera.
@@ -471,7 +621,7 @@ namespace City.Player
                 desired = target.position + toDesired.normalized * MinCameraDistance;
             }
 
-            Vector3 firstPos = target.position + Vector3.up * FirstPersonHeight;
+            Vector3 firstPos = target.position + Vector3.up * FirstPersonEyeHeight();
             Vector3 finalDesired = Vector3.Lerp(desired, firstPos, _fpBlend);
 
             Vector3 smoothed = Vector3.SmoothDamp(transform.position, finalDesired,
