@@ -109,7 +109,13 @@ namespace City.Player
         private const float EggArmClearance = 2.4f;
         // Smoothing separato: la vista segue piu' veloce del corpo, ma con
         // LerpAngle (no giro lungo 359° -> 1°).
-        private const float RotationFollow = 12f;
+        /// <summary>Velocita' del filtro dello yaw. Prima era 12 con LerpLineare
+        /// e dt=0,05 (passo fisico): a 7 fps il blend effettivo era 0,60.
+        /// Ora la vista usa il tempo reale (~0,14 s): con 12 il blend sarebbe
+        /// 1,0 e la rotazione scattrebbe a ogni frame. 6,5/s con filtro
+        /// esponenziale (1-exp(-k*dt)) riproduce 0,60 a 0,14 s ed e' valido
+        /// anche a 30/60 fps.</summary>
+        private const float RotationFollow = 6.5f;
         private float _viewYaw;
         private float _viewPitch;
         private bool _snapView = true;
@@ -697,7 +703,7 @@ namespace City.Player
             }
             else
             {
-                float rotBlend = Mathf.Clamp01(dt * RotationFollow);
+                float rotBlend = 1f - (float)System.Math.Exp(-RotationFollow * dt);
                 _viewYaw = Mathf.LerpAngle(_viewYaw, targetYaw, rotBlend);
                 _viewPitch = Mathf.Lerp(_viewPitch, viewPitch, rotBlend);
             }
