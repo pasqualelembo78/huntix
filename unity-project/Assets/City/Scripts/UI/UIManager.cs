@@ -630,6 +630,18 @@ namespace City.UI
 
             UpdateActionLabel();
 
+            // Etichetta camera sempre coerente: il toggle puo' arrivare anche
+            // dal bridge Android (viewer log / comando setCameraMode).
+            if (camModeText != null)
+            {
+                var camRig = City.Player.CameraRig.Instance;
+                if (camRig != null)
+                {
+                    string camLabel = camRig.firstPerson ? "1A" : "3A";
+                    if (camModeText.text != camLabel) camModeText.text = camLabel;
+                }
+            }
+
             // Il dialog di un NPC si chiude se il player si allontana.
             if (dialogActive && dialogHasOrigin)
             {
@@ -1017,7 +1029,11 @@ namespace City.UI
             camBg.raycastTarget = true;
             Button camBtn = camRt.gameObject.AddComponent<Button>();
             camBtn.targetGraphic = camBg;
-            camModeText = MakeText(camRt, "1A", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            // L'etichetta mostra la modalita' ATTUALE (1A = prima, 3A = terza),
+            // non quella successiva: initialize dalla preferenza persistente.
+            var camRig0 = Game.Instance != null ? Game.Instance.rig : City.Player.CameraRig.Instance;
+            bool fp0 = camRig0 != null && camRig0.firstPerson;
+            camModeText = MakeText(camRt, fp0 ? "1A" : "3A", 30f, Color.white, TextAlignmentOptions.Center, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             camModeText.raycastTarget = false;
             camBtn.onClick.AddListener(() =>
             {
@@ -1029,12 +1045,15 @@ namespace City.UI
                     return;
                 }
                 rig.ToggleFirstPerson();
-                camModeText.text = rig.firstPerson ? "3A" : "1A";
+                camModeText.text = rig.firstPerson ? "1A" : "3A";
                 City.OSM.OsmDiag.Log("[Brookhaven][Camera] Toggle camera -> " +
                     (rig.firstPerson ? "PRIMA persona" : "TERZA persona"));
+                // RIFLESSO UOVA: il cambio di prospettiva e' un modo nuovo di
+                // scovare le uova nascoste (prima persona = dettagli a terra,
+                // terza persona = panoramica dei nascondigli).
                 ShowToast(rig.firstPerson
-                    ? "Camera: prima persona"
-                    : "Camera: terza persona");
+                    ? "Camera: prima persona — cerca le uova tra i cespugli"
+                    : "Camera: terza persona — guarda i nascondigli");
             });
 
             // --- money HUD
