@@ -96,6 +96,11 @@ namespace City.Player
 
             rig.LayFootOnAnchor();
 
+            // Misura la suola VERA (vertici skinnati) prima che l'Animator
+            // modifichi la posa: i bounds SMR scendono 0,28 unita' modello
+            // sotto la scarpa e non possono essere usati come appoggio.
+            SoleGeometry.Ensure(go);
+
             // Allinea la capsula del CharacterController ai piedi VISUALI del
             // modello (feetAnchor y=-1): se il CC della scena ha center.y =
             // height/2 il fondo capsula cade al pivot e i piedi dell'hero

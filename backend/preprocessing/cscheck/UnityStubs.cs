@@ -203,6 +203,7 @@ namespace UnityEngine
         public Vector3 up => Vector3.up;
         public Vector3 right => Vector3.right;
         public Matrix4x4 worldToLocalMatrix => new Matrix4x4();
+        public Matrix4x4 localToWorldMatrix => new Matrix4x4();
         public Vector3 lossyScale => default(Vector3);
         public void SetParent(Transform p, bool worldStays) {}
         public void SetParent(Transform p) {}
@@ -229,6 +230,11 @@ namespace UnityEngine
         public Rigidbody attachedRigidbody => null;
     }
     public struct Matrix4x4 { public Vector3 MultiplyPoint3x4(Vector3 p) => p; }
+    public struct BoneWeight
+    {
+        public float weight0, weight1, weight2, weight3;
+        public int boneIndex0, boneIndex1, boneIndex2, boneIndex3;
+    }
     public class Rigidbody : Component
     {
         public Vector3 position { get; set; }
@@ -297,6 +303,8 @@ namespace UnityEngine
 
     public class Mesh : Object { public int vertexCount => 0;
         public Vector3[] vertices { get; set; }
+        public BoneWeight[] boneWeights { get; set; }
+        public Matrix4x4[] bindposes { get; set; }
         public Vector2[] uv { get; set; } public int[] triangles { get; set; }
         public Bounds bounds => new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
         public void SetVertices(List<Vector3> v) {} public void SetUVs(int i, List<Vector2> u) {}
