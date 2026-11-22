@@ -26,6 +26,7 @@ namespace City.Player
         private bool useAnimator;
         private Animator animator;
         private CharacterController cc;
+        private SoleGeometry _sole;
 
         // ── GIORNO 5: fase del ciclo di locomozione ──
         // UN'unica sorgente per head bob (CameraRig) e passi audio: se i due
@@ -176,10 +177,23 @@ namespace City.Player
             var heroRig = GetComponentInChildren<PlayerHeroRig>(true);
             if (heroRig != null)
             {
+                _sole = heroRig.GetComponentInChildren<SoleGeometry>(true);
                 var heroAnimator = heroRig.GetComponentInChildren<Animator>(true);
                 if (heroAnimator != null) return heroAnimator;
             }
             return GetComponentInChildren<Animator>(true);
+        }
+
+        /// <summary>Spessore scarpa misurato sulla geometria reale: la caviglia
+        /// IK deve stare questo tanto sopra il suolo perche' la suola tocchi.
+        /// Usato anche da FootIK per non far scendere il piede nel terreno.</summary>
+        public float SoleBelowAnkle
+        {
+            get
+            {
+                return _sole != null && !float.IsNaN(_sole.SoleBelowAnkle)
+                    ? _sole.SoleBelowAnkle : 0f;
+            }
         }
 
         private void Start()
@@ -440,7 +454,15 @@ namespace City.Player
             float bodySinkLift = 0f;
             Transform hipsBone = animator.GetBoneTransform(HumanBodyBones.Hips);
             if (hipsBone != null && grounded)
-                bodySinkLift = (groundRef + _legSpanRest) - hipsBone.position.y;
+            {
+                // _legSpanRest e' bacino->suola a gamba distesa. La caviglia IK
+                // viene pero' alzata dello spessore della scarpa e abbassata di
+                // SoleTouchDrop: il bacino deve stare piu' basso della stessa
+                // quantita', altrimenti la gamba dovrebbe allungarsi di 3 cm e
+                // l'IK non ce la fa (suola che resta sospesa).
+                bodySinkLift = (groundRef + _legSpanRest -
+                    PlayerHeroRig.SoleTouchDrop) - hipsBone.position.y;
+            }
             float target = (bodySinkLift < 0f)
                 ? bodySinkLift               // bacino troppo alto -> SCENDI
                 : Mathf.Max(footLift, bodySinkLift);
@@ -531,6 +553,14 @@ namespace City.Player
         /// lo stesso valore per ogni clip, nessun sollevamento fantasma.</summary>
         private float MeasureLegSpan()
         {
+            // La distanza bacino->suola viene misurata sull'armatura e sui
+            // vertici reali (SoleGeometry), non stimata dalla capsula del CC:
+            // cc.height=2 m dava 1,04 m mentre lo scheletro Remy in scala
+            // 0,43 ha un appoggio reale di ~0,91 m. Il divario di 0,13 m
+            // teneva il bacino (e quindi la suola) sospeso sopra l'asfalto.
+            if (_sole != null && !float.IsNaN(_sole.HipsToSole) &&
+                _sole.HipsToSole > 0.3f && _sole.HipsToSole < 3f)
+                return _sole.HipsToSole;
             if (cc != null)
             {
                 float standing = cc.height * 0.52f;
@@ -601,7 +631,14 @@ namespace City.Player
             if (best >= 0)
             {
                 var h = IkHitsBuffer[best];
-                targetPos = h.point + Vector3.up * 0.02f;
+                // La target IK e' l'OSSO caviglia, non la suola: la scarpa
+                // scende SoleBelowAnkle sotto l'osso. Senza questo termine la
+                // caviglia veniva piantata a filo d'asfalto e la suola restava
+                // sospesa dello spessore della scarpa (~0,11 m). SoleTouchDrop
+                // lascia 3 cm di affondamento voluto (clearance del follower).
+                float ankleY = h.point.y + SoleBelowAnkle -
+                    PlayerHeroRig.SoleTouchDrop;
+                targetPos = new Vector3(h.point.x, ankleY, h.point.z);
                 targetRot = Quaternion.FromToRotation(Vector3.up, h.normal) *
                     Quaternion.LookRotation(transform.forward, Vector3.up);
                 // peso per quanto il suolo dista dal livello-piedi: a terra ~1,

@@ -190,7 +190,13 @@ namespace City.Player
                 return 0f;
             if (hit.normal.y < GroundSnapper.ShortNorm) return 0f;
 
-            float off = hit.point.y - p.y;
+            // p e' l'osso caviglia: la suola reale sta SoleBelowAnkle piu'
+            // in basso. Piantare la caviglia sull'asfalto faceva galleggiare
+            // la scarpa di tutto lo spessore della suola.
+            float ankleTarget = hit.point.y +
+                (_walker != null ? _walker.SoleBelowAnkle : 0f) -
+                PlayerHeroRig.SoleTouchDrop;
+            float off = ankleTarget - p.y;
             if (off > MaxPlant || off < -MaxPlant) return 0f;
             footRot = Quaternion.FromToRotation(Vector3.up, hit.normal) * bone.rotation;
             return off;
