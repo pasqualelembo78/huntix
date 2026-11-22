@@ -1,5 +1,6 @@
 using UnityEngine;
 using City.OSM;
+using City.UI;
 using System.Collections.Generic;
 
 namespace City.Player
@@ -181,6 +182,10 @@ namespace City.Player
             ApplyModelVisibility();
             OsmDiag.Log("[Camera][Mode] avvio -> " +
                 (firstPerson ? "PRIMA persona" : "TERZA persona"));
+            // Il pulsante hamburger e' un root DontDestroyOnLoad indipendente
+            // dalla camera: lo si ricontrolla all'avvio e a ogni toggle perche'
+            // un reload puo' lasciarlo disattivato (issue 1A/3A).
+            HamburgerMenu.EnsureVisible();
             _headBobEnabled = PlayerPrefs.GetInt(HeadBobPrefKey, 1) == 1;
             if (SystemInfo.supportsGyroscope)
             {
@@ -219,6 +224,9 @@ namespace City.Player
             string msg = (on ? "PRIMA" : "TERZA") + " persona" +
                 " (occhio=" + FirstPersonEyeHeight().ToString("F2") + "m dal pivot)";
             City.OSM.OsmDiag.Log("[Camera][Mode] " + msg);
+            // Il cambio di vista non deve portare via l'hamburger: lo si
+            // riattiva esplicitamente (idempotente) e lo si traccia nel log.
+            HamburgerMenu.EnsureVisible();
             // Ponte Unity -> Android: la scelta finisce nel viewer dei log
             // dell'app (nessun logcat), coerente con il comando inverso
             // GameManager.OnEvent("toggleCameraMode").

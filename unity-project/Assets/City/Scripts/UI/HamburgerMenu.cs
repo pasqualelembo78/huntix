@@ -17,6 +17,7 @@ namespace City.UI
     public class HamburgerMenu : MonoBehaviour
     {
         private static HamburgerMenu _instance;
+        private static GameObject _menuRoot;
         private GameObject panel;
         private GameObject skinPanel;
         private GameObject profilePanel;
@@ -33,7 +34,75 @@ namespace City.UI
         {
             if (_instance != null) return;
             var go = new GameObject("HamburgerMenu", typeof(HamburgerMenu));
+            _menuRoot = go;
             DontDestroyOnLoad(go);
+        }
+
+        /// <summary>Ripristina il SOLO pulsante hamburger dopo un cambio di
+        /// camera o un reload di scena. Il root e' DontDestroyOnLoad: puo'
+        /// restare disattivato, o perdere il riferimento al Canvas, senza che
+        /// nessun codice lo riattivi. NON apre il pannello e NON tocca gli
+        /// altri HUD. Chiamato da CameraRig all'avvio e a ogni toggle 1A/3A.
+        /// </summary>
+        public static void EnsureVisible()
+        {
+            HamburgerMenu menu = _instance;
+            // Il root viene tenuto a parte: GetComponent lo trova anche se
+            // l'intero GameObject e' stato disattivato (e in quel caso Awake
+            // non viene richiamato, quindi _instance non basta).
+            if (menu == null && _menuRoot != null)
+                menu = _menuRoot.GetComponent<HamburgerMenu>();
+            if (menu == null)
+            {
+                if (UIManager.Instance != null) Ensure(UIManager.Instance);
+                menu = _instance;
+            }
+            if (menu == null)
+            {
+                OsmDiag.Log("[Hamburger][Ensure] menu assente (UIManager non pronto)");
+                return;
+            }
+            menu.RestoreButton();
+        }
+
+        private void RestoreButton()
+        {
+            bool changed = false;
+            if (!gameObject.activeSelf)
+            {
+                gameObject.SetActive(true);
+                changed = true;
+            }
+            if (_canvas == null)
+            {
+                Canvas found = GetComponentInChildren<Canvas>(true);
+                if (found != null) _canvas = found.transform;
+            }
+            bool canvasOk = false;
+            if (_canvas != null)
+            {
+                Canvas cv = _canvas.GetComponent<Canvas>();
+                canvasOk = cv != null;
+                if (cv != null && !cv.enabled)
+                {
+                    cv.enabled = true;
+                    changed = true;
+                }
+                if (!_canvas.gameObject.activeSelf)
+                {
+                    _canvas.gameObject.SetActive(true);
+                    changed = true;
+                }
+                Transform btn = _canvas.Find("Btn_Menu");
+                if (btn != null && !btn.gameObject.activeSelf)
+                {
+                    btn.gameObject.SetActive(true);
+                    changed = true;
+                }
+            }
+            OsmDiag.Log("[Hamburger][Ensure] " +
+                (changed ? "pulsante ripristinato" : "pulsante gia' attivo") +
+                " root=" + gameObject.activeSelf + " canvas=" + canvasOk);
         }
 
         private void Awake()
