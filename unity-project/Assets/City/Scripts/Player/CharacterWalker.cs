@@ -66,6 +66,11 @@ namespace City.Player
         private Quaternion _ikRotL, _ikRotR;
         private float _hipOffsetY;
         private float _hipsBaseY = float.NaN;
+        // OnAnimatorIK puo' essere chiamato piu' volte nello stesso frame se il
+        // controller ha piu' layer con IK Pass. bodyPosition e' ADDITIVO (viene
+        // ricalcolato dall'animazione solo a ogni frame): senza questa guardia
+        // lo stesso delta -0,47 verrebbe sommato due volte (-0,94).
+        private int _bodyWriteFrame = -1;
         private float _legSpanRest = float.NaN;
         private float _groundDiagAt;
         // Il ray e il riepilogo IK hanno throttle SEPARATI: prima condividevano
@@ -442,30 +447,26 @@ namespace City.Player
             float offset = Mathf.Clamp(target, -ikMaxOffset, ikMaxLift);
             _hipOffsetY = Mathf.Lerp(_hipOffsetY, offset, ikSmoothSpeed * Time.deltaTime);
 
+            // FIX COORDINAMENTO IK (galleggiamento): su un avatar HUMANOID
+            // Unity ricompone la posa degli ossi DOPO OnAnimatorIK partendo da
+            // animator.bodyPosition. Scrivere hipsBone.localPosition (vecchio
+            // codice) funzionava solo DENTRO il callback (hipsY=1,04 nel diag)
+            // ma veniva annullato al frame renderizzato (SoleCheck=1,53): il
+            // personaggio restava sospeso ~0,47 m con l'ombra staccata.
+            // Ora il bacino si abbassa scrivendo su bodyPosition, LO STESSO
+            // canale usato da FootIK. I due sistemi restano entrambi attivi e
+            // i loro delta si SOMMANO (FootIK applica il suo _pelvis dopo
+            // aver letto bodyPosition), senza annullarsi ne' accumularsi.
+            // _hipOffsetY e' gia' in metri mondo: nessuna conversione locale.
             if (hipsBone != null)
             {
-                // Cattura ogni frame: il clip corrente (idle/walk/run) puo'
-                // avere un'altezza pelvi diversa; fissarla al primo frame
-                // (idle) rendeva la camminata piu' bassa dell'originale.
-                _hipsBaseY = hipsBone.localPosition.y;
-
-                // _hipOffsetY e' in METRI MONDO (bodySinkLift/footLift lo
-                // sono), mentre localPosition.y e' nelle unita' del parent
-                // dell'osso. Il modello e' scalato (~0.43): scrivere -0.47
-                // direttamente in locale abbasserebbe il bacino di soli
-                // ~0,20 m, lasciando i piedi sospesi. Convertiamo quindi
-                // l'offset mondo -> locale dividendo per la scala Y del
-                // parent (guardia contro scale nulle/degenerate).
-                float worldToLocalY = 1f;
-                Transform hipsParent = hipsBone.parent;
-                float scaleY = hipsParent != null
-                    ? hipsParent.lossyScale.y
-                    : hipsBone.lossyScale.y;
-                if (Mathf.Abs(scaleY) > 1e-4f) worldToLocalY = 1f / scaleY;
-
-                Vector3 hp = hipsBone.localPosition;
-                hp.y = _hipsBaseY + _hipOffsetY * worldToLocalY;
-                hipsBone.localPosition = hp;
+                _hipsBaseY = hipsBone.localPosition.y; // diagnostica invariata
+                if (_bodyWriteFrame != Time.frameCount)
+                {
+                    _bodyWriteFrame = Time.frameCount;
+                    Vector3 body = animator.bodyPosition;
+                    animator.bodyPosition = body + Vector3.up * _hipOffsetY;
+                }
             }
 
             DiagGround("IK", groundRef, footLift, bodySinkLift, offset, _hipOffsetY,
