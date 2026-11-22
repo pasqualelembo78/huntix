@@ -1,0 +1,173 @@
+================================================================================
+HUNTIX - REPORT TECNICO: GALLEGGIAMENTO PLAYER (RIANALISI DALLO ZERO)
+================================================================================
+Data: 22 novembre 2026
+Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
+Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, VERIFICA VISIVA SU DEVICE PENDENTE
+
+================================================================================
+PREMESSA - PERCHE' IL REPORT PRECEDENTE ERA SBAGLIATO
+================================================================================
+Il report del 22 novembre (build 1.16) dichiarava il galleggiamento RISOLTO
+perche' [SoleCheck] mostrava delta = smrMin - feetY ≈ 0,00 ... -0,02 m.
+QUELLA CONCLUSIONE ERA FALSA.
+
+Lo strumento misurava la quantita' sbagliata:
+  smrMin = SkinnedMeshRenderer.bounds.min.y
+I bounds degli SMR non sono i vertici renderizzati. Sul modello Remy la scarpa
+ha:
+
+  vertice piu' basso (suola vera)   Y =  0,0001  (unita' modello)
+  SMR.bounds.min                   Y = -0,2813  (unita' modello)
+  --------------------------------------------------------------
+  i bounds scendono                     0,2813  SOTTO la suola reale
+
+A scala runtime (0,434) sono 0,122 m. Il "delta≈0" del vecchio [SoleCheck]
+significava solo che i bounds gonfiato coincidevano con il piede fisico: la
+suola vera era ancora ~12 cm SOPRA il terreno. E' per questo che i log
+"allineati" e la vista in gioco continuavano a contraddirsi.
+
+Il commit 9c06c96 NON era sbagliato nel suo principio (coordinare i due IK su
+animator.bodyPosition), ma non poteva risolvere il difetto: partiva da due
+misure geometriche errate.
+
+================================================================================
+VERIFICA 1 - L'APK CONTENEVA DAVVERO I FIX DICHIARATI?
+================================================================================
+SI'. APK: app/build/outputs/apk/release/app-release-signed.apk
+  192.413.715 byte, sha256
+  01a1831ba1893292aefd119055d459b9184de681fbe25727d1ddbdb7b6b8e563
+
+Nel global-metadata.dat dell'APK sono presenti [SoleCheck], SoleTouchDrop,
+FootIK.cs, bodyPosition, GroundDiag.cs. Quindi NON e' una build vecchia: il
+problema era nella diagnosi, non nell'installazione.
+
+================================================================================
+VERIFICA 2 - LA CAUSA REALE (numeri dal log del device 10:49)
+================================================================================
+Dopo 9c06c96, righe [SoleCheck]:
+
+  feetY=0,03  hipsY=1,07  -> hipsY - feetY = 1,04
+  feetY=0,17  hipsY=1,21  -> hipsY - feetY = 1,04
+
+Il bacino veniva tenuto esattamente a feetY + 1,04 m. Quel 1,04 e' il vecchio
+MeasureLegSpan() = cc.height * 0,52 (capsula da 2 m).
+
+GEOMETRIA VERA (audit Unity Editor sul prefab PlayerHero, scala 0,434):
+  spessore scarpa (caviglia -> suola)   0,1070 m
+  bacino -> suola                       0,9076 m
+  portata reale della gamba             0,8006 m  (= 0,9076 - 0,1070)
+
+Il walker chiedeva quindi alla gamba di coprire 1,04 m mentre puo' arrivare a
+0,80 m: mancavano ~0,24 m. L'IK andava in saturazione, la caviglia si fermava
+a ~0,21 m e la suola restava a ~0,10 m da terra. Da qui il galleggiamento e
+l'ombra staccata.
+
+Cause concorrenti (tutte con la stessa radice: "bounds/approx invece di
+geometria misurata"):
+  A) MeasureLegSpan usava cc.height*0,52 = 1,04 invece di 0,9076.
+  B) La target IK della caviglia era h.point.y + 0,02 (caviglia a filo
+     d'asfalto) invece di h.point.y + spessoreScarpa - SoleTouchDrop. La
+     suola restava sospesa dello spessore della scarpa (~0,11 m).
+  C) [SoleCheck] misurava i bounds, non la suola: nascondeva A e B.
+
+Nota: dopo 9c06c96 anche FootIK era stato allineato al target sbagliato di
+CharacterWalker, quindi i due IK concordavano... sulla quota errata.
+
+================================================================================
+FIX APPLICATI (non ancora presenti nell'APK 1.16)
+================================================================================
+1) Nuovo unity-project/Assets/City/Scripts/Player/SoleGeometry.cs
+   Misura i VERTICI SKINNATI reali (con pesi e bindpose), non i bounds:
+     SoleBelowAnkle = caviglia - suola   (spessore scarpa, 0,1070 m)
+     HipsToSole     = bacino  - suola    (0,9076 m)
+   Installato da PlayerHeroRig.Ensure subito dopo LayFootOnAnchor, in bind
+   pose (prima della prima valutazione dell'Animator): nessuna costante
+   numerica, resta corretto se cambia modello o scala.
+
+2) CharacterWalker.cs
+   - MeasureLegSpan() usa HipsToSole (0,9076) invece di cc.height*0,52.
+   - target caviglia = h.point.y + SoleBelowAnkle - SoleTouchDrop.
+   - bodySinkLift = (groundRef + HipsToSole - SoleTouchDrop) - hipsY.
+   Il bacino scende di ~0,16 m e la portata richiesta (0,8006 m) diventa
+   ESATTAMENTE la portata reale della gamba: l'IK non satura piu'.
+
+3) FootIK.cs
+   PlantOffset usa lo stesso target caviglia (spessore scarpa - SoleTouchDrop)
+   del walker: i due sistemi IK restano entrambi attivi e concordano sulla
+   stessa quota. Nessuna disattivazione.
+
+4) GroundDiag.cs
+   [SoleCheck] ora riporta:
+     trueSole = suola reale (vertici skinnati)
+     suolo    = trueSole - superficie fisica sotto i piedi
+     caviglia = quota ossa caviglia
+     boundsMin = vecchio valore (per confronto)
+   Il controllo visivo sul device diventa: suolo ≈ -0,03 (SoleTouchDrop).
+
+5) Stub cscheck (BoneWeight, Mesh.boneWeights/bindposes,
+   Transform.localToWorldMatrix) per far compilare SoleGeometry fuori Unity.
+
+VINCOLI RISPETTATI:
+  - I due sistemi IK restano attivi.
+  - Nessun hit piu' alto della colonna, nessun proxy altimetrico da edifici.
+  - WorldHeights.Flat e il toggle follower intatti.
+  - Nessun rialzo prefab, nessun DEM forzato, nessuna costante numerica casuale.
+  - Transazioni AnyState Act_* e Walking.fbx non toccate.
+
+================================================================================
+VERIFICA 3 - CONTROLLI STATICI (fatti qui, senza device)
+================================================================================
+- backend/preprocessing/cscheck/check.sh: Compilation succeeded, 185 warning
+  (numero invariato), CSCHECK OK.
+- Audit Unity Editor (City.Editor.PlayerSoleAudit.Run):
+
+  MODELLO vertY=0.0001..3.7849 boundsMin=-0.2813 ERRORE_BOUNDS=0.2813
+  RUNTIME scala=0.4340 spessoreScarpa=0.1070 bacinoSuola=0.9076
+          portataGamba=0.8006
+  OBIETTIVO caviglia=0.0770 bacino=0.8776
+            distanzaRichiesta=0.8006 portata=0.8006 (scarto=0.0000)
+  POSA suolaReale=-0.0300 (target=-0.0300)
+       boundsMin=-0.1521 (i bounds restano 0,1221 SOTTO la suola)
+
+  La distanza richiesta alle gambe e' UGUALE alla portata reale: geometria
+  autoconsistente. Lo scarto precedente di 2,5 cm emerso in una simulazione
+  IK era un artefatto del test: in batch/Edit mode OnAnimatorIK NON viene
+  chiamato (verificato: 0 call su 30 anim.Update). La simulazione e' stata
+  rimossa dall'audit per non produrre un falso allarme.
+
+- Verifica visiva Editor: docs/verifica_suola_player.png
+  Il modello e' posizionato con la suola reale a -0,03 (SoleTouchDrop).
+  Marcatori: VERDE suola reale, ROSSO suolo, GIALLO vecchi bounds (0,12 m
+  sotto la suola: la ragione del falso "delta=0"), CYAN caviglia, MAGENTA
+  bacino.
+
+================================================================================
+VERIFICA 4 - VERIFICA VISIVA SU DEVICE (IN ATTESA - NON DICHIARARE RISOLTO)
+================================================================================
+NON ci sono device Android collegati qui (adb devices = vuoto), quindi NON
+posso fare io lo screenshot fisico ne' confermare l'ombra proiettata.
+
+Per la verifica definitiva serve la NUOVA APK (con i fix qui sopra, non la
+1.16) e il viewer di log dentro l'app (NON adb logcat):
+
+  1) Aprire la citta', attendere il caricamento (senza "Salta attesa").
+  2) Aprire il visualizzatore log in-app e cercare:
+       [SoleGeometry] suola=... spessoreScarpa=0.107 bacinoSuola=0.908
+       [SoleCheck] ... suolo=-0.03  caviglia=0.08  hipsY≈0.88
+     Se "suolo" e' ≈ -0,03 la suola e' a terra (3 cm di affondamento voluto).
+     Se "suolo" resta > 0,05 il fix non e' entrato nella build.
+  3) Guardare il personaggio a schermo, fermo e in movimento:
+       - suole appoggiate sull'asfalto/marciapiede, non sospese;
+       - postura naturale, nessuna inclinazione od offset anomali;
+       - ombra che parte dai piedi;
+       - salendo su un cordolo, hipsY e caviglia seguono il terreno.
+
+ solo dopo questa conferma visiva il difetto potra' essere dichiarato risolto.
+
+================================================================================
+STATO COMMIT / PUSH
+================================================================================
+Nessun push effettuato, come richiesto. I pezzi sono stati committati
+separatamente con messaggi in italiano.
+================================================================================
