@@ -3,7 +3,17 @@ HUNTIX - REPORT TECNICO: GALLEGGIAMENTO PLAYER (RIANALISI DALLO ZERO)
 ================================================================================
 Data: 22 novembre 2026
 Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
-Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, VERIFICA VISIVA SU DEVICE PENDENTE
+Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, NUOVA APK COMPILATA,
+       VERIFICA VISIVA SU DEVICE ANCORA PENDENTE
+
+NUOVA APK DA INSTALLARE (contiene i fix di questa rianalisi):
+  app/build/outputs/apk/release/app-release-signed.apk
+  192.417.811 byte, 22 novembre 2026 11:24
+  sha256 a5c171fc5c21ab8690b4b8ce90e413cbfc8f42fbb3ff7734fcc6932ddac7278d
+  AAR unityLibrary-release.aar rigenerato alle 11:22 dalle nuove fonti.
+  Verificato nel global-metadata.dat: SoleGeometry, SoleBelowAnkle,
+  HipsToSole, trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
+  (la vecchia APK 1.16, sha256 01a1831b..., NON conteneva questi marker)
 
 ================================================================================
 PREMESSA - PERCHE' IL REPORT PRECEDENTE ERA SBAGLIATO
@@ -147,9 +157,10 @@ VERIFICA 4 - VERIFICA VISIVA SU DEVICE (IN ATTESA - NON DICHIARARE RISOLTO)
 ================================================================================
 NON ci sono device Android collegati qui (adb devices = vuoto), quindi NON
 posso fare io lo screenshot fisico ne' confermare l'ombra proiettata.
+La NUOVA APK e' stata compilata (dati in cima al report): installarla sul
+device, sostituendo la 1.16.
 
-Per la verifica definitiva serve la NUOVA APK (con i fix qui sopra, non la
-1.16) e il viewer di log dentro l'app (NON adb logcat):
+Per la verifica definitiva usa il viewer di log dentro l'app (NON adb logcat):
 
   1) Aprire la citta', attendere il caricamento (senza "Salta attesa").
   2) Aprire il visualizzatore log in-app e cercare:
