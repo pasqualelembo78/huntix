@@ -6,16 +6,17 @@ Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
 Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, NUOVA APK COMPILATA,
        VERIFICA VISIVA SU DEVICE ANCORA PENDENTE
 
-ULTIMA APK DA INSTALLARE (fix galleggiamento + camera + regressioni 20:12):
+ULTIMA APK DA INSTALLARE (fix suola su superficie misurata, 23:10):
   app/build/outputs/apk/release/app-release-signed.apk
-  192.479.251 byte, 22 novembre 2026 20:12
-  sha256 49d2b66c9e9d1cbb7561219dbbefe35085bb8cffb6c6783657694eec0a0e1e76
-  AAR unityLibrary-release.aar rigenerato dalla build delle 20:10 (IL2CPP
+  192.479.251 byte, 22 novembre 2026 23:10
+  sha256 6f2ca3082b71e38af0cbc06592618af1439fabb7b1859d694e36c8cd9502155b
+  AAR unityLibrary-release.aar rigenerato dalla build delle 23:05 (IL2CPP
   ricompilato, NON solo Gradle). Build: "BUILD SUCCESSFUL", firma verificata.
   Verificato nel global-metadata.dat: SoleGeometry, SoleBelowAnkle,
   HipsToSole, HeadToSole, cameraFirstPerson, toggleCameraMode,
   trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
   Remy.fbx.meta: isReadable=1 anche dopo la build (il baker non lo ripristina).
+  APK precedente (20:12): sha256 49d2b66c9e9d1c... (superata).
   APK precedente (18:35): 192.421.907 byte, sha256 43122eeffaed... (superata).
   (la vecchia APK 1.16, sha256 01a1831b..., NON conteneva questi marker)
 
@@ -248,15 +249,62 @@ B) HAMBURGER SPARITO PASSANDO IN 1A.
    se root e canvas erano attivi: da li' va cercata la causa, non nella camera.
 
 ================================================================================
-VERIFICA FINALE SULL'APK DELLE 20:12 (DA FARE SUL DEVICE)
+VERIFICA 7 - ANALISI LOG 22:55 (ANCORA 2-4 CM SOPRA)
 ================================================================================
-  1) Installare l'APK sopracitata (sostituisce quella delle 18:35).
-  2) Entrare in citta': ZERO errori rossi "isReadable is false" e presenza
-     di [SoleGeometry] con spessoreScarpa/bacinoSuola non NA.
-  3) [SoleCheck] suolo≈-0.03, suole appoggiate, ombra dai piedi.
-  4) Premere "1A": hamburger ancora visibile a destra, marker
-     [Hamburger][Ensure] presente, piu' [Camera][Mode] PRIMA persona.
-  5) Premere "3A": hamburger visibile e [Camera][Mode] TERZA persona.
+Log: docs/huntix_log_20261122_225549.txt (sessione 22:54-22:55).
+
+CONFERME (i fix delle 20:12 funzionano):
+  - Nessun errore "isReadable is false" nella sessione nuova.
+  - [SoleGeometry] suola=-0.382 caviglia=-0.275 spessoreScarpa=0.107
+    bacinoSuola=0.908 testaSuola=1.447  -> misura geometrica attiva.
+  - [Hamburger][Ensure] pulsante gia' attivo root=True canvas=True.
+  - [SoleCheck] delta (suola - piedi fisici) = -0.03/-0.05: la suola e' gia'
+    PIU' BASSA del riferimento fisico, quindi non e' piu' l'IK "sbagliato".
+
+MISURE DEL RESIDUO (sull'asfalto):
+  [GroundDiag][Chain] colliders=Strade@0.03 ... feetY=0.08
+  [CharacterWalker][GroundRay] bestY=0.03 groundRef=0.08 gap=0.05
+  [SoleCheck] trueSole=0.05 feetY=0.08 delta=-0.03 suolo=+0.02
+  [WalkDiag] maxErr=0.030 corr/s=31
+  [CharacterWalker][Ground][IK] hipsY=1.58 (pre-write), applied=-0.60,
+    bodySinkLift=-0.62 -> CLAMP a ikMaxOffset=0.60.
+
+CAUSA (tutta misurata, nessuna costante inventata):
+  1) Il CharacterController ha skinWidth=0,05: la base capsula non puo'
+     scendere sotto superficie+0,05. La clearance del follower era 0,02,
+     quindi il target (0,05) era INRAGGIUNGIBILE di 3 cm: err=-0,03 perenne
+     e 31 correzioni/s rifiutate dal CC.
+  2) L'IK usava feetY (=0,08) come "suolo" invece della superficie vera
+     (0,03): il bacino restava ~7 cm troppo alto (0,98 contro 0,91 attesi).
+     La gamba, lunga HipsToSole-SoleBelowAnkle=0,801 m, non arrivava alla
+     caviglia target 0,107 m (serve 0,873 m): IK bloccato, suola +2/+4 cm.
+  3) ikMaxOffset=0,60 tagliava ulteriormente 2-3 cm di sink necessario.
+
+FIX (commit 73bbf75):
+  - groundRef dell'IK = quota MISURATA dai raggi dei piedi (_footSurfaceY),
+    non il fondo del CharacterController; fallback a feetY se nessun hit.
+  - target del follower = superficie + max(clearance, skinWidth reale).
+  - caviglia IK = superficie + SoleBelowAnkle, senza SoleTouchDrop doppio
+    (stessa geometria nei due sistemi IK, entrambi ancora attivi).
+  - ikMaxOffset 0,60 -> 0,75 (misurato: servono 0,64 m).
+
+MARKER ATTESI DOPO QUESTA APK:
+  - [CharacterWalker][Ground][IK] groundRef=0.03 (era 0.08) su Strade@0.03;
+    applied non piu' fermo al clamp -0.60.
+  - [WalkDiag] maxErr=0.00 e corr/s vicino a 0 (follower non piu' in lotta).
+  - [SoleCheck] suolo ≈ 0.00 (eres +/- 0.01), caviglia ≈ 0.14, hipsY ≈ 0.91.
+  - Nessun "isReadable is false", hamburger presente in 1A e 3A.
+
+================================================================================
+VERIFICA FINALE SULL'APK DELLE 23:10 (DA FARE SUL DEVICE)
+================================================================================
+  1) Installare l'APK sopracitata (sostituisce quella delle 20:12).
+  2) Entrare in citta': ZERO errori rossi, [SoleGeometry] non NA e
+     [SoleCheck] suolo ≈ 0.00, suole appoggiate, ombra che parte dai piedi.
+  3) Camminare su asfalto, marciapiede e cordoli: i piedi devono seguire il
+     terreno senza scatti ne' affondamenti.
+  4) Premere "1A": hamburger ancora visibile, [Camera][Mode] PRIMA persona.
+  5) Premere "3A": hamburger visibile, [Camera][Mode] TERZA persona.
   Solo dopo questa verifica visiva il galleggiamento sara' dichiarato risolto.
 
 ================================================================================
@@ -269,5 +317,8 @@ separatamente con messaggi in italiano:
   c31daa6 Bridge switch camera: comando Android e log Unity
   9af09fb fix: abilita Read/Write su Remy per misurare la suola
   9b189e8 fix: ripristina l'hamburger al cambio di camera
-  (segue commit del report)
+  e5781f1 docs: registra i fix delle regressioni e la APK delle 20:12
+  73bbf75 fix: appoggia la suola sulla superficie misurata, non sul fondo
+          del collider
+  (segue commit del report e del log 22:55)
 ================================================================================
