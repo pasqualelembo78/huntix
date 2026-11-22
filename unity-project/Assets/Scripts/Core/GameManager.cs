@@ -162,6 +162,28 @@ namespace Huntix.Core
                 return;
             }
 
+            // Doppia modalita' camera (prima/terza persona): comando dal
+            // bottone in-game e dal viewer dei log Android, stesso canale del
+            // follower. "setCameraMode" accetta true/false oppure prima/first.
+            if (message.IndexOf("toggleCameraMode", StringComparison.Ordinal) >= 0)
+            {
+                var camRig = City.Player.CameraRig.Instance;
+                if (camRig != null) camRig.ToggleFirstPerson();
+                Debug.Log("[GameManager] CameraMode -> " +
+                    (camRig != null && camRig.firstPerson ? "PRIMA" : "TERZA"));
+                return;
+            }
+            if (message.IndexOf("setCameraMode", StringComparison.Ordinal) >= 0)
+            {
+                var camRig = City.Player.CameraRig.Instance;
+                bool first = message.IndexOf("true", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    message.IndexOf("prima", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    message.IndexOf("first", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (camRig != null) camRig.SetFirstPerson(first);
+                Debug.Log("[GameManager] CameraMode set -> " + (first ? "PRIMA" : "TERZA"));
+                return;
+            }
+
             // GIORNO 5: toggle del head bob dal viewer dei log Android (utile
             // per chi soffre il motion sickness). Stesso canale del follower.
             if (message.IndexOf("toggleHeadBob", StringComparison.Ordinal) >= 0)

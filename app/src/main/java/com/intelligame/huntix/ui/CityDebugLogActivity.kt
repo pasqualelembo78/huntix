@@ -136,6 +136,26 @@ class CityDebugLogActivity : AppCompatActivity() {
         })
         header.addView(btnRow3)
 
+        // Switch camera prima/terza persona comandato dall'app (ponte
+        // Android -> Unity). Lo stato persistente e della UI resta in Unity.
+        val btnRow4 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 4.dp(), 0, 0)
+            gravity = Gravity.END
+        }
+        btnRow4.addView(smallBtn("CAM 1A/3A", "#1565C0") {
+            try {
+                StoreUnityBridge.sendToUnityIfAlive(
+                    "GameManager", "OnEvent", "{\"action\":\"toggleCameraMode\"}")
+                Toast.makeText(this, "Camera commutata: vedi [Camera][Mode] nel log",
+                    Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Comando non inviato: ${e.message}",
+                    Toast.LENGTH_SHORT).show()
+            }
+        })
+        header.addView(btnRow4)
+
         // Log text
         logTextView = TextView(this).apply {
             textSize = 11f; typeface = Typeface.MONOSPACE
