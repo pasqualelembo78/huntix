@@ -21,6 +21,18 @@ namespace City.Player
         /// resta indietro anche a player fermo (camGap=0,79 misurato): oltre
         /// questa distanza la agganciamo al punto desiderato.</summary>
         private const float MaxSmoothGap = 0.35f;
+        /// <summary>Tetto del tempo di vista: il device gira a 6-10 fps (misurato
+        /// nei log 23:25/23:28), quindi il frame reale dura 0,10-0,16 s. Usare
+        /// qui PlayerController.MaxFrameStepS (0,05 = passo della fisica) faceva
+        /// avanzare SmoothDamp a 1/3 della velocita' reale: la camera restava
+        /// indietro e scattava a ogni superamento di MaxSmoothGap (camGap=0,35
+        /// nel log). La vista usa il tempo REALE, con un tetto contro i freeze.</summary>
+        private const float MaxViewStepS = 0.25f;
+        /// <summary>True nel frame in cui la camera e' stata agganciata al
+        /// bersaglio per evitare il ritardo: diagnosticabile da [WalkDiag].</summary>
+        public bool LastSnap { get; private set; }
+        /// <summary>Delta tempo REALE usato dalla vista (prima del tetto).</summary>
+        public float LastFrameDt { get; private set; }
         public float orbitSpeed = 5f;
         // Giroscopio (Android): gira la visuale ruotando il telefono, in
         // aggiunta al drag sul lato destro. Se ruota al contrario inverti
@@ -532,7 +544,9 @@ namespace City.Player
             transform.position -= _bobApplied;
             _bobApplied = Vector3.zero;
             LastObstaclePull = false;
-            float dt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
+            LastSnap = false;
+            LastFrameDt = Time.deltaTime;
+            float dt = Mathf.Min(Time.deltaTime, MaxViewStepS);
 
             // In guida la camera resta SEMPRE in terza persona alta dietro
             // l'auto (vede il veicolo da sopra): gli override indoor di
@@ -638,6 +652,7 @@ namespace City.Player
             {
                 smoothed = finalDesired;
                 velocity = Vector3.zero;
+                LastSnap = true;
             }
             transform.position = smoothed;
             // Diagnostiche PRIMA del bob: devono misurare il ritardo della

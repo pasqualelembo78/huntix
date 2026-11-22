@@ -31,6 +31,7 @@ namespace City.Player
         private const float ProbeDown = 0.85f;  // portata sotto il piede
         private const float MaxPlant = GroundSnapper.StepAssistHeight; // 0,35 m
         private const float IkRate = 12f;       // /s smorzamento posa piedi/bacino
+        private const float MaxViewStepS = 0.25f; // tetto anti-freeze per il filtro
         private const float MaxPelvisDrop = 0.18f;
         private const float FootWeight = 0.85f;
         private const float RotWeight = 0.45f;
@@ -120,8 +121,12 @@ namespace City.Player
             float lo = lb != null ? PlantOffset(lb, out lr) : 0f;
             float ro = rb != null ? PlantOffset(rb, out rr) : 0f;
 
-            float dt = Mathf.Min(Time.deltaTime, PlayerController.MaxFrameStepS);
-            float a = (IkRate * dt) / (1f + IkRate * dt);
+            // A 6-10 fps il frame reale dura 0,10-0,16 s: usare il passo
+            // fisico (0,05) rendeva le caviglie 3x piu' lente del corpo e
+            // il filtro lineare non era frame-rate independent. Esponenziale
+            // sul tempo reale (con tetto anti-freeze), sempre 0 < a < 1.
+            float dt = Mathf.Min(Time.deltaTime, MaxViewStepS);
+            float a = 1f - (float)System.Math.Exp(-IkRate * dt);
             if (!_seeded)
             {
                 _leftOff = lo;

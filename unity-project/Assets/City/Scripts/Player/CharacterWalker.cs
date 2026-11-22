@@ -78,10 +78,18 @@ namespace City.Player
         private int _bodyWriteFrame = -1;
         private float _legSpanRest = float.NaN;
         /// <summary>Quota della superficie calpestabile misurata dai raggi dei
-        /// piedi in questo frame. Il fondo del CharacterController sta
-        /// skinWidth SOPRA l'asfalto, quindi non e' un riferimento valido per
-        /// l'IK: senza questo valore il bacino resta 5 cm troppo alto.</summary>
+        /// piedi in questo frame. Serve alle caviglia IK (contatto esatto), NON
+        /// al bacino: i raggi sono campioni discreti e a 7 fps saltano da
+        /// Strade@0,03 a Terreno@-0,05 a ogni passo.</summary>
         private float _footSurfaceY = float.NaN;
+        /// <summary>Riferimento continuo del bacino e offset applicato: esposti
+        /// per [WalkDiag] cosi' si misura lo scatto invece di indovinarlo.</summary>
+        public float LastGroundRef { get; private set; }
+        public float LastHipOffsetY { get { return _hipOffsetY; } }
+        /// <summary>Tetto del delta per i filtri IK: il device gira a 6-10 fps,
+        /// con Time.deltaTime grezzo (0,10-0,16 s) un Lerp lineare a 12/s
+        /// superava 1 e diventava uno snap.</summary>
+        private const float MaxIkStepS = 0.25f;
         private float _groundDiagAt;
         // Il ray e il riepilogo IK hanno throttle SEPARATI: prima condividevano
         // _groundDiagAt e il ray (chiamato prima) consumava sempre lo slot,
@@ -430,17 +438,21 @@ namespace City.Player
             FootIKStep(AvatarIKGoal.LeftFoot, ref _ikWeightL, ref _ikPosL, ref _ikRotL);
             FootIKStep(AvatarIKGoal.RightFoot, ref _ikWeightR, ref _ikPosR, ref _ikRotR);
 
-            // groundRef DEVE essere la superficie MISURATA, non il livello
-            // piedi del CharacterController: il CC lascia skinWidth (0,05 m)
-            // tra la base capsula e l'asfalto e il follower aggiunge la
-            // clearance. Usare feetY teneva la pelvi 5 cm troppo alta, la
-            // gamba non raggiungeva la caviglia target e la suola galleggiava.
-            // Se i raggi non trovano nulla si torna al vecchio feetY.
+            // groundRef = superficie SOTTO il collider: feetY - skinWidth.
+            // Il CC lascia skinWidth (0,05 m misurati) tra la base capsula e
+            // l'asfalto, quindi sottrarlo rende il riferimento continuo (il CC
+            // e' substeppato) E corretto (suolo=0.00 nei log 23:28).
+            // I raggi dei piedi restano la sorgente delle SINGLE caviglie:
+            // usarli anche per il bacino faceva saltare groundRef da 0,03 a
+            // -0,05 a ogni passo, con scatti visibili del personaggio a 7 fps.
             float feetFromPivot = (cc != null)
                 ? cc.height * 0.5f - cc.center.y
                 : 1f;
             float feetY = transform.position.y - feetFromPivot;
-            float groundRef = float.IsNaN(_footSurfaceY) ? feetY : _footSurfaceY;
+            float groundRef = (cc != null)
+                ? feetY - cc.skinWidth
+                : (float.IsNaN(_footSurfaceY) ? feetY : _footSurfaceY);
+            LastGroundRef = groundRef;
 
             // Compensazione AFFONDAMENTO clip baked: Idle/Walk/Run Mixamo hanno
             // ogniuno una quota pelvi diversa (-1.5 m in Run se il fix d'import
@@ -482,7 +494,13 @@ namespace City.Player
                 ? bodySinkLift               // bacino troppo alto -> SCENDI
                 : Mathf.Max(footLift, bodySinkLift);
             float offset = Mathf.Clamp(target, -ikMaxOffset, ikMaxLift);
-            _hipOffsetY = Mathf.Lerp(_hipOffsetY, offset, ikSmoothSpeed * Time.deltaTime);
+            // Filtro esponenziale con tempo REALE (tetto anti-freeze): a 7 fps
+            // ikSmoothSpeed*Time.deltaTime = 1,7 > 1 e il Lerp diventava uno
+            // snap istantaneo del bacino a ogni frame. 1-exp(-k*dt) resta <1
+            // e mantiene la stessa costante di tempo a qualsiasi frame rate.
+            float ikDt = Mathf.Min(Time.deltaTime, MaxIkStepS);
+            _hipOffsetY += (offset - _hipOffsetY) *
+                (1f - (float)System.Math.Exp(-ikSmoothSpeed * ikDt));
 
             // FIX COORDINAMENTO IK (galleggiamento): su un avatar HUMANOID
             // Unity ricompone la posa degli ossi DOPO OnAnimatorIK partendo da

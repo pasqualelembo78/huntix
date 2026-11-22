@@ -519,6 +519,12 @@ namespace City.Player
                 " camGap=" + (rig != null ? rig.LastSmoothGap : 0f).ToString("F2", inv) +
                 " camDist=" + (rig != null ? rig.LastTargetDistance : 0f).ToString("F2", inv) +
                 " camPush=" + (rig != null && rig.LastObstaclePull ? "Y" : "N") +
+                // Diagnostica del tremito a 6-10 fps: dt reale, snap della
+                // camera, riferimento continuo del bacino e offset IK.
+                " dt=" + (rig != null ? rig.LastFrameDt : 0f).ToString("F2", inv) +
+                " camSnap=" + (rig != null && rig.LastSnap ? "Y" : "N") +
+                " gRef=" + (walker != null ? walker.LastGroundRef : 0f).ToString("F2", inv) +
+                " hipOff=" + (walker != null ? walker.LastHipOffsetY : 0f).ToString("F2", inv) +
                 // RIFLESSO UOVA (sola lettura): distanza dal contenitore scelto
                 // nell'intero corrente. Non rivela l'uovo, non tocca il
                 // mini-gioco: serve solo a leggere l'avvicinamento al cassetto
