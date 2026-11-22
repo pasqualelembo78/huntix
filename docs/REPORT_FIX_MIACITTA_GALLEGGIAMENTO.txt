@@ -6,14 +6,17 @@ Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
 Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, NUOVA APK COMPILATA,
        VERIFICA VISIVA SU DEVICE ANCORA PENDENTE
 
-NUOVA APK DA INSTALLARE (contiene i fix di questa rianalisi e lo switch camera):
+ULTIMA APK DA INSTALLARE (fix galleggiamento + camera + regressioni 20:12):
   app/build/outputs/apk/release/app-release-signed.apk
-  192.421.907 byte, 22 novembre 2026 18:35
-  sha256 43122eeffaedc12ef8a8e5c5b29b4fff83337fd4149fb77bcd71b72775af75fa
-  AAR unityLibrary-release.aar rigenerato dalla build delle 18:35.
+  192.479.251 byte, 22 novembre 2026 20:12
+  sha256 49d2b66c9e9d1cbb7561219dbbefe35085bb8cffb6c6783657694eec0a0e1e76
+  AAR unityLibrary-release.aar rigenerato dalla build delle 20:10 (IL2CPP
+  ricompilato, NON solo Gradle). Build: "BUILD SUCCESSFUL", firma verificata.
   Verificato nel global-metadata.dat: SoleGeometry, SoleBelowAnkle,
   HipsToSole, HeadToSole, cameraFirstPerson, toggleCameraMode,
   trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
+  Remy.fbx.meta: isReadable=1 anche dopo la build (il baker non lo ripristina).
+  APK precedente (18:35): 192.421.907 byte, sha256 43122eeffaed... (superata).
   (la vecchia APK 1.16, sha256 01a1831b..., NON conteneva questi marker)
 
 ================================================================================
@@ -210,6 +213,53 @@ cercare le uova tra i cespugli; in terza persona invita a guardare i
 nascondigli. Nessuna modifica a spawn, rarita' o progresso uova.
 
 ================================================================================
+VERIFICA 6 - REGRESSIONI DOPO LA BUILD DELLE 18:35
+================================================================================
+Log esaminato: docs/huntix_log_20261122_195149.txt (viewer log in-app).
+
+A) ERRORI ROSSI ALL'INGRESSO: "Not allowed to access vertices on mesh
+   'Eyes'/'Hair'/'Body'/... (isReadable is false)".
+   Causa: SoleGeometry.SoleY legge mesh.vertices su Remy.fbx, il cui meta
+   aveva isReadable: 0. Il baker dei morph lo abilita solo temporaneamente
+   in editor e lo rimette a false; a runtime le mesh FBX restano non leggibili.
+   Conseguenza peggiore degli errori a schermo: Capture() usciva subito,
+   SoleBelowAnkle / HipsToSole / HeadToSole restavano NaN, CharacterWalker
+   ricadeva su cc.height*0,52 (1,04 m contro 0,91 m misurati) e FootIK non
+   applicava lo spessore scarpa. Il fix del galleggiamento NON era attivo.
+   Fix: isReadable: 1 in Assets/Art/Mixamo/Remy.fbx.meta (verificato dopo
+   la build: il baker non lo ripristina perche' lo trova gia' true).
+   Atteso nel log: nessun "isReadable is false" e la riga
+     [SoleGeometry] suola=... spessoreScarpa=0.107 bacinoSuola=0.908
+   Prima compariva solo [SoleCheck], perche' dopo il bake dei morph le mesh
+   sostituite sono leggibili e la diagnostica funzionava, ma troppo tardi.
+
+B) HAMBURGER SPARITO PASSANDO IN 1A.
+   Dal log non risulta alcun toggle verso PRIMA persona ne' comando bridge;
+   non esiste codice che nasconda HamburgerMenu in base alla camera e non ci
+   sono eccezioni. Il sospetto e' uno stato del root DontDestroyOnLoad
+   (disattivato, o riferimento al Canvas perso) dopo un reload di scena.
+   Fix: HamburgerMenu.EnsureVisible(), chiamato da CameraRig all'avvio e a
+   ogni SetFirstPerson: riattiva root, Canvas e Btn_Menu senza aprire il
+   pannello, ed e' idempotente. Nuovo marker nel log:
+     [Hamburger][Ensure] pulsante gia' attivo root=True canvas=True
+   oppure
+     [Hamburger][Ensure] pulsante ripristinato root=True canvas=True
+   Se il pulsante non dovesse comparire ancora in 1A, il prossimo log dira'
+   se root e canvas erano attivi: da li' va cercata la causa, non nella camera.
+
+================================================================================
+VERIFICA FINALE SULL'APK DELLE 20:12 (DA FARE SUL DEVICE)
+================================================================================
+  1) Installare l'APK sopracitata (sostituisce quella delle 18:35).
+  2) Entrare in citta': ZERO errori rossi "isReadable is false" e presenza
+     di [SoleGeometry] con spessoreScarpa/bacinoSuola non NA.
+  3) [SoleCheck] suolo≈-0.03, suole appoggiate, ombra dai piedi.
+  4) Premere "1A": hamburger ancora visibile a destra, marker
+     [Hamburger][Ensure] presente, piu' [Camera][Mode] PRIMA persona.
+  5) Premere "3A": hamburger visibile e [Camera][Mode] TERZA persona.
+  Solo dopo questa verifica visiva il galleggiamento sara' dichiarato risolto.
+
+================================================================================
 STATO COMMIT / PUSH
 ================================================================================
 Nessun push effettuato, come richiesto. I pezzi sono stati committati
@@ -217,5 +267,7 @@ separatamente con messaggi in italiano:
   2299514 Camera prima persona: altezza occhio misurata dall'armatura
   e5e04b5 Pulsante camera: etichetta coerente e toast con riflesso uova
   c31daa6 Bridge switch camera: comando Android e log Unity
+  9af09fb fix: abilita Read/Write su Remy per misurare la suola
+  9b189e8 fix: ripristina l'hamburger al cambio di camera
   (segue commit del report)
 ================================================================================
