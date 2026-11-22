@@ -101,14 +101,13 @@ namespace City.Player
 
         /// <summary>
         /// PROVA DECISIVA sul galleggiamento: misura in LateUpdate, cioe' DOPO
-        /// animazione e AfterAnimator IK, la suola VISIVA (bounds reali degli
-        /// SkinnedMeshRenderer) e il piede FISICO (CharacterController).
-        ///Il [GroundDiag][Chain] di Update viene campionato prima che l'IK
-        /// venga applicato, quindi puo' mostrare il bacino alto anche quando
-        /// il frame renderizzato e' corretto: qui si legge lo stesso frame che
-        /// va a schermo. Se delta resta ~0,47 m l'IK viene annullato a valle;
-        /// se delta ~0 il personaggio e' a terra e l'ombra staccata e' un
-        /// artefatto di un build vecchio.
+        /// animazione e OnAnimator IK, la suola VISIVA (vertici SKINNATI reali,
+        /// non i bounds SMR) e il piede FISICO (CharacterController). I bounds
+        /// SMR del modello Remy scendono 0,28 unita' modello SOTTO la scarpa:
+        /// il vecchio delta calcolato sui bounds diceva 0 con la suola ancora
+        /// a 7-10 cm da terra. "suolo" e' la distanza dalla superficie fisica
+        /// under i piedi; "caviglia" permette di verificare che l'IK I'alzi
+        /// dello spessore corretto della scarpa.
         /// </summary>
         private void LateUpdate()
         {
@@ -133,7 +132,14 @@ namespace City.Player
                 if (float.IsNaN(smrMin) || mn < smrMin) smrMin = mn;
             }
 
+            // MISURA VERA: vertici skinnati. I bounds SMR sul modello Remy
+            // scendono 0,28 unita' modello (~0,12 m in scala) SOTTO la suola:
+            // il vecchio "delta=0" era un artefatto, non un appoggio.
+            float trueSole = float.NaN;
+            SoleGeometry.SoleY(transform, out trueSole);
+
             float hipsY = float.NaN;
+            float ankleY = float.NaN;
             if (_heroAnimator == null)
                 _heroAnimator = GetComponentInChildren<Animator>(true);
             if (_heroAnimator != null && _heroAnimator.avatar != null &&
@@ -141,17 +147,30 @@ namespace City.Player
             {
                 Transform hips = _heroAnimator.GetBoneTransform(HumanBodyBones.Hips);
                 if (hips != null) hipsY = hips.position.y;
+                Transform lf = _heroAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                Transform rf = _heroAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
+                if (lf != null) ankleY = lf.position.y;
+                if (rf != null) ankleY = float.IsNaN(ankleY)
+                    ? rf.position.y : Mathf.Min(ankleY, rf.position.y);
             }
 
-            string d = float.IsNaN(smrMin) ? "NA"
-                : (smrMin - feetY).ToString("F2",
+            string d = float.IsNaN(trueSole) ? "NA"
+                : (trueSole - feetY).ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture);
+            string vsTerrain = float.IsNaN(trueSole) || float.IsNaN(_lastSurfaceY)
+                ? "NA" : (trueSole - _lastSurfaceY).ToString("F2",
                     System.Globalization.CultureInfo.InvariantCulture);
             OsmDiag.Log("[SoleCheck] frame=" + Time.frameCount +
-                " smrMin=" + (float.IsNaN(smrMin) ? "NA" : smrMin.ToString("F2",
+                " trueSole=" + (float.IsNaN(trueSole) ? "NA" : trueSole.ToString("F2",
                     System.Globalization.CultureInfo.InvariantCulture)) +
                 " feetY=" + feetY.ToString("F2",
                     System.Globalization.CultureInfo.InvariantCulture) +
                 " delta=" + d +
+                " suolo=" + vsTerrain +
+                " caviglia=" + (float.IsNaN(ankleY) ? "NA" : ankleY.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture)) +
+                " boundsMin=" + (float.IsNaN(smrMin) ? "NA" : smrMin.ToString("F2",
+                    System.Globalization.CultureInfo.InvariantCulture)) +
                 " hipsY=" + (float.IsNaN(hipsY) ? "NA" : hipsY.ToString("F2",
                     System.Globalization.CultureInfo.InvariantCulture)) +
                 " ccGrounded=" + _cc.isGrounded);
