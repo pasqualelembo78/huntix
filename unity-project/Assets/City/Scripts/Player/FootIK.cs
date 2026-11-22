@@ -192,10 +192,11 @@ namespace City.Player
 
             // p e' l'osso caviglia: la suola reale sta SoleBelowAnkle piu'
             // in basso. Piantare la caviglia sull'asfalto faceva galleggiare
-            // la scarpa di tutto lo spessore della suola.
+            // la scarpa di tutto lo spessore della suola. La sonda legge la
+            // superficie vera (non il fondo CC): nessun SoleTouchDrop qui,
+            // altrimenti la scarpa affonda 3 cm sotto l'asfalto.
             float ankleTarget = hit.point.y +
-                (_walker != null ? _walker.SoleBelowAnkle : 0f) -
-                PlayerHeroRig.SoleTouchDrop;
+                (_walker != null ? _walker.SoleBelowAnkle : 0f);
             float off = ankleTarget - p.y;
             if (off > MaxPlant || off < -MaxPlant) return 0f;
             footRot = Quaternion.FromToRotation(Vector3.up, hit.normal) * bone.rotation;

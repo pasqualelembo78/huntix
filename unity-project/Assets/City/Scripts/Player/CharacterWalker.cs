@@ -53,7 +53,11 @@ namespace City.Player
         public bool footIKEnabled = true;
         public float ikRayDistance = 1.5f;
         public float ikSmoothSpeed = 12f;
-        public float ikMaxOffset = 0.6f;
+        /// <summary>Sink massimo del bacino. Misurato sul device: raw hips
+        /// 1,58 m, target = superficie(0,03) + HipsToSole(0,91) = 0,94 m ->
+        /// servono 0,64 m; 0,60 tagliava 3-4 cm e la suola restava sospesa.
+        /// 0,75 copre lo span misurato con margine senza inventare offset.</summary>
+        public float ikMaxOffset = 0.75f;
         // FIX fluttuazione: prima 1.6 m, il bacino poteva essere sollevato di
         // oltre un metro sopra i piedi ancorati a terra (look "sospeso in
         // aria"). Il tetto è ora 0.25 m: compensa l'affondamento del clip
@@ -73,6 +77,11 @@ namespace City.Player
         // lo stesso delta -0,47 verrebbe sommato due volte (-0,94).
         private int _bodyWriteFrame = -1;
         private float _legSpanRest = float.NaN;
+        /// <summary>Quota della superficie calpestabile misurata dai raggi dei
+        /// piedi in questo frame. Il fondo del CharacterController sta
+        /// skinWidth SOPRA l'asfalto, quindi non e' un riferimento valido per
+        /// l'IK: senza questo valore il bacino resta 5 cm troppo alto.</summary>
+        private float _footSurfaceY = float.NaN;
         private float _groundDiagAt;
         // Il ray e il riepilogo IK hanno throttle SEPARATI: prima condividevano
         // _groundDiagAt e il ray (chiamato prima) consumava sempre lo slot,
@@ -415,18 +424,23 @@ namespace City.Player
             if (!useAnimator || !footIKEnabled || animator == null) return;
             _ikFiredAt = UnityEngine.Time.time;
 
+            // La quota di superficie viene rivalutata a ogni frame dai raggi
+            // dei due piedi (FootIKStep la scrive in _footSurfaceY).
+            _footSurfaceY = float.NaN;
             FootIKStep(AvatarIKGoal.LeftFoot, ref _ikWeightL, ref _ikPosL, ref _ikRotL);
             FootIKStep(AvatarIKGoal.RightFoot, ref _ikWeightR, ref _ikPosR, ref _ikRotR);
 
-            // groundRef usa il livello PIEDI (non il pivot del CharacterController):
-            // sul terreno piatto i piedi stanno a root - feetFromPivot.  Usare il
-            // pivot come groundRef produce un offset permanente di -feetFromPivot
-            // (tipicamente -1 m) che spinge la pelvi nel terreno e rende visibile
-            // l'affondamento durante la camminata.
+            // groundRef DEVE essere la superficie MISURATA, non il livello
+            // piedi del CharacterController: il CC lascia skinWidth (0,05 m)
+            // tra la base capsula e l'asfalto e il follower aggiunge la
+            // clearance. Usare feetY teneva la pelvi 5 cm troppo alta, la
+            // gamba non raggiungeva la caviglia target e la suola galleggiava.
+            // Se i raggi non trovano nulla si torna al vecchio feetY.
             float feetFromPivot = (cc != null)
                 ? cc.height * 0.5f - cc.center.y
                 : 1f;
-            float groundRef = transform.position.y - feetFromPivot;
+            float feetY = transform.position.y - feetFromPivot;
+            float groundRef = float.IsNaN(_footSurfaceY) ? feetY : _footSurfaceY;
 
             // Compensazione AFFONDAMENTO clip baked: Idle/Walk/Run Mixamo hanno
             // ogniuno una quota pelvi diversa (-1.5 m in Run se il fix d'import
@@ -455,13 +469,14 @@ namespace City.Player
             Transform hipsBone = animator.GetBoneTransform(HumanBodyBones.Hips);
             if (hipsBone != null && grounded)
             {
-                // _legSpanRest e' bacino->suola a gamba distesa. La caviglia IK
-                // viene pero' alzata dello spessore della scarpa e abbassata di
-                // SoleTouchDrop: il bacino deve stare piu' basso della stessa
-                // quantita', altrimenti la gamba dovrebbe allungarsi di 3 cm e
-                // l'IK non ce la fa (suola che resta sospesa).
-                bodySinkLift = (groundRef + _legSpanRest -
-                    PlayerHeroRig.SoleTouchDrop) - hipsBone.position.y;
+                // _legSpanRest e' bacino->suola a gamba distesa, misurato sui
+                // vertici. La caviglia IK sta SoleBelowAnkle sopra la suola:
+                // bacino = superficie + HipsToSole e caviglia = superficie +
+                // SoleBelowAnkle distano esattamente la lunghezza naturale
+                // della gamba. Aggiungere SoleTouchDrop qui (vecchia
+                // compensazione della clearance del CC) abbassava il bacino
+                // di 3 cm rispetto alla caviglia e confondeva i due IK.
+                bodySinkLift = (groundRef + _legSpanRest) - hipsBone.position.y;
             }
             float target = (bodySinkLift < 0f)
                 ? bodySinkLift               // bacino troppo alto -> SCENDI
@@ -631,13 +646,17 @@ namespace City.Player
             if (best >= 0)
             {
                 var h = IkHitsBuffer[best];
+                // Superficie REALE: la stessa quota viene usata dal bacino per
+                // calcolare groundRef, cosi' caviglia e pelvi concordano.
+                if (float.IsNaN(_footSurfaceY) || h.point.y < _footSurfaceY)
+                    _footSurfaceY = h.point.y;
                 // La target IK e' l'OSSO caviglia, non la suola: la scarpa
                 // scende SoleBelowAnkle sotto l'osso. Senza questo termine la
                 // caviglia veniva piantata a filo d'asfalto e la suola restava
-                // sospesa dello spessore della scarpa (~0,11 m). SoleTouchDrop
-                // lascia 3 cm di affondamento voluto (clearance del follower).
-                float ankleY = h.point.y + SoleBelowAnkle -
-                    PlayerHeroRig.SoleTouchDrop;
+                // sospesa dello spessore della scarpa (~0,11 m). Non si sottrae
+                // piu' SoleTouchDrop: la sonda legge gia' la superficie vera,
+                // quindi la suola finisce ESATTAMENTE a contacto (0 cm).
+                float ankleY = h.point.y + SoleBelowAnkle;
                 targetPos = new Vector3(h.point.x, ankleY, h.point.z);
                 targetRot = Quaternion.FromToRotation(Vector3.up, h.normal) *
                     Quaternion.LookRotation(transform.forward, Vector3.up);

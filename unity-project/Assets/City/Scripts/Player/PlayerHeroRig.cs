@@ -25,12 +25,11 @@ namespace City.Player
             + "-> i piedi stanno a y=-1).")]
         public Vector3 feetAnchor = new Vector3(0f, -1f, 0f);
 
-        /// <summary>Abbassamento extra dei piedi visivi sotto la base della
-        /// capsula (compensa skin + clearance del GroundFollow): la suola
-        /// finisce ESATTAMENTE sulla superficie calpestata, senza il classico
-        /// "galleggiamento" di qualche centimetro sopra asfalto/marciapiede.
-        /// In flat-world il collider stradale e' l'asfalto stesso (0.03),
-        /// quindi base = superficie + clearance e suola = superficie.</summary>
+        /// <summary>Abbassamento applicato al modello in LayFootOnAnchor,
+        /// quando i piedi vengono allineati ai bounds dell'SMR (che scendono
+        /// ~0,12 m SOTTO la suola vera). E' solo posa iniziale: l'appoggio
+        /// finale e' deciso dagli IK sulla superficie MISURATA dai raggi,
+        /// quindi qui non va messa alcuna compensazione di skin/clearance.</summary>
         public const float SoleTouchDrop = 0.03f;
 
         private static readonly string PrefabResource = "PlayerHero";

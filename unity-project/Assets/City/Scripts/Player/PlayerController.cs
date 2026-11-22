@@ -54,6 +54,12 @@ namespace City.Player
         // finestra del magnete faceva partire la clip Jump (hasExitTime=0).
         private float _jumpAnimHoldUntil = -10f;
         private const float JumpAnimHoldS = 0.8f;
+        /// <summary>Clearance minima sopra la superficie. Il CharacterController
+        /// pero' non puo' scendere sotto la superficie + skinWidth: se la
+        /// clearance e' minore (0,02 contro 0,05) il follower passa ogni frame
+        /// a chiedere 3 cm che il CC rifiuta (31 corr/s misurate). Si usa
+        /// quindi almeno lo skinWidth REALE del controller, non una costante
+        /// inventata.</summary>
         private const float GroundFollowClearance = 0.02f;
 
         /// <summary>Passo massimo di integrazione del movimento (s). Durante la
@@ -776,7 +782,10 @@ namespace City.Player
             GroundSample s = GroundSnapper.SampleGround(feetPos, transform);
             if (!s.found) return;   // nessun dato: la fisica e' gia' in carico
 
-            float targetFeet = s.height + GroundFollowClearance;
+            // Mai chiedere al CC una quota che il suo skinWidth non consente
+            // di raggiungere: il target e' la superficie + almeno lo skin.
+            float targetFeet = s.height +
+                Mathf.Max(GroundFollowClearance, controller.skinWidth);
             float err = targetFeet - feetY;
 
             // Magnetismo in discesa: solo subito dopo un appoggio, su una
