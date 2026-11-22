@@ -6,16 +6,16 @@ Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
 Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, NUOVA APK COMPILATA,
        VERIFICA VISIVA SU DEVICE ANCORA PENDENTE
 
-ULTIMA APK DA INSTALLARE (fix suola su superficie misurata, 23:10):
+ULTIMA APK DA INSTALLARE (fix tremito + rotazione camera, 23:50):
   app/build/outputs/apk/release/app-release-signed.apk
-  192.479.251 byte, 22 novembre 2026 23:10
-  sha256 6f2ca3082b71e38af0cbc06592618af1439fabb7b1859d694e36c8cd9502155b
-  AAR unityLibrary-release.aar rigenerato dalla build delle 23:05 (IL2CPP
+  192.483.347 byte, 22 novembre 2026 23:50
+  sha256 ed1da0fec0e487d7520542c5b0466b3ea9a31cce985e40b51b47a7052810d07e
+  AAR unityLibrary-release.aar rigenerato dalla build delle 23:45 (IL2CPP
   ricompilato, NON solo Gradle). Build: "BUILD SUCCESSFUL", firma verificata.
-  Verificato nel global-metadata.dat: SoleGeometry, SoleBelowAnkle,
-  HipsToSole, HeadToSole, cameraFirstPerson, toggleCameraMode,
-  trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
+  Contiene i fix 73bbf75 + 05e50e2 + e6a3177 e i marker [WalkDiag]
+  dt=, camSnap=, gRef=, hipOff=.
   Remy.fbx.meta: isReadable=1 anche dopo la build (il baker non lo ripristina).
+  APK precedente (23:10): sha256 6f2ca3082b71e3... (superata).
   APK precedente (20:12): sha256 49d2b66c9e9d1c... (superata).
   APK precedente (18:35): 192.421.907 byte, sha256 43122eeffaed... (superata).
   (la vecchia APK 1.16, sha256 01a1831b..., NON conteneva questi marker)
@@ -296,15 +296,65 @@ MARKER ATTESI DOPO QUESTA APK:
   - Nessun "isReadable is false", hamburger presente in 1A e 3A.
 
 ================================================================================
-VERIFICA FINALE SULL'APK DELLE 23:10 (DA FARE SUL DEVICE)
+VERIFICA 8 - LOG 23:28: TREMITO IN CORSA E ROTAZIONE A SCATTI
 ================================================================================
-  1) Installare l'APK sopracitata (sostituisce quella delle 20:12).
+Log: docs/huntix_log_20261122_232828.txt (sessioni 22:54, 23:25, 23:28).
+
+MISURE (nessuna costante inventata):
+  - Frame: 23:25:45 -> 26, 23:25:51 -> 87: ~10 fps.
+    23:28:12 -> 313, 23:28:23 -> 394: ~7 fps.
+  - CameraRig.LateUpdate usava PlayerController.MaxFrameStepS = 0,05 s
+    (passo della fisica) come delta. Con frame reali da 0,10-0,16 s
+    SmoothDamp avanzava a 1/3 della velocita' reale: [WalkDiag] camGap
+    =0,35 (soglia MaxSmoothGap) a 23:25:31, quindi snap del camera.
+  - CharacterWalker usava Mathf.Lerp(_hipOffsetY, offset,
+    ikSmoothSpeed*Time.deltaTime): a 7 fps il fattore era 12*0,14=1,7
+    (>1) e il bacino scattava a ogni frame.
+  - groundRef era il MIN dei raggi dei due piedi: saltava da Strade@0,03
+    a Terreno@-0,05 (8 cm) a ogni passo.
+  - Rotazione: OrbitZone.OnDrag consegna dx a blocchi; lo yaw era
+    LerpAngle con rotBlend=dt*12. Con il dt reale di 0,14 s il blend
+    diventava 1,0 -> snap istantaneo dello yaw a ogni frame.
+
+VELOCITA' NEL LOG (la corsa SI vede):
+  - corsa: 22:55:29/30/31 tgt=7,50 cur=7,44..7,50 real=7,44..7,50
+  - camminata: 23:28:15 tgt=3,64 cur=3,43 real=3,43
+  - transizione con ostacolo: 22:55:23 tgt=4,33 cur=2,95 real=0,74
+  NB: nella sessione 23:28 c'e' solo il passo (3,64): il tremito in
+  corsa e' documentato nel finestrone delle 22:55.
+
+FIX:
+  - 05e50e2: vista e IK usano tempo REALE con tetto anti-freeze (0,25 s),
+    filtri esponenziali 1-exp(-k*dt); groundRef del bacino =
+    feetY - cc.skinWidth (continuo), i raggi restano alle caviglie.
+  - e6a3177: rotazione con filtro esponenziale 6,5/s, tarato per
+    riprodurre il vecchio blend 0,60 misurato a 7 fps.
+
+MARKER AGGIUNTI A [WalkDiag]:
+  dt=<tempo reale> camSnap=Y/N gRef=<riferimento bacino>
+  hipOff=<offset IK applicato>
+  Attesi: dt≈0,10-0,16, camSnap=N (o sporadico), gRef stabile sul
+  valore della superficie, hipOff che non salta di 8 cm fra due frame.
+
+NOTA SUI TOGGLE:
+  Nel log non compaiono [Camera][Bob] ne' [GameManager] HeadBob e
+  follow resta sempre ON: i pulsanti del viewer non risultano arrivati
+  a Unity. Le prove A/B quindi NON sono state applicate; la diagnosi e'
+  stata fatta sul codice e sui frame del log.
+
+================================================================================
+VERIFICA FINALE SULL'APK DELLE 23:50 (DA FARE SUL DEVICE)
+================================================================================
+  1) Installare l'APK sopracitata (sostituisce quella delle 23:10).
   2) Entrare in citta': ZERO errori rossi, [SoleGeometry] non NA e
      [SoleCheck] suolo ≈ 0.00, suole appoggiate, ombra che parte dai piedi.
-  3) Camminare su asfalto, marciapiede e cordoli: i piedi devono seguire il
-     terreno senza scatti ne' affondamenti.
-  4) Premere "1A": hamburger ancora visibile, [Camera][Mode] PRIMA persona.
-  5) Premere "3A": hamburger visibile, [Camera][Mode] TERZA persona.
+  3) CORRERE (tgt=7,50) e girare la camera con il drag: niente tremito
+     del personaggio, niente scatti della vista o dell'ombra delle case.
+  4) Controllare [WalkDiag]: dt≈0,10-0,16, camSnap=N, gRef stabile,
+     hipOff senza salti.
+  5) Camminare su asfalto, marciapiede e cordoli: piedi a terra senza
+     affondamenti.
+  6) Premere "1A" e "3A": hamburger visibile, [Camera][Mode] coerente.
   Solo dopo questa verifica visiva il galleggiamento sara' dichiarato risolto.
 
 ================================================================================
@@ -320,5 +370,8 @@ separatamente con messaggi in italiano:
   e5781f1 docs: registra i fix delle regressioni e la APK delle 20:12
   73bbf75 fix: appoggia la suola sulla superficie misurata, non sul fondo
           del collider
-  (segue commit del report e del log 22:55)
+  9d25b53 docs: registra l'analisi del log 22:55 e la APK delle 23:10
+  05e50e2 fix: elimina il tremito a basso frame rate (camera e IK)
+  e6a3177 fix: rendi fluida la rotazione della camera a basso frame rate
+  (segue commit del report e del log 23:28)
 ================================================================================
