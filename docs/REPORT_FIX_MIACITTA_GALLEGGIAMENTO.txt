@@ -6,13 +6,14 @@ Build esaminata: 1.16 (26), APK firmato v3, commit 9c06c96
 Stato: CAUSA RIINDIVIDUATA, FIX IN CODICE, NUOVA APK COMPILATA,
        VERIFICA VISIVA SU DEVICE ANCORA PENDENTE
 
-NUOVA APK DA INSTALLARE (contiene i fix di questa rianalisi):
+NUOVA APK DA INSTALLARE (contiene i fix di questa rianalisi e lo switch camera):
   app/build/outputs/apk/release/app-release-signed.apk
-  192.417.811 byte, 22 novembre 2026 11:24
-  sha256 a5c171fc5c21ab8690b4b8ce90e413cbfc8f42fbb3ff7734fcc6932ddac7278d
-  AAR unityLibrary-release.aar rigenerato alle 11:22 dalle nuove fonti.
+  192.421.907 byte, 22 novembre 2026 18:35
+  sha256 43122eeffaedc12ef8a8e5c5b29b4fff83337fd4149fb77bcd71b72775af75fa
+  AAR unityLibrary-release.aar rigenerato dalla build delle 18:35.
   Verificato nel global-metadata.dat: SoleGeometry, SoleBelowAnkle,
-  HipsToSole, trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
+  HipsToSole, HeadToSole, cameraFirstPerson, toggleCameraMode,
+  trueSole, suolo=, caviglia=, spessoreScarpa, bacinoSuola.
   (la vecchia APK 1.16, sha256 01a1831b..., NON conteneva questi marker)
 
 ================================================================================
@@ -177,8 +178,44 @@ Per la verifica definitiva usa il viewer di log dentro l'app (NON adb logcat):
  solo dopo questa conferma visiva il difetto potra' essere dichiarato risolto.
 
 ================================================================================
+VERIFICA 5 - DOPPIA MODALITA' CAMERA (PRIMA / TERZA PERSONA)
+================================================================================
+Il pulsante "1A/3A" in alto a sinistra commuta la vista direttamente in game:
+  - 3A = terza persona (follower classico, impostazione iniziale);
+  - 1A = prima persona (camera all'altezza degli occhi del modello).
+L'etichetta mostra la modalita' ATTUALE e la scelta viene salvata in
+PlayerPrefs ("cameraFirstPerson"), quindi resta dopo il riavvio.
+
+Correzione geometrica: il vecchio FirstPersonHeight=1.55 m era un' altezza
+SOPRA il pivot del player (gia' ~1 m sopra il suolo): la camera finiva circa
+0,9 m sopra la testa. Ora l'altezza viene dall'osso HumanBodyBones.Head
+(posa animata/IK), con fallback su HeadToSole misurato da SoleGeometry meno
+l'offset noto del pivot (feetAnchor + SoleTouchDrop). Nessuna costante nuova.
+
+In prima persona vengono disattivati SOLO i Renderer sotto PlayerHeroRig:
+Animator, FootIK, SoleGeometry, CharacterController e diagnostica restano
+attivi, quindi il fix del galleggiamento e i marker [SoleCheck] continuano a
+funzionare. In guida la vista resta sempre in terza persona e il modello
+visivo viene ripristinato.
+
+Ponte bidirezionale:
+  Android -> Unity: viewer log, bottone "CAM 1A/3A" invia
+    GameManager.OnEvent({"action":"toggleCameraMode"}).
+    Supportati anche "setCameraMode" con true/false oppure prima/first.
+  Unity -> Android: UnityBridge.LogToAndroid("[Camera][Mode]", ...):
+    il cambio compare nel viewer log dell'app (nessun logcat).
+
+Riflesso della caccia alle uova: in prima persona il toast suggerisce di
+cercare le uova tra i cespugli; in terza persona invita a guardare i
+nascondigli. Nessuna modifica a spawn, rarita' o progresso uova.
+
+================================================================================
 STATO COMMIT / PUSH
 ================================================================================
 Nessun push effettuato, come richiesto. I pezzi sono stati committati
-separatamente con messaggi in italiano.
+separatamente con messaggi in italiano:
+  2299514 Camera prima persona: altezza occhio misurata dall'armatura
+  e5e04b5 Pulsante camera: etichetta coerente e toast con riflesso uova
+  c31daa6 Bridge switch camera: comando Android e log Unity
+  (segue commit del report)
 ================================================================================
