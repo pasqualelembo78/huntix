@@ -26,6 +26,21 @@ namespace City.OSM
         private const int BuildingsPerStep = 12;
         private const int TreesPerStep = 120;
 
+        /// <summary>Tetti di edifici istanziati per chunk. Il ramo unity che
+        /// girava senza lag aveva ~15.700 edifici in 49 chunk (circa 320 per
+        /// chunk); i log del 23/11 mostrano chunk fino a 13.614 edifici, con
+        /// build da secondi e frame da 100-400 ms. I dati restano TUTTI nei
+        /// tile (uova, POI e spawn non cambiano): si istanziano solo i 320
+        /// edifici piu' vicini al centro del chunk.</summary>
+        private const int MaxPlacedBuildingsPerChunk = 320;
+
+        private struct BuildingCandidate
+        {
+            public TileBuildingRec rec;
+            public Vector3 pos;
+            public float dist2;
+        }
+
         /// <summary>Sezione (italiano) attualmente in costruzione nell'ultimo
         /// chunk processato: alimenta lo splash "Sto caricando: X". Letto da
         /// ChunkManager per il report CityProgress; vuota se nessuna build.</summary>
@@ -270,9 +285,14 @@ namespace City.OSM
             if (mergedBuildings != null)
             {
                 int placed = 0, scanned = 0, skipped = 0, skipDegenerate = 0;
+                // Prima passata: validazione e raccolta. I record restano tutti
+                // nei tile; solo l'istanziazione viene limitata sotto.
+                var candidates = new List<BuildingCandidate>();
                 foreach (var b in mergedBuildings)
                 {
-                    if (b?.c == null || b.c.Length < 2) { skipDegenerate++; continue; }
+                    scanned++;
+                    if (b == null || b.c == null || b.c.Length < 2)
+                    { skipDegenerate++; continue; }
 
                     // protezione per-record: un dato anomalo non deve costare
                     // il chunk intero (su Roma: 32k edifici per tile)
@@ -286,8 +306,10 @@ namespace City.OSM
                         if (BuildingPlacer.IsSkippableBuildingType(b.t)) { skipDegenerate++; continue; }
                         if (poiSpots != null && poiSpots.Count > 0 &&
                             IsNearPoi(poiSpots, p)) continue;
-                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform, b, p, heights))
-                            placed++;
+                        candidates.Add(new BuildingCandidate
+                        {
+                            rec = b, pos = p, dist2 = p.sqrMagnitude
+                        });
                     }
                     catch (System.Exception e)
                     {
@@ -296,15 +318,40 @@ namespace City.OSM
                             UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                                 " edificio saltato id=" + b.id + " t=" + b.t + ": " + e);
                     }
+                }
 
-                    if (++scanned % BuildingsPerStep == 0 &&
+                // I piu' vicini al centro del chunk: la citta' resta compatta
+                // intorno al player invece di svuotarsi a caso.
+                candidates.Sort((a, b) => a.dist2.CompareTo(b.dist2));
+                int limit = Mathf.Min(candidates.Count, MaxPlacedBuildingsPerChunk);
+                for (int i = 0; i < limit; i++)
+                {
+                    var cand = candidates[i];
+                    try
+                    {
+                        if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform,
+                                cand.rec, cand.pos, heights))
+                            placed++;
+                    }
+                    catch (System.Exception e)
+                    {
+                        skipped++;
+                        if (skipped <= 3)
+                            UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                                " edificio saltato id=" + cand.rec.id +
+                                " t=" + cand.rec.t + ": " + e);
+                    }
+
+                    if ((i + 1) % BuildingsPerStep == 0 &&
                         clock.ElapsedMilliseconds > budgetMs)
                     { clock.Reset(); clock.Start(); yield return null; }
                 }
                 OsmDiag.Log("[Builder] " + chunk.key +
                     " edificiTotali=" + scanned +
+                    " candidati=" + candidates.Count +
                     " posizionati=" + placed +
-                    " falliti=" + (scanned - placed - skipped - skipDegenerate) +
+                    " limitati=" + (candidates.Count - limit) +
+                    " falliti=" + skipped +
                     " degeneri=" + skipDegenerate +
                     " erroriPerRecord=" + skipped);
                 if (skipped > 3)
