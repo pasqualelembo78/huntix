@@ -423,3 +423,64 @@ VERIFICA DA RIPETERE SULLA NUOVA APK:
     "posizionati" non deve superare 320.
   - [SoleCheck] suolo ≈ 0.00 e uova/POI presenti come prima.
 ================================================================================
+
+NUOVA APK CON I TAGLI (23/11, build automatica):
+  app/build/outputs/apk/release/app-release-signed.apk (184 MB)
+  sha256 af6018320ad72d218801a0f36e911d20bf41a9195037eb645868c2d72e1795a2
+  Build: AAR Unity "BUILD SUCCESSFUL in 4m 43s", APK "BUILD SUCCESSFUL in
+  1m 50s". Nessun push. La APK delle 23:50
+  (ed1da0fec0e487d7520542c5b0466b3ea9a31cce985e40b51b47a7052810d07e) e'
+  superata.
+
+================================================================================
+CONFRONTO ARCHITETTURALE: PERCHE' I GIOCHI 3D DI QUESTO TIPO GIRANO FLUIDI
+================================================================================
+L'utente ha chiarito che il riferimento non e' il GTA 1 2D, ma i giochi
+open world 3D in terza persona (GTA III/Vice City/San Andreas, Mafia,
+Assassin's Creed) e le loro versioni Android.
+
+Fonti controllate (codice, non impressioni):
+  - clone GTA1 browser "codexbountyforge2608/gta1-clone-bounty":
+    crime-city.html, 53.880 byte, canvas 960x640, DT=1/60 con accumulator
+    e massimo 5 step, mappa 256x256 celle in Uint8Array generata una volta
+    all'avvio, disegno solo delle celle visibili, cache 1500 isolati,
+    spatial hash a 128 unita', 24 auto di traffico / 26 cap, 130 pedoni,
+    22 poliziotti, 1500 particelle, collisioni cerchio-cella, zero asset
+    esterni. Camera con smoothing esponenziale 1-exp(-6.5*dt).
+  - port GTA III "re3" su Raspberry Pi 5 (chronic8000/re3-pi5): motore
+    reverse-engineered di GTA III, ma i file di gioco (models, data,
+    audio) vanno copiati dall'installazione originale: il mondo e'
+    PRECOSTRUITO e viene solo caricato/streammato. Le ottimizzazioni
+    citate nel README sono precisione mediump nei fragment shader, early
+    alpha discard, riflessi auto semplificati, backend OpenGL ES.
+
+LA DIFFERENZA CHE CONTA (non e' la camera ne' l'IK):
+  1. Loro caricano una citta' gia' cotta (modelli, texture, collisioni,
+     indicatori di streaming). Huntix, prima dei tagli, costruiva mesh e
+     collider dagli OSM grezzi DENTRO il frame: fino a 13.614 edifici in
+     un solo chunk da 1 km, 56 build in 50 s, 2 build concorrenti da
+     24 ms l'una.Su 16,7 ms di budget, 24-48 ms erano solo costruzione.
+  2. Loro hanno un numero di attori chiuso e vicino alla camera (24 auto,
+     ~130 pedoni, spatial hash). Huntix ha 3054 veicoli tracciati e
+     culling che li scorre tutti (vehOn=2).
+  3. Loro usano proxy di collisione semplici (cerchi, box, celle). Huntix
+     usa Renderer/Collider Unity per edificio, piu' porta/interno/luce.
+  4. Loro girano a risoluzione interna controllata e con effetti scelti
+     per il budget (riflessi/alpha/p precisione). Huntix su display
+     1080x2340 con URP, HDR e ombre, texture Quaternius da 29 MB.
+  5. Loro non hanno GPS/AR, bridge Android<->Unity, DEM, POI uova da
+     generare a runtime, telemetry e viewer log attivi ogni frame.
+
+IL LIMITE NOSTRO, DETTO SENZA SCONTORNAMENTI: stiamo chiedendo al telefono
+di ESSERE IL BUILD SERVER della citta' mentre cerca di essere anche il
+render engine. I tagli gia' applicati (320 edifici/chunk, 1 build/12 ms,
+8 interni, render scale 0,75) applicano la regola loro: limiti espliciti
+e working set piccolo. Il passo successivo, se i numeri non bastano, e'
+cuocere gli edifici in mesh/collider statici lato backend (come i file
+`models`/`data` di re3) e lasciare al client solo lo spawn e il disegno,
+senza toccare uova/POI/DEM/bridge.
+
+NOTA UOVA: come "uovo del budget" era stato proposto un uovo che appare
+solo quando il frame time resta sotto soglia per N secondi; proposta
+ancora senza accettazione, quindi NON implementata.
+================================================================================
