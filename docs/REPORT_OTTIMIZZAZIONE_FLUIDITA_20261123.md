@@ -1,7 +1,8 @@
 # HUNTIX — Analisi e ottimizzazione completa della fluidità di gioco
 
 Data: 23/11/2026. Repository: `/root/giochi/huntix`, ramo `flat-world`.
-Lingua e commit: italiano, commit separati per concetto logico, **nessun push**.
+Lingua e commit: italiano, commit separati per concetto logico, push su
+`origin/flat-world` eseguito (prima i commit del profiler, poi quelli dell'uovo).
 
 > Regola richiamata dal Mandato: non dichiarare risolto nulla perché compila
 > o perché l'APK si avvia. La verifica finale è solo quella sul device, con
@@ -19,7 +20,7 @@ Lingua e commit: italiano, commit separati per concetto logico, **nessun push**.
 | 4. Report tecnico delle criticità | **Fatto** (questo documento) |
 | 5. Definizione degli interventi | **Fatto** |
 | 6. Implementazione delle correzioni | **Fatto**: tagli di budget + profiler interno |
-| 7. Nuova profilazione e confronto | **In attesa della tua prova sul device** |
+| 7. Nuova profilazione e confronto | **Fatto**: log `docs/huntix_log_20261123_122151.txt`, sessione 12:21 (vedi paragrafo 7) |
 | 8. Nuova APK per i test | **Fatto**: hash `52f516d0…`, vedi paragrafo 8 |
 
 Il passo 2 non può essere completato da qui: non c'è un telefono collegato e
@@ -185,82 +186,129 @@ naturale; con frame da 400 ms, anche un IK perfetto sembra un tremito.
 
 ---
 
-## 7. Cosa deve mostrare la nuova profilazione (dopo la tua prova)
+## 7. Risultati della prova reale (sessione 12:21)
 
-Marker attesi nel viewer, nella stessa sessione di corsa e girata camera:
+File: `docs/huntix_log_20261123_122151.txt` (contiene più sessioni; quella
+nuova è il blocco con timestamp `2026-11-23 12:21`). Stesso dispositivo
+Samsung SM-A356B, Medium, vsync=1, 1080×2340.
 
-- `[T+...] fps=` verso **30** (33 ms) sui dispositivi compatibili; 60 FPS resta
-  l'obiettivo finale, non una dichiarazione odierna.
-- `hist=` con più frame sotto `33`/`50` e meno oltre `400`.
-- `prof=move:... camera:... ik:... chunk:...` con media e picco. Se `chunk`
-  resta il termine dominante, il prossimo intervento è cuocere gli edifici
-  lato backend; se domina `ik`, si agisce sul costo delle sonde; se domina
-  `camera`, sulla spring arm.
-- `[WalkDiag]` con `camSnap=N`, `camDist` stabile, `gRef`/`hipOff` continui,
-  `suolo ≈ 0.00`.
-- `[Builder] posizionati<=320` e `limitati>0`.
-- `uova=I/O` invariate: nessuna regressione del Riflesso.
+| Misura | Prima (07:36) | Dopo (12:21) | Esito |
+|---|---|---|---|
+| FPS (beacon stabili) | 8-15 | **15-19** | Migliorato, non ancora sufficiente |
+| Frame peggiore | fino a 650 ms | 233-400 ms | Ridotto |
+| `camSnap=Y` | 11 campioni su 17 | **0** (`camSnap=N` ovunque) | Risolto |
+| `camDist` | 5,95-7,45 m oscillante | 7,1-8,4 m, continuo | Migliorato |
+| `prof=move` media/picco | non misurato | 0,14-0,24 / 1,2-1,6 ms | Trascurabile |
+| `prof=camera` | non misurato | 0,01-0,02 / 0,0 ms | Trascurabile |
+| `prof=ik` | non misurato | 0,08-0,11 / 2,0-2,3 ms | Trascurabile |
+| `prof=chunk` | 2 build da 24 ms | 0,30-0,94 / 2,2-4,1 ms | Risolto il picco |
+| `prof=input` | non misurato | 1,62 / 1,6 ms | Reattività buona |
+| `GOVERNOR` | tier 4 in 0,8 s | tier 3, ema 86 ms a T+38 | Meno aggressivo |
+| RAM | 166→556 MB in 45 s | 423→471 MB in 10 s | Crescita ancora presente |
+| `[Builder] posizionati` | fino a 13.614 edifici | 193 / 235 / 348 / 221 | Cap rispettato |
+| `limitati` | - | 0 (i candidati già filtrati sono <320) | Coerente |
+| `uova=I/O` | I0/O0 | I0/O0 | Nessuna regressione |
+
+**Interpretazione:** i interventi su camera, governor e pompa chunk hanno
+funzionato: lo scatto della camera è sparito e il costo CPU dei nostri scope è
+ora di frazioni di millisecondo. Il frame time resta però 33-100 ms con picchi
+fino a 400 ms. Poiché `move`, `camera`, `ik` e `chunk` sono tutti <1 ms di
+media, il costo rimanente **non è in quei quattro scope**: sta in rendering /
+GPU, fisica PhysX, GC o `Instantiate` non strumentati. Cuocere le mesh lato
+backend a questo punto NON è più la prima leva (il `chunk` non domina più).
+
+**Prossima misura da aggiungere**, prima di toccare altro: uno scope `render`
+attorno al submit e un contatore di allocation/`Instantiate` per beacon, così
+si distingue GPU da GC. Poi, solo se i dati lo mostrano, si interviene su
+pool veicoli/decorazioni o su URP.
 
 ---
 
 ## 8. APK per i test
 
-APK finale con profiler interno e misura della latenza input→movimento:
+APK finale con profiler interno, latenza input→movimento e **Uovo del budget**:
 
 - `app/build/outputs/apk/release/app-release-signed.apk`, 184 MB
-- SHA-256 `52f516d06e7adb4e277c7e7534ab51b688dd6295895282a650185fb576220c07`
-- Build: AAR Unity `BUILD SUCCESSFUL in 4m 32s`, APK `BUILD SUCCESSFUL in 1m 48s`.
+- SHA-256 `e66ae7bd16d50440224390eca9a84b44f2d8bd568d9eb7fde5798787fcce3f1b`
+- Build: AAR Unity `BUILD SUCCESSFUL in 4m 36s`, APK `BUILD SUCCESSFUL in 5m 18s`.
 
 APK intermediate superate (non usare):
 - `af6018320ad72d218801a0f36e911d20bf41a9195037eb645868c2d72e1795a2` — tagli senza `prof=`
 - `979eb2d893820be44dea7ee138f25ae6233c0de795b4212b592dd690f862e987` — `prof=` senza latenza input
+- `52f516d06e7adb4e277c7e7534ab51b688dd6295895282a650185fb576220c07` — profiler completo, senza uovo budget
+
+---
+
+## 9. Uovo del budget (Riflesso del Mandato)
+
+Accettato e implementato con il flusso canonico, senza sistemi paralleli.
+
+**Meccanica.** `BudgetEggWatcher` (nuovo, in `Assets/City/Scripts/Economy/`)
+si arma quando: mondo pronto, player a piedi, minigioco uova non attivo, e
+l'EMA del `PerformanceGovernor` resta sotto **33 ms per 5 secondi**. Allora
+spawna un uovo **Epic** 3 m davanti al player, agganciato al suolo con
+`CityChunkedWorld.TryGroundColumn` (mai al tetto di un edificio), con
+`placeHint = "città→budget→frame<33ms→5s"`.
+
+**Cattura.** Non c'è un bypass: `EggController.OnCaptured → Game.OnEggCollected →
+SendEggToHuntix → Bridge.handleCityEggCaptured → EggInventoryManager /
+EggWhereLog`. Il payload ora include `eggId` stabile, `kind=budget`, `tsMt`,
+oltre a `rarityId`, `fantasyName="Uovo del budget"`, `power`, `xpReward`,
+`gems`, `lat`, `lng`, `place`. `Game.OnEggCollected` chiama
+`BudgetEggWatcher.MarkCaptured` e `ContainerEgg.MarkFound` con la stessa chiave.
+
+**Bridge bidirezionale.**
+- Unity → Android: nuovo evento whitelistato `BudgetEggSpawned` (eggId, place,
+  lat, lng, timestamp, soglia, EMA); Android lo registra in `AppLog` e mostra
+  un toast. Nessuna SharedPreferences nuova.
+- Persistenza: lo snapshot `CityWorldSync` porta `budgetEggSpawned`,
+  `budgetEggFound`, `budgetEggId`, `budgetEggLat`, `budgetEggLng`,
+  `budgetEggTs`. Android li conserva nel già esistente `city_sync_prefs` e li
+  restituisce col restore: l'uovo non rinasce dopo un rebuild del chunk.
+
+**Nota sul dispositivo attuale:** con EMA 86 ms l'uovo NON compare ancora — è
+il trofeo del traguardo dei 30 fps, non uno sfogo del log. Quando il frame
+scende sotto 33 ms il viewer mostra `UOVO budget: frame sotto soglia ...` e
+poi `UOVO budget comparso: ...`.
 
 ---
 
 ## REPORT FINALE (stato attuale)
 
 ### Problemi individuati
-1. Costruzione runtime della città dentro il frame.
-2. Working set di edifici e veicoli troppo grande.
-3. Governor e camera che amplificavano il ritardo invece di assorbirlo.
-4. Decorazione per edificio non budgettata.
-5. Mancanza di misure distribuite e di breakdown CPU nel viewer.
+1. Costruzione runtime della città dentro il frame (risolto il picco).
+2. Camera che amplificava il ritardo (risolto: `camSnap=N`).
+3. Governor che contava i frame invece dei secondi (risolto).
+4. Working set di edifici/veicoli e decorazione per edificio (mitigato).
+5. Osservabilità insufficiente (risolto con `prof=`).
 
 ### Cause tecniche
-Come da tabella 3-4: sono cause di **budget e temporizzazione**, non di
-sintassi animatoria o di costanti di movimento.
+Cause di **budget e temporizzazione**. La misura successiva ha spostato il
+sospetto fuori dagli scope misurati: rendering/GPU, fisica, GC o instantiate.
 
 ### File e componenti modificati
-Elencati al paragrafo 5-6.
+Paragrafi 5-6 (tagli e profiler) e paragrafo 9 (uovo del budget).
 
 ### Interventi effettuati
-Tagli di budget già committati + profiler interno in questa sessione.
+Tagli di budget, profiler interno, misura latenza input, uovo del budget con
+bridge e persistenza.
 
 ### FPS e frame time prima/dopo
 - **Prima**: 8-15 fps reali, frame fino a 650 ms (log 07:36 del 23/11).
-- **Dopo**: **non ancora misurato**. La misura arriva solo dalla tua sessione
-  con la nuova APK. Ogni numero scritto adesso sarebbe inventato.
+- **Dopo**: 15-19 fps reali, frame 33-100 ms, picchi 233-400 ms (log 12:21).
+- **Obiettivo dichiarato**: 30 fps stabili (33 ms); 60 fps resta il traguardo
+  finale. Non dichiaro il problema risolto.
 
 ### Risultati dei test su dispositivo reale
-In attesa. Serve: installa la nuova APK, corri fino a `tgt=7.50`, gira la camera
-a destra e sinistra, apri il viewer dei log dentro l'app e inviami il file.
+Prova eseguita e misurata (12:21). Camera e chunk non sono più la causa
+dominante. Restano da misurare GPU/fisica/GC.
 
 ### Problemi ancora presenti / prossimi passi
-- Verificare se i tagli bastano. Se `chunk` domina ancora: cuocere mesh e
-  collider statici lato backend (modello `re3`), senza toccare uova/POI/DEM.
-- Se `vehOn` resta basso con 3.054 tracciati: introdurre spatial hash e pool
-  vicino alla camera, come nei cloni.
-- Se `ik` o `camera` dominano: intervenire solo dopo aver letto i picchi.
-
-### Riflesso uova (Mandato, regola 3)
-Il gioco è una caccia alle uova: propongo esplicitamente l'**"Uovo del budget"**
-— un uovo che appare nel profile Android solo quando il frame time resta sotto
-soglia per N secondi, con posizione e timestamp salvati e bridge bidirezionale.
-È ancora in attesa di accettazione: **non implementato**, nessun uovo toccato.
-Se preferisci un altro nome o un'altra mechanic (per esempio un uovo che si
-schiude quando la camera resta 10 secondi senza `camSnap`), dimmelo e lo
-implemento con il bridge completo.
+1. Aggiungere uno scope `render` e un contatore allocate/instantiate al beacon.
+2. Con quei dati, decidere tra URP, pool veicoli o decorazione edifici.
+3. Rifare la prova e verificare che l'Uovo del budget compaia.
 
 ### Chiusura
-Nessun push. La working tree sarà pulita dopo i commit del profiler e di questo
-report; eventuali file `.meta` riscritti dalla build verranno ripristinati.
+I commit del profiler e del report sono già pushati su `origin/flat-world`.
+Quelli dell'uovo vengono committati e pushati con questa consegna. Eventuali
+file `.meta` riscritti dalla build vengono ripristinati prima del commit.
