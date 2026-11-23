@@ -26,19 +26,22 @@ namespace City.OSM
         public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
         public const int UnloadRadius = 4;  // isteresi: un anello oltre il carico
         private const float TickIntervalS = 0.25f;
-        private const long BuildBudgetMs = 24;
+        /// <summary>Log 23/11: 2 build concorrenti da 24 ms consumavano fino a
+        /// 48 ms/frame di solo main-thread, con frame totali da 100 a 400 ms.
+        /// Si dimezza sia il numero di build in volo sia il budget di ciascuna
+        /// (12 ms): il mondo si carica piu' piano ma il frame resta sotto il
+        /// budget. LoadRadius resta 3 (regola del Mandato: mai accorciarlo).</summary>
+        private const long BuildBudgetMs = 12;
 
         /// <summary>Chunk totali dentro il raggio di carico (7x7) a fine load.</summary>
         public const int ExpectedChunkCount = (2 * LoadRadius + 1) * (2 * LoadRadius + 1);
 
-        /// <summary>Build coroutine attive: max 2 per volta. Senza serializzazione
-        /// N chunk in volo consumano ognuno fino a BuildBudgetMs di main-thread
-        /// (25 x 24ms = 600ms/frame) -> frame da 2115ms e fps=0 durante la build.
-        /// Con 1 solo build la coda di 49 chunk (46 pending) drena a ~1 chunk/2s.
-        /// Con 2 build in parallelo (ciascuna col budget per frame) si dimezza
-        /// la latenza di world-load mantenendo il frame-time sotto controllo.</summary>
+        /// <summary>Build coroutine attive: una sola per volta. Il log 23/11
+        /// (8-11 fps, 56 BUILD START in 50 s di corsa) mostra che due build in
+        /// parallelo non bastavano a tenere il frame sotto budget: la coda
+        /// viene drenata piu' lentamente, ma ogni frame ha un solo build.</summary>
         private int _activeBuilds;
-        private const int MaxConcurrentBuilds = 2;
+        private const int MaxConcurrentBuilds = 1;
 
         /// <summary>Intervallo dei report di avanzamento "CityProgress" allo
         /// splash Android (Mappa 0-40%, Costruzione 40-95%, Pronto 100%).</summary>
