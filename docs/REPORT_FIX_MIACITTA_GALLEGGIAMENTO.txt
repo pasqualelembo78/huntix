@@ -374,4 +374,52 @@ separatamente con messaggi in italiano:
   05e50e2 fix: elimina il tremito a basso frame rate (camera e IK)
   e6a3177 fix: rendi fluida la rotazione della camera a basso frame rate
   (segue commit del report e del log 23:28)
+
+================================================================================
+VERIFICA 9 - LOG 23/11: PERCHE' LA FLUIDITA' NON E' ANCORA RISPETTATA
+================================================================================
+Log: docs/huntix_log_20261123_073631.txt (sessione 07:35-07:36, device
+samsung SM-A356B, Android API 36, display 1080x2340, quality=Medium,
+vsync=1). L'utente ha corso e girato la camera a destra e sinistra:
+il tremito resta.
+
+MISURE DAL LOG (nessun valore inventato):
+  - fps reali: 8,0 / 8,8 / 9,0 / 10,0 / 10,5 / 11,0 / 11,5 / 12,5 / 15,0
+    (frame da [SoleCheck] e beacon [T+]). Istanti fino a 650 ms.
+  - Istogramma SessionTelemetry: quasi nessun frame sotto 16/33 ms;
+    la maggior parte fra 50 e 400 ms.
+  - GOVERNOR: tier 1->4 in 0,8 s (tier massimo in meno di un secondo).
+    Causa: UpConfirmSeconds (3 SECONDI) era confrontato con un contatore
+    incrementato PER FRAME (3 frame = 0,4 s a 8 fps).
+  - CAMERA: camSnap=Y in 11 dei 17 campioni [WalkDiag] della corsa.
+    camDist oscillava fra 5,95 e 7,45 m a ogni hit della spring arm.
+  - MONDO: 56 BUILD START in ~50 s di corsa, con 2 build concorrenti
+    da 24 ms ciascuno (fino a 48 ms/frame solo di costruzione chunk).
+  - EDIFICI: [Builder] edificiTotali=1792, 9457, 13614 per singolo chunk
+    (il ramo unity che girava senza lag aveva ~15.700 edifici in 49
+    chunk, circa 320/chunk).
+  - RAM: 166 MB all'avvio -> 556 MB dopo 45 s; vehOn=2/3054 veicoli
+    tracciati (solo 2 attivi, il culling scorre l'intera lista).
+
+CORREZIONI COMMITTATE DOPO QUESTA MISURA:
+  aa506d0 Camera: tetto di snap dinamico (v*tau, 0,90 m a 7,5 m/s) invece
+          di 0,35 m fissi; lunghezza della spring arm smorzata con la
+          stessa costante di tempo della posizione.
+  5695e45 Governor: conta i secondi di overload, non i frame.
+  598b5b4 ChunkBuilder: 320 edifici istanziati per chunk (i piu' vicini
+          al centro); i dati uova/POI restano tutti nei tile.
+  e981470 ChunkManager: una sola build per volta, budget 24->12 ms;
+          LoadRadius resta 3 (regola del Mandato).
+  73217d9 BuildingPlacer: ripristinato il budget di 8 edifici visitabili
+          per chunk (Porta + InteriorGenerator solo per essi).
+  27113ae URP: render scale 1->0,75 e HDR disattivato; ombre conservate.
+
+VERIFICA DA RIPETERE SULLA NUOVA APK:
+  - beacon [T+]: fps deve salire verso 30 (33 ms); istogramma con piu'
+    frame sotto 33/50 ms e meno oltre 400 ms.
+  - [WalkDiag]: camSnap=N nella corsa a 7,50, camDist stabile,
+    built chunk più lenti ma senza frame da 400 ms.
+  - [Builder]: "limitati" deve mostrare quanti edifici non istanziati;
+    "posizionati" non deve superare 320.
+  - [SoleCheck] suolo ≈ 0.00 e uova/POI presenti come prima.
 ================================================================================
