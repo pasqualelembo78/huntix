@@ -20,7 +20,7 @@ Lingua e commit: italiano, commit separati per concetto logico, **nessun push**.
 | 5. Definizione degli interventi | **Fatto** |
 | 6. Implementazione delle correzioni | **Fatto**: tagli di budget + profiler interno |
 | 7. Nuova profilazione e confronto | **In attesa della tua prova sul device** |
-| 8. Nuova APK per i test | **In build** con la strumentazione inclusa |
+| 8. Nuova APK per i test | **Fatto**: hash `52f516d0…`, vedi paragrafo 8 |
 
 Il passo 2 non può essere completato da qui: non c'è un telefono collegato e
 il Mandato vieta `adb logcat`. Ho quindi reso il viewer in-app più informativo
@@ -205,11 +205,15 @@ Marker attesi nel viewer, nella stessa sessione di corsa e girata camera:
 
 ## 8. APK per i test
 
-Da compilare/aggiornare con l'hash finale dopo la build in corso. La build
-precedente (senza `prof=`) era:
+APK finale con profiler interno e misura della latenza input→movimento:
 
 - `app/build/outputs/apk/release/app-release-signed.apk`, 184 MB
-- SHA-256 `af6018320ad72d218801a0f36e911d20bf41a9195037eb645868c2d72e1795a2`
+- SHA-256 `52f516d06e7adb4e277c7e7534ab51b688dd6295895282a650185fb576220c07`
+- Build: AAR Unity `BUILD SUCCESSFUL in 4m 32s`, APK `BUILD SUCCESSFUL in 1m 48s`.
+
+APK intermediate superate (non usare):
+- `af6018320ad72d218801a0f36e911d20bf41a9195037eb645868c2d72e1795a2` — tagli senza `prof=`
+- `979eb2d893820be44dea7ee138f25ae6233c0de795b4212b592dd690f862e987` — `prof=` senza latenza input
 
 ---
 
