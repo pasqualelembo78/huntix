@@ -250,7 +250,7 @@ si arma quando: mondo pronto, player a piedi, minigioco uova non attivo, e
 l'EMA del `PerformanceGovernor` resta sotto **33 ms per 5 secondi**. Allora
 spawna un uovo **Epic** 3 m davanti al player, agganciato al suolo con
 `CityChunkedWorld.TryGroundColumn` (mai al tetto di un edificio), con
-`placeHint = "città→budget→frame<33ms→5s"`.
+`placeHint = "città→Kenney→budget→frame<33ms→5s"`.
 
 **Cattura.** Non c'è un bypass: `EggController.OnCaptured → Game.OnEggCollected →
 SendEggToHuntix → Bridge.handleCityEggCaptured → EggInventoryManager /

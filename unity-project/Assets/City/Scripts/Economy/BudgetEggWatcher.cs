@@ -130,7 +130,7 @@ namespace City.Economy
             col.isTrigger = true;
             var egg = go.AddComponent<EggController>();
             egg.Init(snapped, EggController.Rarity.Epic, EggController.EggType.Budget);
-            egg.placeHint = "città→budget→frame<33ms→5s";
+            egg.placeHint = "città→Kenney→budget→frame<33ms→5s";
             // Stessa chiave usata da ContainerEgg.MarkFound: viaggia nello
             // snapshot e impedisce che l'uovo rinasca dopo un rebuild.
             egg.containerEggKey = _eggId;
@@ -152,7 +152,7 @@ namespace City.Economy
             string json = "{\"eggId\":\"" + _eggId +
                 "\",\"rarityId\":\"epic\"" +
                 ",\"lat\":\"" + _lat + "\",\"lng\":\"" + _lng + "\"" +
-                ",\"place\":\"città→budget→frame<33ms→5s\"" +
+                ",\"place\":\"città→Kenney→budget→frame<33ms→5s\"" +
                 ",\"tsMt\":" + _spawnTs +
                 ",\"thresholdMs\":33,\"holdSeconds\":5" +
                 ",\"emaMs\":" + ema.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) +
