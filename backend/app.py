@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import socketio as socketio_lib
 
 from storage import init_db, init_group_chat_tables
+from storage.crypto import validate_crypto_config
 from ai_engine import init_provider, rebuild_free_model_chain
 from auth_fastapi import init_auth_db, _cleanup_expired_tokens
 
@@ -113,6 +114,10 @@ def _free_port(port):
 # ─── Lifespan ────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(application):
+    # Fail-closed: senza MASTER_KEY o senza cryptography il backend non deve
+    # partire e scrivere dati non cifrati. Controllo prima di ogni altra init.
+    logger.info("Verifica configurazione cifratura...")
+    validate_crypto_config()
     logger.info("Initializing database...")
     init_auth_db()
     init_db()

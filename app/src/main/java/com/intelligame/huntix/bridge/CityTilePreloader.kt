@@ -24,7 +24,7 @@ import kotlin.math.floor
  * chunk iniziale.
  *
  * I file vengono scritti esattamente dove TileClient li cercherebbe
- * (cache-first): {key}.v2.graph.json / {key}.v2.geo.json nella directory
+ * (cache-first): {key}.v[CACHE_VERSION].graph.json / {key}.v[CACHE_VERSION].geo.json nella directory
  * "huntix_tiles" sotto il persistentDataPath di Unity.
  */
 object CityTilePreloader {
@@ -33,7 +33,10 @@ object CityTilePreloader {
 
     private const val BASE_URL = "http://82.165.218.56:5100"
     private const val TILE_DIR = "huntix_tiles"
-    private const val CACHE_VERSION = 4
+    // Deve combaciare con TileClient.CacheVersion (Unity): 5 = griglia DEM
+    // rigenerata a 250 m allineata ai chunk. Con 4 il preloader scriveva file
+    // .v4.* che Unity non legge mai, causando un doppio download.
+    private const val CACHE_VERSION = 5
 
     // Griglia tile (deve combaciare con CityGrid.cs / tile_builder.py)
     private const val ORIGIN_LAT = 34.0

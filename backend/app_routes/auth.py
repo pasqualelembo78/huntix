@@ -15,7 +15,7 @@ from auth_fastapi import (
     AuthUser, create_tokens, ensure_persistent_token,
     GOOGLE_CLIENT_ID, _verify_google_token,
     generate_password_hash, check_password_hash,
-    revoke_refresh_token, _verify_jwt, _blacklist_lock, _token_blacklist,
+    revoke_refresh_token, _verify_jwt, blacklist_access_token,
     reauth_from_persistent_token, require_adult,
 )
 
@@ -400,8 +400,7 @@ async def logout(request: Request, body: LogoutRequest):
     if token:
         payload = _verify_jwt(token)
         if payload:
-            with _blacklist_lock:
-                _token_blacklist.add(payload.get("jti", ""))
+            blacklist_access_token(payload)
     if body.refresh_token:
         revoke_refresh_token(body.refresh_token)
     return {"status": "ok"}

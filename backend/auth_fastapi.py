@@ -36,6 +36,23 @@ def _prune_blacklist():
         for entry in [e for e in _token_blacklist if e[1] < now]:
             _token_blacklist.discard(entry)
 
+
+def blacklist_access_token(payload):
+    """Registra un access token revocato nel formato atteso da _verify_jwt.
+
+    Storicamente il logout inseriva una stringa con il solo jti, mentre
+    _verify_jwt cerca una tupla (jti, exp): il confronto t[0] == jti
+    confrontava il primo carattere della stringa con l'UUID intero, quindi il
+    token restava valido. Questo helper e' l'unico punto che scrive nella
+    blacklist e mantiene la scadenza per permettere la pulizia.
+    """
+    jti = payload.get("jti")
+    exp = payload.get("exp", 0)
+    if not jti:
+        return
+    with _blacklist_lock:
+        _token_blacklist.add((jti, exp))
+
 # ─── Age verification (no minors) ─────────────────────────────────
 # Huntix contains adult/NSFW companion content. Users must be adults.
 MIN_AGE = 18
