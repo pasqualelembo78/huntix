@@ -487,6 +487,10 @@ namespace City
             // cassetto dopo una rigenerazione del chunk.
             City.Interior.ContainerEgg.MarkFound(egg);
 
+            // Uovo del budget: segna il trofeo come trovato nello snapshot,
+            // cosi' Android se lo ricorda e non lo fa rinascere.
+            City.Economy.BudgetEggWatcher.MarkCaptured(egg);
+
             // GIORNO 2 - riflesso uova: conta le uova indoor (cassetto o
             // player dentro un edificio) vs outdoor (chunk). La telemetria
             // lo riporta nel beacon [AR] come uova=I<indoor>/O<outdoor>.
@@ -539,10 +543,22 @@ namespace City
                 lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
                 lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
             }
-            string json = "{\"rarityId\":\"" + rarityId +
-                "\",\"fantasyName\":\"Uovo di MiAcittà\"" +
-                ",\"power\":" + power + ",\"xpReward\":" + xp +
-                ",\"gems\":" + gems +
+            // Id stabile: per le uova budget e' quello generato allo spawn e
+            // salvato nello snapshot; per le altre resta il comportamento
+            // precedente (timestamp). Consente l'idempotenza lato Android.
+            bool isBudget = egg.eggType == City.Economy.EggController.EggType.Budget;
+            string eggId = string.IsNullOrEmpty(egg.containerEggKey)
+                ? "city_" + System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : egg.containerEggKey;
+            string fantasyName = isBudget ? "Uovo del budget" : "Uovo di MiAcittà";
+            long tsMt = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string json = "{\"eggId\":\"" + JsonEscape(eggId) +
+                "\",\"kind\":\"" + (isBudget ? "budget" : "city") +
+                "\",\"rarityId\":\"" + rarityId +
+                "\",\"fantasyName\":\"" + fantasyName +
+                "\",\"power\":" + power + ",\"xpReward\":" + xp +
+                ",\"gems\":" + gems + ",\"tsMt\":" + tsMt +
                 ",\"lat\":\"" + lat + "\",\"lng\":\"" + lng + "\",\"place\":\"" + JsonEscape(place) + "\"}";
             try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("EggCapturedInCity", json); }
             catch (System.Exception e) { UnityEngine.Debug.LogWarning("EggCapturedInCity failed: " + e.Message); }

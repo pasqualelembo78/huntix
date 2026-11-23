@@ -137,6 +137,15 @@ namespace City.Sync
             // rinascono nello stesso contenitore dopo un rebuild del chunk).
             j.foundContainerEggs = City.Interior.ContainerEgg.ExportFound();
 
+            // Uovo del budget: stato, posizione e timestamp viaggiano nello
+            // snapshot cosi' Android lo conserva e il restore non lo rifa' nascere.
+            j.budgetEggSpawned = BudgetEggWatcher.Spawned;
+            j.budgetEggFound = BudgetEggWatcher.Found;
+            j.budgetEggId = BudgetEggWatcher.EggId;
+            j.budgetEggLat = BudgetEggWatcher.Lat;
+            j.budgetEggLng = BudgetEggWatcher.Lng;
+            j.budgetEggTs = BudgetEggWatcher.SpawnTs;
+
             var jobs = new List<string>();
             foreach (JobManager.JobType t in System.Enum.GetValues(typeof(JobManager.JobType)))
             {
@@ -183,6 +192,12 @@ namespace City.Sync
             public int daysTired;
             public string eggDex = "";
             public string foundContainerEggs = "";
+            public bool budgetEggSpawned;
+            public bool budgetEggFound;
+            public string budgetEggId = "";
+            public string budgetEggLat = "0";
+            public string budgetEggLng = "0";
+            public long budgetEggTs;
             public string jobs = "";
             public int peopleKnown;
             public string relationships = "";
@@ -336,6 +351,10 @@ namespace City.Sync
             // Uova nei contenitori: unione con quelle gia' raccolte in locale.
             // Android e' il mirror persistente; Unity non dimentica nulla.
             City.Interior.ContainerEgg.ImportFound(j.foundContainerEggs);
+
+            // Uovo del budget: trofeo una sola volta, con posizione/timestamp.
+            BudgetEggWatcher.ImportState(j.budgetEggSpawned, j.budgetEggFound,
+                j.budgetEggId, j.budgetEggLat, j.budgetEggLng, j.budgetEggTs);
 
             // XP lavori: solo se il locale è a zero (l'XP locale vince).
             if (!string.IsNullOrEmpty(j.jobs) && NoJobXpLocal())

@@ -7,7 +7,7 @@ namespace City.Economy
     public class EggController : MonoBehaviour
     {
         public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
-        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna }
+        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna, Budget }
 
         public Rarity rarity;
         public EggType eggType;
@@ -56,6 +56,8 @@ namespace City.Economy
         // uova del sistema lavori (stazioni LAVORI e pacchi consegnati)
         private static readonly Color LavoroColor = new Color(0.2f, 0.75f, 0.55f);
         private static readonly Color ConsegnaColor = new Color(0.9f, 0.65f, 0.25f);
+        // Uovo del budget: premio per la fluidita' misurata (Riflesso del Mandato)
+        private static readonly Color BudgetColor = new Color(1f, 0.92f, 0.35f);
 
         private void Awake()
         {
@@ -378,6 +380,7 @@ namespace City.Economy
                 case EggType.Breccia: return BrecciaColor;
                 case EggType.Lavoro: return LavoroColor;
                 case EggType.Consegna: return ConsegnaColor;
+                case EggType.Budget: return BudgetColor;
                 default: return TerraColor;
             }
         }

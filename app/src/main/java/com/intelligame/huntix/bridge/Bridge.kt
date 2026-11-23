@@ -209,6 +209,9 @@ object Bridge {
             }
             // ── MiAcitma: uovo catturato nel mini-gioco → inventario uova Huntix
             "EggCapturedInCity" -> handleCityEggCaptured(jsonData)
+            // ── Uovo del budget: notifica di comparsa (la persistenza resta
+            //    lo snapshot CityStateSync, senza nuove SharedPreferences). ──
+            "BudgetEggSpawned" -> handleBudgetEggSpawned(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -282,6 +285,27 @@ object Bridge {
     }
 
     /**
+     * Uovo del budget comparso in MiCittà: il frame time e' restato sotto
+     * soglia per 5 secondi. Non versa nulla nell'inventario (lo fara' la
+     * cattura canonica EggCapturedInCity); registra solo l'evento nel mirror
+     * Android e avvisa il player. Nessuna SharedPreferences nuova: lo stato
+     * persistente viaggia nello snapshot CityStateSync.
+     */
+    private fun handleBudgetEggSpawned(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val eggId = j.optString("eggId", "")
+        val place = j.optString("place", "città→budget")
+        val lat = j.optDouble("lat", 0.0)
+        val lng = j.optDouble("lng", 0.0)
+        val ema = j.optDouble("emaMs", 0.0)
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Uovo del budget comparso: id=$eggId place=$place lat=$lat lng=$lng ema=${ema}ms"
+        )
+        showToast("✨ Uovo del budget: la città è fluida! Vai a catturarlo.")
+    }
+
+    /**
      * Uovo catturato in MiAcitma (Unity): lo versa nell'inventario uova del
      * player Huntix + aggiorna il profilo (contatori rarita'/XP/power) + premia
      * MVC e gemme, replicando il flusso canonico di OutdoorManager.tryCatch.
@@ -301,6 +325,13 @@ object Bridge {
         val lat = j.optDouble("lat", 0.0)
         val lng = j.optDouble("lng", 0.0)
         val place = j.optString("place", "MiAcitta")
+        if (j.optString("kind", "") == "budget") {
+            val budgetEggId = j.optString("eggId", "")
+            com.intelligame.huntix.AppLog.i(
+                "HuntixSync",
+                "Uovo del budget catturato: id=$budgetEggId place=$place"
+            )
+        }
 
         // Eventi stagionali: XP reale x2/x5 (non solo display).
         val xpMult = com.intelligame.huntix.gamification.LiveEventManager.getActiveXpMultiplier()

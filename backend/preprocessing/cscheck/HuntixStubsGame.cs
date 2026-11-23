@@ -19,7 +19,7 @@ namespace City.Economy
     public class EggController : MonoBehaviour
     {
         public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
-        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna }
+        public enum EggType { Strada, Parco, Bosco, Albero, Edificio, Terra, Acqua, Aria, Sabbia, Fango, Breccia, Lavoro, Consegna, Budget }
         public Rarity rarity;
         public EggType eggType;
         public int value = 10;

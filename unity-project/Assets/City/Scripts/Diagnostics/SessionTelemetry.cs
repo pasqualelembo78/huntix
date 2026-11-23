@@ -12,6 +12,10 @@ namespace City.Diagnostics
     {
         public static SessionTelemetry Instance { get; private set; }
 
+        /// <summary>True dopo MONDO pronto: l'Uovo del budget si arma solo
+        /// quando la citta' e' realmente caricata, non durante la build.</summary>
+        public static bool WorldIsReady { get; private set; }
+
         private const float BeaconInterval = 2f;
 
         private float beaconTimer;
@@ -61,6 +65,7 @@ namespace City.Diagnostics
             var go = new GameObject("SessionTelemetry");
             DontDestroyOnLoad(go);
             PerformanceGovernor.Ensure();
+            City.Economy.BudgetEggWatcher.Ensure();
             return go.AddComponent<SessionTelemetry>();
         }
 
@@ -96,6 +101,7 @@ namespace City.Diagnostics
 
         public void WorldReady(int roads, int buildings, int trees, int parks)
         {
+            WorldIsReady = true;
             Mark("MONDO pronto: strade={0} edifici={1} alberi={2} parchi={3}",
                 roads, buildings, trees, parks);
         }

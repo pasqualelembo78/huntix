@@ -28,6 +28,11 @@ namespace City.Diagnostics
 
         public int Tier { get; private set; }
 
+        /// <summary>Frame time mediato usato anche dall'Uovo del budget: e' la
+        /// stessa misura che governa la qualita', quindi il premio premia
+        /// esattamente cio' che il gioco considera "fluido".</summary>
+        public float EmaMs => _emaMs;
+
         public float VehicleCullRadius => VehCullTier[Mathf.Clamp(Tier, 0, MaxTier)];
         public float NpcRenderRadius => NpcRenderTier[Mathf.Clamp(Tier, 0, MaxTier)];
         public float NpcAnimRadius => NpcAnimTier[Mathf.Clamp(Tier, 0, MaxTier)];
