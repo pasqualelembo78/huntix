@@ -6,10 +6,12 @@ e **non sono stati eseguiti**. Analisi dettagliata: `docs/AUDIT_REPOSITORY_UNITY
 
 ## Regola applicata
 
-**Nessun file di codice o asset dei repository sotto elencati è stato copiato nel progetto Huntix.**
+**Nessun file di codice o asset dei repository sotto elencati è stato copiato tale quale.**
 Dove una soluzione è stata riutilizzata, è stata **reimplementata da zero** partendo dal solo
 pattern architetturale, perché la licenza del progetto d'origine non lo consentiva oppure
-perché l'implementazione Huntix esistente era già più completa. Le attribuzioni sotto servono a
+perché l'implementazione Huntix esistente era già più completa. L'unica eccezione è il codice
+MIT di Zone Zero espressamente indicato al punto 10: adattato, con attribuzione e con le
+dipendenze non permissive rimosse. Nessun asset binario di alcun repository è stato importato. Le attribuzioni sotto servono a
 documentare la provenienza delle idee e a non perdere il collegamento con le licenze originali.
 
 I marchi e i nomi dei progetti restano dei rispettivi proprietari. Huntix non incorpora modelli,
@@ -127,7 +129,14 @@ SOFTWARE.
 - Licenza asset: `Assets/StarterAssets/license.txt` = Unity Companion License; BigRookGames
   ("All rights reserved", divieto di redistribuzione di Amplify Color), Photon/PlayFab vendored:
   **non verificati / non copiabili**.
-- Uso in Huntix: **nessuno**. Nessun codice copiato. L'AppId Photon presente nel repo non è riutilizzabile.
+- Uso in Huntix: **codice MIT adattato**, non preso tale quale. Il file
+  `unity-project/Assets/City/Scripts/UI/AlternateTouchInput.cs` deriva da
+  `Assets/_Project/Scripts/UI/VirtualJoystick.cs` e `.../Player/MobileInputHandler.cs`:
+  mantenuta l'attribuzione MIT nel commento in testa, rimossi `using Unity.VisualScripting`
+  e il `Debug.Log` per-frame, aggiunti smoothing esponenziale, flag di attivazione e bridge
+  Android. È un sistema **affiancato** a `DynamicJoystick`, non una sostituzione.
+  **Non copiati**: `Assets/StarterAssets/**` (Unity Companion License), Photon/PlayFab,
+  prefab, AppId Photon e ogni asset di terze parti.
 
 ## 11. Battle Island Mobile
 

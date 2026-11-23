@@ -81,8 +81,8 @@ Valuta il **codice letto**, non i diritti d'uso e non prestazioni misurate. I 0 
 
 ## 5. Codice riutilizzato
 
-**Nessun file di codice o asset dei 13 repository è stato copiato.** Le tre integrazioni
-effettive sono state reimplementate da zero partendo solo dal pattern architetturale:
+Nella fase 1 **nessun file di codice o asset dei 13 repository è stato copiato**: le tre
+integrazioni effettive sono state reimplementate da zero partendo solo dal pattern architetturale:
 
 1. freno a mano touch/derapata (idea da 3ddriving/CarRace, senza licenza);
 2. profili qualità Low/Medium/High sopra i `QualitySettings` già esistenti (idea da Traffic Rider, senza licenza);
@@ -111,7 +111,7 @@ Modifiche sostanziali a script esistenti (nuovi metodi, nessuna riscrittura):
 Android (Kotlin/Java): nuovi eventi whitelistati `FeatureEggHidden`, `CityQualityChanged`
 e persistenza `city_quality` in `SharedPreferences`.
 
-Test: `backend/test_unity_audit_features.py` (11 test statici dei collegamenti).
+Test: `backend/test_unity_audit_features.py` (17 test statici dei collegamenti dopo la fase 2).
 
 ## 7. File modificati/aggiunti
 
@@ -134,6 +134,20 @@ verifica/report successivi.
 | `unity-project/Assets/City/Scripts/Vehicle/VehicleController.cs` | modificato |
 | `unity-project/Assets/Scripts/Core/GameManager.cs` | modificato |
 | `app/src/main/java/com/intelligame/huntix/bridge/Bridge.kt`, `BridgeActivity.java`, `UnityIpc.kt` | modificati |
+
+Fase 2 (branch `integrazione-clone`):
+
+| File | Tipo |
+|---|---|
+| `unity-project/Assets/City/Scripts/UI/AlternateTouchInput.cs(.meta)` | aggiunti (MIT Zone Zero adattato) |
+| `unity-project/Assets/City/Scripts/Diagnostics/TrafficYieldMeter.cs(.meta)` | aggiunti (solo misura) |
+| `unity-project/Assets/City/Scripts/Diagnostics/PerfProbe.cs` | modificato (slot `traffic`) |
+| `unity-project/Assets/City/Scripts/Vehicle/Traffic/CarAgent.cs` | modificato (strumentazione, non guida) |
+| `unity-project/Assets/City/Scripts/UI/UIManager.cs`, `HamburgerMenu.cs` | modificati (voce input touch) |
+| `unity-project/Assets/City/Scripts/Game.cs` | modificato (uovo joystick) |
+| `unity-project/Assets/Scripts/Core/GameManager.cs` | modificato (ripristino `altTouch`) |
+| `app/src/main/java/com/intelligame/huntix/bridge/{Bridge.kt,BridgeActivity.java,UnityIpc.kt}` | modificati (`AltTouchChanged`) |
+| `THIRD_PARTY_NOTICES.md`, report questo | aggiornati |
 
 **Non toccati**: `main`, sistemi già funzionanti (player, camera, traffico, NPC, uova, missioni,
 garage, multiplayer, bridge esistente), dipendenze principali, versione Unity. Le modifiche
@@ -188,8 +202,9 @@ intatte; gli effetti collaterali della build (`PlayerLocomotion.controller`, `Pl
 
 - `cd backend/preprocessing/cscheck && ./check.sh` → **CSCHECK OK** (dopo le modifiche Unity e dopo il bridge).
 - `python3 backend/test_audit_regressions.py` → **Ran 8 tests, OK** (blacklist logout, crypto fallback).
-- `python3 backend/test_unity_audit_features.py` → **Ran 11 tests, OK** (collegamenti UI→Game→Vehicle,
-  uova, bridge, nessuna forzatura all'avvio).
+- `python3 backend/test_unity_audit_features.py` → **Ran 17 tests, OK** (collegamenti UI→Game→Vehicle,
+  uova, bridge, nessuna forzatura all'avvio, joystick alternativo Zone Zero,
+  strumentazione traffico).
 - Build AAR Unity/Il2Cpp e APK: vedi punto 12.
 - I file generati dalla build non sono stati inclusi nei commit; il branch è locale e non pushato.
 
@@ -198,7 +213,7 @@ intatte; gli effetti collaterali della build (`PlayerLocomotion.controller`, `Pl
 **Nessun test eseguito su dispositivo fisico o emulatore Android.** Non è quindi dichiarato
 verificato il comportamento runtime di: pulsante touch freno a mano, derapata, cambio qualità,
 spawn/raccolta uova-premio, persistenza bridge e assenza di regressioni FPS/RAM.
-Sono stati verificati solo: compilazione C# via `cscheck`, 11 test statici sui collegamenti
+Sono stati verificati solo: compilazione C# via `cscheck`, 17 test statici sui collegamenti
 e l'esito della build APK (punto 12). Il collaudo su device resta un passaggio obbligatorio prima del rilascio.
 
 ## 12. APK
@@ -207,29 +222,41 @@ Stato iniziale: `app/build/outputs/apk/release/app-release-signed.apk` preesiste
 SHA-256 `16dd2b4a5a4d5df3bb900e35dffbea726ec84474cb55bed8d527f4d1975cd82f`,
 **precedente alle modifiche dell'audit**.
 
-Build finale **riuscita**: `SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto`
-(`BUILD_EXIT=0`, AAR Unity/IL2CPP ricreato, `BUILD SUCCESSFUL`, APK firmato e verificato).
-Log: `/tmp/opencode/build_audit_unity_retry.log`.
+Build fase 1 **riuscita** (`/tmp/opencode/build_audit_unity_retry.log`):
+SHA-256 `50561031bb1649e2fa34d3a5be238d3a7f072a7b4cc921396c8585c183c3eddc`.
 
-- APK: `app/build/outputs/apk/release/app-release-signed.apk` (184 MiB, 192.512.019 byte).
-- SHA-256: `50561031bb1649e2fa34d3a5be238d3a7f072a7b4cc921396c8585c183c3eddc`.
+Build intermedia della fase 2 (`/tmp/opencode/build_integrazione_clone.log`, `BUILD_EXIT=0`):
+SHA-256 `e0ded29fad624458d99e819677a2de336018de0004b2476c61cd772acaa03eed`.
+Controllo `global-metadata.dat`: presente `AlternateTouchInput`/`AltTouchChanged`,
+assente `TrafficYieldMeter` (la strumentazione era stata aggiunta dopo l'export Unity).
+Per questo motivo è stata eseguita una build finale.
+
+Build finale **riuscita**: `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto`
+(`BUILD_EXIT=0`, AAR Unity/IL2CPP ricreato, `BUILD SUCCESSFUL`, APK firmato e verificato).
+Log: `/tmp/opencode/build_integrazione_finale.log`.
+
+- APK: `app/build/outputs/apk/release/app-release-signed.apk` (184 MiB, 192.524.307 byte).
+- SHA-256: `8bd422c0ca32851e595c9e531ca7ea6fa21cfa47d14caeaf25d0fc0a98f2e3c6`.
 - Verifica contenuto: `global-metadata.dat` dentro l'APK contiene `QualityProfileSelector`,
-  `SetHandbrake`, `SpawnRewardEgg`, `FeatureEggHidden`, `CityQualityChanged`, la stringa
-  `FRENO A MANO` e i log `[Quality] profilo=`/`[GameManager] qualita' ripristinata da Android`:
-  quindi l'APK contiene le nuove integrazioni, non solo i sorgenti.
-- Primo tentativo fallito per Burst (cache corrotta): risolto spostando
-  `unity-project/Library/BurstCache` e ripetendo con `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8`.
-  Nessun file sorgente modificato per aggirare il guasto.
-- Effetti collaterali della build su `link.xml.meta`, `PlayerLocomotion.controller` e
-  `PlayerHero.prefab` ripristinati prima del commit.
+  `SetHandbrake`, `SpawnRewardEgg`, `FeatureEggHidden`, `CityQualityChanged`, `FRENO A MANO`,
+  e — fase 2 — `AlternateTouchInput`, `AltTouchChanged`, `zone-zero`,
+  `Uovo del joystick fluido`, `TrafficYieldMeter` e `crosswalk:`. Quindi l'APK contiene
+  sia i sorgenti sia le nuove integrazioni compilate in IL2CPP.
+- Primo tentativo della fase 1 fallito per Burst (cache corrotta): risolto spostando
+  `unity-project/Library/BurstCache` e ripetendo con locale esplicito. Nessun file
+  sorgente modificato per aggirare il guasto.
+- Effetti collaterali della build finale su `link.xml.meta`, `PlayerLocomotion.controller` e
+  `PlayerHero.prefab` ripristinati prima del commit; i log cancellati dall'utente e
+  `docs/huntix_log_20261123_175436.txt` non sono stati toccati.
 
 ## 13. Licenze e attribuzioni
 
 `THIRD_PARTY_NOTICES.md` raccoglie provenienza, licenza codice e licenza asset di tutti i 13 repo,
 con testo MIT completo per SanAndreasUnity (`Copyright (c) 2015 James King`), Apache 2.0 per
 CarGame/FuzzyTown, MIT per RaceRider3D/Zone Zero/Battle Island, GPLv3 per Third Person Controller
-Android (evitato), e indicazione "nessuna licenza" per i rimanenti. Attribution mantenuta anche
-per le sole idee riutilizzate. Nessun asset GTA importato.
+Android (evitato), e indicazione "nessuna licenza" per i rimanenti. Nella fase 2 il codice MIT
+di Zone Zero è stato **adattato con attribuzione** in `AlternateTouchInput.cs`; nessun asset,
+prefab, Photon/PlayFab o AppId copiato. Nessun asset GTA importato.
 
 ## 14. Ottimizzazioni Android e vincoli rispettati
 
@@ -240,13 +267,53 @@ per le sole idee riutilizzate. Nessun asset GTA importato.
 - Riflesso uova applicato a ogni nuova feature, con posizione geografica inviata al bridge.
 - Bridge richiesto dal Mandato esteso in entrambi i sensi senza toccare i canali esistenti.
 
-## 15. Conclusioni e prossimi passi
+## 15. Fase 2 — integrazione "affianca e misura" (branch `integrazione-clone`)
 
-L'audit ha prodotto un quadro verificabile dei 13 repository e ha innestato in Huntix solo tre
-meccaniche a basso rischio, senza copiare codice terzo e senza duplicare sistemi esistenti.
-La compilazione statica e i test sono passati; **il giudizio finale sull'esperienza di gioco
-resta sospeso fino al collaudo su dispositivo** e alla risoluzione dello stall di build del
-terreno segnalato nel log. Prossimi passi consigliati: (1) installare l'APK su device e
-verificare touch/derapata/qualità/uova; (2) raccogliere un nuovo log con i marker del builder
-per diagnosticare lo stall; (3) solo dopo misure, valutare una reimplementazione locale
-dell'IDM con semafori adattivi; (4) decidere se perseguire TLS sul server di gioco.
+Dopo la richiesta di sostituire "tutti i sistemi", ho applicato la scelta confermata
+**"affianca e misura"**: nessun sistema esistente è stato rimosso. Ho innestato prima il solo
+sistema input, perché è il punto con minor rischio sull'Universo Unico (DEM, AR, uova, bridge).
+
+- **Sorgente legale**: Zone Zero, MIT, `Copyright (c) 2026 Mishal Bhasim`. È il primo codice
+  effettivamente adattato (non solo pattern): `AlternateTouchInput.cs` deriva da
+  `VirtualJoystick.cs`/`MobileInputHandler.cs`. Ho rimosso dipendenze non permissive
+  (`Unity.VisualScripting`) e il log per-frame, e ho aggiunto smoothing esponenziale, flag
+  `Enabled`, bridge e uovo. Nessun asset, prefab, Photon/PlayFab o AppId copiato.
+- **Affiancamento**: `UIManager` continua a costruire il `DynamicJoystick` storico; il nuovo
+  componente usa la **stessa zona di tocco e le stesse visuali** ed è inerte finché non lo si
+  attiva. `SetMoveInput` sceglie `altJoystick.Value` solo se `Enabled`; la latenza input→movimento
+  resta misurabile con `PerfProbe.MarkInput`/`InputConsumed`, già presenti.
+- **Attivazione e misura**: nuova voce `Input touch: Huntix/Zone Zero` nel menu hamburger.
+  Ogni cambio emette `AltTouchChanged{source, tsMt}`, tracciato in `SessionTelemetry` con
+  `touch=zone-zero|huntix`. Android salva `alt_touch` e lo restituisce a Unity in
+  `BridgeActivity` → `GameManager` (notify=false: nessun evento/uovo doppio al ripristino).
+- **Riflesso uova**: prima attivazione → `Uovo del joystick fluido` (Rare), percorso canonico
+  `EggSpawnManager` → `EggCapturedInCity`.
+- **Non aggiunto**: smoothing camera da SanAndreasUnity. `CameraRig.cs` ha già lo smoothing
+  della distanza braccio con la stessa costante di tempo (righe 650-658); duplicarlo avrebbe
+  solo introdotto un secondo filtro sullo stesso segnale.
+- **Verifiche**: `cscheck` OK; `backend/test_unity_audit_features.py` → **17 test OK**;
+  `backend/test_audit_regressions.py` → 8 test OK. APK finale e hash nella sezione 12.
+- **Secondo slice — misura traffico (diagnostica, non policy)**: aggiunto
+  `TrafficYieldMeter.cs` e uno slot `traffic` in `PerfProbe` (8→9). `CarAgent.CheckObstacle`
+  conta le frenate già presenti davanti a player/pedoni e scrive
+  `crosswalk: frenate/player/pedoni/dMin/vMedia` in `SessionTelemetry` ogni 25 eventi.
+  **Nessuna velocità, corsia o semaforo modificato**: il codice FuzzyTown con
+  `using UnityEditor` in runtime e le code `Intersection.cs` non sono stati copiati
+  (sarebbero un downgrade di `JunctionControl`). Nessun tile rigenerato.
+  Riflesso uova differito: se i numeri giustificheranno una policy attiva,
+  l'uovo previsto è `Uovo del passaggio sicuro` con GPS all'incrocio osservato.
+- **Non verificato su device**: fluidità percepita, latenza del nuovo joystick, frenate
+  contate e persistenza Android→Unity runtime. Nessuna dichiarazione di "sostituzione riuscita".
+
+## 16. Conclusioni e prossimi passi
+
+L'audit ha prodotto un quadro verificabile dei 13 repository; la fase 2 ha innestato un sistema
+di input opzionale con attribuzione MIT e una misurazione diagnostica del traffico, senza copiare
+asset e senza duplicare o rimuovere sistemi esistenti. La compilazione statica, i test e la build
+APK finale sono passati; **il giudizio finale sull'esperienza di gioco resta sospeso fino al
+collaudo su dispositivo** e alla risoluzione dello stall di build del terreno segnalato nel log.
+Prossimi passi consigliati: (1) installare l'APK su device e verificare touch/derapata/qualità/uova;
+(2) leggere i nuovi mark `touch=` e `crosswalk:` insieme a `prof=` per confrontare il joystick
+alternativo e decidere se una policy crosswalk attiva è giustificata; (3) raccogliere un nuovo log
+con i marker del builder per diagnosticare lo stall; (4) solo dopo misure, valutare una
+reimplementazione locale dell'IDM con semafori adattivi; (5) decidere se perseguire TLS sul server.

@@ -186,6 +186,7 @@ namespace City
 
         private bool handbrakeEggGranted;
         private bool qualityEggGranted;
+        private bool touchEggGranted;
 
         /// <summary>Pulsante touch "FRENO A MANO" della HUD guida. Delega al
         /// veicolo e, la prima volta che si derapa in movimento, nasconde un
@@ -213,6 +214,18 @@ namespace City
                 "Uovo del profilo " + profileName,
                 City.Economy.EggController.Rarity.Rare,
                 "città→impostazioni→qualità");
+        }
+
+        /// <summary>Riflesso uova del joystick alternativo derivato da Zone Zero:
+        /// il primo passaggio al nuovo input lascia un uovo accanto al player.
+        /// Lo stato della scelta viaggia anche su Android con AltTouchChanged.</summary>
+        public void OnAlternateTouchEnabled()
+        {
+            if (touchEggGranted) return;
+            touchEggGranted = true;
+            GrantFeatureEgg("touch-zone-zero", "Uovo del joystick fluido",
+                City.Economy.EggController.Rarity.Rare,
+                "città→impostazioni→input touch");
         }
 
         /// <summary>Piazza un uovo legato a una funzionalita' appena scoperta

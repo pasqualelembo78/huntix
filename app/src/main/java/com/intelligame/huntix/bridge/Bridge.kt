@@ -219,6 +219,9 @@ object Bridge {
             // ── Profilo grafico scelto in MiAcitta → preferenza persistente,
             //    rispedita a Unity all'apertura successiva (bridge bidirezionale). ──
             "CityQualityChanged" -> handleCityQualityChanged(jsonData)
+            // ── Sorgente input touch scelta in MiCittà: preferenza persistente,
+            //    rispedita a Unity all'apertura successiva. ──
+            "AltTouchChanged" -> handleAltTouchChanged(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -330,6 +333,19 @@ object Bridge {
         ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
             .edit().putString("city_quality", profile).apply()
         com.intelligame.huntix.AppLog.i("HuntixSync", "Qualità MiCittà: $profile")
+    }
+
+    /** Joystick touch alternativo (pattern Zone Zero, MIT) scelto in MiCittà:
+     *  Android ne diventa proprietario e lo rimanda a Unity in openUnityActivity.
+     *  Nessun nuovo file: usa le stesse SharedPreferences di city_quality. */
+    private fun handleAltTouchChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val source = j.optString("source", "").lowercase()
+        if (source !in setOf("zone-zero", "huntix")) return
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("alt_touch", source == "zone-zero").apply()
+        com.intelligame.huntix.AppLog.i("HuntixSync", "Input touch MiCittà: $source")
     }
 
     /**

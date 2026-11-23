@@ -40,6 +40,7 @@ namespace City.UI
     // stub di UI/DynamicJoystick.cs (escluso dal check)
     public class DynamicJoystick : MonoBehaviour
     {
+        public float radius = 120f;
         public Vector2 Value => Vector2.zero;
         public void Configure(RectTransform root, RectTransform baseRt, RectTransform handleRt) {}
     }

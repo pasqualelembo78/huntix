@@ -287,6 +287,16 @@ namespace Huntix.Core
                     City.Diagnostics.QualityProfileSelector.Ensure().Apply(p, false);
                     Debug.Log("[GameManager] qualita' ripristinata da Android: " + p);
                 }
+
+                // Sorgente input touch scelta in Miacitta e salvata da Android.
+                // notify=false: e' un ripristino, non una scelta dell'utente.
+                var altTouch = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"altTouch\"\\s*:\\s*true");
+                if (altTouch.Success)
+                {
+                    City.UI.AlternateTouchInput.SetEnabled(true, false);
+                    Debug.Log("[GameManager] input touch ripristinato da Android: zone-zero");
+                }
             }
             catch (System.Exception e)
             {

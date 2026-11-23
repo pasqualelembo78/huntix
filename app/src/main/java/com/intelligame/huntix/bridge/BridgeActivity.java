@@ -112,6 +112,10 @@ public class BridgeActivity extends UnityPlayerActivity {
                     String quality = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
                             .getString("city_quality", null);
                     if (quality != null && !quality.isEmpty()) j.put("cityQuality", quality);
+                    // Sorgente input touch salvata da Android → Unity.
+                    boolean altTouch = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getBoolean("alt_touch", false);
+                    if (altTouch) j.put("altTouch", true);
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

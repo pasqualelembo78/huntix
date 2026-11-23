@@ -111,5 +111,67 @@ class TestAndroidBridge(unittest.TestCase):
         self.assertIn("QualityProfileSelector.Ensure().Apply(p, false)", self.manager)
 
 
+class TestAlternateTouchIntegration(unittest.TestCase):
+    """Joystick alternativo Zone Zero (MIT): affiancato, non sostitutivo."""
+
+    def setUp(self):
+        self.touch = read(os.path.join(UNITY, "City", "Scripts", "UI", "AlternateTouchInput.cs"))
+        self.ui = read(os.path.join(UNITY, "City", "Scripts", "UI", "UIManager.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI", "HamburgerMenu.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(APP, "BridgeActivity.java"))
+
+    def test_attribuzione_mit_presente(self):
+        self.assertIn("Adattato da Zone Zero", self.touch)
+        self.assertIn("Mishal Bhasim", self.touch)
+
+    def test_sorgente_alternativa_e_opzionale(self):
+        self.assertIn("public static bool Enabled", self.touch)
+        self.assertIn("SetEnabled(bool on, bool notify)", self.touch)
+        self.assertIn('"huntix_alt_touch"', self.touch)
+        self.assertIn("AlternateTouchInput.Enabled && altJoystick != null", self.ui)
+        self.assertIn("altJoystick.Value : joystick.Value", self.ui.replace("\n", ""))
+
+    def test_menu_e_riflesso_uova(self):
+        self.assertIn("Input touch:", self.menu)
+        self.assertIn("ToggleTouch()", self.menu)
+        self.assertIn("OnAlternateTouchEnabled()", self.game)
+        self.assertIn('GrantFeatureEgg("touch-zone-zero"', self.game)
+
+    def test_bridge_bidirezionale(self):
+        self.assertIn('"AltTouchChanged"', self.ipc)
+        self.assertIn('"AltTouchChanged" -> handleAltTouchChanged(jsonData)', self.bridge)
+        self.assertIn('putBoolean("alt_touch"', self.bridge)
+        self.assertIn('j.put("altTouch", true)', self.activity)
+        self.assertIn(r'\"altTouch\"', self.manager)
+        self.assertIn("AlternateTouchInput.SetEnabled(true, false)", self.manager)
+
+
+class TestTrafficYieldInstrumentation(unittest.TestCase):
+    """Misura diagnostica della precedenza pedonale: zero cambio di guida."""
+
+    def setUp(self):
+        self.meter = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                      "TrafficYieldMeter.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                       "PerfProbe.cs"))
+        self.car = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                     "Traffic", "CarAgent.cs"))
+
+    def test_misura_senza_modificare_velocita(self):
+        self.assertIn("TrafficYieldMeter.Record(", self.car)
+        self.assertIn('PerfProbe.Measure("traffic")', self.car)
+        self.assertIn("non policy di guida", self.meter)
+        self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
+
+    def test_slot_probe_e_telemetria(self):
+        self.assertIn("SlotCount = 9", self.probe)
+        self.assertIn('"spawn", "roads", "traffic"', self.probe)
+        self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -24,6 +24,7 @@ namespace City.UI
         private GameObject skinSelRow;
         private Text _styleLabel;
         private Text _qualityLabel;
+        private Text _touchLabel;
         private Transform _canvas;
 
         private static readonly Color Bg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
@@ -161,7 +162,7 @@ namespace City.UI
             prt.anchorMin = prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
             prt.anchoredPosition = new Vector2(-16f, 0f);
-            prt.sizeDelta = new Vector2(360f, 600f);
+            prt.sizeDelta = new Vector2(360f, 680f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -174,6 +175,7 @@ namespace City.UI
                 "Note legali",
                 "Qualità grafica: Media",
                 "Esci dal gioco",
+                "Input touch: Huntix",
             };
             System.Action[] actions =
             {
@@ -214,6 +216,7 @@ namespace City.UI
                     if (UIManager.Instance != null)
                         UIManager.Instance.OnExitPressedPublic();
                 },
+                () => ToggleTouch(),
             };
 
             for (int i = 0; i < labels.Length; i++)
@@ -234,6 +237,7 @@ namespace City.UI
                 lbl.text = labels[idx];
                 if (idx == 3) _styleLabel = lbl;
                 if (idx == 6) _qualityLabel = lbl;
+                if (idx == 8) _touchLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -267,7 +271,7 @@ namespace City.UI
         private void SetVisible(bool v)
         {
             if (panel == null) return;
-            if (v) { RefreshStyleLabel(); RefreshQualityLabel(); }
+            if (v) { RefreshStyleLabel(); RefreshQualityLabel(); RefreshTouchLabel(); }
             panel.SetActive(v);
         }
 
@@ -295,6 +299,22 @@ namespace City.UI
             RefreshQualityLabel();
             if (UIManager.Instance != null)
                 UIManager.Instance.ShowToast("Qualità: " + sel.Current);
+        }
+
+        // ---- input touch alternativo (Zone Zero, MIT) ----
+
+        private void RefreshTouchLabel()
+        {
+            if (_touchLabel == null) return;
+            _touchLabel.text = "Input touch: " +
+                (AlternateTouchInput.Enabled ? "Zone Zero" : "Huntix");
+        }
+
+        private void ToggleTouch()
+        {
+            if (UIManager.Instance == null) return;
+            UIManager.Instance.SetAlternateTouch(!AlternateTouchInput.Enabled);
+            RefreshTouchLabel();
         }
 
         // ---- stile edifici (fluidita' / qualita') ----

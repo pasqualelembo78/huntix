@@ -17,6 +17,7 @@ namespace UnityEngine
         public static float Distance(Vector2 a, Vector2 b) => 0f;
         public static float Dot(Vector2 a, Vector2 b) => 0f;
         public static Vector2 Scale(Vector2 a, Vector2 b) => a;
+        public static Vector2 Lerp(Vector2 a, Vector2 b, float t) => a;
         public static Vector2 operator +(Vector2 a, Vector2 b) => a;
         public static Vector2 operator -(Vector2 a, Vector2 b) => a;
         public static Vector2 operator *(Vector2 a, float d) => a;
@@ -121,6 +122,7 @@ namespace UnityEngine
         public static int Clamp(int v, int a, int b) => v;
         public static float Sqrt(float f) => f;
         public static float Pow(float f, float p) => f;
+        public static float Exp(float f) => 1f;
         public static float Sign(float f) => f >= 0f ? 1f : -1f;
         public static bool Approximately(float a, float b) => false;
         public static float Sin(float f) => 0f; public static float Lerp(float a, float b, float t) => a;

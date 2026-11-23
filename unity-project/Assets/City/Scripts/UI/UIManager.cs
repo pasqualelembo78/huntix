@@ -26,6 +26,9 @@ namespace City.UI
 
         public ScreenFader fader;
         public DynamicJoystick joystick;
+        // Joystick alternativo (Zone Zero, MIT): affiancato, non sostituisce
+        // quello storico. Viene usato solo se l'utente lo attiva dal menu.
+        public AlternateTouchInput altJoystick;
         public OrbitZone orbit;
 
         private LegalManager _legal;
@@ -459,6 +462,14 @@ namespace City.UI
         // Feedback visivo del freno a mano (rosso = inserito).
         private Image handbrakeButtonImage;
 
+        /// <summary>Attiva/disattiva il joystick alternativo mantenendo
+        /// intatto quello storico. Chiamato dal menu e dal bridge Android.</summary>
+        public void SetAlternateTouch(bool on)
+        {
+            AlternateTouchInput.SetEnabled(on, true);
+            ShowToast(on ? "Input touch: Zone Zero" : "Input touch: Huntix");
+        }
+
         public void ShowDrivingUI(bool show)
         {
             if (drivingPanel == null) BuildDrivingUI();
@@ -712,7 +723,13 @@ namespace City.UI
             bool menuOpen = actionMenuRoot != null && actionMenuRoot.activeSelf;
 
             if (player != null && !Game.Instance.IsDriving && !Game.Instance.IsInInterior && !legalOpen && !menuOpen)
-                player.SetMoveInput(joystick.Value);
+            {
+                // Sorgente di movimento: vecchio joystick oppure quello
+                // alternativo. La misura input->movimento resta PerfProbe.
+                Vector2 move = AlternateTouchInput.Enabled && altJoystick != null
+                    ? altJoystick.Value : joystick.Value;
+                player.SetMoveInput(move);
+            }
 
             // Aggiorna velocita' se in guida
             if (Game.Instance != null && Game.Instance.IsDriving && speedText != null && Game.Instance.CurrentVehicle != null)
@@ -977,6 +994,13 @@ namespace City.UI
             RectTransform handleRt = MakeCircle(baseRt, "JoystickHandle", 70f, new Color(1f, 1f, 1f, 0.65f));
             baseRt.gameObject.SetActive(false);
             joystick.Configure(root, baseRt, handleRt);
+
+            // Joystick alternativo (pattern Zone Zero, MIT): condivide la
+            // stessa zona di tocco e le stesse visuali, ma resta inerte finche'
+            // Enabled e' false. Nessun pulsante o collider nuovo.
+            AlternateTouchInput.Initialize();
+            altJoystick = moveZone.gameObject.AddComponent<AlternateTouchInput>();
+            altJoystick.Configure(root, baseRt, handleRt, joystick.radius);
 
             // --- pulsante LAVORI: accesso diretto al pannello dei lavori
             // (Tassista/Corriere/Ronda), una delle funzioni core del gioco.
