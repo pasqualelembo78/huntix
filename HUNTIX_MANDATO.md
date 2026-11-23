@@ -12,7 +12,7 @@
 
 **HUNTIX Ã¨ nato come CACCIA ALLE UOVA AR.** Non Ã¨ "un gioco che ha anche delle
 uova": Ã¨ una caccia alle uova che vive in RealtÃ  Aumentata (GPS, indoor, cittÃ  OSM
-3D Unity) e in ogni angolo dell'app. L'uovo Ã¨ il fulcro emozionale, economico e di
+3D Unity), nella cittÃ  fittizia generata da ricette derivate da mappe reali, e in ogni angolo dell'app. L'uovo Ã¨ il fulcro emozionale, economico e di
 progressione di tutto l'universo.
 
 Ogni feature, minigioco, missione, decorazione, sistema, menu, DA SOLIDARIETÃ€ non
@@ -26,6 +26,7 @@ Tutto ciÃ² che esiste nel progetto fa parte dello **stesso universo Huntix**:
 - Unity (cittÃ  3D OSM, mini-cittÃ  AR, esplorazione outdoor, minigiochi)
 - App Android (profilo, inventario, schiusa, classifiche, eventi, missioni, casa)
 - Dati reali (GPS, POI, tile OSM, coordinate)
+- Ricette di cittÃ  fittizia (parametri estratti una volta da OSM reale; nessuna cartografia a runtime)
 - Profilo giocatore (XP, MVC, gemme, energia, skin, pet, famiglia, casa, bestiario)
 
 **NIENTE Ã¨ "a parte".** Una casa arredata in Unity, un uovo trovato in un cassetto
@@ -177,6 +178,10 @@ dello stesso universo Huntix e devono essere progressivamente integrati.
 - Minigioco in Unity o Activity Android = stesso universo. Ricompense condivise.
 - Città Unity e città AR Android = stessa città. Uova sincronizzate.
 - Outdoor GPS e città Unity = stesso mondo. Stesse rarità, stessi eventi.
+
+### Città fittizia (modalità Gioco)
+
+La città fittizia è un quartiere dello stesso universo Huntix, non un gioco a parte e non una sostituzione della città AR/OSM. Si genera da una **ricetta** di parametri estratti offline da mappe reali (strade, isolati, parchi, POI); a runtime non usa cartografia reale, DEM né tile. Deve essere sempre affiancata e attivabile con un flag, mai impostata in modo da disattivare i sistemi esistenti senza conferma esplicita. Come ogni componente Unity ha bridge bidirezionale obbligatorio (stato → Android e ripristino → Unity), riflesso uova con posizione registrata e misure `PerfProbe`/`SessionTelemetry` prima di qualunque cambio di predefinito.
 
 La presenza di sistemi paralleli NON autorizza la loro eliminazione.
 
