@@ -36,8 +36,14 @@ namespace City.Vehicle
         private Rigidbody rb;
         private float currentSpeed, steerInput, throttleInput;
         private bool braking;
+        // Freno a mano: non e' un settore "brake" separato (la fisica Whoosh
+        // e' Rigidbody + velocita' scalare), ma una frenata piu' energica con
+        // perdita di aderenza posteriore → derapata controllata. Niente
+        // WheelCollider nuovo: resta la guida mobile gia' collaudata.
+        private bool handbrakeInput;
 
         public bool IsDriving { get; private set; }
+        public bool IsHandbrakeOn { get { return handbrakeInput; } }
         public VehicleDamage Damage { get; private set; }
 
         /// <summary>HP del veicolo 0-100 (integrita'): scende coi danni da
@@ -102,6 +108,13 @@ namespace City.Vehicle
         // mezzi: evita che un turnSpeed alto (70-130) trasformi la guida
         // in una trottola. ~55 deg/s = curva stretta ma controllabile.
         private const float MaxYawPerSec = 55f;
+        // Freno a mano (derapata): frenata maggiore del freno normale, piu'
+        // imbardata per lo stesso sterzo e velocita' massima limitata. Valori
+        // conservativi: su Android l'auto resta governabile col joystick.
+        private const float HandbrakeBrakeFactor = 1.35f;
+        private const float HandbrakeYawBoost = 1.55f;
+        private const float HandbrakeMaxSpeedFactor = 0.65f;
+        private const float HandbrakeSlideFactor = 0.22f;
         // ── stabilita' / anti-ribaltamento ─────────────────────────
         // Sospensione virtuale degli ammortizzatori: l'auto NON deve
         // accappottarsi nemmeno su un marciapiede a bassa velocita'.
@@ -535,6 +548,16 @@ namespace City.Vehicle
             braking = brake;
         }
 
+        /// <summary>Freno a mano con perdita di tenuta posteriore (drift). Richiamato dal
+        /// pulsante touch "FRENO A MANO" tramite Game.SetHandbrake. Lo stato
+        /// resta indipendente da SetInput: il joystick continua a dare
+        /// gas/sterzo mentre il freno e' premuto.</summary>
+        public void SetHandbrake(bool on)
+        {
+            handbrakeInput = on;
+            if (on && !IsDriving) handbrakeInput = false;
+        }
+
         private void FixedUpdate()
         {
             if (!IsDriving || data == null) return;
@@ -566,6 +589,9 @@ namespace City.Vehicle
             float maxSpd = (FlatTire || SuspensionDead || limpByPart)
                             ? Mathf.Min(LimpSpeed, baseMax)
                             : baseMax;
+            // Freno a mano: il motore non puo' spingere oltre una velocita'
+            // ridotta finche' e' premuto (ci si puo' ancora muovere in derapata).
+            if (handbrakeInput) maxSpd *= HandbrakeMaxSpeedFactor;
 
             // Incidentata / in fiamme: motore spento, auto ferma (di norma
             // siamo gia' stati staccati dall'urto con un prompt)
@@ -576,11 +602,16 @@ namespace City.Vehicle
                 return;
             }
 
-            if (braking)
+            if (braking || handbrakeInput)
             {
                 // frenata scalata dagli eventuali freni rotti (asiimmetrica → sbanda)
+                // Il freno a mano e' piu' energico e NON accelera anche se il
+                // joystick e' ancora a tavoletta.
                 float brakeEff = PartEffect(VehiclePartType.Brake);
-                float brakeVal = data.brakeForce * brakeEff * Time.fixedDeltaTime;
+                float brakeForce = handbrakeInput
+                    ? data.brakeForce * HandbrakeBrakeFactor
+                    : data.brakeForce;
+                float brakeVal = brakeForce * brakeEff * Time.fixedDeltaTime;
                 if (brakeEff < 1f && currentSpeed > 0.3f)
                 {
                     // freni asimmetrici: tende a sbandare sul lato con freno rotto
@@ -611,6 +642,10 @@ namespace City.Vehicle
                                 * highSpeedFactor;
             float yawRate = steerInput * data.turnSpeed * speedFactor
                             * PartEffect(VehiclePartType.Steering);
+            // Freno a mano: perdita di aderenza al retrotreno → l'auto ruota
+            // piu' di quanto lo sterzo chiederebbe (derapata, non testacoda:
+            // il clamp MaxYawPerSec qui sotto resta attivo).
+            if (handbrakeInput) yawRate *= HandbrakeYawBoost;
             // sospensioni/ammortizzatori a terra → scarsa tenuta in curva
             float gripEff = 0.5f * (PartEffect(VehiclePartType.Suspension) +
                                     PartEffect(VehiclePartType.ShockAbsorber));
@@ -630,6 +665,12 @@ namespace City.Vehicle
             transform.Rotate(0f, turn, 0f);
 
             Vector3 vel = transform.forward * currentSpeed;
+            // Derapata: una componente laterale proporzionale allo sterzo e
+            // alla velocita' simula lo scivolamento senza introdurre un
+            // Rigidbody aggiuntivo o WheelCollider (costo mobile sotto controllo).
+            if (handbrakeInput)
+                vel += transform.right * (-steerInput * Mathf.Abs(currentSpeed)
+                                          * HandbrakeSlideFactor);
             vel.y = rb.velocity.y;
             rb.velocity = vel;
             rb.velocity *= (1f - data.drag * Time.fixedDeltaTime);

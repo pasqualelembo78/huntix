@@ -142,6 +142,10 @@ namespace City
             // Telemetria di sessione verso AppLog Android (analisi pregi/difetti)
             try { City.Diagnostics.SessionTelemetry.Ensure(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] SessionTelemetry.Ensure FALLITO: " + e.Message); }
+            // Profili grafici Low/Medium/High: tetto qualitativo scelto dal
+            // giocatore, il governor continua ad adattare i raggi in automatico.
+            try { City.Diagnostics.QualityProfileSelector.Ensure(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] QualityProfileSelector.Ensure FALLITO: " + e.Message); }
 
             // Realtà aumentata: pulsante PASSA A AR (camera + ARCore + piano).
             try { City.AR.ArCityController.Ensure(); }
@@ -176,6 +180,72 @@ namespace City
                 Vector2 v = ui.joystick.Value;
                 CurrentVehicle.SetInput(v.y, v.x, false);
             }
+        }
+
+        // ── Freno a mano + riflesso uova ──────────────────────────
+
+        private bool handbrakeEggGranted;
+        private bool qualityEggGranted;
+
+        /// <summary>Pulsante touch "FRENO A MANO" della HUD guida. Delega al
+        /// veicolo e, la prima volta che si derapa in movimento, nasconde un
+        /// uovo-premio accanto all'auto: deve essere raccolto a piedi, cosi'
+        /// la scoperta della meccanica diventa una caccia alle uova.</summary>
+        public void SetHandbrake(bool on)
+        {
+            if (CurrentVehicle == null) return;
+            CurrentVehicle.SetHandbrake(on);
+            if (!on || handbrakeEggGranted) return;
+            if (CurrentVehicle.GetCurrentSpeedKmh() < 18f) return;
+            handbrakeEggGranted = true;
+            GrantFeatureEgg("handbrake", "Uovo della derapata",
+                City.Economy.EggController.Rarity.Rare, "città→strada→derapata");
+        }
+
+        /// <summary>Riflesso uova del selettore grafico: il primo cambio di
+        /// profilo lascia indietro un uovo raro. Richiamato da
+        /// QualityProfileSelector.Apply solo quando l'utente cambia profilo.</summary>
+        public void OnQualityProfileApplied(int profileIndex, string profileName)
+        {
+            if (qualityEggGranted) return;
+            qualityEggGranted = true;
+            GrantFeatureEgg("quality-" + profileName.ToLowerInvariant(),
+                "Uovo del profilo " + profileName,
+                City.Economy.EggController.Rarity.Rare,
+                "città→impostazioni→qualità");
+        }
+
+        /// <summary>Piazza un uovo legato a una funzionalita' appena scoperta
+        /// e comunica l'evento ad Android con posizione e timestamp. L'uovo
+        /// usa il normale EggController: quando viene raccolto, OnEggCollected
+        /// invia EggCapturedInCity con lat/lng, quindi Android sa sempre
+        /// dove e' stato trovato (Regola del Riflesso + bridge obbligatorio).</summary>
+        private void GrantFeatureEgg(string featureId, string label,
+            City.Economy.EggController.Rarity rarity, string place)
+        {
+            if (EggSpawnManager.Instance == null || player == null) return;
+            Vector3 at = player.transform.position +
+                player.transform.right * 2.5f + Vector3.up * 0.4f;
+            var egg = EggSpawnManager.Instance.SpawnRewardEgg(
+                at, rarity, City.Economy.EggController.EggType.Strada, place);
+            if (egg == null) return;
+
+            string lat = "0", lng = "0";
+            if (City.OSM.WorldOrigin.Initialized)
+            {
+                var g = City.OSM.WorldOrigin.ToGeo(at);
+                lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            long ts = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string json = "{\"feature\":\"" + JsonEscape(featureId) +
+                "\",\"label\":\"" + JsonEscape(label) +
+                "\",\"lat\":\"" + lat + "\",\"lng\":\"" + lng +
+                "\",\"place\":\"" + JsonEscape(place) +
+                "\",\"tsMt\":" + ts + "}";
+            try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("FeatureEggHidden", json); }
+            catch (System.Exception e) { OsmDiag.Log("[Egg] FeatureEggHidden failed: " + e.Message); }
+            if (ui != null) ui.ShowToast("Hai scovato un uovo: " + label + "!");
         }
 
         // ── Input routing ──────────────────────────────────────────

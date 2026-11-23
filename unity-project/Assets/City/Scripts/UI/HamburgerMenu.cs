@@ -23,6 +23,7 @@ namespace City.UI
         private GameObject profilePanel;
         private GameObject skinSelRow;
         private Text _styleLabel;
+        private Text _qualityLabel;
         private Transform _canvas;
 
         private static readonly Color Bg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
@@ -171,6 +172,7 @@ namespace City.UI
                 "Stile edifici: Veloce",
                 "Profilo (Sim)",
                 "Note legali",
+                "Qualità grafica: Media",
                 "Esci dal gioco",
             };
             System.Action[] actions =
@@ -205,6 +207,7 @@ namespace City.UI
                     if (UIManager.Instance != null)
                         UIManager.Instance.ShowLegal();
                 },
+                () => ToggleQuality(),
                 () =>
                 {
                     SetVisible(false);
@@ -230,6 +233,7 @@ namespace City.UI
                 var lbl = NewLabel(row.transform);
                 lbl.text = labels[idx];
                 if (idx == 3) _styleLabel = lbl;
+                if (idx == 6) _qualityLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -263,8 +267,34 @@ namespace City.UI
         private void SetVisible(bool v)
         {
             if (panel == null) return;
-            if (v) RefreshStyleLabel();
+            if (v) { RefreshStyleLabel(); RefreshQualityLabel(); }
             panel.SetActive(v);
+        }
+
+        // ---- profilo grafico (Low / Medium / High) ----
+
+        private void RefreshQualityLabel()
+        {
+            if (_qualityLabel == null) return;
+            var sel = City.Diagnostics.QualityProfileSelector.Instance;
+            string name = sel == null ? "Media" : sel.Current.ToString();
+            _qualityLabel.text = "Qualità grafica: " +
+                (name == "Low" ? "Bassa" : name == "High" ? "Alta" : "Media");
+        }
+
+        private void ToggleQuality()
+        {
+            var sel = City.Diagnostics.QualityProfileSelector.Instance;
+            if (sel == null)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast("Selettore qualità non disponibile");
+                return;
+            }
+            sel.Cycle();
+            RefreshQualityLabel();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast("Qualità: " + sel.Current);
         }
 
         // ---- stile edifici (fluidita' / qualita') ----

@@ -456,6 +456,8 @@ namespace City.UI
         private TMP_Text damageBarText;
         private Image fuelBarImage;
         private TMP_Text fuelBarText;
+        // Feedback visivo del freno a mano (rosso = inserito).
+        private Image handbrakeButtonImage;
 
         public void ShowDrivingUI(bool show)
         {
@@ -523,6 +525,40 @@ namespace City.UI
                 if (v != null) v.Honk();
             });
             MakeText(hornBt, "CLACSON", 16f, Color.white, TextAlignmentOptions.Center,
+                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            // Freno a mano (tieni premuto): derapata controllata. Usa
+            // EventTrigger invece del Button.onClick per averlo solo finche'
+            // il dito resta sul pulsante, come un vero freno.
+            var hbRt = MakeRect("VehicleHandbrakeBtn", prt, new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-176f, 90f), new Vector2(-56f, 210f));
+            handbrakeButtonImage = hbRt.gameObject.AddComponent<Image>();
+            handbrakeButtonImage.color = new Color(0.85f, 0.35f, 0.25f, 0.92f);
+            handbrakeButtonImage.raycastTarget = true;
+            var hbTrigger = hbRt.gameObject.AddComponent<EventTrigger>();
+            var down = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+            down.callback.AddListener(_ =>
+            {
+                Vibration.Vibrate(20);
+                if (Game.Instance != null) Game.Instance.SetHandbrake(true);
+                handbrakeButtonImage.color = new Color(1f, 0.15f, 0.1f, 1f);
+            });
+            var up = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
+            up.callback.AddListener(_ =>
+            {
+                if (Game.Instance != null) Game.Instance.SetHandbrake(false);
+                handbrakeButtonImage.color = new Color(0.85f, 0.35f, 0.25f, 0.92f);
+            });
+            var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exit.callback.AddListener(_ =>
+            {
+                if (Game.Instance != null) Game.Instance.SetHandbrake(false);
+                handbrakeButtonImage.color = new Color(0.85f, 0.35f, 0.25f, 0.92f);
+            });
+            hbTrigger.triggers.Add(down);
+            hbTrigger.triggers.Add(up);
+            hbTrigger.triggers.Add(exit);
+            MakeText(hbRt, "FRENO\nA MANO", 17f, Color.white, TextAlignmentOptions.Center,
                 Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             // Indicatore velocita' in basso al centro

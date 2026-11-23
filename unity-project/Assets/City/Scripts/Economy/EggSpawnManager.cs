@@ -544,6 +544,35 @@ namespace City.Economy
             return new Vector3(CoordinateConverter.LonToX(p.lng), 0f, CoordinateConverter.LatToZ(p.lat));
         }
 
+        /// <summary>Riflesso della caccia alle uova: piazza un uovo-premio
+        /// collegato a una nuova azione del giocatore (derapata, cambio qualita',
+        /// scoperta di un garage, ecc.). Passa per lo stesso EggController di
+        /// quelle normali: alla cattura scatta Game.OnEggCollected → bridge
+        /// EggCapturedInCity con lat/lng e luogo, senza duplicare sistemi.
+        /// Ritorna null se il budget uova e' già pieno (MAX_EGGS).</summary>
+        public GameObject SpawnRewardEgg(Vector3 worldPos, EggController.Rarity rarity,
+            EggController.EggType type, string placeHint)
+        {
+            if (eggs.Count >= MAX_EGGS) return null;
+            try
+            {
+                var go = new GameObject("Egg_Feature_" + type);
+                var col = go.AddComponent<SphereCollider>();
+                col.radius = 0.5f;
+                col.isTrigger = true;
+                var egg = go.AddComponent<EggController>();
+                egg.Init(worldPos, rarity, type);
+                if (!string.IsNullOrEmpty(placeHint)) egg.placeHint = placeHint;
+                eggs.Add(go);
+                return go;
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[Egg] SpawnRewardEgg fallito: " + e.Message);
+                return null;
+            }
+        }
+
         public void DespawnAll()
         {
             foreach (var go in eggs)

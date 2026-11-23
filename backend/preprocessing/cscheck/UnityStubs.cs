@@ -524,6 +524,7 @@ namespace UnityEngine
         public static string[] names => new string[0];
         public static int vSyncCount { get; set; }
         public static int GetQualityLevel() => 0;
+        public static void SetQualityLevel(int index, bool applyExpensiveChanges) {}
     }
 
     namespace Profiling
@@ -919,6 +920,7 @@ namespace UnityEngine
 namespace UnityEngine.EventSystems
 {
     using UnityEngine;
+    using UnityEngine.Events;
     using UnityEngine.UI;
     public class EventSystem : Behaviour
     {
@@ -954,6 +956,19 @@ namespace UnityEngine.EventSystems
     public struct RaycastResult
     {
         public GameObject gameObject;
+    }
+    public class BaseEventData {}
+    public enum EventTriggerType { PointerDown, PointerUp, PointerExit, PointerClick, PointerEnter }
+    public class EventTrigger : Behaviour
+    {
+        public class TriggerEvent : UnityEvent<BaseEventData> {}
+        public class Entry
+        {
+            public EventTriggerType eventID;
+            public TriggerEvent callback = new TriggerEvent();
+        }
+        public System.Collections.Generic.List<Entry> triggers =
+            new System.Collections.Generic.List<Entry>();
     }
 }
 

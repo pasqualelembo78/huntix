@@ -80,6 +80,9 @@ namespace City.Economy
     {
         public static EggSpawnManager Instance;
         public void RemoveEgg(GameObject egg) {}
+        public GameObject SpawnRewardEgg(UnityEngine.Vector3 worldPos,
+            EggController.Rarity rarity, EggController.EggType type,
+            string placeHint) { return null; }
         public void SpawnEggsInChunk(Transform root, City.OSM.TileGeoDoc geo,
             System.Func<City.OSM.GeoLL, UnityEngine.Vector3> toLocal,
             UnityEngine.Rect bounds, int chunkSeed) {}
