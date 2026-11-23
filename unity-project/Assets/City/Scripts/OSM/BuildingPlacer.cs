@@ -259,12 +259,16 @@ namespace City.OSM
         }
 
         // ── Entrate interni (Fase 4) ─────────────────────────────────────
-        // Tutti gli edifici sono esplorabili: niente budget né filtro casuale
-        // per chunk. Gli enterabile sono costruiti IN-PLACE (guscio reale
-        // cavo con porte, finestre e arredi), così si può entrare in quasi
-        // ogni edificio della città. ResetChunkBudget resta per
-        // compatibilità (ChunkBuilder lo chiama) ma non limita piu' nulla.
-        public static void ResetChunkBudget() { }
+        // Budget ripristinato (era già nel ramo unity: 8 edifici visitabili
+        // per chunk). Con "tutti gli edifici esplorabili" ogni edificio aveva
+        // Porta + BuildingEntrance + InteriorGenerator e, all'ingresso, luci
+        // e arredi: nei log 23/11 i chunk arrivavano a 13.614 edifici.
+        // Il sistema degli interni resta INTATTO e viene assegnato agli 8
+        // edifici idonei piu' vicini; gli altri restano prefab esterni, con
+        // uova e POI invariati.
+        private const int MaxEnterablePerChunk = 8;
+        private static int enterableBudget;
+        public static void ResetChunkBudget() { enterableBudget = MaxEnterablePerChunk; }
 
         public static bool IsCommercial(string t)
         {
@@ -700,13 +704,19 @@ namespace City.OSM
             // (InteriorManager.MarkOutside -> fade -> esterno ripristinato).
             // Il collider esterno (box) resta acceso FUORI e spento DENTRO,
             // cosi' il giocatore non lo attraversa da fuori.
-            var gen = inst.AddComponent<City.Interior.InteriorGenerator>();
-            gen.PreparePrefabExterior(
-                MapInteriorType(b.t),
-                w, d, h,
-                entranceComp != null ? entranceComp.shop : null,
-                box);
-            if (entranceComp != null) gen.SetEntrance(entranceComp);
+            // Solo gli edifici con ingresso ricevono il generatore d'interni:
+            // senza questa guarda venivano creati generatori inutili su ogni
+            // prefab (migliaia per chunk), anche se l'interno resta lazy.
+            if (entranceComp != null)
+            {
+                var gen = inst.AddComponent<City.Interior.InteriorGenerator>();
+                gen.PreparePrefabExterior(
+                    MapInteriorType(b.t),
+                    w, d, h,
+                    entranceComp.shop,
+                    box);
+                gen.SetEntrance(entranceComp);
+            }
             OsmDiag.Log("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
                 "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +
                 " bounds=" + baseB.size.ToString("F2") +
@@ -728,6 +738,8 @@ namespace City.OSM
             Bounds baseB, float w, float d, float h,
             float sx, float sy, float sz)
         {
+            // Budget per chunk: esaurito, questo edificio resta solo esterno.
+            if (enterableBudget <= 0) return null;
             string iType = MapInteriorType(b.t);
             bool shop = iType == "shop";
 
@@ -784,6 +796,7 @@ namespace City.OSM
                 entrance.shop = shopComp;
             }
 
+            enterableBudget--;
             return entrance;
         }
 
