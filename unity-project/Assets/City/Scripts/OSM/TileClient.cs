@@ -180,6 +180,7 @@ namespace City.OSM
     {
         public static void Log(string msg)
         {
+            City.Diagnostics.SessionTelemetry.NoteLast(msg);
             // Debug.Log passa da Application.logMessageReceived (ErrorSurface):
             // senza soppressione il messaggio arriva due volte ad Android
             // (copia col tag "OSM" qui sotto + re-forward col tag [..]/[Log]).

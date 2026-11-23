@@ -38,6 +38,13 @@ namespace City.Diagnostics
         // via bridge (Giorno 3 / 18).
         private long _peakRamMb;
 
+        // Audit 23/11: i beacon con frame >1 s non dicevano DOVE fosse il
+        // main thread. Teniamo i delta delle collezioni GC e l'ultimo evento
+        // OSM loggato: se il prossimo freeze arriva, il beacon riporta il
+        // codice che stava girando invece di un numero muto.
+        private int _gc0, _gc1, _gc2;
+        private static string _lastEvent = "-";
+
         // GIORNO 2: contatore uova. indoor = contenitore/cassetto o player
         // dentro un edificio; outdoor = uova sparse nei chunk. Riflesso uova
         // del Mandato: distingue finalmente le due cacce.
@@ -52,6 +59,13 @@ namespace City.Diagnostics
         {
             if (indoor) _eggsIndoor++;
             else _eggsOutdoor++;
+        }
+
+        /// <summary>Chiamato da OsmDiag.Log: reference assignment, nessuna
+        /// allocazione e nessuna formattazione sul percorso caldo.</summary>
+        public static void NoteLast(string msg)
+        {
+            if (!string.IsNullOrEmpty(msg)) _lastEvent = msg;
         }
 
         private void ResetFrameBuckets()
@@ -78,6 +92,9 @@ namespace City.Diagnostics
         private void Start()
         {
             started = true;
+            _gc0 = System.GC.CollectionCount(0);
+            _gc1 = System.GC.CollectionCount(1);
+            _gc2 = System.GC.CollectionCount(2);
             Mark("SCENA avviata ver={0} quality={1} vsync={2} res={3}x{4} dev={5}",
                 Application.version,
                 QualitySettings.names[QualitySettings.GetQualityLevel()],
@@ -219,6 +236,23 @@ namespace City.Diagnostics
                 if (vp != null)
                     sb.Append(" vehOn=").Append(vp.CountActive())
                       .Append("/").Append(vp.CountTotal());
+
+                // Audit 23/11: GC e ultimo evento utile solo nei beacon con
+                // un frame mostruoso (>1 s). Nei normali non aggiungono rumore.
+                int g0 = System.GC.CollectionCount(0);
+                int g1 = System.GC.CollectionCount(1);
+                int g2 = System.GC.CollectionCount(2);
+                sb.Append(" gc=")
+                  .Append(g0 - _gc0).Append('/')
+                  .Append(g1 - _gc1).Append('/')
+                  .Append(g2 - _gc2);
+                _gc0 = g0; _gc1 = g1; _gc2 = g2;
+                if (worstFrameMs >= 1000f)
+                {
+                    string last = _lastEvent ?? "-";
+                    if (last.Length > 90) last = last.Substring(0, 90);
+                    sb.Append(" last=").Append(last);
+                }
 
                 if (fps < 15f)
                     sb.Append(" LAG");

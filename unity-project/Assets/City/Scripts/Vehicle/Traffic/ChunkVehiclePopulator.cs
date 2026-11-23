@@ -219,10 +219,17 @@ namespace City.Vehicle
                                     // parcheggio salvato sul server.
                                     if (!VehicleOwnershipApi.IsSold(code))
                                     {
-                                        var go = City.Vehicle.VehicleSpawnManager
-                                            .BuildVehicle(chunk.root.transform,
-                                                VehicleSpawnManager.Catalogue[idx],
-                                                pos, angle, code);
+                                        GameObject go;
+                                        // Audit 23/11: misura il costo reale di
+                                        // Instantiate + AddComponent di ogni
+                                        // auto, oggi fuori da tutti gli scope.
+                                        using (City.Diagnostics.PerfProbe.Measure("spawn"))
+                                        {
+                                            go = City.Vehicle.VehicleSpawnManager
+                                                .BuildVehicle(chunk.root.transform,
+                                                    VehicleSpawnManager.Catalogue[idx],
+                                                    pos, angle, code);
+                                        }
                                         if (go != null)
                                         {
                                             host.Track(go); parked++;

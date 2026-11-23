@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using City.OSM;
@@ -10,10 +11,17 @@ namespace City.NPC
     /// (stesso schema di ChunkVehiclePopulator): seed dall'indice del chunk,
     /// waypoint lungo le strade urbane con l'offset marciapiede usato anche
     /// da RoadRenderer, cosi' i pedoni camminano sul cordolo e non in strada.
+    ///
+    /// Audit 23/11: il vecchio loop costruiva 30 pedoni in un solo frame
+    /// (355 ms misurati fra 12:20:50.650 e 12:20:51.005). Ora la popolazione
+    /// e' una coroutine budgetata: al massimo 2 pedoni e 8 ms per frame, con
+    /// un yield esplicito fra i blocchi. Stesso seed, stessi id, stessa skin.
     /// </summary>
     public static class NPCPopulator
     {
         private const int MaxNpcPerChunk = 30;
+        private const int MaxNpcPerFrame = 2;
+        private const long FrameBudgetMs = 8;
         private const float MinPathLen = 18f;
         private const float Y_SIDEWALK = 0.12f;   // = RoadRenderer.Y_SIDEWALK
         private const float GAP = 0.15f;          // = RoadRenderer gap asfalto/marciapiede
@@ -43,52 +51,59 @@ namespace City.NPC
             "citizenF21","citizenF22","citizenF23","citizenF24",
         };
 
+        /// <summary>Compatibilita' con chiamanti fuori dal build dei chunk:
+        /// svuota la coroutine in sincrono. Il build usa PopulateRoutine.</summary>
         public static void Populate(ChunkData chunk,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds)
         {
-            if (chunk.geo?.roads == null || chunk.geo.roads.Length == 0) return;
+            var routine = PopulateRoutine(chunk, toLocal, bounds);
+            while (routine.MoveNext()) { }
+        }
+
+        /// <summary>Popolazione a blocchi. Ogni yield torna al main loop del
+        /// builder, che a sua volta restituisce il frame: il costo dei 30 NPC
+        /// non puo' piu' concentrarsi in un solo frame.</summary>
+        public static IEnumerator PopulateRoutine(ChunkData chunk,
+            System.Func<GeoLL, Vector3> toLocal, Rect bounds)
+        {
+            if (chunk.geo?.roads == null || chunk.geo.roads.Length == 0) yield break;
             LoadCharacterPrefab();
-            if (_charPrefab == null) return;
+            if (_charPrefab == null) yield break;
 
             // seed deterministico: stesso chunk -> stessi pedoni
             int seed = chunk.index.x * 73856093 ^ chunk.index.y * 19349663;
             var rng = new System.Random(seed);
 
             var paths = BuildSidewalkPaths(chunk.geo.roads, toLocal, bounds, rng);
-            if (paths.Count == 0) return;
+            if (paths.Count == 0) yield break;
 
             chunk.npcsGo = new GameObject("NPC");
             chunk.npcsGo.transform.SetParent(chunk.root.transform, false);
 
             // piu' pedoni dello stesso chunk possono condividere un percorso:
-            // abbiamo sempre il budget pieno, cosi' le strade sono animate
+            // dopo ogni blocco si cede il frame, cosi' le strade restano animate
             int count = MaxNpcPerChunk;
             int placed = 0;
+            int inFrame = 0;
+            var frameClock = new System.Diagnostics.Stopwatch();
+            var totalClock = System.Diagnostics.Stopwatch.StartNew();
+
             for (int i = 0; i < count; i++)
             {
+                if (inFrame >= MaxNpcPerFrame ||
+                    frameClock.ElapsedMilliseconds >= FrameBudgetMs)
+                {
+                    frameClock.Reset();
+                    inFrame = 0;
+                    yield return null;
+                }
+                // UnloadFar/WorldOrigin possono aver già' distrutto la radice
+                // mentre la coda e' in corso: niente NPC in un chunk fantasma.
+                if (chunk.root == null || chunk.npcsGo == null) yield break;
+                if (!frameClock.IsRunning) frameClock.Start();
                 try
                 {
-                    var path = paths[rng.Next(paths.Count)];
-                    GameObject go = Object.Instantiate(_charPrefab, chunk.npcsGo.transform);
-                    go.name = "NPC_" + chunk.key + "_" + i;
-                    go.tag = "Untagged";
-
-                    // statura/presenza fisica unica per ogni PNG (0.42..0.50)
-                    float h = 0.455f + (float)(StableHashScaled(i) - 0.5f) * 0.055f;
-                    go.transform.localScale = Vector3.one * h;
-
-                    // i collider importati dal FBX restano spenti: il corpo
-                    // solido lo aggiunge NPCController (capsula)
-                    foreach (var c in go.GetComponentsInChildren<Collider>())
-                        if (c != null) c.enabled = false;
-
-                    string npcId = "npc_" + chunk.index.x + "_" + chunk.index.y + "_" + i;
-                    ApplySkin(go, PickCitizenSkin(npcId, i));
-
-                    var npc = go.AddComponent<NPCController>();
-                    // offset di partenza sul percorso condiviso: evita che i
-                    // pedoni impilati partano tutti dal primo waypoint
-                    npc.Init(path.ToArray(), rng, npcId, i);
+                    SpawnOne(chunk, paths, rng, i);
                     placed++;
                 }
                 catch (System.Exception e)
@@ -96,11 +111,42 @@ namespace City.NPC
                     UnityBridge.LogToAndroid("NPCPopulator",
                         "NPC saltato nel " + chunk.key + ": " + e.ToString());
                 }
+                inFrame++;
             }
             OsmDiag.Log("[NPCPopulator] " + chunk.key + ": " + placed + "/" + count +
                 " pedoni paths=" + paths.Count +
                 " rootY=" + chunk.root.transform.position.y.ToString("F2") +
-                " bounds=" + bounds);
+                " bounds=" + bounds +
+                " ms=" + totalClock.ElapsedMilliseconds.ToString("F0"));
+        }
+
+        private static void SpawnOne(ChunkData chunk, List<List<Vector3>> paths,
+            System.Random rng, int i)
+        {
+            using (City.Diagnostics.PerfProbe.Measure("spawn"))
+            {
+                var path = paths[rng.Next(paths.Count)];
+                GameObject go = Object.Instantiate(_charPrefab, chunk.npcsGo.transform);
+                go.name = "NPC_" + chunk.key + "_" + i;
+                go.tag = "Untagged";
+
+                // statura/presenza fisica unica per ogni PNG (0.42..0.50)
+                float h = 0.455f + (float)(StableHashScaled(i) - 0.5f) * 0.055f;
+                go.transform.localScale = Vector3.one * h;
+
+                // i collider importati dal FBX restano spenti: il corpo
+                // solido lo aggiunge NPCController (capsula)
+                foreach (var c in go.GetComponentsInChildren<Collider>())
+                    if (c != null) c.enabled = false;
+
+                string npcId = "npc_" + chunk.index.x + "_" + chunk.index.y + "_" + i;
+                ApplySkin(go, PickCitizenSkin(npcId, i));
+
+                var npc = go.AddComponent<NPCController>();
+                // offset di partenza sul percorso condiviso: evita che i
+                // pedoni impilati partano tutti dal primo waypoint
+                npc.Init(path.ToArray(), rng, npcId, i);
+            }
         }
 
         private static void LoadCharacterPrefab()

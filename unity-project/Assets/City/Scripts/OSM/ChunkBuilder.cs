@@ -174,11 +174,15 @@ namespace City.OSM
                 {
                     Mesh sidewalkMesh;
                     Mesh deckColMesh;
-                    Mesh roadMesh = RoadRenderer.Build(
-                        geo.roads, ToLocal, bounds, chunk.root.transform,
-                        out sidewalkMesh, out deckColMesh,
-                        new RoadRenderer.RoadGeoBounds(cornerSW_geo.lat,
-                            cornerNE_geo.lat, cornerSW_geo.lng, cornerNE_geo.lng));
+                    Mesh roadMesh;
+                    using (City.Diagnostics.PerfProbe.Measure("roads"))
+                    {
+                        roadMesh = RoadRenderer.Build(
+                            geo.roads, ToLocal, bounds, chunk.root.transform,
+                            out sidewalkMesh, out deckColMesh,
+                            new RoadRenderer.RoadGeoBounds(cornerSW_geo.lat,
+                                cornerNE_geo.lat, cornerSW_geo.lng, cornerNE_geo.lng));
+                    }
                     if (roadMesh != null)
                     {
                         chunk.roadsGo = new GameObject("Strade",
@@ -408,15 +412,29 @@ namespace City.OSM
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
             // ── pedoni sui marciapiedi (deterministici, animati, parlanti) ──
+            // Pompa manuale della coroutine: un MoveNext per frame. Se si
+            // facesse `yield return routine` Unity la eseguirebbe come nested
+            // coroutine e i guard di BuildChunkCoroutine (epoch/chunk scaricato)
+            // tornerebbero solo a popolazione finita.
             Section("Pedoni");
-            try
+            var npcRoutine = NPC.NPCPopulator.PopulateRoutine(
+                chunk, ToLocal, bounds);
+            bool npcDone = false;
+            while (!npcDone)
             {
-                NPC.NPCPopulator.Populate(chunk, ToLocal, bounds);
-            }
-            catch (System.Exception e)
-            {
-                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
-                    " ERRORE sezione NPC: " + e);
+                try
+                {
+                    npcDone = !npcRoutine.MoveNext();
+                }
+                catch (System.Exception e)
+                {
+                    UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                        " ERRORE sezione NPC: " + e);
+                    break;
+                }
+                // yield FUORI dal try: C# vieta `yield return` in un try
+                // che ha una clausola catch.
+                if (!npcDone) yield return null;
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
 
