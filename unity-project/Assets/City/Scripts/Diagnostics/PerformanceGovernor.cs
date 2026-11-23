@@ -60,7 +60,15 @@ namespace City.Diagnostics
         {
             if (!_started && Time.realtimeSinceStartup > 3f) _started = true;
             if (!_started) return;
-            float ms = Time.unscaledDeltaTime * 1000f;
+            float rawDt = Time.unscaledDeltaTime;
+            // Un singolo stall non e' carico SOSTENUTO: il 23/11 un frame da
+            // 20690 ms ha portato l'EMA a 2108 ms e fatto salire il tier al
+            // massimo in 4 frame, degradando la qualita' per oltre un secondo
+            // dopo che il gioco era gia' tornato a 30 fps. Clampiamo sia il
+            // campione sia l'integrazione dei secondi, senza buttarlo via:
+            // lo stall resta visibile nel beacon di SessionTelemetry.
+            float dt = Mathf.Min(rawDt, 0.25f);
+            float ms = Mathf.Min(rawDt * 1000f, 250f);
             _emaMs = _emaMs <= 0f ? ms : Mathf.Lerp(_emaMs, ms, 0.1f);
 
             bool overload = _emaMs > FloorMs;
@@ -71,7 +79,7 @@ namespace City.Diagnostics
                 // UpConfirmSeconds e' in SECONDI: contare i frame faceva
                 // raggiungere il tier massimo in 3 frame (0,4 s a 8 fps nel
                 // log 23/11) invece che nei 3 secondi previsti.
-                _overloadSeconds += Time.unscaledDeltaTime;
+                _overloadSeconds += dt;
                 if (_overloadSeconds >= UpConfirmSeconds && Tier < MaxTier)
                 {
                     _overloadSeconds = 0f;
@@ -83,7 +91,7 @@ namespace City.Diagnostics
                 _overloadSeconds = 0f;
                 if (smooth)
                 {
-                    _goodSeconds += Time.unscaledDeltaTime;
+                    _goodSeconds += dt;
                     if (_goodSeconds >= ImproveRampSeconds && Tier > 0)
                     {
                         _goodSeconds = 0f;

@@ -46,7 +46,30 @@ namespace City.OSM
         /// ChunkManager per il report CityProgress; vuota se nessuna build.</summary>
         public static string CurrentBuildSection = "";
 
-        private static void Section(string name) { CurrentBuildSection = name; }
+        // Audit 23/11: un chunk e' finito in 21204 ms, ma il profiler diceva
+        // `chunk:0,21ms` perche' misurava solo la pompa di ChunkManager, non
+        // la coroutine di build. Ogni cambio di sezione chiude il cronometro
+        // della precedente: se supera 100 ms scriviamo DOVE e' andato il
+        // tempo. Il cronometro e' statico perche' MaxConcurrentBuilds = 1.
+        private static readonly Stopwatch _sectionClock = new Stopwatch();
+        private static string _sectionName = "";
+
+        private static void Section(string name)
+        {
+            if (_sectionClock.IsRunning)
+            {
+                long ms = _sectionClock.ElapsedMilliseconds;
+                // Include gli yield: e' il tempo PERCEPITO dal player, ed e'
+                // quello che dobbiamo spiegare quando il frame salta.
+                if (ms >= 100)
+                    OsmDiag.Log("[Builder][Section] " + _sectionName +
+                        " ms=" + ms + " (include attese fra yield)");
+            }
+            CurrentBuildSection = name;
+            _sectionName = name;
+            _sectionClock.Reset();
+            _sectionClock.Start();
+        }
 
         public static IEnumerator Build(ChunkManager mgr, ChunkData chunk,
             TileGeoDoc geo, Stopwatch clock, long budgetMs)

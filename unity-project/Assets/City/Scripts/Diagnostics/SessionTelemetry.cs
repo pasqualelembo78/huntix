@@ -252,6 +252,11 @@ namespace City.Diagnostics
                     string last = _lastEvent ?? "-";
                     if (last.Length > 90) last = last.Substring(0, 90);
                     sb.Append(" last=").Append(last);
+                    // Distinguish a main-thread stall from an Android
+                    // lifecycle pause (app in background / timeScale 0):
+                    // both show up as a huge unscaledDeltaTime.
+                    sb.Append(" focus=").Append(Application.isFocused ? "1" : "0")
+                      .Append(" ts=").Append(Time.timeScale.ToString("F1"));
                 }
 
                 if (fps < 15f)

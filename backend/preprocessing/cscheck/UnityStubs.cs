@@ -508,6 +508,7 @@ namespace UnityEngine
     public static class Application { public static string persistentDataPath => "/tmp"; public static bool isMobilePlatform => false;
         public static bool isEditor => true;
         public static bool isPlaying => false;
+        public static bool isFocused => true;
         public static string version => "stub";
         public static RuntimePlatform platform => RuntimePlatform.WindowsEditor;
         public static bool CanStreamedLevelBeLoaded(string levelName) => false; }
