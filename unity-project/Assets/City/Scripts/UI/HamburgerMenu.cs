@@ -273,7 +273,10 @@ namespace City.UI
         {
             if (_styleLabel == null) return;
             _styleLabel.text = "Stile edifici: " +
-                (CityStyle.UseQuaternius ? "Qualita' (Quaternius)" : "Veloce (Kenney)");
+                (CityStyle.UseQuaternius
+                    ? "Qualita' (Quaternius)"
+                    : "Veloce (Kenney)" +
+                      (CityStyle.CanUseQuaternius ? "" : " — Quaternius inibito"));
         }
 
         /// <summary>Un click commuta Kenney (fluido, default) <-> Quaternius
@@ -281,6 +284,18 @@ namespace City.UI
         /// letta da BuildingPlacer.PlaceLegacy al prossimo build.</summary>
         private void ToggleBuildingStyle()
         {
+            // I prefab Quaternius restano nel progetto, ma il loro caricamento
+            // e' inibito: il toggle non puo' riattivarli a caldo. Spieghiamo il
+            // motivo invece di far credere che la scelta sia cambiata.
+            if (!CityStyle.CanUseQuaternius)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast(
+                        "Edifici Kenney: Quaternius inibito per la fluidita'");
+                SetVisible(false);
+                return;
+            }
+
             // REVIEW: UnloadAll distrugge i collider e i riferimenti agli edifici.
             // Se siamo dentro un edificio o in auto, currentEntrance/CurrentVehicle
             // resterebbero appesi a oggetti distrutti: rifiuta il cambio con un

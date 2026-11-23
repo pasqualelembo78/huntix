@@ -83,6 +83,11 @@ namespace City.Diagnostics
                 QualitySettings.names[QualitySettings.GetQualityLevel()],
                 QualitySettings.vSyncCount, Screen.width, Screen.height,
                 SystemInfo.deviceModel);
+            // Il bridge dice ad Android quale kit edifici e' attivo (Mandato:
+            // ogni scelta della citta' deve essere nota anche fuori da Unity).
+            Mark("STILE edifici={0} quaterniusInibito={1}",
+                City.UI.CityStyle.UseQuaternius ? "Quaternius" : "Kenney",
+                !City.UI.CityStyle.CanUseQuaternius);
         }
 
         public void Mark(string format, params object[] args)
