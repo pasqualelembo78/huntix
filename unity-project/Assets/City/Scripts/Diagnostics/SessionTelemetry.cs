@@ -150,6 +150,10 @@ namespace City.Diagnostics
                 if (ramMb > _peakRamMb) _peakRamMb = ramMb;
                 sb.Append(" ram=").Append(ramMb).Append("MB")
                   .Append(" peak=").Append(_peakRamMb).Append("MB");
+                // Profiler interno: medie/picchi dei 2 secondi precedenti.
+                // Nessun marker Unity Profiler: nella build non sarebbe
+                // leggibile dal viewer in-app; qui tutto passa da UnityBridge.
+                sb.Append(' ').Append(PerfProbe.SnapshotAndReset());
 
                 // GIORNO 2: istogramma + contatore uova (vede anche le uova
                 // catturate prima che il beacon partisse).

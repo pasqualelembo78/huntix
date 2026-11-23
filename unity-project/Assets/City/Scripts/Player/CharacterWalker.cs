@@ -429,6 +429,8 @@ namespace City.Player
         /// (AnimatorIKRelay) inoltra qui il callback.</summary>
         public void RunFootIK(int layerIndex)
         {
+            using (City.Diagnostics.PerfProbe.Measure("ik"))
+            {
             if (!useAnimator || !footIKEnabled || animator == null) return;
             _ikFiredAt = UnityEngine.Time.time;
 
@@ -526,6 +528,7 @@ namespace City.Player
 
             DiagGround("IK", groundRef, footLift, bodySinkLift, offset, _hipOffsetY,
                 hipsBone != null ? hipsBone.position.y : 0f);
+            }
         }
 
         /// <summary>Diagnostica in logcat (throttled per istanza) del

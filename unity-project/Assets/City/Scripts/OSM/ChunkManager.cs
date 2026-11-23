@@ -358,6 +358,8 @@ namespace City.OSM
         /// <summary>Pompa di costruzione con budget per frame (chiamata da Update).</summary>
         private void Update()
         {
+            using (City.Diagnostics.PerfProbe.Measure("chunk"))
+            {
             if (!StreamingEnabled || _pending.Count == 0) return;
 
             // Riordina la coda per distanza dal target a ogni frame: la camera
@@ -382,6 +384,7 @@ namespace City.OSM
                 _activeBuilds++;
                 OsmDiag.Log("[ChunkManager] === BUILD START === chunk " + c.x + "," + c.y + " pending=" + _pending.Count);
                 StartCoroutine(BuildChunkCoroutine(c));
+            }
             }
         }
 

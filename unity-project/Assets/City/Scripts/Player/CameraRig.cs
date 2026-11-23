@@ -531,6 +531,8 @@ namespace City.Player
 
         private void LateUpdate()
         {
+            using (City.Diagnostics.PerfProbe.Measure("camera"))
+            {
             if (target == null) return;
             if (_cachedTarget != target)
             {
@@ -725,6 +727,7 @@ namespace City.Player
                 ? Mathf.Cos(_walker.StepPhase * BobTwoPi) * bobRollDeg * _bobWeight
                 : 0f;
             transform.rotation = Quaternion.Euler(_viewPitch, _viewYaw, -bobRoll);
+            }
         }
     }
 }

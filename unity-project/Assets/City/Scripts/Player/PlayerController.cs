@@ -222,6 +222,9 @@ namespace City.Player
         public void SetMoveInput(Vector2 input)
         {
             if (inputLocked) return;
+            if (input.sqrMagnitude > MoveDeadzoneSqr &&
+                moveInput.sqrMagnitude <= MoveDeadzoneSqr)
+                City.Diagnostics.PerfProbe.MarkInput();
             moveInput = input;
         }
 
@@ -294,6 +297,8 @@ namespace City.Player
 
         private void Update()
         {
+            using (City.Diagnostics.PerfProbe.Measure("move"))
+            {
             // mini-gioco di cattura uova attivo: il player e' congelato
             if (City.Economy.EggCaptureMinigame.Instance != null &&
                 City.Economy.EggCaptureMinigame.Instance.IsActive)
@@ -310,6 +315,7 @@ namespace City.Player
 
             if (moveInput.sqrMagnitude > MoveDeadzoneSqr)
             {
+                City.Diagnostics.PerfProbe.InputConsumed();
                 CameraRig rig = CameraRig.Instance;
                 Vector3 forward = rig != null
                     // GIORNO 9: base di marcia = solo yaw del drag, non la
@@ -486,6 +492,7 @@ namespace City.Player
             if (sprintRemain > 0f) sprintRemain = Mathf.Max(0f, sprintRemain - frameDt);
             TrackWalkDistance();
             LogWalkDiagnostics();
+            }
         }
 
         /// <summary>Una riga al secondo nella scatola nera Android: riunisce le
