@@ -21,7 +21,7 @@ Lingua e commit: italiano, commit separati per concetto logico, push su
 | 5. Definizione degli interventi | **Fatto** |
 | 6. Implementazione delle correzioni | **Fatto**: tagli di budget + profiler interno |
 | 7. Nuova profilazione e confronto | **Fatto**: log `docs/huntix_log_20261123_122151.txt`, sessione 12:21 (vedi paragrafo 7) |
-| 8. Nuova APK per i test | **Fatto**: hash `52f516d0…`, vedi paragrafo 8 |
+| 8. Nuova APK per i test | **Fatto**: hash `37045e53…`, vedi paragrafo 8 |
 
 Il passo 2 non può essere completato da qui: non c'è un telefono collegato e
 il Mandato vieta `adb logcat`. Ho quindi reso il viewer in-app più informativo
@@ -226,16 +226,18 @@ pool veicoli/decorazioni o su URP.
 
 ## 8. APK per i test
 
-APK finale con profiler interno, latenza input→movimento e **Uovo del budget**:
+APK finale con profiler interno, latenza input→movimento, **Uovo del budget** e
+blocco del caricamento Quaternius (`STILE edifici=Kenney quaterniusInibito=True`):
 
 - `app/build/outputs/apk/release/app-release-signed.apk`, 184 MB
-- SHA-256 `e66ae7bd16d50440224390eca9a84b44f2d8bd568d9eb7fde5798787fcce3f1b`
-- Build: AAR Unity `BUILD SUCCESSFUL in 4m 36s`, APK `BUILD SUCCESSFUL in 5m 18s`.
+- SHA-256 `37045e532016aaaa46e2019e29b09e385f9514903f67169db665107667bb9223`
+- Build: AAR Unity `BUILD SUCCESSFUL in 4m 46s`, APK `BUILD SUCCESSFUL in 1m 38s`.
 
 APK intermediate superate (non usare):
 - `af6018320ad72d218801a0f36e911d20bf41a9195037eb645868c2d72e1795a2` — tagli senza `prof=`
 - `979eb2d893820be44dea7ee138f25ae6233c0de795b4212b592dd690f862e987` — `prof=` senza latenza input
 - `52f516d06e7adb4e277c7e7534ab51b688dd6295895282a650185fb576220c07` — profiler completo, senza uovo budget
+- `e66ae7bd16d50440224390eca9a84b44f2d8bd568d9eb7fde5798787fcce3f1b` — uovo budget, senza blocco Quaternius e senza marker `STILE`
 
 ---
 
@@ -270,6 +272,29 @@ oltre a `rarityId`, `fantasyName="Uovo del budget"`, `power`, `xpReward`,
 il trofeo del traguardo dei 30 fps, non uno sfogo del log. Quando il frame
 scende sotto 33 ms il viewer mostra `UOVO budget: frame sotto soglia ...` e
 poi `UOVO budget comparso: ...`.
+
+---
+
+## 10. Verifica kit edifici (Kenney vs Quaternius)
+
+Ipotesi sollevata dall'utente (e da ChatGPT): i modelli Quaternius con 29 MB di
+texture potrebbero essere la causa dei 15-19 fps. **I dati della prova reale
+smentiscono l'ipotesi per quel dispositivo:** nel log delle 12:21 ci sono
+**8010** occorrenze di `useQuaternius=False` e **8010** di `via=Kenney`, zero
+caricamenti Quaternius. Il default del codice è Kenney dal commit `376fbc9`
+(19/11); l'indicazione "default 1" in `AGENTS.md` è superata.
+
+Ho comunque applicato la richiesta come **salvagardia**: `CityStyle.QuaterniusAllowed
+= false` impedisce il caricamento Quaternius anche se un vecchio `PlayerPrefs`
+vale 1. Prefab, FBX e texture Quaternius restano integri nel progetto; il codice
+di `BuildingPlacer.LoadQuaternius` resta intatto e si riattiva portando la
+costante a `true`. L'hamburger menu mostra "Veloce (Kenney) — Quaternius
+inibito" e spiega il perché invece di un toggle muto. `SessionTelemetry`
+scrive nel viewer e nel bridge Android il marker `STILE edifici=...`.
+
+**Conclusione onesta:** questo intervento non spiega i 15-19 fps e non dovrebbe
+cambiarli sul dispositivo già in Kenney. La causa rimasta fuori dagli scope
+misurati (GPU/fisica/GC/instantiate) resta la prossima da misurare.
 
 ---
 
@@ -309,6 +334,8 @@ dominante. Restano da misurare GPU/fisica/GC.
 3. Rifare la prova e verificare che l'Uovo del budget compaia.
 
 ### Chiusura
-I commit del profiler e del report sono già pushati su `origin/flat-world`.
-Quelli dell'uovo vengono committati e pushati con questa consegna. Eventuali
-file `.meta` riscritti dalla build vengono ripristinati prima del commit.
+Profiler, report, uovo del budget e blocco Quaternius sono committati e pushati
+su `origin/flat-world`. I file `.meta`/prefab riscritti dalla build sono stati
+ripristinati prima del commit. La verifica finale resta sul dispositivo: serve
+una nuova sessione con questa APK e il log del viewer in-app, perché la causa
+dei 15-19 fps non è ancora misurata.
