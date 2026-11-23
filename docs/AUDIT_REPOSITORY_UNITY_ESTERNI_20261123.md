@@ -114,18 +114,17 @@ Sistemi paralleli da **conservare** (Mandato §6–8, nessuna cancellazione auto
      │                                            │
      │                                            └──► [UnityBridge] ─► Android (preferenza qualità)
      │
-     ├──► [SavedManager] ──(nuovo)──► [AtomicJsonWriter] (.tmp → rename → .bak)
-     │                                            │
-     │                                            └──► [UnityBridge] ─► Android (snapshot)
-     │
      └──► [EggSpawnManager] ◄──(riflesso uova)── [nuove feature]
                                   └──► [Game.OnEggCollected] ─► [UnityBridge] ─► Android
 ```
 
+I salvataggi restano quelli attuali (`SavedManager`/`PlayerPrefs` + snapshot Android):
+il writer atomico `.tmp → rename → .bak` è stato valutato ma **non implementato**.
+
 Regole applicate:
-1. **Nessuna riscrittura** di sistemi funzionanti: si aggiungono componentiLaterali.
-2. **Ogni nuova feature ha un uovo**: aree di parcheggio/garage, menu qualità, salvataggi e
-   incroci diventano punti dove nascondere/trovare uova, con posizione registrata nel profilo.
+1. **Nessuna riscrittura** di sistemi funzionanti: si aggiungono componenti laterali.
+2. **Ogni nuova feature ha un uovo**: freno a mano e menu qualità, con posizione
+   registrata nel profilo. Nessun uovo aggiuntivo per feature non implementate.
 3. **Bridge obbligatorio**: ogni evento locale deve essere inviato ad Android e ripristinabile.
 4. **Nessun codice copiato** da repository senza licenza o con licenza non permissiva.
 
@@ -138,7 +137,7 @@ Regole applicate:
 | Budget tempo per frame + coda ordinata (`Cell.cs`) | SanAndreasUnity MIT | **Idea/ispirazione**: Huntix ha già `[Builder][Section]` e governor; nessuna copia. |
 | Spawn NPC limitato con focus point (`NPCPedSpawner.cs`) | SanAndreasUnity MIT | **Idea**: già parzialmente attuato con `NPCPopulator` budgetato; nessuna copia. |
 | Enter/exit a stati + camera collision | SanAndreasUnity MIT | Non serve: `Game.EnterVehicle/ExitVehicle` già completo. |
-| Salvataggio atomico `.tmp → rename → .bak` | 3ddriving (no license) | **Reimplementato da zero** in Huntix. |
+| Salvataggio atomico `.tmp → rename → .bak` | 3ddriving (no license) | Valutato ma **non implementato**: Huntix usa `PlayerPrefs` + bridge Android, senza guadagno dimostrato. |
 | Freno a mano + pedal touch | idee da 3ddriving/CarRace (no license) | **Reimplementato da zero**, senza WheelCollider. |
 | Profili qualità Low/Medium/High | Traffic Rider (no license) | **Reimplementato da zero** sopra `PerformanceGovernor`. |
 | IDM gap/spillback + semafori adattivi | Smart City (no license) | Valutato: troppo rischioso da innestare su `CarAgent`/`JunctionControl` senza misure; **non implementato** in questa fase. |

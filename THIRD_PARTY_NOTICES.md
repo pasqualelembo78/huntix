@@ -8,8 +8,8 @@ e **non sono stati eseguiti**. Analisi dettagliata: `docs/AUDIT_REPOSITORY_UNITY
 
 **Nessun file di codice o asset dei repository sotto elencati è stato copiato nel progetto Huntix.**
 Dove una soluzione è stata riutilizzata, è stata **reimplementata da zero** partendo dal solo
-pattern architetturale, perché la licenza del progetto d'origine non lo consentiva oppure因为
-l'implementazione Huntix esistente era già più completa. Le attribuzioni sotto servono a
+pattern architetturale, perché la licenza del progetto d'origine non lo consentiva oppure
+perché l'implementazione Huntix esistente era già più completa. Le attribuzioni sotto servono a
 documentare la provenienza delle idee e a non perdere il collegamento con le licenze originali.
 
 I marchi e i nomi dei progetti restano dei rispettivi proprietari. Huntix non incorpora modelli,
@@ -60,7 +60,8 @@ SOFTWARE.
 - Licenza asset: `THIRD_PARTY_NOTICES.md` interno cita Khronos (CC BY 4.0), Quaternius/Kenney/
   3DAssetsDev (CC0). Non è una licenza per il codice sorgente.
 - Uso in Huntix: **sola idea** per il pattern di salvataggio atomico (`.tmp` → rename → `.bak`)
-  e per la stratificazione degli input touch. Reimplementato da zero. Nessun codice copiato.
+  e per la stratificazione degli input touch. Il salvataggio atomico è stato **valutato e non
+  implementato** (Huntix usa `PlayerPrefs` + bridge Android). Nessun codice copiato.
 
 ## 3. CarGame
 
