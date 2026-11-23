@@ -31,6 +31,10 @@ namespace Huntix.Core
             Instance = this;
             DontDestroyOnLoad(gameObject);
             IsInUnity = true;
+            // Legge subito la modalita' mondo: se l'evento Android arriva dopo
+            // l'avvio della scena City, il flag e' gia' noto e non parte uno
+            // streaming OSM inutile prima del ripristino del bridge.
+            City.Fictional.FictionalCityWorld.Initialize();
         }
 
         private void Start()
@@ -239,6 +243,21 @@ namespace Huntix.Core
         {
             try
             {
+                // CITTA' GIOCO: il ripristino da Android DEVE arrivare prima del
+                // caricamento della scena City, cosi' CityChunkedWorld trova il
+                // flag gia' impostato e non streama tile OSM. notify=false:
+                // nessun evento di ritorno e nessun uovo su un ripristino.
+                var worldMode = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"worldMode\"\\s*:\\s*\"([^\"]+)\"");
+                if (worldMode.Success)
+                {
+                    string requested = worldMode.Groups[1].Value.ToLowerInvariant();
+                    bool fictional = requested == "fictional" || requested == "citta-gioco";
+                    City.Fictional.FictionalCityWorld.SetMode(fictional, false);
+                    Debug.Log("[GameManager] mondo ripristinato da Android: " +
+                        (fictional ? "Città Gioco" : "Reale"));
+                }
+
                 var match = System.Text.RegularExpressions.Regex.Match(json, "\"mode\"\\s*:\\s*\"([^\"]+)\"");
                 if (match.Success)
                     LoadSceneForMode(match.Groups[1].Value);

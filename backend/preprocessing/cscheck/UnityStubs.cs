@@ -633,6 +633,7 @@ namespace UnityEngine
         public static T GetBuiltinResource<T>(string p) where T : Object => default(T); }
     public static class JsonUtility { public static T FromJson<T>(string json) => default(T);
         public static string ToJson(object obj) => null; }
+    public class TextAsset : Object { public string text { get; set; } }
 
     public static class PlayerPrefs
     {

@@ -168,9 +168,61 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 9", self.probe)
-        self.assertIn('"spawn", "roads", "traffic"', self.probe)
+        self.assertIn("SlotCount = 10", self.probe)
+        self.assertIn('"spawn", "roads", "traffic", "fictional"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
+
+
+class TestFictionalCityIntegration(unittest.TestCase):
+    """Città Gioco affiancata: ricetta offline, flag, ponte e uovo."""
+
+    def setUp(self):
+        self.gen = read(os.path.join(UNITY, "City", "Scripts", "Game",
+                                     "FictionalCityWorld.cs"))
+        self.recipe = read(os.path.join(UNITY, "Resources", "CityRecipes",
+                                        "foggia_city_recipe.json"))
+        self.chunk = read(os.path.join(UNITY, "City", "Scripts", "OSM",
+                                       "ChunkManager.cs"))
+        self.world = read(os.path.join(UNITY, "City", "Scripts", "OSM",
+                                       "CityChunkedWorld.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(ROOT, "unity-project", "Assets", "Scripts",
+                                         "Core", "GameManager.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                      "HamburgerMenu.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(APP, "BridgeActivity.java"))
+
+    def test_ricetta_solo_parametri(self):
+        self.assertIn('"road_spacing_m"', self.recipe)
+        self.assertIn('"poi_mix"', self.recipe)
+        self.assertNotIn('"nodes"', self.recipe)
+        self.assertNotIn('"ele"', self.recipe)
+        self.assertIn("Resources/CityRecipes/foggia_city_recipe.json", self.gen)
+        self.assertIn("System.Random", self.gen)
+
+    def test_modalita_default_reale_e_streaming_bloccato(self):
+        self.assertIn('PlayerPrefs.GetInt(PrefKey, 0)', self.gen)
+        self.assertIn("FictionalCityWorld.Enabled) return", self.chunk)
+        self.assertIn("Manager.StreamingEnabled = false", self.world)
+        self.assertIn("if (!fictional && Manager != null", self.world)
+        self.assertIn("FictionalCityWorld.DestroyWorld()", self.world)
+
+    def test_uovo_e_bridge_bidirezionale(self):
+        self.assertIn("OnFictionalCityEntered()", self.game)
+        self.assertIn('GrantFeatureEgg("fictional-city"', self.game)
+        self.assertIn('"Uovo della città di carta"', self.game)
+        self.assertIn('"WorldModeChanged"', self.ipc)
+        self.assertIn('"WorldModeChanged" -> handleWorldModeChanged(jsonData)', self.bridge)
+        self.assertIn('putString("world_mode", mode)', self.bridge)
+        self.assertIn('j.put("worldMode", "fictional")', self.activity)
+        self.assertIn(r'\"worldMode\"', self.manager)
+        self.assertIn("Mondo:", self.menu)
+
+    def test_misura_del_build(self):
+        self.assertIn('PerfProbe.Measure("fictional")', self.gen)
+        self.assertIn("citta-gioco: edifici=%d poi=%d", self.gen)
 
 
 if __name__ == "__main__":

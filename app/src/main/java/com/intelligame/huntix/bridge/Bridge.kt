@@ -222,6 +222,9 @@ object Bridge {
             // ── Sorgente input touch scelta in MiCittà: preferenza persistente,
             //    rispedita a Unity all'apertura successiva. ──
             "AltTouchChanged" -> handleAltTouchChanged(jsonData)
+            // ── Città Gioco (mondo Reale / Città Gioco): preferenza
+            //    persistente, rispedita a Unity all'apertura successiva. ──
+            "WorldModeChanged" -> handleWorldModeChanged(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -346,6 +349,22 @@ object Bridge {
         ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
             .edit().putBoolean("alt_touch", source == "zone-zero").apply()
         com.intelligame.huntix.AppLog.i("HuntixSync", "Input touch MiCittà: $source")
+    }
+
+    /** Mondo scelto in MiCittà: Android ne diventa proprietario e lo rimanda
+     *  a Unity in openUnityActivity. Nessun nuovo file: usa le stesse
+     *  SharedPreferences di city_quality / alt_touch. */
+    private fun handleWorldModeChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val mode = j.optString("mode", "").lowercase()
+        if (mode !in setOf("fictional", "real")) return
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putString("world_mode", mode).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Mondo MiCittà: $mode (ricetta=${j.optString("recipe", "-")})"
+        )
     }
 
     /**

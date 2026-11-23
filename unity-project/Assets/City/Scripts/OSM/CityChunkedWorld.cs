@@ -242,6 +242,7 @@ private const float TerrainPhysxTimeoutS = 15f;
                 // cattura l'ultima posizione prima di scaricare i chunk
                 SaveWorldPosition();
                 RemoveSpawnBridge();
+                City.Fictional.FictionalCityWorld.DestroyWorld();
                 if (Manager != null) Manager.UnloadAll();
                 Debug.Log("[CityChunkedWorld] uscita dalla citta', chunk scaricati");
             }
@@ -481,6 +482,25 @@ private const float TerrainPhysxTimeoutS = 15f;
             Manager.StreamingEnabled = true;
             OsmDiag.Log("[CityChunkedWorld] === MIACITTA === StreamingEnabled=true");
 
+            // CITTA' GIOCO (affiancata, mai sostitutiva): se il flag e' attivo
+            // il quartiere fittizio viene costruito qui, PRIMA dello spawn, e
+            // lo streaming OSM resta fermo (nessun tile/DEM a runtime). Il
+            // ChunkManager e tutti gli altri sistemi restano in memoria: si
+            // riattivano tornando alla modalita' Reale.
+            bool fictional = City.Fictional.FictionalCityWorld.Enabled;
+            if (fictional)
+            {
+                City.Fictional.FictionalCityWorld.BuildWorld();
+                Manager.StreamingEnabled = false;
+                if (Manager.target != null)
+                {
+                    var plF = City.Game.Instance != null ? City.Game.Instance.player : null;
+                    Manager.target.position = new Vector3(0f, FeetFromPivot(plF), 0f);
+                    Physics.SyncTransforms();
+                }
+                OsmDiag.Log("[CityChunkedWorld] modalita' CITTA GIOCO: streaming OSM sospeso");
+            }
+
             // ── GATE SPAWN (requisito #7/: il primo chunk PRIMA del player) ──
             // Il player resta congelato (CC spento, sul ponte di sicurezza)
             // finche' il chunk che contiene il suo punto di spawn non e'
@@ -489,12 +509,14 @@ private const float TerrainPhysxTimeoutS = 15f;
             // movimento, si chiude lo splash e la citta' e' giocabile.
             Vector2Int intro = CityGrid.ChunkIndexOf(startLat, startLng);
             float gateStart = Time.unscaledTime;
-            while (Manager != null && !Manager.IsChunkBuilt(intro))
+            while (!fictional && Manager != null && !Manager.IsChunkBuilt(intro))
             {
                 if (Time.unscaledTime - gateStart > SpawnGateTimeoutS) break;
                 yield return new WaitForSecondsRealtime(0.2f);
             }
-            if (Manager == null || !Manager.IsChunkBuilt(intro))
+            if (fictional)
+                OsmDiag.Log("[CityChunkedWorld] gate spawn: CITTA GIOCO pronta (nessun chunk OSM atteso)");
+            else if (Manager == null || !Manager.IsChunkBuilt(intro))
                 OsmDiag.Log("[CityChunkedWorld] gate spawn: primo chunk (" + intro.x +
                     "," + intro.y + ") non pronto entro " + SpawnGateTimeoutS +
                     "s -> spawn su ponte di sicurezza");
@@ -511,7 +533,7 @@ private const float TerrainPhysxTimeoutS = 15f;
             // nascerebbe sul ponte di sicurezza invece che sulla superficie vera
             // (a Perugia il terreno arriva a y~22 mentre il ponte resta a y=0).
             bool terrainReady = false;
-            if (Manager != null && Manager.IsChunkBuilt(intro))
+            if (!fictional && Manager != null && Manager.IsChunkBuilt(intro))
             {
                 float physStart = Time.unscaledTime;
                 while (Manager != null && !terrainReady &&
@@ -524,7 +546,7 @@ private const float TerrainPhysxTimeoutS = 15f;
                         yield return new WaitForSecondsRealtime(0.2f);
                 }
             }
-            if (!terrainReady)
+            if (!fictional && !terrainReady)
             {
                 OsmDiag.Log("[CityChunkedWorld] gate: terreno NON registrato in PhysX entro " +
                     TerrainPhysxTimeoutS + "s - ponte di sicurezza mantenuto (collider chunk attesi)");

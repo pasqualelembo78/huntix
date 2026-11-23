@@ -116,6 +116,12 @@ public class BridgeActivity extends UnityPlayerActivity {
                     boolean altTouch = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
                             .getBoolean("alt_touch", false);
                     if (altTouch) j.put("altTouch", true);
+                    // CITTA' GIOCO: preferenza scelta in MiCitta' e salvata da
+                    // Android. Rimandata a Unity prima del caricamento della
+                    // scena City (il flag blocca lo streaming OSM a runtime).
+                    String worldMode = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getString("world_mode", "real");
+                    if ("fictional".equals(worldMode)) j.put("worldMode", "fictional");
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

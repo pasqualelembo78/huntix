@@ -162,6 +162,17 @@ SOFTWARE.
 
 ---
 
+## Città Gioco (2026-11-24)
+
+Generatore `unity-project/Assets/City/Scripts/Game/FictionalCityWorld.cs` ed estrattore
+`backend/preprocessing/city_recipe.py`: **codice originale Huntix**, scritto da zero a partire
+dalle statistiche estratte offline dai nostri PBF OSM (griglia stradale, isolati, parchi, mix
+POI). Non contiene codice, prefab, texture né idee implementative copiate dai 13 repository
+auditati: la loro lezione (mondo piccolo e controllato) è stata applicata come scelta di
+prodotto, non come import. Nessuna attribuzione aggiuntiva è quindi dovuta.
+
+---
+
 ## Aggiornamenti futuri
 
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit

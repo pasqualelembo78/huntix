@@ -187,6 +187,7 @@ namespace City
         private bool handbrakeEggGranted;
         private bool qualityEggGranted;
         private bool touchEggGranted;
+        private bool fictionalCityEggGranted;
 
         /// <summary>Pulsante touch "FRENO A MANO" della HUD guida. Delega al
         /// veicolo e, la prima volta che si derapa in movimento, nasconde un
@@ -226,6 +227,18 @@ namespace City
             GrantFeatureEgg("touch-zone-zero", "Uovo del joystick fluido",
                 City.Economy.EggController.Rarity.Rare,
                 "città→impostazioni→input touch");
+        }
+
+        /// <summary>Riflesso uova della Città Gioco: la prima attivazione del
+        /// quartiere fittizio lascia un uovo accanto al player. La posizione
+        /// viene registrata dal normale FeatureEggHidden → EggCapturedInCity.</summary>
+        public void OnFictionalCityEntered()
+        {
+            if (fictionalCityEggGranted) return;
+            fictionalCityEggGranted = true;
+            GrantFeatureEgg("fictional-city", "Uovo della città di carta",
+                City.Economy.EggController.Rarity.Epic,
+                "città→città-gioco→ricetta-osm");
         }
 
         /// <summary>Piazza un uovo legato a una funzionalita' appena scoperta

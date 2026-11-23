@@ -253,6 +253,11 @@ namespace City.OSM
 
         private void Tick()
         {
+            // CITTA' GIOCO: il flag e' persistito e arriva da Android prima
+            // dell'ingresso in citta'. Nessun tile/geo/DEM viene richiesto in
+            // questa modalita'; il manager resta vivo e si riattiva al ritorno
+            // alla modalita' Reale (nessun sistema rimosso).
+            if (City.Fictional.FictionalCityWorld.Enabled) return;
             if (!StreamingEnabled) return;
             if (target == null && !ResolveTarget())
             {
@@ -364,6 +369,7 @@ namespace City.OSM
         {
             using (City.Diagnostics.PerfProbe.Measure("chunk"))
             {
+            if (City.Fictional.FictionalCityWorld.Enabled) return;
             if (!StreamingEnabled || _pending.Count == 0) return;
 
             // Riordina la coda per distanza dal target a ogni frame: la camera
