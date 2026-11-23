@@ -41,9 +41,11 @@ namespace City.OSM
         /// fisica sui chunk lontani.
         ///
         /// Il TERRENO non si spegne mai (sotto i piedi non puo' mancare), ma il
-        /// suo collider si accende solo entro il raggio di marcia: un
-        /// MeshCollider da ~1k triangoli per 25-49 chunk e' la voce piu' grossa
-        /// del broadphase di PhysX e i chunk lontani non li tocca nessuno.
+        /// suo collider si accende solo nei 3x3 chunk attorno al giocatore
+        /// (LOD0): un MeshCollider per 49 chunk e' la voce piu' grossa del
+        /// broadphase di PhysX e i chunk lontani non li tocca nessuno.
+        /// Il centro del LOD e' il chunk del player e si aggiorna ogni 0,25 s,
+        /// quindi il suolo calpestabile e' sempre coperto.
         /// </summary>
         public void SetLod(int level)
         {
@@ -81,9 +83,12 @@ namespace City.OSM
 
         /// <summary>LOD fino al quale il MeshCollider del terreno resta in
         /// PhysX. Il chunk sotto i piedi e' sempre LOD0, quindi il collider
-        /// del suolo che calpesti e' SEMPRE attivo: il risparmio riguarda solo
-        /// gli anelli esterni, dove nessuno arriva a camminare.</summary>
-        public const int TerrainColliderLod = 1;
+        /// del suolo che calpesti e' SEMPRE attivo. Portandolo da 1 a 0 i
+        /// MeshCollider del terreno passano da 49 a 9 (3x3): con la mesh DEM
+        /// da 45 m sono ~9.500 triangoli invece di ~51.800 in PhysX.
+        /// Nessun'altra query di suolo usa i chunk esterni: NPC e veicoli
+        /// lontani seguono TileElevation (DEM), non i collider.</summary>
+        public const int TerrainColliderLod = 0;
 
         private static void SetTerrainCollider(GameObject terrainGo, bool on)
         {

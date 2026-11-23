@@ -189,6 +189,21 @@ namespace City.OSM
             catch (Exception) {}
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        public const bool VerboseDiagnostics = true;
+#else
+        public const bool VerboseDiagnostics = false;
+#endif
+
+        /// <summary>Log ad alto volume (per edificio, per prefab, per way):
+        /// in release e' disattivato alla compilazione per non pagare JNI e
+        /// allocazioni di stringhe migliaia di volte durante il build dei chunk.
+        /// Errori, warning e riepiloghi restano su Log/LogThrottled.</summary>
+        public static void LogDebug(string msg)
+        {
+            if (VerboseDiagnostics) Log(msg);
+        }
+
         /// <summary>Log con soglia temporale per chiave: lo stesso messaggio
         /// (categoria + inizio testo) non viene ripetuto piu' spesso di
         /// minIntervalSec. Evita di inondare la logcat Android su controlli

@@ -556,7 +556,10 @@ namespace UnityEngine
         // Giorno 6: sphere-cast del footprint (5 punti) — usato da GroundSnapper.
         public static int SphereCastNonAlloc(Vector3 origin, float radius, Vector3 dir, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) => 0;
         public static Collider[] OverlapBox(Vector3 center, Vector3 halfExtents, Quaternion rotation, int mask, QueryTriggerInteraction q) => new Collider[0];
-        public static int RaycastNonAlloc(Ray ray, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) { if (results != null) for (int i = 0; i < results.Length; i++) results[i] = default(RaycastHit); return 0; } }
+        public static int RaycastNonAlloc(Ray ray, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) { if (results != null) for (int i = 0; i < results.Length; i++) results[i] = default(RaycastHit); return 0; }
+        public static int RaycastNonAlloc(Vector3 origin, Vector3 dir, RaycastHit[] results, float maxDist) => 0;
+        public static int RaycastNonAlloc(Vector3 origin, Vector3 dir, RaycastHit[] results, float maxDist, int mask, QueryTriggerInteraction q) => 0;
+    }
 
     public struct RaycastHit { public Vector3 point; public Vector3 normal; public Collider collider;
         public Transform transform => null; public float distance => 0f; }

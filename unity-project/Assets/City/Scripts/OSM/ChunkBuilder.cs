@@ -176,7 +176,9 @@ namespace City.OSM
                     Mesh deckColMesh;
                     Mesh roadMesh = RoadRenderer.Build(
                         geo.roads, ToLocal, bounds, chunk.root.transform,
-                        out sidewalkMesh, out deckColMesh);
+                        out sidewalkMesh, out deckColMesh,
+                        new RoadRenderer.RoadGeoBounds(cornerSW_geo.lat,
+                            cornerNE_geo.lat, cornerSW_geo.lng, cornerNE_geo.lng));
                     if (roadMesh != null)
                     {
                         chunk.roadsGo = new GameObject("Strade",
@@ -651,7 +653,8 @@ namespace City.OSM
                 Mesh sidewalkMesh;
                 Mesh deckColMesh;
                 Mesh roadMesh = RoadRenderer.Build(geo.roads, ToLocal, bounds,
-                    rootT, out sidewalkMesh, out deckColMesh);
+                    rootT, out sidewalkMesh, out deckColMesh,
+                    new RoadRenderer.RoadGeoBounds(sw.lat, ne.lat, sw.lng, ne.lng));
                 if (roadMesh != null)
                 {
                     if (chunk.roadsGo == null)

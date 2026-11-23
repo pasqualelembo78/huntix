@@ -27,6 +27,17 @@ namespace City.Player
     /// </summary>
     public class GroundDiag : MonoBehaviour
     {
+        /// <summary>Overlay temporaneo: solo editor e development build.
+        /// In release NON viene aggiunto al player: evita un secondo
+        /// GroundSnapper.SampleGround (5 SphereCast + SyncOnce) OGNI frame,
+        /// oltre a due righe di log via JNI ogni 2 secondi. La telemetria di
+        /// sessione (game.player.LastGroundSource) resta attiva comunque.</summary>
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        public const bool EnabledByBuild = true;
+#else
+        public const bool EnabledByBuild = false;
+#endif
+
         private const float LogEveryS = 2f;
         private const int SummaryEveryS = 10;   // log riassuntivo piu' raro
 
@@ -70,7 +81,7 @@ namespace City.Player
 
         public static GroundDiag Ensure(GameObject root)
         {
-            if (root == null) return null;
+            if (!EnabledByBuild || root == null) return null;
             var d = root.GetComponent<GroundDiag>();
             if (d == null) d = root.AddComponent<GroundDiag>();
             return d;

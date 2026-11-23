@@ -302,13 +302,18 @@ namespace City.Vehicle
                 }
             }
 
+            // Con fino a ~750 pedoni attivi, il vecchio ciclo calcolava una
+            // radice quadrata per OGNI NPC a OGNI frame. Il confronto in quadro
+            // scarta il 99% degli NPC senza sqrt; il risultato e' identico.
             var npcs = City.NPC.NPCController.Active;
+            float brakeAheadSqr = brakeAhead * brakeAhead;
             for (int i = 0; i < npcs.Count; i++)
             {
                 var n = npcs[i];
                 if (n == null) continue;
                 Vector3 toNpc = n.transform.position - transform.position;
                 toNpc.y = 0f;
+                if (toNpc.sqrMagnitude >= brakeAheadSqr) continue;
                 float nd = toNpc.magnitude;
                 if (nd >= brakeAhead) continue;
                 if (Vector3.Dot(fwd, toNpc.normalized) <= 0.3f) continue;

@@ -113,7 +113,38 @@ namespace City.OSM
                 mesh.RecalculateBounds();
                 return mesh;
             }
+
+            /// <summary>Svuota mantenendo la capacita': Mesh.Set* copia i dati,
+            /// quindi gli array posso essere riutilizzati dal chunk successivo.</summary>
+            public void Clear()
+            {
+                verts.Clear();
+                uvs.Clear();
+                tris.Clear();
+            }
         }
+
+        // Un build di chunk alla volta (ChunkManager.MaxConcurrentBuilds=1):
+        // tre accumulatori da ~96 KB ciascuno venivano allocati e buttati per
+        // ognuno dei 49 chunk. Il pool li riutilizza con lock per sicurezza.
+        private static readonly Stack<Acc> _accPool = new Stack<Acc>();
+
+        private static Acc RentAcc()
+        {
+            lock (_accPool)
+                return _accPool.Count > 0 ? _accPool.Pop() : new Acc();
+        }
+
+        private static void ReturnAcc(Acc acc)
+        {
+            acc.Clear();
+            lock (_accPool) _accPool.Push(acc);
+        }
+
+        /// <summary>Bbox geografico del chunk: le way della tile intera che non
+        /// lo intersecano vengono scartate PRIMA di CollectJunctions. Senza questo
+        /// filtro ogni chunk della tile (100) riprocessa le stesse 1700+ strade
+        /// e 1800+ giunzioni, anche quando la mesh finale e' vuota (campagna).</summary>
 
         /// <summary>
         /// Costruisce le mesh stradali del chunk. toLocal converte una GeoLL in
@@ -121,24 +152,82 @@ namespace City.OSM
         /// chunk in metri locali (con margine applicato dal caller). Se
         /// labelsParent e' valorizzato crea anche i TextMesh coi nomi vie.
         /// sidewalkOut riceve la mesh dei marciapiedi (null se vuota).
+        /// geoBounds, se valido, e' il bbox geografico del chunk: filtra le
+        /// way della tile intera prima di raccogliere le giunzioni.
         /// </summary>
+        public struct RoadGeoBounds
+        {
+            public bool valid;
+            public double latMin, latMax, lonMin, lonMax;
+
+            public RoadGeoBounds(double swLat, double neLat, double swLon, double neLon)
+            {
+                valid = true;
+                latMin = swLat; latMax = neLat; lonMin = swLon; lonMax = neLon;
+            }
+        }
+
+        private static TileRoadRec[] FilterByGeoBounds(TileRoadRec[] roads,
+            RoadGeoBounds b)
+        {
+            if (!b.valid || roads == null) return roads;
+            // ~0.004 gradi = 440 m di latitudine, ~340 m di longitudine a 40N:
+            // copre il margine di 60/80 m usato dal nastro e le way lunghe con
+            // pochi vertici che attraversano il chunk senza averci un nodo dentro.
+            const double pad = 0.004;
+            double loLat = b.latMin - pad, hiLat = b.latMax + pad;
+            double loLon = b.lonMin - pad, hiLon = b.lonMax + pad;
+            List<TileRoadRec> keep = null;
+            for (int r = 0; r < roads.Length; r++)
+            {
+                var road = roads[r];
+                bool drop = false;
+                if (road != null && road.pts != null && road.pts.Length > 0)
+                {
+                    double rLatMin = double.MaxValue, rLatMax = double.MinValue;
+                    double rLonMin = double.MaxValue, rLonMax = double.MinValue;
+                    for (int k = 0; k < road.pts.Length; k++)
+                    {
+                        double la = road.pts[k].a, lo = road.pts[k].o;
+                        if (la < rLatMin) rLatMin = la;
+                        if (la > rLatMax) rLatMax = la;
+                        if (lo < rLonMin) rLonMin = lo;
+                        if (lo > rLonMax) rLonMax = lo;
+                    }
+                    drop = rLatMax < loLat || rLatMin > hiLat ||
+                           rLonMax < loLon || rLonMin > hiLon;
+                }
+                if (!drop && keep != null) { keep.Add(road); continue; }
+                if (!drop) continue;
+                if (keep == null)
+                {
+                    keep = new List<TileRoadRec>(roads.Length);
+                    for (int j = 0; j < r; j++) keep.Add(roads[j]);
+                }
+            }
+            return keep != null ? keep.ToArray() : roads;
+        }
+
         public static Mesh Build(TileRoadRec[] roads, System.Func<GeoLL, Vector3> toLocal,
             Rect localBounds, Transform labelsParent, out Mesh sidewalkOut,
-            out Mesh deckColOut)
+            out Mesh deckColOut, RoadGeoBounds geoBounds = default(RoadGeoBounds))
         {
-            var road = new Acc();
-            var walk = new Acc();
-            var deckCol = new Acc();   // collider dei viadotti/gallerie (solo impalcato)
+            int roadsTotal = roads != null ? roads.Length : 0;
+            var candidates = FilterByGeoBounds(roads, geoBounds);
+            var road = RentAcc();
+            var walk = RentAcc();
+            var deckCol = RentAcc();   // collider dei viadotti/gallerie (solo impalcato)
             var labels = new List<LabelSpec>();
 
             // Nodi condivisi fra piu' strade (bivi T/X/incroci): le strade che
             // terminano su un nodo fermano la loro bocca SUL fan di giunzione,
             // mai piu' con un taglio squadrato in mezzo all'incrocio.
-            var junctions = CollectJunctions(roads, toLocal);
+            // Il filtro geografico qui sopra e' conservativo: le giunzioni che
+            // contano sono quelle dei nodi within bounds, identiche a prima.
+            var junctions = CollectJunctions(candidates, toLocal);
 
-            int roadsTotal = roads != null ? roads.Length : 0;
             int roadsSkipped = 0;
-            foreach (var roadRec in roads)
+            foreach (var roadRec in candidates)
             {
                 if (roadRec?.pts == null || roadRec.pts.Length < 2)
                 {
@@ -167,11 +256,16 @@ namespace City.OSM
             deckColOut = deckCol.ToMesh("DeckColChunk");
             var roadMesh = road.ToMesh("StradeChunk");
             OsmDiag.Log("[Roads] Build chunk: strade=" + roadsTotal +
+                " nelChunk=" + candidates.Length +
                 " saltate=" + roadsSkipped + " giunzioni=" + junctions.Count +
                 " vertAsfalto=" + road.verts.Count + " vertMarciapiede=" +
                 walk.verts.Count + " labels=" + labels.Count +
                 " (mesh asfalto " + (roadMesh != null ? "SI" : "NO") +
                 ", mesh marciapiede " + (sidewalkOut != null ? "SI" : "NO") + ")");
+            // Mesh.Set* ha gia' copiato i dati: gli accumulatori tornano al pool.
+            ReturnAcc(road);
+            ReturnAcc(walk);
+            ReturnAcc(deckCol);
             return roadMesh;
         }
 
@@ -217,11 +311,11 @@ namespace City.OSM
         /// disco, non a un raccordo). Le direzioni delle costole sono calcolate
         /// nella stessa metrica toLocal del nastro cosi' le bocche combaciano.
         ///
-        /// DUE PASSATE, per non allocare su tutti i nodi della tile. Questa
-        /// funzione gira UNA VOLTA PER CHUNK ma riceve l'elenco strade della
-        /// TILE INTERA (ogni chunk filtra dopo per i propri bounds): quindi il
-        /// costo si moltiplica per i ~100 chunk che la compongono. La versione
-        /// precedente costruiva un `Junction` (con HashSet + List) per OGNI
+        /// DUE PASSATE, per non allocare su tutti i nodi. Questa funzione gira
+        /// UNA VOLTA PER CHUNK: il caller passa solo le way il cui bbox
+        /// geografico interseca il chunk (FilterByGeoBounds), quindi il costo
+        /// non si moltiplica piu' per le 1724 strade della tile intera.
+        /// Storicamente costruiva un `Junction` (con HashSet + List) per OGNI
         /// nodo e poi buttava via il 87%: su una tile urbana sono ~150k nodi,
         /// cioe' ~150k Junction + 150k HashSet + 150k List **per chunk**, e
         /// milioni di allocazioni gestite sul main thread durante il

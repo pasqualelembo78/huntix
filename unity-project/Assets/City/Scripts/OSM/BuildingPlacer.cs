@@ -57,7 +57,7 @@ namespace City.OSM
             if (_kenneyCache.TryGetValue(key, out cached)) return cached;
             var go = Resources.Load<GameObject>("Buildings/" + key);
             _kenneyCache[key] = go;
-            OsmDiag.Log("[Building][Kenney] load='" + key + "' ok=" + (go != null));
+            OsmDiag.LogDebug("[Building][Kenney] load='" + key + "' ok=" + (go != null));
             return go;
         }
 
@@ -137,7 +137,7 @@ namespace City.OSM
                 // Se per qualche motivo manca il shader URP (torna a Standard
                 // senza rompere): niente conversione, evita errori.
                 _convertedMats.Add(m);
-                OsmDiag.Log("[Building][Mat] URP/Lit NON trovato, lascio '" + legacyName + "'");
+                OsmDiag.LogDebug("[Building][Mat] URP/Lit NON trovato, lascio '" + legacyName + "'");
                 return;
             }
 
@@ -215,7 +215,7 @@ namespace City.OSM
             }
 
             _convertedMats.Add(m);
-            OsmDiag.Log("[Building][Mat] convertito shader='" + legacyName +
+            OsmDiag.LogDebug("[Building][Mat] convertito shader='" + legacyName +
                 "' -> URP/Lit tex=" + (albedo != null ? albedo.name : "-") +
                 " nome='" + (m.name != null ? m.name : "") + "'");
         }
@@ -438,7 +438,7 @@ namespace City.OSM
             if (_quaterniusCache.TryGetValue(name, out cached)) return cached;
             var go = Resources.Load<GameObject>("Buildings/Quaternius/" + name);
             _quaterniusCache[name] = go;
-            OsmDiag.Log("[Building][Quat] load='" + name + "' area=" + area.ToString("F0") +
+            OsmDiag.LogDebug("[Building][Quat] load='" + name + "' area=" + area.ToString("F0") +
                 " ok=" + (go != null));
             return go;
         }
@@ -546,7 +546,7 @@ namespace City.OSM
                     prefab = LoadKenney(folder, prefabName);
                 }
             }
-            OsmDiag.Log("[Building][Pick] id=" + b.id + " t='" + b.t + "' w=" + w.ToString("F1") +
+            OsmDiag.LogDebug("[Building][Pick] id=" + b.id + " t='" + b.t + "' w=" + w.ToString("F1") +
                 " d=" + d.ToString("F1") + " area=" + (w * d).ToString("F0") +
                 " useQuaternius=" + useQ +
                 " prefab=" + (prefab != null ? prefab.name : "NULL") +
@@ -589,7 +589,7 @@ namespace City.OSM
                     ConvertToURP(m);
                 }
             }
-            OsmDiag.Log("[Building][Spawn] id=" + b.id + " name='" + inst.name +
+            OsmDiag.LogDebug("[Building][Spawn] id=" + b.id + " name='" + inst.name +
                 "' renderers=" + instRenderers.Length +
                 " matsTot=" + matsTotal +
                 " matsNoShader=" + matsNullShader +
@@ -689,7 +689,7 @@ namespace City.OSM
                     box.enabled = false;
                     var guard = inst.AddComponent<ColliderReArm>();
                     guard.Setup(box, worldCenter, w, d);
-                    OsmDiag.Log("[Building][Guard] id=" + b.id +
+                    OsmDiag.LogDebug("[Building][Guard] id=" + b.id +
                         " collider differito (player nell'impronta): anti-volo");
                 }
             }
@@ -717,7 +717,7 @@ namespace City.OSM
                     box);
                 gen.SetEntrance(entranceComp);
             }
-            OsmDiag.Log("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
+            OsmDiag.LogDebug("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
                 "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +
                 " bounds=" + baseB.size.ToString("F2") +
                 " porta=" + (entranceComp != null) + " interno=si");

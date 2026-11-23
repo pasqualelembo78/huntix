@@ -339,3 +339,54 @@ su `origin/flat-world`. I file `.meta`/prefab riscritti dalla build sono stati
 ripristinati prima del commit. La verifica finale resta sul dispositivo: serve
 una nuova sessione con questa APK e il log del viewer in-app, perché la causa
 dei 15-19 fps non è ancora misurata.
+
+---
+
+## ANALISI E FIX DEL TERRENO 3D (23/11, secondo intervento)
+
+Analisi statica approfondita del terreno (sola lettura) e successiva
+applicazione dei fix. Valori verificati nel codice: DEM server 250 m
+(`backend/preprocessing/dem.py:72`), mesh terreno 45 m
+(`TerrainChunk.cs:89`), `LoadRadius=3` → 49 chunk, collider del terreno
+inizialmente attivo fino a LOD1 (tutti i 49 chunk). In build corrente
+`CityConfig.WorldHeights=Flat`: la mesh DEM è compilata ma spenta e ogni chunk
+ha soltanto **4 vertici / 2 triangoli** di terreno (`terrenoVerts=4` nel log).
+I 510.000 triangoli storici erano 20.402 tri/chunk × 25 chunk della mesh a 10 m.
+
+### Fix applicati (nessun cambio di gameplay)
+
+1. **`Physics.autoSyncTransforms = false`** in `ChunkManager`, `CityChunkedWorld`
+   e `CityOSMWorld`: prima era forzato a `true` in tre punti, con sync PhysX a
+   ogni spostamento di transform. La registrazione dei collider runtime resta
+   garantita dai sync espliciti esistenti (fine build, spawn bridge, rebase,
+   `GroundSnapper.SyncOnce` una volta per frame).
+2. **`GroundDiag` solo in editor/development build**: in release non viene più
+   attaccato al player, eliminando il secondo `SampleGround` (5 SphereCast) per
+   frame. La telemetria `prof=`/`ground=` resta attiva.
+3. **Sonde NPC sfalsate 1/3 oltre 40 m** con dt accumulato nel follower: stesse
+   quote finali, ~3× meno SphereCast per frame. Auto `TrafficCar`: confronto
+   `sqrMagnitude` prima della radice su tutti gli NPC attivi.
+4. **Filtro geografico delle strade prima di `CollectJunctions`**
+   (`RoadRenderer.FilterByGeoBounds`): i chunk di campagna non ricalcolano più
+   giunzioni su 1724 strade/1816 nodi della tile quando l'asfalto finale è 0.
+5. **Pool degli accumulatori mesh** (~96 KB ×3 per chunk) e `LogDebug` per le
+   righe per-edificio in release: meno GC e meno chiamate JNI durante il build.
+6. **Un solo `sharedMesh`** nel MeshCollider del terreno (prima mesh→null→mesh,
+   due cook PhysX per chunk).
+7. **`TerrainColliderLod = 0`**: collider del terreno solo nei 3×3 chunk attorno
+   al giocatore (~9.500 tri con DEM invece di ~51.800), non più in tutti i 49.
+8. **`RaycastAll` → `RaycastNonAlloc`** con buffer condivisi in `GroundSnapper`
+   e `CityChunkedWorld`; commenti e numeri aggiornati in `ChunkManager`.
+
+### Rischi e verifica
+
+- Il rischio maggiore è il passaggio ad `autoSyncTransforms=false`: se una
+  sincronizzazione esplicita mancasse, il player potrebbe attraversare il suolo
+  appena costruito. Le guardie esistenti (build, spawn gate con retry 15 s,
+  rebase, `SyncOnce`) sono state mantenute e rafforzate dai commenti.
+- `TerrainColliderLod=0` è coperto dal fatto che il centro LOD è il chunk del
+  player e si aggiorna ogni 0,25 s; NPC/veicoli lontani usano `TileElevation`,
+  non i collider.
+- **Non dichiaro il problema risolto**: serve una nuova sessione su device con
+  l'APK di questa build e il log del viewer in-app per verificare ground, spawn
+  e frame time in campagna aperta.

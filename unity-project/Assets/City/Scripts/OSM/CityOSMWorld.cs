@@ -113,15 +113,14 @@ namespace City.OSM
 
         private void Init()
         {
-            // CRITICO: in questo progetto ProjectSettings/DynamicsManager.asset ha
-            // m_AutoSyncTransforms: 0. La città OSM è generata a runtime (colliders
-            // creati via trasform.position = ...) e senza la sincronizzazione
-            // automatica i collider non vengono registrati nel solver di PhysX:
-            // il player (CharacterController) passa attraverso strade e terreno e
-            // cade nel vuoto. Il seed serializzato nella scena funzionava perché
-            // i suoi collider erano registrati al load. Forzare l'auto-sync è la
-            // soluzione robusta (è anche il default di Unity).
-            Physics.autoSyncTransforms = true;
+            // autoSyncTransforms OFF (valore di ProjectSettings/DynamicsManager.asset).
+            // Storicamente era forzato a true per registrare i collider creati a
+            // runtime: il costo per frame su centinaia di NPC/auto era pero'
+            // altissimo. Ora la registrazione e' esplicita e mirata (ChunkBuilder
+            // a fine build, CityChunkedWorld dopo lo spawn bridge, GroundSnapper
+            // una volta per frame prima delle sonde): mantenere false evita di
+            // risincronizzare l'intera scena PhysX a ogni spostamento di transform.
+            Physics.autoSyncTransforms = false;
 
             // CRITICO: nascondi la seed city SUBITO (stesso frame, no yield).
             // Prima veniva nascosta dopo yield return null (1 frame visibile).

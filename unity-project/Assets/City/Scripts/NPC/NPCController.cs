@@ -122,6 +122,8 @@ namespace City.NPC
                 ? ((startIndex % waypoints.Length + waypoints.Length) % waypoints.Length)
                 : 0;
             walking = false;
+            _groundPhase = (GetInstanceID() & 0x7fffffff) % GroundSnapEveryN;
+            _groundDtAccum = 0f;
             pauseTimer = Random.Range(0.5f, 2f);
             _shopper = rng != null && rng.NextDouble() < 0.45;
             _dailyNextAt = Time.time + Random.Range(4f, 12f);
@@ -931,23 +933,43 @@ namespace City.NPC
 
         private GroundFollowState _groundFollow;
         private string _lastSurface = "";
-        // Il sondaggio fisico del suolo (RaycastAll) costa CPU: oltre ~120m o
+        // Il sondaggio fisico del suolo (SphereCast) costa CPU: oltre ~120m o
         // per i pedoni cullati si usa solo il DEM (nessun raycast).
         private const float GroundProbeSqr = 120f * 120f;
+        // Entro 40 m il pedone e' grande a schermo: sonda fisica OGNI frame.
+        // Oltre 40 m la sonda e' sfalsata 1 frame su 3 per NPC (fase stabile
+        // per istanza): il follower riceve il dt accumulato, quindi la quota
+        // finale e' identica, ma le SphereCast per frame calano di ~3x.
+        private const float GroundProbeNearSqr = 40f * 40f;
+        private const int GroundSnapEveryN = 3;
+        private int _groundPhase;
+        private float _groundDtAccum;
 
         /// <summary>Aggiorna la quota del pedone sulla superficie del terreno
         /// tramite GroundSnapper (sistema condiviso col player): sonda corta
         /// sotto i piedi sui collider walkable (terreno, strade, deck dei
         /// viadotti; mai gli edifici layer 8), sonda lunga in fondo alla
-        /// colonna per i dislivelli e fallback DEM. Chiamato OGNI frame (anche
-        /// quando il pedone e' fermo), cosi' non resta appeso a quota vecchia
-        /// se il terreno viene rialzato/ricostruito sotto di lui.</summary>
+        /// colonna per i dislivelli e fallback DEM. Chiamato OGNI frame per i
+        /// pedoni vicini (anche da fermi); oltre 40 m la sonda fisica e'
+        /// sfalsata 1 su 3 con dt accumulato, cosi' non resta appeso a quota
+        /// vecchia se il terreno viene rialzato/ricostruito sotto di lui.</summary>
         private void SnapToGround()
         {
             Transform rootT = transform.root;
             Vector3 npcWorld = transform.position;
             bool probe = !_culled && (_camCache == null
                 || (_camCache.transform.position - transform.position).sqrMagnitude <= GroundProbeSqr);
+            bool near = probe && (_camCache == null
+                || (_camCache.transform.position - transform.position).sqrMagnitude <= GroundProbeNearSqr);
+
+            _groundDtAccum += Time.deltaTime;
+            // Sfalsatura solo per le sonde fisiche lontane: i pedoni vicini e
+            // quelli in fallback DEM restano a 60 Hz come prima.
+            if (probe && !near && (Time.frameCount + _groundPhase) % GroundSnapEveryN != 0)
+                return;
+            float snapDt = Mathf.Min(_groundDtAccum, 0.12f);
+            _groundDtAccum = 0f;
+
             // Solo gli NPC vicini/non cullati pagano il raycasting fisico; gli
             // altri seguono l'altimetria DEM (follow 1/mesh metrico identico).
             GroundSample s = probe
@@ -957,7 +979,7 @@ namespace City.NPC
 
             float targetY = s.height + 0.12f;
             float newY = GroundSnapper.Follow(ref _groundFollow, npcWorld.y,
-                targetY, Time.deltaTime);
+                targetY, snapDt);
             transform.position = new Vector3(npcWorld.x, newY, npcWorld.z);
             _lastSurface = s.surfaceName;
 

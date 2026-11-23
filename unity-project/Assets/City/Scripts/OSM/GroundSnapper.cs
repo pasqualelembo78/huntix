@@ -142,6 +142,9 @@ namespace City.OSM
         // allocazioni per frame. Non e' rientrante (nessun callback gira
         // durante la sonda), quindi e' sicuro usalo per player e NPC.
         private static readonly RaycastHit[] _probeHits = new RaycastHit[24];
+        // Sonda lunga: 32 hit bastano per una colonna verticale; RaycastAll
+        // allocava un array nuovo a OGNI chiamata (player + NPC vicini).
+        private static readonly RaycastHit[] _longHits = new RaycastHit[32];
 
         private static Vector3 FootprintPoint(Vector3 center, Vector3 side,
             Vector3 fwd, int i)
@@ -227,14 +230,14 @@ namespace City.OSM
             // ── 2. Sonda lunga: fondo della colonna (dislivelli, tail) ──
             float dem = TileElevation.HeightAtWorld(new Vector3(pos.x, pos.y, pos.z));
             float fromY = Mathf.Max(feetY + LongRise, dem + DemRelief);
-            RaycastHit[] hits = Physics.RaycastAll(
-                new Vector3(pos.x, fromY, pos.z), Vector3.down, LongDepth,
-                WalkableMask, QueryTriggerInteraction.Ignore);
+            int hitCount = Physics.RaycastNonAlloc(
+                new Vector3(pos.x, fromY, pos.z), Vector3.down, _longHits,
+                LongDepth, WalkableMask, QueryTriggerInteraction.Ignore);
             float best = float.MinValue;
             string bestName = "";
-            for (int i = 0; i < hits.Length; i++)
+            for (int i = 0; i < hitCount && i < _longHits.Length; i++)
             {
-                var h = hits[i];
+                var h = _longHits[i];
                 if (h.collider == null) continue;
                 if (IsSelf(h.collider.transform, self)) continue;
                 if (IsBridge(h.collider.transform, bridge)) continue;

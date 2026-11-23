@@ -18,11 +18,12 @@ namespace City.OSM
     {
         // Raggio 3 (7x7 = 49 chunk) come nel ramo `unity`, che girava bene.
         // Era stato ridotto a 2 (25 chunk) per compensare la mesh del terreno a
-        // 10 m, che costava 20402 triangoli di collider PER CHUNK senza LOD:
-        // 510k triangoli in PhysX. Con la mesh a 45 m (1058 tri/chunk, e
-        // collider spento oltre il raggio di marcia) il costo e' 26k, quindi il
-        // raggio corto non serve piu' e tornerebbe solo a far uscire il player
-        // dal mondo caricato piu' in fretta, con il vuoto davanti.
+        // 10 m: 20402 tri/chunk × 25 chunk = 510k triangoli in PhysX (con
+        // raggio 3 sarebbero stati ~1 M). Oggi la mesh e' a 45 m (1058 tri/chunk)
+        // e il collider del terreno e' attivo solo nei 3x3 chunk del giocatore
+        // (ChunkData.TerrainColliderLod = 0): ~9.500 triangoli, non 26k ne' 52k.
+        // Accorciare il raggio servirebbe solo a far uscire il player dal mondo
+        // caricato piu' in fretta, con il vuoto davanti.
         public const int LoadRadius = 3;    // chunk in ogni direzione (7x7)
         public const int UnloadRadius = 4;  // isteresi: un anello oltre il carico
         private const float TickIntervalS = 0.25f;
@@ -133,12 +134,15 @@ namespace City.OSM
 
         private void Start()
         {
-            // I collider di chunk generati a runtime entrano in PhysX con un
-            // piccolo ritardo di registrazione. autoSyncTransforms=on (come nel
-            // world legacy) fa registrare subito i nuovi MeshCollider al
-            // CharacterController: senza, il player puo' attraversare il terreno
-            // appena costruito e precipitare (mesh one-sided).
-            Physics.autoSyncTransforms = true;
+            // autoSyncTransforms RESTA OFF (come in ProjectSettings/DynamicsManager.asset):
+            // con centinaia di transform in movimento (NPC/auto) l'engine risincronizza
+            // PhysX a OGNI modifica, per frame, su tutta la scena. La registrazione
+            // dei collider generati a runtime e' garantita dai sync esplicite gia'
+            // presenti: ChunkBuilder (fine build), CityChunkedWorld (spawn bridge),
+            // GroundSnapper.SyncOnce (una per frame prima delle sonde) e qui sotto
+            // in OnRebased. Non riattivare l'auto-sync: era una stampella dei tempi
+            // in cui quei sync espliciti non c'erano.
+            Physics.autoSyncTransforms = false;
             // persistente: sopravvive ai reload della scena City (il double-load
             // di GameManager distruggeva questo oggetto prima del primo tick)
             DontDestroyOnLoad(gameObject);

@@ -44,12 +44,12 @@ namespace City.OSM
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
+            // Una sola assegnazione di sharedMesh al MeshCollider: il vecchio
+            // doppio passaggio (mesh -> null -> mesh) forzava de-cook e ri-cook
+            // della mesh in PhysX per ogni chunk, 49 volte a ogni ricaricamento.
             go.GetComponent<MeshFilter>().sharedMesh = mesh;
             go.GetComponent<MeshRenderer>().sharedMaterial = _grassMat;
-            go.GetComponent<MeshCollider>().sharedMesh = mesh;
-
             var col = go.GetComponent<MeshCollider>();
-            col.sharedMesh = null;
             col.sharedMesh = mesh;
             col.enabled = true;
 

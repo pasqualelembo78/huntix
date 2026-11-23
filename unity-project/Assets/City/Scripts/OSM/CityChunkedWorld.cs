@@ -65,6 +65,10 @@ private const float TerrainPhysxTimeoutS = 15f;
         private float _nextTerrainDiag;
         private GameObject _spawnBridge;
 
+        // Le colonne di diagnostica/spawn usano un buffer condiviso: RaycastAll
+        // riallocava un array nuovo a ogni sonda (anche solo ogni 2 secondi).
+        private static readonly RaycastHit[] _columnHits = new RaycastHit[64];
+
         /// <summary>Pubblico: usato da Game.SnapToGround per escludere
         /// il ponte di sicurezza dal raycast di snap dopo l'uscita veicolo.</summary>
         public GameObject SpawnBridge { get { return _spawnBridge; } }
@@ -251,9 +255,11 @@ private const float TerrainPhysxTimeoutS = 15f;
             _inCityScene = true;
             _cityReadyNotified = false;
 
-            // CRITICO: colliders generati a runtime senza autoSyncTransforms non
-            // vengono registrati in PhysX (vedi CityOSMWorld.Init).
-            Physics.autoSyncTransforms = true;
+            // autoSyncTransforms OFF: i collider dei chunk e dello SpawnBridge
+            // vengono registrati con Physics.SyncTransforms() esplicite (vedi
+            // ChunkBuilder e più avanti in questo metodo), non con la
+            // sincronizzazione automatica globale che costa un frame intero.
+            Physics.autoSyncTransforms = false;
 
             // il tracking Android parte poco prima del cambio scena: i primi
             // valori letti sono 0,0 (nessun fix). Attendiamo un fix valido.
@@ -1124,18 +1130,18 @@ private const float TerrainPhysxTimeoutS = 15f;
                 ? City.Game.Instance.player.transform : null;
             Transform bridge = Instance != null && Instance._spawnBridge != null
                 ? Instance._spawnBridge.transform : null;
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, maxDist);
-            for (int i = 0; i < hits.Length; i++)
+            int n = Physics.RaycastNonAlloc(from, Vector3.down, _columnHits, maxDist);
+            for (int i = 0; i < n && i < _columnHits.Length; i++)
             {
-                if (playerRoot != null && hits[i].collider != null &&
-                    (hits[i].collider.transform == playerRoot ||
-                     hits[i].collider.transform.IsChildOf(playerRoot)))
+                if (playerRoot != null && _columnHits[i].collider != null &&
+                    (_columnHits[i].collider.transform == playerRoot ||
+                     _columnHits[i].collider.transform.IsChildOf(playerRoot)))
                     continue;
-                if (bridge != null && hits[i].collider != null &&
-                    (hits[i].collider.transform == bridge ||
-                     hits[i].collider.transform.IsChildOf(bridge)))
+                if (bridge != null && _columnHits[i].collider != null &&
+                    (_columnHits[i].collider.transform == bridge ||
+                     _columnHits[i].collider.transform.IsChildOf(bridge)))
                     continue;
-                result = hits[i];
+                result = _columnHits[i];
                 return true;
             }
             return false;
@@ -1147,7 +1153,7 @@ private const float TerrainPhysxTimeoutS = 15f;
         /// indicando che il terreno fisico e' pronto. NON ci si puo' fermare al
         /// primo hit: quando il terreno e' piatto (y~0, es. costa) il ponte (piano
         /// a y=0 sovrapposto) viene colpito per primo e il terreno sta poco sotto,
-        /// quindi va scansionato tutto il RaycastAll.</summary>
+        /// quindi va scansionato tutto il buffer della colonna.</summary>
         private bool RealTerrainBelow(Transform target)
         {
             if (target == null) return false;
@@ -1159,11 +1165,11 @@ private const float TerrainPhysxTimeoutS = 15f;
             // verso il basso non lo colpirebbe mai. Ancoriamo l'origine ~150 m
             // sopra la superficie DEM cosi' la colonna la vede sempre.
             Vector3 from = RayStartAboveSurface(target.position);
-            RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 500f);
-            for (int i = 0; i < hits.Length; i++)
+            int n = Physics.RaycastNonAlloc(from, Vector3.down, _columnHits, 500f);
+            for (int i = 0; i < n && i < _columnHits.Length; i++)
             {
-                if (hits[i].collider == null) continue;
-                var t = hits[i].collider.transform;
+                if (_columnHits[i].collider == null) continue;
+                var t = _columnHits[i].collider.transform;
                 if (playerRoot != null && (t == playerRoot || t.IsChildOf(playerRoot)))
                     continue;
                 if (_spawnBridge != null &&
