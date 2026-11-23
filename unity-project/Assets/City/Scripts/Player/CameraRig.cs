@@ -95,6 +95,8 @@ namespace City.Player
         private float yaw = 0f;
         private Vector3 velocity;
         private float _nextPushLog;
+        /// <summary>Lunghezza smorzata della spring arm (NaN al primo frame).</summary>
+        private float _smoothedArmDist = float.NaN;
 
         // ── GIORNO 9: spring arm ──
         // La collisione usa una SFERA, non un raggio: un muro visto di taglio
@@ -589,8 +591,9 @@ namespace City.Player
             }
 
             Vector3 offset = Quaternion.Euler(p, yaw, 0f) * new Vector3(0f, h, -d);
-            Vector3 desired = target.position + offset;
+            Vector3 armDir = offset.normalized;
             float dist = offset.magnitude;
+            float wantedArmDist = dist;
 
             if (_fpBlend < 0.5f)
             {
@@ -598,7 +601,6 @@ namespace City.Player
                 // partito 5 m sopra il player (bucava muri di taglio e cornici).
                 // Un solo query/frame, buffer riusato, hit PIU' VICINO (regola
                 // del Mandato: mai il piu' alto/ultimo di RaycastAll).
-                Vector3 armDir = offset.normalized;
                 Vector3 start = target.position + Vector3.up * ArmPivotHeight;
                 int mask = ~(1 << 8);   // layer 8 = edifici, invariato
                 int found = Physics.SphereCastNonAlloc(start, ArmRadius, armDir,
@@ -628,7 +630,7 @@ namespace City.Player
                     float hitDist = Vector3.Distance(target.position, best.point);
                     if (hitDist > MinCameraDistance + 1f)
                     {
-                        desired = best.point - armDir * 0.5f;
+                        wantedArmDist = Mathf.Max(MinCameraDistance, hitDist - 0.5f);
                         LastObstaclePull = true;
                         // Audit: la camera e' stata tirata dentro da un ostacolo
                         // (radice di "camera in prima persona" dentro un edificio).
@@ -643,18 +645,30 @@ namespace City.Player
                 }
             }
 
-            Vector3 toDesired = desired - target.position;
-            if (toDesired.magnitude < MinCameraDistance)
-            {
-                desired = target.position + toDesired.normalized * MinCameraDistance;
-            }
+            // La lunghezza del braccio viene smorzata con la STESSA costante di
+            // tempo della posizione (smoothTime): nel log 23/11 il camDist
+            // oscillava fra 5,95 e 7,45 m a ogni hit, trascinando la vista e
+            // le ombre. La direzione non cambia: si smorza solo la distanza,
+            // quindi la geometria della spring arm resta identica.
+            wantedArmDist = Mathf.Max(MinCameraDistance, wantedArmDist);
+            if (float.IsNaN(_smoothedArmDist)) _smoothedArmDist = wantedArmDist;
+            _smoothedArmDist += (wantedArmDist - _smoothedArmDist) *
+                (1f - (float)System.Math.Exp(-dt / smoothTime));
+            Vector3 desired = target.position + armDir * _smoothedArmDist;
 
             Vector3 firstPos = target.position + Vector3.up * FirstPersonEyeHeight();
             Vector3 finalDesired = Vector3.Lerp(desired, firstPos, _fpBlend);
 
             Vector3 smoothed = Vector3.SmoothDamp(transform.position, finalDesired,
                 ref velocity, smoothTime);
-            if (Vector3.Distance(smoothed, finalDesired) > MaxSmoothGap)
+            // Il ritardo fisiologico di un filtro che insegue un bersaglio in
+            // moto e' v*tau (velocita' per la costante di tempo). A 7,5 m/s e
+            // tau=0,12 s sono ~0,90 m: il tetto fisso di 0,35 m faceva scattare
+            // la camera (camSnap=Y in 11 dei 17 campioni del log 23/11). Ora il
+            // tetto include il ritardo atteso e resta solo rete per i teleport.
+            float followSpeed = _walker != null ? _walker.Speed : 0f;
+            float gapLimit = MaxSmoothGap + followSpeed * Mathf.Max(dt, smoothTime);
+            if (Vector3.Distance(smoothed, finalDesired) > gapLimit)
             {
                 smoothed = finalDesired;
                 velocity = Vector3.zero;
