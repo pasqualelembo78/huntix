@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "generated_by": "city_recipe.py (Huntix, statistiche OSM locali)",
+  "source": {
+    "bbox": [
+      41.44,
+      15.51,
+      41.49,
+      15.58
+    ],
+    "pbf": [
+      "roads.pbf",
+      "areas.pbf",
+      "points.pbf"
+    ],
+    "note": "solo parametri estratti una volta; nessuna geometria, DEM o tile a runtime"
+  },
+  "seed": 3880082521,
+  "grid": {
+    "road_spacing_m": 177.6,
+    "road_width_m": 6.0,
+    "block_m": 171.7,
+    "park_ratio": 0.0306,
+    "buildings_per_km2": 268.8
+  },
+  "poi_mix": {
+    "bar": 0.6538,
+    "school": 0.2582,
+    "hospital": 0.0604,
+    "repair": 0.022,
+    "dealer": 0.0055
+  },
+  "road_classes": {
+    "residential": 1500,
+    "service": 540,
+    "tertiary": 238,
+    "unclassified": 226,
+    "secondary": 192,
+    "pedestrian": 131
+  },
+  "raw": {
+    "road_segments": 2856,
+    "road_length_m": 365242.2,
+    "buildings": 8719,
+    "poi": 182,
+    "bbox_area_m2": 32441226.3
+  }
+}
