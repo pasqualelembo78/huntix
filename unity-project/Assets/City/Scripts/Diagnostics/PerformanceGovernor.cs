@@ -33,7 +33,7 @@ namespace City.Diagnostics
         public float NpcAnimRadius => NpcAnimTier[Mathf.Clamp(Tier, 0, MaxTier)];
 
         private float _emaMs;
-        private int _upCount;
+        private float _overloadSeconds;
         private float _goodSeconds;
         private bool _started;
 
@@ -63,16 +63,19 @@ namespace City.Diagnostics
             if (overload)
             {
                 _goodSeconds = 0f;
-                _upCount++;
-                if (_upCount >= UpConfirmSeconds && Tier < MaxTier)
+                // UpConfirmSeconds e' in SECONDI: contare i frame faceva
+                // raggiungere il tier massimo in 3 frame (0,4 s a 8 fps nel
+                // log 23/11) invece che nei 3 secondi previsti.
+                _overloadSeconds += Time.unscaledDeltaTime;
+                if (_overloadSeconds >= UpConfirmSeconds && Tier < MaxTier)
                 {
-                    _upCount = 0;
+                    _overloadSeconds = 0f;
                     SetTier(Tier + 1);
                 }
             }
             else
             {
-                _upCount = 0;
+                _overloadSeconds = 0f;
                 if (smooth)
                 {
                     _goodSeconds += Time.unscaledDeltaTime;
