@@ -20,6 +20,7 @@ namespace City.Diagnostics
         private static readonly int[] UnityLevel = { 1, 2, 3 };
 
         public Profile Current { get; private set; }
+        private bool applyStoredOnStart;
 
         public static QualityProfileSelector Ensure()
         {
@@ -33,13 +34,27 @@ namespace City.Diagnostics
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
-            int stored = PlayerPrefs.GetInt(PrefsKey, (int)Profile.Medium);
-            Current = (Profile)Mathf.Clamp(stored, 0, UnityLevel.Length - 1);
+            // Nessuna scelta salvata = NON toccare la qualita' configurata nel
+            // progetto (oggi Ultra). Evita regressioni visive silenziose su
+            // dispositivi gia' a posto: il profilo viene applicato solo dopo
+            // un cambio esplicito dell'utente dal menu.
+            int stored = PlayerPrefs.GetInt(PrefsKey, -1);
+            if (stored >= 0 && stored < UnityLevel.Length)
+            {
+                Current = (Profile)stored;
+                applyStoredOnStart = true;
+            }
+            else
+            {
+                int level = QualitySettings.GetQualityLevel();
+                Current = level <= 1 ? Profile.Low
+                        : level == 2 ? Profile.Medium : Profile.High;
+            }
         }
 
         private void Start()
         {
-            Apply(Current, false);
+            if (applyStoredOnStart) Apply(Current, false);
         }
 
         public void Cycle()
