@@ -212,6 +212,13 @@ object Bridge {
             // ── Uovo del budget: notifica di comparsa (la persistenza resta
             //    lo snapshot CityStateSync, senza nuove SharedPreferences). ──
             "BudgetEggSpawned" -> handleBudgetEggSpawned(jsonData)
+            // ── Uovo nascosto da una nuova meccanica (derapata/qualita'):
+            //    Android lo registra con posizione, la cattura canonica
+            //    EggCapturedInCity lo versera' nell'inventario. ──
+            "FeatureEggHidden" -> handleFeatureEggHidden(jsonData)
+            // ── Profilo grafico scelto in MiAcitta → preferenza persistente,
+            //    rispedita a Unity all'apertura successiva (bridge bidirezionale). ──
+            "CityQualityChanged" -> handleCityQualityChanged(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -282,6 +289,47 @@ object Bridge {
         val xpBonus = j.optLong("xp", 0L)
         if (xpBonus > 0) StoreUnityBridge.addXpFromCity(xpBonus)
         com.intelligame.huntix.AppLog.i("HuntixSync", "Reincarnazione: nuovo nome '$newName' +$xpBonus xp")
+    }
+
+    /**
+     * Uovo-premio nascosto da una meccanica appena scoperta in MiCittà
+     * (derapata col freno a mano, cambio profilo grafico). Non versa premi:
+     * lo fa la cattura canonica EggCapturedInCity. Qui Android prende nota
+     * del luogo e del momento, come richiesto dal profilo "DOVE HO TROVATO".
+     */
+    private fun handleFeatureEggHidden(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val feature = j.optString("feature", "")
+        if (feature.isBlank()) return
+        val label = j.optString("label", feature)
+        val place = j.optString("place", "città")
+        val lat = j.optDouble("lat", 0.0)
+        val lng = j.optDouble("lng", 0.0)
+        val ctx = UnityAppContext.context ?: return
+        val prefs = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        val seen = prefs.getString("feature_eggs", "") ?: ""
+        val record = "$feature|$lat|$lng|${j.optLong("tsMt", 0L)}"
+        if (!seen.contains(feature)) {
+            prefs.edit().putString("feature_eggs",
+                if (seen.isEmpty()) record else "$seen;$record").apply()
+        }
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Uovo nascosto: $label ($feature) place=$place lat=$lat lng=$lng"
+        )
+    }
+
+    /** Profilo grafico Low/Medium/High scelto in MiCittà: lo stesso valore
+     *  viene rimandato a Unity in openUnityActivity, così la scelta sopravvive
+     *  alla ricreazione dell'Activity e Android ne resta proprietario. */
+    private fun handleCityQualityChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val profile = j.optString("profile", "").lowercase()
+        if (profile !in setOf("low", "medium", "high")) return
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putString("city_quality", profile).apply()
+        com.intelligame.huntix.AppLog.i("HuntixSync", "Qualità MiCittà: $profile")
     }
 
     /**

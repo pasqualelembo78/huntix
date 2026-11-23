@@ -32,7 +32,8 @@ object UnityIpc {
      *  :unity perche' li' vivono le Activity Unity. */
     val APP_EVENTS: Set<String> = setOf(
         "CatchRequest", "PoiSelected", "PlayerPosition",
-        "EggCapturedInCity", "BudgetEggSpawned", "CityXpEarned", "CityPowerEarned",
+        "EggCapturedInCity", "BudgetEggSpawned", "FeatureEggHidden", "CityQualityChanged",
+        "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
     )

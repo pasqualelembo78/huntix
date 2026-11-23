@@ -107,6 +107,11 @@ public class BridgeActivity extends UnityPlayerActivity {
                         tileDir = wp.getString("tile_cache_dir", null);
                     }
                     if (tileDir != null && !tileDir.isEmpty()) j.put("tileCacheDir", tileDir);
+                    // Profilo grafico scelto in Miacitta e salvato da Android:
+                    // rimandato a Unity per il ripristino Android -> Unity.
+                    String quality = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getString("city_quality", null);
+                    if (quality != null && !quality.isEmpty()) j.put("cityQuality", quality);
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

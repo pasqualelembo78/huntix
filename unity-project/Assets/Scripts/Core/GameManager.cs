@@ -269,6 +269,24 @@ namespace Huntix.Core
                         lLat.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
                         lLng.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
+
+                // Profilo grafico salvato da Android: bridge Android -> Unity.
+                // apply=false perche' e' un ripristino, non una scelta utente
+                // (non deve nascondere un altro uovo ne' re-inviare l'evento).
+                var quality = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"cityQuality\"\\s*:\\s*\"([^\"]+)\"");
+                if (quality.Success)
+                {
+                    City.Diagnostics.QualityProfileSelector.Profile p;
+                    switch (quality.Groups[1].Value.ToLowerInvariant())
+                    {
+                        case "low": p = City.Diagnostics.QualityProfileSelector.Profile.Low; break;
+                        case "high": p = City.Diagnostics.QualityProfileSelector.Profile.High; break;
+                        default: p = City.Diagnostics.QualityProfileSelector.Profile.Medium; break;
+                    }
+                    City.Diagnostics.QualityProfileSelector.Ensure().Apply(p, false);
+                    Debug.Log("[GameManager] qualita' ripristinata da Android: " + p);
+                }
             }
             catch (System.Exception e)
             {
