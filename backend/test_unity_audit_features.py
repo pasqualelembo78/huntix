@@ -972,7 +972,7 @@ class TestFase2Ricette(unittest.TestCase):
         self.assertIn("EggFusionRecipeManager.views(c).forEach", self.activity)
         self.assertIn("Non avvia fusioni", self.activity)
         self.assertIn("Ricette di fusione (guida)", self.menu_cs)
-        self.assertIn("prt.sizeDelta = new Vector2(360f, 1300f)", self.menu_cs)
+        self.assertIn("prt.sizeDelta = new Vector2(360f, 1470f)", self.menu_cs)
         self.assertIn("Le ricette sono una guida", self.activity)
 
 
@@ -1303,7 +1303,7 @@ class TestOpenSourceMasterToggle(unittest.TestCase):
         self.assertIn("OpenSourceFeatureBridge.SetAll(on);", self.menu)
         self.assertIn("Opzioni audit open source attivate", self.menu)
         self.assertIn("Opzioni audit open source disattivate", self.menu)
-        self.assertIn("1300f", self.menu)  # riga aggiunta: pannello allargato
+        self.assertIn("1470f", self.menu)  # riga aggiunta: pannello allargato
 
     def test_comandi_fini_usano_la_stessa_sorgente(self):
         self.assertIn("OpenSourceFeatureBridge.LabelFor(args[1])", self.commands)
