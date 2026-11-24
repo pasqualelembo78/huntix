@@ -272,6 +272,10 @@ namespace City.Vehicle
                 // il collider solido e' solo il nostro box, uniforme
                 foreach (var col in go.GetComponentsInChildren<Collider>())
                     col.enabled = false;
+
+                // I FBX Kenney sono importati senza materiali: senza questa
+                // riparazione le auto del mondo chunked restano grigie.
+                VehicleMaterialFix.Apply(go);
             }
             else
             {

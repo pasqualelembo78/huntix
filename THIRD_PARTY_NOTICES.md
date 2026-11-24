@@ -173,6 +173,20 @@ prodotto, non come import. Nessuna attribuzione aggiuntiva è quindi dovuta.
 
 ---
 
+## Kenney Car Kit (asset già presente nel progetto, 2026-11-24)
+
+- Provenienza: Kenney Car Kit, https://kenney.nl/assets/car-kit — **CC0 1.0**.
+- File usati: `unity-project/Assets/Resources/Vehicles/*.fbx` e
+  `Resources/Vehicles/Textures/colormap.png` (atlas colori). Nessun file scaricato dai 13
+  repository auditati e nessun modello prelevato da essi.
+- `VehicleMaterialFix.cs` applica a quei prefab lo shader URP/Lit e l'atlas CC0 già presente:
+  è codice originale Huntix, necessario perché gli FBX sono importati senza materiali.
+- **Esclusi** dall'uso: `ConceptCar006.fbx` (29 MB) e `Resources/Vehicles/Sketchfab/cars kit
+  pack.obj`, la cui licenza non è verificata. Restano nel progetto ma non vengono usati dalle
+  nuove integrazioni.
+
+---
+
 ## Aggiornamenti futuri
 
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit

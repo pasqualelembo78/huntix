@@ -642,6 +642,11 @@ namespace City.Vehicle
                 // Disabilita collider nei figli
                 foreach (var col in inst.GetComponentsInChildren<Collider>())
                     col.enabled = false;
+
+                // Stessa riparazione delle auto parcheggiate: il materiale
+                // condiviso con la colormap Kenney evita le carrozzerie grigie
+                // anche nel traffico del mondo chunked.
+                VehicleMaterialFix.Apply(inst);
             }
             else
             {

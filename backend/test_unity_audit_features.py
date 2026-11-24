@@ -236,5 +236,34 @@ class TestFictionalCityIntegration(unittest.TestCase):
         self.assertIn('Box("Suolo", new Vector3(0f, -0.25f, 0f)', self.gen)
 
 
+class TestVehicleMaterials(unittest.TestCase):
+    """Auto Kenney con colore ripristinato: atlas CC0, nessun asset dei clone."""
+
+    def setUp(self):
+        self.fix = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                     "VehicleMaterialFix.cs"))
+        self.spawn = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                       "VehicleSpawnManager.cs"))
+        self.traffic = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                         "TrafficCar.cs"))
+        self.notice = read(os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"))
+
+    def test_materiale_condiviso_e_colormap_atlas(self):
+        self.assertIn('Resources.Load<Texture2D>("Vehicles/Textures/colormap")', self.fix)
+        self.assertIn('Shader.Find("Universal Render Pipeline/Lit")', self.fix)
+        self.assertIn("r.sharedMaterial = mat", self.fix)
+        self.assertIn("private static bool tried", self.fix)
+
+    def test_percorso_chunked_applica_la_riparazione(self):
+        self.assertIn("VehicleMaterialFix.Apply(go)", self.spawn)
+        self.assertIn("VehicleMaterialFix.Apply(inst)", self.traffic)
+
+    def test_attribuzione_cc0_e_asset_esclusi(self):
+        self.assertIn("Kenney Car Kit", self.notice)
+        self.assertIn("CC0 1.0", self.notice)
+        self.assertIn("ConceptCar006.fbx", self.notice)
+        self.assertNotIn("VehicleMaterialFix.Apply(prefabSketchfabKit)", self.spawn)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
