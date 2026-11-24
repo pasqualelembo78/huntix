@@ -193,6 +193,8 @@ class TestFictionalCityIntegration(unittest.TestCase):
         self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
         self.bridge = read(os.path.join(APP, "Bridge.kt"))
         self.activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.home = read(os.path.join(ROOT, "app", "src", "main", "java",
+                                      "com", "intelligame", "huntix", "HomeActivity.kt"))
 
     def test_ricetta_solo_parametri(self):
         self.assertIn('"road_spacing_m"', self.recipe)
@@ -223,6 +225,15 @@ class TestFictionalCityIntegration(unittest.TestCase):
     def test_misura_del_build(self):
         self.assertIn('PerfProbe.Measure("fictional")', self.gen)
         self.assertIn("citta-gioco: edifici=%d poi=%d", self.gen)
+
+    def test_nessun_preload_tile_su_android(self):
+        self.assertIn('worldMode == "fictional"', self.home)
+        self.assertIn('preload tile saltato', self.home)
+
+    def test_suolo_allineato_allo_spawn(self):
+        # Faccia superiore del suolo a y=0: strade e parchi devono restare
+        # sopra, non sepolti dentro il collider (regressione 24/11).
+        self.assertIn('Box("Suolo", new Vector3(0f, -0.25f, 0f)', self.gen)
 
 
 if __name__ == "__main__":

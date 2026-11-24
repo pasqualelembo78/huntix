@@ -259,9 +259,13 @@ namespace City.Fictional
                 };
                 Material poiMat = Mat(new Color(0.95f, 0.72f, 0.22f));
 
-                // Suolo UNICO, piano, con collider: nienteDEM e nessuna mesh
-                // di terreno. Il collider e' a y=0 come lo SpawnBridge.
-                Box("Suolo", Vector3.zero,
+                // Suolo UNICO, piano, con collider: niente DEM e nessuna mesh
+                // di terreno. La faccia superiore deve stare esattamente a
+                // y=0 (centro -0.25, spessore 0.5): e' la quota dello
+                // SpawnBridge e dello snap del player. Se la faccia stesse a
+                // +0.25 strade (top +0.06) e parchi (top +0.10) resterebbero
+                // sepolti dentro il suolo.
+                Box("Suolo", new Vector3(0f, -0.25f, 0f),
                     new Vector3(extent + 80f, 0.5f, extent + 80f),
                     groundMat, _root.transform, false, true);
 

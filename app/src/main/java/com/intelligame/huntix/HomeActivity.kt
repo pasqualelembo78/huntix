@@ -614,6 +614,22 @@ try {
      * dall'overlay di caricamento che BridgeActivity mostra finche' Unity non
      * segnala i chunk pronti (CityReady). */
     private fun runMiacittaPreload(spawnLat: Double, spawnLng: Double) {
+        // CITTA' GIOCO: la ricetta e' offline e il quartiere e' generato a
+        // runtime in Unity. Nessuna tile/graph/geo viene scaricata: salta il
+        // preload Android e apre subito l'Activity (lo splash di BridgeActivity
+        // copre la breve build del quartiere).
+        val worldMode = getSharedPreferences("huntix_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("world_mode", "real")
+        if (worldMode == "fictional") {
+            com.intelligame.huntix.AppLog.i("HuntixSync", "Città Gioco: preload tile saltato (nessuna cartografia a runtime)")
+            miacittaLoading = false
+            Bridge.openUnityActivity(
+                this,
+                BridgeActivity.MODE_MIACITTA,
+                "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
+            )
+            return
+        }
         // Splash screen: immagine di sfondo con scrim scuro in basso e barra
         // di progresso sovrapposta. center-crop cosi' si adatta sia a schermi
         // verticali che orizzontali.

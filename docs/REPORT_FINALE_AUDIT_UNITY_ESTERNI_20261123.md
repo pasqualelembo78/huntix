@@ -249,6 +249,25 @@ Log: `/tmp/opencode/build_integrazione_finale.log`.
   `PlayerHero.prefab` ripristinati prima del commit; i log cancellati dall'utente e
   `docs/huntix_log_20261123_175436.txt` non sono stati toccati.
 
+### Build finale della fase 3 — Città Gioco
+
+Comando: `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 ./build_release.sh --auto`
+(`EXIT=0`, AAR Unity/IL2CPP ricreato, `BUILD SUCCESSFUL`, APK firmato e verificato).
+Log: `/tmp/opencode/build_citta_gioco.log`. Nessun errore Burst o `error CS` nel log.
+
+- APK: `app/build/outputs/apk/release/app-release-signed.apk` — **192.532.593 byte** (184 MiB).
+- SHA-256: `dab6856089ee1ec676489e0c65a41bf88f2edf6b97577f9e807dce35a7afcb3f`.
+- `global-metadata.dat` contiene: `FictionalCityWorld` (3), `WorldModeChanged` (2),
+  `Uovo della città di carta` (1), `citta-gioco` (1), `fictional` (2), oltre a tutti i token
+  della fase 2 (`AlternateTouchInput`, `AltTouchChanged`, `zone-zero`, `TrafficYieldMeter`,
+  `crosswalk:`). Quindi generatore, bridge e uovo sono effettivamente compilati in IL2CPP.
+- I `classes*.dex` contengono la stringa `preload tile saltato`: anche la modifica Android
+  che evita il download di tile in modalità fittizia è entrata nell'APK.
+- Effetti collaterali della build su `link.xml.meta`, `PlayerLocomotion.controller` e
+  `PlayerHero.prefab` di nuovo ripristinati; i `.meta` delle nuove cartelle
+  (`City/Scripts/Game`, `Resources/CityRecipes`) invece sono stati inclusi nel commit,
+  così gli GUID restano stabili su ogni macchina.
+
 ## 13. Licenze e attribuzioni
 
 `THIRD_PARTY_NOTICES.md` raccoglie provenienza, licenza codice e licenza asset di tutti i 13 repo,
@@ -305,15 +324,51 @@ sistema input, perché è il punto con minor rischio sull'Universo Unico (DEM, A
 - **Non verificato su device**: fluidità percepita, latenza del nuovo joystick, frenate
   contate e persistenza Android→Unity runtime. Nessuna dichiarazione di "sostituzione riuscita".
 
-## 16. Conclusioni e prossimi passi
+## 16. Fase 3 — Città Gioco (ricetta OSM, mondo fittizio affiancato)
+
+Dopo la conferma dell'utente ("percorriamo questa strada") ho aggiornato il Mandato con una
+regola **additiva**: la città fittizia è un quartiere dello stesso universo Huntix, mai una
+sostituzione della città AR/OSM. Il principio emerso dall'audit — i 13 clone funzionano perché
+hanno un mondo piccolo e controllato, non per magie nella guida — è stato applicato come
+scelta di prodotto, senza importare codice o asset.
+
+- **Ricetta offline**: `backend/preprocessing/city_recipe.py` estrae SOLO statistiche dai PBF
+  filtrati (con `pyosmium` nel venv e `locations=True`). Per il centro di Foggia
+  (`41.44,15.51,41.49,15.58`): seed `3880082521`, passo strade `177,6 m`, larghezza `6,0 m`,
+  isolato `171,7 m`, parchi `3,06%`, `268,8` edifici/km², mix POI reale (bar 65%, scuole 26%,
+  ospedali 6%, riparazioni 2%, concessionari 0,5%). Nessuna geometria, DEM o tile nel file.
+- **Generatore**: `FictionalCityWorld.cs` legge la ricetta da `Resources/CityRecipes/`, usa
+  `System.Random(seed)`, costruisce un quartiere piatto di 5×5 isolati con un unico suolo
+  collidibile, strade, parchi, edifici su layer 8 (esclusi dallo snap a terra), POI e confini.
+  Il build è misurato dallo slot `fictional` di `PerfProbe` (9→10 slot).
+- **Nessun costo di cartografia a runtime**: `ChunkManager` non streama mentre il flag è attivo;
+  lo streaming resta sospeso solo in questa modalità e si riattiva tornando a Reale. Anche
+  l'Android `HomeActivity` salta il preload di tile/graph/geo quando `world_mode=fictional`.
+  Nessun sistema esistente è stato rimosso o disattivato in modo permanente.
+- **Interruttore e bridge**: voce `Mondo: Reale (OSM)/Città Gioco (ricetta)` nel menu hamburger.
+  Unity emette `WorldModeChanged{mode,recipe,tsMt}`; Android salva `world_mode` e lo restituisce
+  in `BridgeActivity` → `GameManager` prima del caricamento della scena City (notify=false,
+  quindi nessun evento o uovo duplicato al ripristino).
+- **Riflesso uova**: prima attivazione → `Uovo della città di carta` (Epic), percorso canonico
+  `GrantFeatureEgg` → `FeatureEggHidden` → `EggCapturedInCity`, con lat/lng e timestamp.
+- **Verifiche**: `cscheck` OK; `backend/test_unity_audit_features.py` → **23 test OK**;
+  `backend/test_audit_regressions.py` → 8 test OK; `backend/test_city_recipe.py` → 3 test OK.
+- **Non verificato su device**: differenza percepita, collisioni, tempo di build del quartiere,
+  toggle a caldo e persistenza Android→Unity. Nessuna dichiarazione di "più fluido" o
+  "sostituzione riuscita" senza collaudo reale.
+
+## 17. Conclusioni e prossimi passi
 
 L'audit ha prodotto un quadro verificabile dei 13 repository; la fase 2 ha innestato un sistema
-di input opzionale con attribuzione MIT e una misurazione diagnostica del traffico, senza copiare
-asset e senza duplicare o rimuovere sistemi esistenti. La compilazione statica, i test e la build
-APK finale sono passati; **il giudizio finale sull'esperienza di gioco resta sospeso fino al
-collaudo su dispositivo** e alla risoluzione dello stall di build del terreno segnalato nel log.
+di input opzionale con attribuzione MIT e una misurazione diagnostica del traffico; la fase 3 ha
+affiancato la Città Gioco generata da ricetta. Nessun sistema esistente è stato copiato, duplicato
+o rimosso. Compilazione statica, test e build APK sono passati; **il giudizio finale
+sull'esperienza di gioco resta sospeso fino al collaudo su dispositivo** e alla risoluzione dello
+stall di build del terreno segnalato nel log.
+
 Prossimi passi consigliati: (1) installare l'APK su device e verificare touch/derapata/qualità/uova;
-(2) leggere i nuovi mark `touch=` e `crosswalk:` insieme a `prof=` per confrontare il joystick
-alternativo e decidere se una policy crosswalk attiva è giustificata; (3) raccogliere un nuovo log
-con i marker del builder per diagnosticare lo stall; (4) solo dopo misure, valutare una
-reimplementazione locale dell'IDM con semafori adattivi; (5) decidere se perseguire TLS sul server.
+(2) provare il toggle `Mondo` e leggere `world=`, `citta-gioco:` e `prof=fictional` insieme a
+`touch=`/`crosswalk:`; (3) confrontare sullo stesso device la città OSM e il quartiere fittizio
+prima di decidere cambi di predefinito; (4) raccogliere un nuovo log con i marker del builder per
+diagnosticare lo stall; (5) solo dopo misure, valutare una reimplementazione locale dell'IDM con
+semafori adattivi; (6) decidere se perseguire TLS sul server.
