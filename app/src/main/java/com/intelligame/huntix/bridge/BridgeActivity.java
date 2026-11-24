@@ -173,6 +173,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                     j.put("resourceHarvestCount", harvest.optInt("resourceHarvestCount", 0));
                     j.put("resourceHarvestKinds", harvest.optInt("resourceHarvestKinds", 0));
                     j.put("resourceHarvestDetail", harvest.optString("resourceHarvestDetail", ""));
+                    // Fase 2 · crafting: solo contatori del wrapper additivo;
+                    // nessuna uovo generata su un ripristino passivo.
+                    org.json.JSONObject craft =
+                            com.intelligame.huntix.managers.EggFusionCraftManager.INSTANCE.snapshot(this);
+                    j.put("fusionCraftCount", craft.optInt("fusionCraftCount", 0));
+                    j.put("fusionCraftLastLevel", craft.optInt("fusionCraftLastLevel", 0));
+                    j.put("fusionCraftLastRarity", craft.optString("fusionCraftLastRarity", ""));
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

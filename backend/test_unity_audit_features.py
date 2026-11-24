@@ -170,7 +170,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
     def test_slot_probe_e_telemetria(self):
         # SlotCount sale con gli slot "bait" e "harvest" della Fase 2; gli
         # slot preesistenti (traffic incluso) restano tutti presenti.
-        self.assertIn("SlotCount = 17", self.probe)
+        self.assertIn("SlotCount = 18", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -710,7 +710,7 @@ class TestFase2ConsumabiliEsca(unittest.TestCase):
         self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
         self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
         self.assertIn('"bait"', self.probe)
-        self.assertIn("SlotCount = 17", self.probe)
+        self.assertIn("SlotCount = 18", self.probe)
         self.assertIn('Measure("bait")', self.manager)
         self.assertIn("Aromi disponibili: {0}", self.manager)
 
@@ -764,7 +764,7 @@ class TestFase2RaccoltaRisorse(unittest.TestCase):
         self.assertIn('Measure("harvest")', self.manager_cs)
         self.assertIn('Measure("harvest")', self.interaction)
         self.assertIn('"harvest"', self.probe)
-        self.assertIn("SlotCount = 17", self.probe)
+        self.assertIn("SlotCount = 18", self.probe)
         self.assertIn("Raccolte: {0}", self.manager_cs)
 
     def test_ui_italiano_senza_consumare_inventari_esistenti(self):
@@ -777,6 +777,76 @@ class TestFase2RaccoltaRisorse(unittest.TestCase):
         # La raccolta non scala le esche e non usa il secchiello di cattura.
         self.assertNotIn("EggNutrimentManager.consume", self.manager_kt)
         self.assertNotIn("CatchToolManager", self.manager_kt)
+
+
+class TestFase2Crafting(unittest.TestCase):
+    """Fase 2 · voce 15: fusione uova additiva, senza toccare SavedManager."""
+
+    def setUp(self):
+        app_main = os.path.join(ROOT, "app", "src", "main")
+        java = os.path.join(app_main, "java", "com", "intelligame", "huntix")
+        self.manager_kt = read(os.path.join(java, "managers", "EggFusionCraftManager.kt"))
+        self.activity = read(os.path.join(java, "CraftActivity.kt"))
+        self.saved = read(os.path.join(java, "managers", "SavedManager.kt"))
+        self.profile = read(os.path.join(java, "ui", "PlayerProfileTabs.kt"))
+        self.manifest = read(os.path.join(app_main, "AndroidManifest.xml"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.manager_cs = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.menu_cs = read(os.path.join(UNITY, "City", "Scripts", "UI", "HamburgerMenu.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_wrapper_non_modifica_saved_manager(self):
+        # La fusione storica resta intatta: il chiamante e' solo il wrapper.
+        self.assertIn("SavedManager.executeFusionSlots(ctx)", self.manager_kt)
+        self.assertIn("SavedManager.canFuse(ctx)", self.manager_kt)
+        self.assertIn("SavedManager.getFusionSlots(ctx)", self.manager_kt)
+        self.assertIn("SavedManager.addToFusionSlot(ctx, egg)", self.manager_kt)
+        self.assertIn("SavedManager.removeFromFusionSlot(ctx, index)", self.manager_kt)
+        # Nessuna valuta, drop o shop nel nuovo percorso.
+        for token in ("spendMvc", "addMvc", "spendGems", "dropTable", "ShopDefs"):
+            self.assertNotIn(token, self.manager_kt)
+        # Le API storiche sono ancora presenti e invariate nel loro file.
+        self.assertIn("fun executeFusionSlots(ctx: Context): HatchedEgg?", self.saved)
+        self.assertIn("val newLevel = (base.level + 1).coerceAtMost(4)", self.saved)
+
+    def test_riflesso_uovo_posizionale_idempotente_e_un_solo_diario(self):
+        self.assertIn('val eggId = "fusion_" + actual.joinToString("_")', self.manager_kt)
+        self.assertIn("val actual = fused.fusedFrom.sorted()", self.manager_kt)
+        self.assertIn('EggInventoryManager.getInventory(ctx).none { it.eggId == eggId }',
+                      self.manager_kt)
+        self.assertIn("EggWhereLog.record(ctx, rarity.id, where, lat, lng, name)",
+                      self.manager_kt)
+        self.assertIn("EggWhereLog.recordActivity(", self.manager_kt)
+        self.assertIn("xpReward = 0", self.manager_kt)
+        # Ripristino dell'uovo fuso se addEgg storico ha fallito (inv. pieno).
+        self.assertIn("inventoryFull = !EggInventoryManager.addEgg(ctx, restored)",
+                      self.manager_kt)
+        self.assertIn("PoiUnityBridge.sendEvent(\"FusionCrafted\"", self.manager_kt)
+
+    def test_bridge_bidirezionale_e_misure(self):
+        self.assertIn('"CraftRequest"', self.ipc)
+        self.assertIn('"CraftRequest" -> handleCraftRequest', self.bridge)
+        self.assertIn('j.optString("action", "open") == "craft"', self.bridge)
+        self.assertIn('SendMessageToAndroid(\n                            "CraftRequest", "{\\"action\\":\\"open\\"}"',
+                      self.menu_cs)
+        self.assertIn('case "FusionCrafted":', self.manager_cs)
+        self.assertIn('j.put("fusionCraftCount"', self.bridge_activity)
+        self.assertIn('j.put("fusionCraftLastLevel"', self.bridge_activity)
+        self.assertIn('PlayerPrefs.SetInt("huntix_fusion_craft_count"', self.manager_cs)
+        self.assertIn('Measure("craft")', self.manager_cs)
+        self.assertIn('"craft"', self.probe)
+        self.assertIn("SlotCount = 18", self.probe)
+
+    def test_ui_italiana_senza_secondario_inventario(self):
+        self.assertIn('android:name=".CraftActivity"', self.manifest)
+        self.assertIn("class CraftActivity : BaseNavActivity()", self.activity)
+        self.assertIn("com.intelligame.huntix.CraftActivity::class.java", self.profile)
+        self.assertIn("Fondi le uova", self.activity)
+        self.assertIn("mgr.slots(c)", self.activity)
+        self.assertIn("mgr.craft(c,", self.activity)
+        self.assertNotIn("EggInventoryManager.addEgg", self.activity)
 
 
 if __name__ == "__main__":

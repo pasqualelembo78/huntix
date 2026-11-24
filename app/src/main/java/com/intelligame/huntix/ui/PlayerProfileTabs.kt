@@ -510,6 +510,15 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
                         com.intelligame.huntix.ResourceHarvestActivity::class.java))
                 }
             })
+        // Fase 2 · voce 15: unisci 3 uova schiuse sugli slot già esistenti.
+        addView(rowText("🥚 Fondi le uova","crafting gratuito →", "#FFD54F", "#FFF3E0")
+            .also { row ->
+                row.isClickable = true
+                row.setOnClickListener {
+                    startActivity(Intent(this@buildStatsTab,
+                        com.intelligame.huntix.CraftActivity::class.java))
+                }
+            })
         val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))

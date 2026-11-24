@@ -184,6 +184,7 @@ namespace City.UI
                 "Animazione menu: Huntix",
                 "Console QA: Off",
                 "Compagno NPC: Off",
+                "Fondi le uova (crafting)",
             };
             System.Action[] actions =
             {
@@ -229,6 +230,22 @@ namespace City.UI
                 () => ToggleMenuAnimation(),
                 () => ToggleQaConsole(),
                 () => ToggleNpcCompanion(),
+                () =>
+                {
+                    // Fase 2 · voce 15: la fusione vive nell'app Android, dove
+                    // sono le uova schiuse reali. Unity apre la UI sua con un
+                    // evento dedicato; Android risponde con FusionCrafted.
+                    SetVisible(false);
+                    try
+                    {
+                        Huntix.Bridge.UnityBridge.SendMessageToAndroid(
+                            "CraftRequest", "{\"action\":\"open\"}");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning("[HamburgerMenu] CraftRequest: " + e.Message);
+                    }
+                },
             };
 
             for (int i = 0; i < labels.Length; i++)

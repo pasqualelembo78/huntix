@@ -43,6 +43,9 @@ object UnityIpc {
         // Fase 2 · raccolta risorse: Miacittà segnala l'oggetto raccolto;
         // Android registra contatore, uovo posizionale e voce nel diario.
         "ResourceHarvested",
+        // Fase 2 · crafting: Unity apre la UI fusione Android oppure chiede
+        // direttamente la fusione sugli slot già pronti.
+        "CraftRequest",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

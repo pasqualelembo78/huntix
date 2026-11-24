@@ -236,6 +236,11 @@ namespace Huntix.Core
                 case "ActiveBaitChanged":
                     HandleActiveBaitChanged(jsonData);
                     break;
+                // Fase 2 · crafting: Android conferma la fusione e rimanda
+                // contatore/ricordo posizionale. Solo specchio + telemetria.
+                case "FusionCrafted":
+                    HandleFusionCrafted(jsonData);
+                    break;
                 case "setTargetCoord":
                     City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
                     break;
@@ -442,6 +447,29 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] raccolte ripristinate da Android");
                 }
 
+                // Fase 2 · crafting: Android rimanda solo i contatori del
+                // wrapper; nessuna fusione e nessun uovo su un ripristino.
+                var craftCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"fusionCraftCount\"\\s*:\\s*(\\d+)");
+                var craftLevel = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"fusionCraftLastLevel\"\\s*:\\s*(\\d+)");
+                if (craftCount.Success || craftLevel.Success)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("craft"))
+                    {
+                        int fusioni = 0;
+                        int livello = 0;
+                        if (craftCount.Success) int.TryParse(craftCount.Groups[1].Value, out fusioni);
+                        if (craftLevel.Success) int.TryParse(craftLevel.Groups[1].Value, out livello);
+                        PlayerPrefs.SetInt("huntix_fusion_craft_count", fusioni);
+                        PlayerPrefs.SetInt("huntix_fusion_craft_last_level", livello);
+                        if (City.Diagnostics.SessionTelemetry.Instance != null)
+                            City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                "Fusioni: {0} · ultimo livello: {1}", fusioni, livello);
+                    }
+                    Debug.Log("[GameManager] fusioni ripristinate da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(
@@ -513,6 +541,35 @@ namespace Huntix.Core
             }
             Debug.Log("[GameManager] esca da Android: " +
                 (string.IsNullOrEmpty(id) ? "nessuna" : id) + " x" + multiplier);
+        }
+
+        /// <summary>
+        /// Fase 2 · voce 15: Android ha unito tre uova schiuse. Unity non
+        /// scrive inventari (la fonte di verita' resta Android) ma conserva
+        /// lo specchio del contatore e mostra il messaggio in telemetria.
+        /// </summary>
+        private void HandleFusionCrafted(string jsonData)
+        {
+            var name = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"name\"\\s*:\\s*\"([^\"]+)\"");
+            var count = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"count\"\\s*:\\s*(\\d+)");
+            var level = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"level\"\\s*:\\s*(\\d+)");
+            string label = name.Success ? name.Groups[1].Value : "uovo fuso";
+            int fusioni = count.Success ? int.Parse(count.Groups[1].Value) : 0;
+            int livello = level.Success ? int.Parse(level.Groups[1].Value) : 0;
+            using (City.Diagnostics.PerfProbe.Measure("craft"))
+            {
+                PlayerPrefs.SetInt("huntix_fusion_craft_count", fusioni);
+                PlayerPrefs.SetInt("huntix_fusion_craft_last_level", livello);
+                if (City.Diagnostics.SessionTelemetry.Instance != null)
+                    City.Diagnostics.SessionTelemetry.Instance.Mark(
+                        "Fusione {0} · livello {1} · totali {2}", label, livello, fusioni);
+                if (City.UI.UIManager.Instance != null)
+                    City.UI.UIManager.Instance.ShowToast("🥚 " + label + " creato!");
+            }
+            Debug.Log("[GameManager] fusione da Android: " + label + " Lv." + livello);
         }
 
         // ── Esplora: ricezione POI da Android (Overpass) ─────────────

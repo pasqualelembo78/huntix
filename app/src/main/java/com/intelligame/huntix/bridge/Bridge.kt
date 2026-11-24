@@ -249,6 +249,10 @@ object Bridge {
             // ── Fase 2 · raccolta risorse: oggetto raccolto in Miacittà.
             //    Contatore locale, uovo posizionale una tantum e diario. ──
             "ResourceHarvested" -> handleResourceHarvested(jsonData)
+            // ── Fase 2 · crafting: apre la UI della fusione oppure esegue
+            //    la fusione sugli slot già pronti; A→U risponde con
+            //    FusionCrafted. Nessun premio in valuta. ──
+            "CraftRequest" -> handleCraftRequest(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -540,6 +544,34 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync", "Consumabile usato: $itemId (${j.optString("place", "Miacittà→indoor")})"
         )
+    }
+
+    /**
+     * Fase 2 · voce 15: richiesta di crafting arrivata da Miacittà.
+     * `action=open` (default) apre la UI Android degli slot; `action=craft`
+     * esegue la fusione solo se gli slot sono già pronti. In entrambi i casi
+     * nessuna valuta viene toccata e l'esito torna a Unity via `FusionCrafted`.
+     */
+    private fun handleCraftRequest(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { JSONObject() }
+        if (j.optString("action", "open") == "craft") {
+            val ctx = UnityAppContext.context ?: return
+            val outdoor = com.intelligame.huntix.manager.OutdoorManager
+            val loc = outdoor.get().currentLocation ?: outdoor.lastKnownLocation(ctx)
+            val msg = com.intelligame.huntix.managers.EggFusionCraftManager.craft(
+                ctx,
+                "Miacittà→menu",
+                loc?.latitude ?: 0.0,
+                loc?.longitude ?: 0.0
+            )
+            com.intelligame.huntix.AppLog.i("HuntixSync", msg ?: "Fusione non disponibile: slot non pronti")
+            return
+        }
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val intent = Intent(ctx, com.intelligame.huntix.CraftActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
     }
 
     /**
