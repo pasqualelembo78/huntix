@@ -972,7 +972,7 @@ class TestFase2Ricette(unittest.TestCase):
         self.assertIn("EggFusionRecipeManager.views(c).forEach", self.activity)
         self.assertIn("Non avvia fusioni", self.activity)
         self.assertIn("Ricette di fusione (guida)", self.menu_cs)
-        self.assertIn("prt.sizeDelta = new Vector2(360f, 1220f)", self.menu_cs)
+        self.assertIn("prt.sizeDelta = new Vector2(360f, 1300f)", self.menu_cs)
         self.assertIn("Le ricette sono una guida", self.activity)
 
 
@@ -1268,6 +1268,47 @@ class TestNpcMissionDefinitionIntegration(unittest.TestCase):
                     "Player/EggCompassAssist.cs"):
             path = os.path.join(UNITY, "City", "Scripts", rel + ".meta")
             self.assertTrue(os.path.exists(path), "meta mancante: " + path)
+
+
+class TestOpenSourceMasterToggle(unittest.TestCase):
+    """Voce unica nel menu hamburger: accende/spegne tutte le 7 opzioni."""
+
+    def setUp(self):
+        self.bridge = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                        "OpenSourceFeatureBridge.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI", "HamburgerMenu.cs"))
+        self.commands = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                          "OpenSourceFeatureCommands.cs"))
+
+    def test_ponte_espone_id_e_interruttore_unico(self):
+        for token in ("public static readonly string[] AllIds",
+                      "public static bool AllEnabled",
+                      "public static void SetAll(bool on)",
+                      "public static string LabelFor(string id)",
+                      'GrantAuditEgg("os-all", "Uovo dell\'audit open source"',
+                      'SendState(id, on, LabelFor(id), AllPlace, "master", false)',
+                      'Mark("os features all=%s"'):
+            self.assertIn(token, self.bridge)
+        for feature in ("egg-cull", "door-latch", "egg-compass", "egg-journal",
+                        "camera-radius", "npc-persona", "quest-def"):
+            self.assertIn('"' + feature + '"', self.bridge)
+        self.assertIn("if (on && Game.Instance != null)", self.bridge)
+
+    def test_voce_menu_e_refresh(self):
+        self.assertIn('"Opzioni audit open source: Off"', self.menu)
+        self.assertIn("() => ToggleOpenSourceAll(),", self.menu)
+        self.assertIn("if (idx == 12) _openSourceLabel = lbl;", self.menu)
+        self.assertIn("RefreshOpenSourceLabel();", self.menu)
+        self.assertIn("OpenSourceFeatureBridge.AllEnabled ? \"On\" : \"Off\"", self.menu)
+        self.assertIn("OpenSourceFeatureBridge.SetAll(on);", self.menu)
+        self.assertIn("Opzioni audit open source attivate", self.menu)
+        self.assertIn("Opzioni audit open source disattivate", self.menu)
+        self.assertIn("1300f", self.menu)  # riga aggiunta: pannello allargato
+
+    def test_comandi_fini_usano_la_stessa_sorgente(self):
+        self.assertIn("OpenSourceFeatureBridge.LabelFor(args[1])", self.commands)
+        self.assertNotIn("private static readonly string[] Labels", self.commands)
+        self.assertIn('"osfeature"', self.commands)
 
 
 if __name__ == "__main__":

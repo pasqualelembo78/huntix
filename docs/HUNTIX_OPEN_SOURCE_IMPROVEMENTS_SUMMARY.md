@@ -31,11 +31,24 @@ nessun tocco a valute, Firestore, drop o P2P. Tutte le opzioni sono **opt-in**.
 - `City/Scripts/Diagnostics/OpenSourceFeatureBridge.cs`: pref `huntix_os_<id>`, Unity→Android
   `OpenSourceFeatureChanged`, Android→Unity `openSourceFeatures` nel JSON `setMode`, uovo
   posizionale via `FeatureEggHidden`, `PerfProbe`/`SessionTelemetry`.
-- `City/Scripts/Diagnostics/OpenSourceFeatureCommands.cs`: comandi QA `osfeature` / `osaudit`.
+- `City/Scripts/UI/HamburgerMenu.cs`: voce **“Opzioni audit open source: Off/On”** che commuta tutte le 7 opzioni con un tap (`OpenSourceFeatureBridge.SetAll`).
+- `City/Scripts/Diagnostics/OpenSourceFeatureCommands.cs`: comandi QA `osfeature` / `osaudit` per il controllo singolo e gli audit.
 - `Assets/Editor/OpenSourceAuditMenu.cs`: quattro voci menu `Huntix/Audit …`.
 - Android: `UnityIpc.kt` (whitelist evento), `Bridge.kt` (pref e indizio nel diario),
   `BridgeActivity.java` (rimando flags), `Scripts/Core/GameManager.cs` (ripristino passivo).
 - `PerfProbe.SlotCount` 20 → **21** (nuovo slot in coda `egg-hint`; indici esistenti invariati).
+
+## Come si attivano
+
+Menu ☰ → **“Opzioni audit open source: Off”** → diventa **On**: tutte e 7 le opzioni si
+attivano in una volta, vengono salvate nelle preferenze Android e rimandate a Unity a ogni
+avvio. Un secondo tap su **On** le disattiva tutte. Non serve la console QA. La console
+(`osfeature <id> on|off`, `osaudit <sorgente>`) resta solo per il controllo fine e gli audit.
+
+`npc-persona` e `quest-def` sono attivati dal master switch ma, per mostrare il loro effetto,
+richiedono un asset `ScriptableObject` creato in Editor (`Huntix/NPC/Persona offline` /
+`Huntix/Missioni/Definizione`): nel progetto attuale non ne esiste nessuno, quindi restano
+dormienti finché non si aggiungono i dati.
 
 ## File toccati (principali)
 
@@ -49,7 +62,7 @@ nessun tocco a valute, Firestore, drop o P2P. Tutte le opzioni sono **opt-in**.
 
 ## Test eseguiti
 
-- `python3 backend/test_unity_audit_features.py` — **96 OK** (73 baseline + 23 nuovi).
+- `python3 backend/test_unity_audit_features.py` — **99 OK** (73 baseline + 26 nuovi).
 - `python3 backend/test_city_recipe.py` — **3 OK**.
 - `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` — **8 OK**.
 - `cd backend/preprocessing/cscheck && ./check.sh` — **OK**, 0 errori, 194 warning noti.

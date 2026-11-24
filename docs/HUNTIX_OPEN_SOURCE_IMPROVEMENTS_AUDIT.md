@@ -182,9 +182,13 @@ Infrastruttura comune (non un "dodicesimo progetto", ma il ponte che rende ogni 
 verificabile): `Diagnostics/OpenSourceFeatureBridge.cs` — pref `huntix_os_<id>`, evento
 Unity→Android `OpenSourceFeatureChanged` (whitelistato in `UnityIpc.kt`), ritorno Android→Unity
 nel JSON `setMode` come `openSourceFeatures=id=1,id=0`, ripple uova via `FeatureEggHidden`
-e `Game.GrantAuditEgg`, telemetria `PerfProbe`/`SessionTelemetry`. Comandi QA `osfeature` /
-`osaudit` nella console chiusa di default. Tutte le opzioni sono **opt-in con default
-invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
+e `Game.GrantAuditEgg`, telemetria `PerfProbe`/`SessionTelemetry`.
+**Attivazione principale**: voce “Opzioni audit open source: Off/On” nel menu hamburger:
+un solo tap commuta tutte le 7 opzioni (`OpenSourceFeatureBridge.SetAll`), salva i pref su
+Android e lascia un solo uovo-indizio all'attivazione. I comandi QA `osfeature` / `osaudit`
+nella console chiusa di default restano per il controllo fine e gli audit. Tutte le opzioni
+sono **opt-in con default invariato**; i percorsi storici restano attivi quando l'opzione è
+spenta.
 
 | Progetto | File Huntix | Default / comportamento spento | Riflesso uova e misura |
 |---|---|---|---|
@@ -213,6 +217,7 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 - `a7be02c0` — report finale, matrice comparativa e attribuzioni aggiornate.
 - `82de6e8b` — `.meta` mancante del ponte open source.
 - `687b188b` — grazia culling azzerata al rientro e firma `Report` allineata nel menu Editor.
+- `dc7abdac` — esito build release, firma APK e verifica token documentati.
 
 ---
 
@@ -244,7 +249,7 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 
 | Comando | Risultato |
 |---|---|
-| `python3 backend/test_unity_audit_features.py` | **96 test OK** (73 baseline + 23 nuovi: ponte, SubscribeOnce, culling, 4 audit, latch, journal, bussola, raggio camera, persona, missioni, `.meta`) |
+| `python3 backend/test_unity_audit_features.py` | **99 test OK** (73 baseline + 26 nuovi: ponte, SubscribeOnce, culling, 4 audit, latch, journal, bussola, raggio camera, persona, missioni, `.meta`, interruttore globale) |
 | `python3 backend/test_city_recipe.py` | **3 test OK** |
 | `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` | **8 test OK** |
 | `cd backend/preprocessing/cscheck && ./check.sh` | **CSCHECK OK**, 0 errori, 194 warning pre-esistenti. Stubs allineati alle nuove API (`MissionData`, `City.World.InteractDoor`, `Mathf.Tan`, `Camera.aspect`, `Quaternion.RotateTowards`) |

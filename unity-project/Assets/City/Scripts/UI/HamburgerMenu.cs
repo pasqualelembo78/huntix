@@ -28,6 +28,7 @@ namespace City.UI
         private Text _worldLabel;
         private Text _menuAnimLabel;
         private Text _qaConsoleLabel;
+        private Text _openSourceLabel;
         private Text _companionLabel;
         private Transform _canvas;
 
@@ -168,7 +169,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1220f);
+            prt.sizeDelta = new Vector2(360f, 1300f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -185,6 +186,7 @@ namespace City.UI
                 "Mondo: Reale",
                 "Animazione menu: Huntix",
                 "Console QA: Off",
+                "Opzioni audit open source: Off",
                 "Compagno NPC: Off",
                 "Fondi le uova (crafting)",
                 "Le tue uova (collezione)",
@@ -233,6 +235,7 @@ namespace City.UI
                 () => ToggleWorldMode(),
                 () => ToggleMenuAnimation(),
                 () => ToggleQaConsole(),
+                () => ToggleOpenSourceAll(),
                 () => ToggleNpcCompanion(),
                 () =>
                 {
@@ -304,7 +307,8 @@ namespace City.UI
                 if (idx == 9) _worldLabel = lbl;
                 if (idx == 10) _menuAnimLabel = lbl;
                 if (idx == 11) _qaConsoleLabel = lbl;
-                if (idx == 12) _companionLabel = lbl;
+                if (idx == 12) _openSourceLabel = lbl;
+                if (idx == 13) _companionLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -354,6 +358,7 @@ namespace City.UI
                 RefreshWorldLabel();
                 RefreshMenuAnimLabel();
                 RefreshQaConsoleLabel();
+                RefreshOpenSourceLabel();
                 RefreshNpcCompanionLabel();
             }
             panel.SetActive(v);
@@ -451,6 +456,26 @@ namespace City.UI
             City.Diagnostics.HuntixDebugConsole.SetEnabled(
                 !City.Diagnostics.HuntixDebugConsole.Enabled, true);
             RefreshQaConsoleLabel();
+        }
+
+        // ---- interruttore unico delle migliorie open source ----
+
+        private void RefreshOpenSourceLabel()
+        {
+            if (_openSourceLabel == null) return;
+            _openSourceLabel.text = "Opzioni audit open source: " +
+                (City.Diagnostics.OpenSourceFeatureBridge.AllEnabled ? "On" : "Off");
+        }
+
+        private void ToggleOpenSourceAll()
+        {
+            bool on = !City.Diagnostics.OpenSourceFeatureBridge.AllEnabled;
+            City.Diagnostics.OpenSourceFeatureBridge.SetAll(on);
+            RefreshOpenSourceLabel();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(on
+                    ? "Opzioni audit open source attivate"
+                    : "Opzioni audit open source disattivate");
         }
 
         // ---- compagno NPC (pattern MIT SanAndreasUnity, riscritto) ----

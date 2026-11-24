@@ -18,6 +18,23 @@ namespace City.Diagnostics
     public static class OpenSourceFeatureBridge
     {
         public const string PrefPrefix = "huntix_os_";
+        public const string AllPlace = "città→audit open source";
+
+        /// <summary>Ids delle opzioni governate dall'interruttore unico del menu.
+        /// Ordine stabile, coerente con le etichette qui sotto e i comandi QA.</summary>
+        public static readonly string[] AllIds =
+        {
+            "egg-cull", "door-latch", "egg-compass", "egg-journal",
+            "camera-radius", "npc-persona", "quest-def"
+        };
+
+        private static readonly string[] AllLabels =
+        {
+            "Culling uova con grazia", "Chiusura porta anti-doppio",
+            "Bussola uova a bassa velocità", "Diario locale uova",
+            "Raggio camera dal frustum", "Personaggi NPC offline",
+            "Definizioni missioni"
+        };
 
         private static readonly Dictionary<string, Action<bool>> Handlers =
             new Dictionary<string, Action<bool>>(StringComparer.OrdinalIgnoreCase);
@@ -32,6 +49,25 @@ namespace City.Diagnostics
         public static bool Enabled(string id)
         {
             return !string.IsNullOrEmpty(id) && PlayerPrefs.GetInt(PrefPrefix + id, 0) == 1;
+        }
+
+        public static string LabelFor(string id)
+        {
+            for (int i = 0; i < AllIds.Length; i++)
+                if (string.Equals(AllIds[i], id, StringComparison.OrdinalIgnoreCase))
+                    return AllLabels[i];
+            return "";
+        }
+
+        /// <summary>True solo quando tutte le opzioni dell'audit sono attive.</summary>
+        public static bool AllEnabled
+        {
+            get
+            {
+                for (int i = 0; i < AllIds.Length; i++)
+                    if (!Enabled(AllIds[i])) return false;
+                return true;
+            }
         }
 
         /// <summary>
@@ -55,6 +91,37 @@ namespace City.Diagnostics
                 Game.Instance.GrantAuditEgg(id, "Uovo " + label, place);
             if (SessionTelemetry.Instance != null)
                 SessionTelemetry.Instance.Mark("os feature %s=%s", id, on ? "on" : "off");
+        }
+
+        /// <summary>
+        /// Interruttore unico del menu: commuta tutte le opzioni in una volta.
+        /// Android riceve ogni pref, ma non fa sette indizi; Huntix lascia un
+        /// solo uovo-indizio per l'attivazione del blocco. Disattivare non
+        /// genera alcun uovo. I comandi QA restano disponibili per il singolo.
+        /// </summary>
+        public static void SetAll(bool on)
+        {
+            using (PerfProbe.Measure("menu"))
+            {
+                for (int i = 0; i < AllIds.Length; i++)
+                {
+                    string id = AllIds[i];
+                    PlayerPrefs.SetInt(PrefPrefix + id, on ? 1 : 0);
+                    SendState(id, on, LabelFor(id), AllPlace, "master", false);
+                    Action<bool> handler;
+                    if (Handlers.TryGetValue(id, out handler))
+                    {
+                        try { handler(on); }
+                        catch (Exception e)
+                        { City.OSM.OsmDiag.Log("[OpenSource] " + id + " master: " + e.Message); }
+                    }
+                }
+                PlayerPrefs.Save();
+            }
+            if (on && Game.Instance != null)
+                Game.Instance.GrantAuditEgg("os-all", "Uovo dell'audit open source", AllPlace);
+            if (SessionTelemetry.Instance != null)
+                SessionTelemetry.Instance.Mark("os features all=%s", on ? "on" : "off");
         }
 
         /// <summary>Esito di un audit: nessun toggle, solo report + indizio uovo.</summary>

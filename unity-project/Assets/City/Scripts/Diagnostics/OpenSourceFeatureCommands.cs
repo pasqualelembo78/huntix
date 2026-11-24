@@ -5,23 +5,14 @@ using System;
 namespace City.Diagnostics
 {
     /// <summary>
-    /// Comandi della console QA (chiusa di default) per attivare le opzioni
-    /// acquisite dai repository analizzati. Ogni comando passa dal ponte
+    /// Comandi della console QA (chiusa di default) per il controllo fine delle
+    /// singole opzioni. L'attivazione di tutte in una volta avviene dal menu
+    /// hamburger con "Opzioni audit open source". Ogni comando passa dal ponte
     /// condiviso, quindi stato, uovo e telemetria sono identici per tutti.
     /// </summary>
     public static class OpenSourceFeatureCommands
     {
         private const string Place = "città→audit open source";
-
-        private static readonly string[] Ids =
-            { "egg-cull", "door-latch", "egg-compass", "egg-journal",
-              "camera-radius", "npc-persona", "quest-def" };
-
-        private static readonly string[] Labels =
-            { "Culling uova con grazia", "Chiusura porta anti-doppio",
-              "Bussola uova a bassa velocità", "Diario locale uova",
-              "Raggio camera dal frustum", "Personaggi NPC offline",
-              "Definizioni missioni" };
 
         public static void Register()
         {
@@ -40,7 +31,7 @@ namespace City.Diagnostics
                 return HuntixCommandManager.Result.Ok("Uso: osfeature <id> on|off");
             bool on = args[2].Equals("on", StringComparison.OrdinalIgnoreCase) ||
                       args[2] == "1";
-            string label = LabelFor(args[1]);
+            string label = OpenSourceFeatureBridge.LabelFor(args[1]);
             if (string.IsNullOrEmpty(label))
                 return HuntixCommandManager.Result.Ok("Id sconosciuto: " + args[1]);
             OpenSourceFeatureBridge.SetToggle(args[1], on, label, Place);
@@ -54,13 +45,6 @@ namespace City.Diagnostics
                 return HuntixCommandManager.Result.Ok("Uso: osaudit <sorgente>");
             string report = OpenSourceAudit.Run(args[1]);
             return HuntixCommandManager.Result.Ok(report);
-        }
-
-        private static string LabelFor(string id)
-        {
-            for (int i = 0; i < Ids.Length; i++)
-                if (Ids[i].Equals(id, StringComparison.OrdinalIgnoreCase)) return Labels[i];
-            return "";
         }
     }
 }
