@@ -129,6 +129,14 @@ public class BridgeActivity extends UnityPlayerActivity {
                     if (vehicleMount != null && !vehicleMount.isEmpty()) {
                         j.put("vehicleMount", vehicleMount);
                     }
+                    // Innesti MIT dell'audit: preferenze scelte in MiCitta' e
+                    // salvate da Android, rimandate a Unity in ripristino passivo.
+                    boolean menuAnimation = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getBoolean("menu_animation", false);
+                    if (menuAnimation) j.put("menuAnimation", true);
+                    boolean qaConsole = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getBoolean("qa_console", false);
+                    if (qaConsole) j.put("qaConsole", true);
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

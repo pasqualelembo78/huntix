@@ -34,6 +34,7 @@ object UnityIpc {
         "CatchRequest", "PoiSelected", "PlayerPosition",
         "EggCapturedInCity", "BudgetEggSpawned", "FeatureEggHidden", "CityQualityChanged",
         "AltTouchChanged", "WorldModeChanged", "VehicleMountChanged",
+        "MenuAnimationChanged", "QaConsoleChanged",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

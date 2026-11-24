@@ -228,6 +228,10 @@ object Bridge {
             // ── Posto a bordo scelto guidando in MiCittà: preferenza
             //    persistente, rispedita a Unity all'apertura successiva. ──
             "VehicleMountChanged" -> handleVehicleMountChanged(jsonData)
+            // ── Innesti MIT dell'audit: animazione menu e console QA.
+            //    Preferenze persistenti, rispedite a Unity in openUnityActivity. ──
+            "MenuAnimationChanged" -> handleMenuAnimationChanged(jsonData)
+            "QaConsoleChanged" -> handleQaConsoleChanged(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -386,6 +390,31 @@ object Bridge {
             "HuntixSync",
             "Veicolo MiCittà: $type ($mount) code=${j.optString("code", "-")} " +
                 "lat=${j.optDouble("lat", 0.0)} lng=${j.optDouble("lng", 0.0)}"
+        )
+    }
+
+    /** Animazione d'ingresso del menu (pattern Zone Zero, MIT): Android ne
+     *  diventa proprietario e rimanda la scelta a Unity all'apertura
+     *  successiva. Nessun nuovo file di preferenze. */
+    private fun handleMenuAnimationChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("menu_animation", j.optBoolean("enabled", false)).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Animazione menu MiCittà: ${j.optBoolean("enabled", false)}"
+        )
+    }
+
+    /** Console QA (pattern SanAndreasUnity, MIT): preferenza persistente
+     *  rimandata a Unity. La console resta un viewer locale dei log. */
+    private fun handleQaConsoleChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("qa_console", j.optBoolean("enabled", false)).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Console QA MiCittà: ${j.optBoolean("enabled", false)}"
         )
     }
 

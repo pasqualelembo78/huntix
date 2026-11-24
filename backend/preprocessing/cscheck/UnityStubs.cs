@@ -294,6 +294,7 @@ namespace UnityEngine
     }
 
     public static class Debug { public static void Log(object m) {} public static void LogWarning(object m) {} public static void LogError(object m) {} public static void LogException(System.Exception e) {} }
+    public enum LogType { Error, Assert, Warning, Log, Exception }
 
     public struct Bounds { public Bounds(Vector3 c, Vector3 s) { center = c; size = s; min = c; extents = s; max = c; }
         public Vector3 center, size, min, max, extents;
@@ -513,7 +514,10 @@ namespace UnityEngine
         public static bool isFocused => true;
         public static string version => "stub";
         public static RuntimePlatform platform => RuntimePlatform.WindowsEditor;
-        public static bool CanStreamedLevelBeLoaded(string levelName) => false; }
+        public static bool CanStreamedLevelBeLoaded(string levelName) => false;
+        public delegate void LogCallback(string condition, string stackTrace, LogType type);
+        public static event LogCallback logMessageReceivedThreaded;
+        public static event LogCallback logMessageReceived; }
 
     public static class SystemInfo
     {
@@ -876,9 +880,15 @@ namespace UnityEngine
     public class GUIStyle { public float fontSize; }
     public static class GUI
     {
+        public static Color color { get; set; }
+        public static Color contentColor { get; set; }
         public static bool Button(Rect position, string text) { return false; }
         public static void Label(Rect position, string text) {}
         public static void Label(Rect position, string text, GUIStyle style) {}
+        public static void Box(Rect position, string text) {}
+        public static bool Toggle(Rect position, bool value, string text) { return value; }
+        public static string TextField(Rect position, string text) { return text; }
+        public static string TextArea(Rect position, string text) { return text; }
     }
 
     public class Texture2D : Texture

@@ -193,6 +193,8 @@ namespace City
         private bool fictionalCityEggGranted;
         private bool mountInsideEggGranted;
         private bool mountStraddledEggGranted;
+        private bool menuAnimEggGranted;
+        private bool qaConsoleEggGranted;
 
         /// <summary>Pulsante touch "FRENO A MANO" della HUD guida. Delega al
         /// veicolo e, la prima volta che si derapa in movimento, nasconde un
@@ -265,6 +267,29 @@ namespace City
                 : "Uovo del guidatore";
             GrantFeatureEgg(id, label, EggController.Rarity.Rare,
                 "città→veicolo→" + place + "→" + vehicleType);
+        }
+
+        /// <summary>Riflesso uova dell'animazione menu derivata da Zone Zero:
+        /// il primo passaggio lascia un uovo accanto al player, con luogo e
+        /// coordinate che viaggiano via FeatureEggHidden.</summary>
+        public void OnMenuAnimationEnabled()
+        {
+            if (menuAnimEggGranted) return;
+            menuAnimEggGranted = true;
+            GrantFeatureEgg("menu-zone-zero", "Uovo dell'ingresso animato",
+                EggController.Rarity.Rare, "città→impostazioni→animazione menu");
+        }
+
+        /// <summary>Riflesso uova della console QA derivata da SanAndreasUnity:
+        /// il primo accesso lascia un uovo "denominato" accanto al player.
+        /// La console resta un viewer locale: nessun dato di gioco viene
+        /// modificato dai comandi disponibili.</summary>
+        public void OnQaConsoleEnabled()
+        {
+            if (qaConsoleEggGranted) return;
+            qaConsoleEggGranted = true;
+            GrantFeatureEgg("console-qa", "Uovo del registro di bordo",
+                EggController.Rarity.Uncommon, "città→strumenti→console QA");
         }
 
         /// <summary>Piazza un uovo legato a una funzionalita' appena scoperta

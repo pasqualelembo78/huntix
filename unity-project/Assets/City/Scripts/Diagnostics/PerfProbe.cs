@@ -14,15 +14,17 @@ namespace City.Diagnostics
     /// </summary>
     public static class PerfProbe
     {
-        private const int SlotCount = 11;
+        private const int SlotCount = 13;
         // "spawn" = istanziazione NPC/veicoli, "roads" = meshing asfalto e
         // marciapiedi. Aggiunti dopo il log 23/11: move/camera/ik/chunk/input
         // sommavano 6-13 ms mentre il frame era a 266-300 ms, quindi il tempo
         // mancante era fuori dagli scope misurati. "traffic" misura la sonda
         // ostacoli già esistente, senza cambiarne il comportamento. "mount"
         // copre il positioning del guidatore dentro/sopra il veicolo (24/11).
+        // "menu" e "console" misurano gli innesti MIT dell'audit (24/11): setup
+        // dell'animazione d'ingresso e costruzione dei comandi della console QA.
         private static readonly string[] Names =
-            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount" };
+            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console" };
         private static readonly float[] Sum = new float[SlotCount];
         private static readonly float[] Peak = new float[SlotCount];
         private static readonly int[] Samples = new int[SlotCount];

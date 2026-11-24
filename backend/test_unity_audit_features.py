@@ -168,7 +168,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 11", self.probe)
+        self.assertIn("SlotCount = 13", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -331,6 +331,171 @@ class TestVehicleMount(unittest.TestCase):
         self.assertIn("VehicleMountProfile.KindOf(data) == VehicleMountKind.Inside",
                       self.controller)
         self.assertIn("interior.BuildIfNeeded()", self.controller)
+
+
+class TestMitReuseGate(unittest.TestCase):
+    """Inventario 24/11: solo file MIT legalmente e tecnicamente integrabili."""
+
+    def setUp(self):
+        self.inventory = read(os.path.join(ROOT, "docs",
+            "INVENTARIO_INTEGRAZIONI_CLONE_20261124.md"))
+        self.notice = read(os.path.join(ROOT, "THIRD_PARTY_NOTICES.md"))
+
+    def test_shortlist_e_esclusioni_documentate(self):
+        self.assertIn("MainMenuAnimator.cs", self.inventory)
+        self.assertIn("BakeTransformIntoMesh.cs", self.inventory)
+        self.assertIn("EnableGPUInstancing.cs", self.inventory)
+        self.assertIn("CommandManager.cs", self.inventory)
+        self.assertIn("Console.cs", self.inventory)
+        self.assertIn("ConsoleLogEventSubscriber.cs", self.inventory)
+        self.assertIn("RagdollBuilder.cs", self.inventory)
+        self.assertIn("non integrabile", self.inventory)
+
+    def test_attribuzioni_e_modifiche_nel_notice(self):
+        self.assertIn("Copyright (c) 2026 Mishal Bhasim", self.notice)
+        self.assertIn("Copyright (c) 2015 James King", self.notice)
+        self.assertIn("Integrazioni con codice adattato", self.notice)
+        self.assertIn("**Modifiche**:", self.notice)
+        self.assertIn("Grand-Road-Auto", self.notice)
+        self.assertIn("nessun asset", self.notice.lower())
+
+
+class TestMenuEntranceAnimation(unittest.TestCase):
+    """Animazione menu Zone Zero (MIT): affiancata, opzionale, con uovo e bridge."""
+
+    def setUp(self):
+        self.anim = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                      "MenuEntranceAnimator.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                      "HamburgerMenu.cs"))
+        self.ui = read(os.path.join(UNITY, "City", "Scripts", "UI", "UIManager.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(ROOT, "unity-project", "Assets", "Scripts",
+                                         "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(ROOT, "app", "src", "main", "java",
+                                          "com", "intelligame", "huntix",
+                                          "bridge", "BridgeActivity.java"))
+
+    def test_attribuzione_e_default_inattivo(self):
+        self.assertIn("Adattato da Zone Zero", self.anim)
+        self.assertIn("Mishal Bhasim", self.anim)
+        self.assertIn('PlayerPrefs.GetInt(PrefsKey, 0)', self.anim)
+        self.assertIn("public static bool Enabled", self.anim)
+        self.assertNotIn("using TMPro", self.anim)
+        self.assertNotIn("PulseButton", self.anim)
+
+    def test_menu_affiancato_e_non_sostitutivo(self):
+        self.assertIn("Animazione menu: Huntix", self.menu)
+        self.assertIn("ToggleMenuAnimation()", self.menu)
+        self.assertIn("MenuEntranceAnimator.Initialize()", self.ui)
+        self.assertIn("if (MenuEntranceAnimator.Enabled && panel != null)", self.menu)
+        self.assertIn("panel.AddComponent<MenuEntranceAnimator>()", self.menu)
+
+    def test_uovo_telemetria_e_probe(self):
+        self.assertIn("OnMenuAnimationEnabled()", self.game)
+        self.assertIn('GrantFeatureEgg("menu-zone-zero"', self.game)
+        self.assertIn('"Uovo dell\'ingresso animato"', self.game)
+        self.assertIn('città→impostazioni→animazione menu', self.game)
+        self.assertIn('menu anim=%s', self.anim)
+        self.assertIn('PerfProbe.Measure("menu")', self.anim)
+
+    def test_bridge_bidirezionale(self):
+        self.assertIn('"MenuAnimationChanged"', self.ipc)
+        self.assertIn('"MenuAnimationChanged" -> handleMenuAnimationChanged(jsonData)',
+                      self.bridge)
+        self.assertIn('putBoolean("menu_animation"', self.bridge)
+        self.assertIn('j.put("menuAnimation", true)', self.activity)
+        self.assertIn(r'\"menuAnimation\"', self.manager)
+        self.assertIn("MenuEntranceAnimator.SetEnabled(true, false)", self.manager)
+
+
+class TestQaConsole(unittest.TestCase):
+    """Console QA SanAndreasUnity (MIT): viewer locale, nessuna dipendenza GTA."""
+
+    def setUp(self):
+        self.console = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                         "HuntixDebugConsole.cs"))
+        self.commands = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                          "HuntixCommandManager.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                      "HamburgerMenu.cs"))
+        self.ui = read(os.path.join(UNITY, "City", "Scripts", "UI", "UIManager.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(ROOT, "unity-project", "Assets", "Scripts",
+                                         "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(ROOT, "app", "src", "main", "java",
+                                          "com", "intelligame", "huntix",
+                                          "bridge", "BridgeActivity.java"))
+
+    def test_attribuzione_e_nessuna_dipendenza_proprietaria(self):
+        for src in (self.console, self.commands):
+            self.assertIn("Adattato da SanAndreasUnity", src)
+            self.assertIn("James King", src)
+            # Le dipendenze rimosse possono comparire nelle note di modifica:
+            # il controllo verte sul codice effettivo, non sui commenti.
+            code = "\n".join(line for line in src.splitlines()
+                             if not line.lstrip().startswith("//"))
+            self.assertNotIn("using SanAndreasUnity", code)
+            self.assertNotIn("using UGameCore", code)
+            self.assertNotIn("UGameCore.Utilities", code)
+            self.assertNotIn("PauseMenuWindow", code)
+            self.assertNotIn("NetStatus", code)
+            self.assertNotIn("using UnityEditor", code)
+            self.assertNotIn("GTA", code)
+
+    def test_parser_mit_adattato_e_probe(self):
+        self.assertIn("SplitCommandIntoArguments", self.commands)
+        self.assertIn("limitInterval", self.commands)
+        self.assertIn('new CommandInfo("help"', self.commands)
+        self.assertIn('new CommandInfo("prof"', self.commands)
+        self.assertIn("PerfProbe.SnapshotAndReset()", self.commands)
+        self.assertIn('PerfProbe.Measure("console")', self.console)
+
+    def test_default_chiuso_e_menu_affiancato(self):
+        self.assertIn('PlayerPrefs.GetInt(PrefsKey, 0)', self.console)
+        self.assertIn("public static bool Enabled", self.console)
+        self.assertIn("Console QA: Off", self.menu)
+        self.assertIn("ToggleQaConsole()", self.menu)
+        self.assertIn("HuntixDebugConsole.Initialize()", self.ui)
+
+    def test_uovo_telemetria_e_bridge(self):
+        self.assertIn("OnQaConsoleEnabled()", self.game)
+        self.assertIn('GrantFeatureEgg("console-qa"', self.game)
+        self.assertIn('"Uovo del registro di bordo"', self.game)
+        self.assertIn('città→strumenti→console QA', self.game)
+        self.assertIn('console QA=%s', self.console)
+        self.assertIn('"QaConsoleChanged"', self.ipc)
+        self.assertIn('"QaConsoleChanged" -> handleQaConsoleChanged(jsonData)',
+                      self.bridge)
+        self.assertIn('putBoolean("qa_console"', self.bridge)
+        self.assertIn('j.put("qaConsole", true)', self.activity)
+        self.assertIn(r'\"qaConsole\"', self.manager)
+        self.assertIn("HuntixDebugConsole.SetEnabled(true, false)", self.manager)
+
+
+class TestEditorMeshTools(unittest.TestCase):
+    """Utility Editor Zone Zero (MIT): esplicite, con Undo, non runtime."""
+
+    def setUp(self):
+        self.tools = read(os.path.join(UNITY, "City", "Editor", "CityMeshTools.cs"))
+
+    def test_attribuzione_e_menu_italiano(self):
+        self.assertIn("Adattato da Zone Zero", self.tools)
+        self.assertIn("Mishal Bhasim", self.tools)
+        self.assertIn("Huntix/Strumenti (MIT Zone Zero)/Cuoce transform nel mesh",
+                      self.tools)
+        self.assertIn("Huntix/Strumenti (MIT Zone Zero)/Abilita GPU instancing",
+                      self.tools)
+
+    def test_solo_editor_e_con_undo(self):
+        self.assertIn("using UnityEditor;", self.tools)
+        self.assertIn("Undo.RecordObject", self.tools)
+        self.assertNotIn("MonoBehaviour", self.tools)
+        self.assertIn("non componenti runtime", self.tools)
 
 
 if __name__ == "__main__":

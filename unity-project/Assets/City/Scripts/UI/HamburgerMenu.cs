@@ -26,6 +26,8 @@ namespace City.UI
         private Text _qualityLabel;
         private Text _touchLabel;
         private Text _worldLabel;
+        private Text _menuAnimLabel;
+        private Text _qaConsoleLabel;
         private Transform _canvas;
 
         private static readonly Color Bg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
@@ -163,7 +165,7 @@ namespace City.UI
             prt.anchorMin = prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
             prt.anchoredPosition = new Vector2(-16f, 0f);
-            prt.sizeDelta = new Vector2(360f, 760f);
+            prt.sizeDelta = new Vector2(360f, 908f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -178,6 +180,8 @@ namespace City.UI
                 "Esci dal gioco",
                 "Input touch: Huntix",
                 "Mondo: Reale",
+                "Animazione menu: Huntix",
+                "Console QA: Off",
             };
             System.Action[] actions =
             {
@@ -220,6 +224,8 @@ namespace City.UI
                 },
                 () => ToggleTouch(),
                 () => ToggleWorldMode(),
+                () => ToggleMenuAnimation(),
+                () => ToggleQaConsole(),
             };
 
             for (int i = 0; i < labels.Length; i++)
@@ -242,6 +248,8 @@ namespace City.UI
                 if (idx == 6) _qualityLabel = lbl;
                 if (idx == 8) _touchLabel = lbl;
                 if (idx == 9) _worldLabel = lbl;
+                if (idx == 10) _menuAnimLabel = lbl;
+                if (idx == 11) _qaConsoleLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -269,13 +277,29 @@ namespace City.UI
         {
             bool open = panel == null || !panel.activeSelf;
             CloseAll();
-            if (open) SetVisible(true);
+            if (!open) return;
+            SetVisible(true);
+            // Animazione affiancata: resta inerte se l'utente non l'ha attivata.
+            if (MenuEntranceAnimator.Enabled && panel != null)
+            {
+                var anim = panel.GetComponent<MenuEntranceAnimator>();
+                if (anim == null) anim = panel.AddComponent<MenuEntranceAnimator>();
+                anim.Play(panel.GetComponent<RectTransform>());
+            }
         }
 
         private void SetVisible(bool v)
         {
             if (panel == null) return;
-            if (v) { RefreshStyleLabel(); RefreshQualityLabel(); RefreshTouchLabel(); RefreshWorldLabel(); }
+            if (v)
+            {
+                RefreshStyleLabel();
+                RefreshQualityLabel();
+                RefreshTouchLabel();
+                RefreshWorldLabel();
+                RefreshMenuAnimLabel();
+                RefreshQaConsoleLabel();
+            }
             panel.SetActive(v);
         }
 
@@ -337,6 +361,40 @@ namespace City.UI
             City.Fictional.FictionalCityWorld.SetMode(
                 !City.Fictional.FictionalCityWorld.Enabled, true);
             RefreshWorldLabel();
+        }
+
+        // ---- animazione ingresso menu (Zone Zero, MIT) ----
+
+        private void RefreshMenuAnimLabel()
+        {
+            if (_menuAnimLabel == null) return;
+            _menuAnimLabel.text = "Animazione menu: " +
+                (MenuEntranceAnimator.Enabled ? "Zone Zero" : "Huntix");
+        }
+
+        private void ToggleMenuAnimation()
+        {
+            MenuEntranceAnimator.SetEnabled(!MenuEntranceAnimator.Enabled, true);
+            RefreshMenuAnimLabel();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(MenuEntranceAnimator.Enabled
+                    ? "Animazione menu: Zone Zero" : "Animazione menu: Huntix");
+        }
+
+        // ---- console QA (SanAndreasUnity, MIT) ----
+
+        private void RefreshQaConsoleLabel()
+        {
+            if (_qaConsoleLabel == null) return;
+            _qaConsoleLabel.text = "Console QA: " +
+                (City.Diagnostics.HuntixDebugConsole.Enabled ? "On" : "Off");
+        }
+
+        private void ToggleQaConsole()
+        {
+            City.Diagnostics.HuntixDebugConsole.SetEnabled(
+                !City.Diagnostics.HuntixDebugConsole.Enabled, true);
+            RefreshQaConsoleLabel();
         }
 
         // ---- stile edifici (fluidita' / qualita') ----

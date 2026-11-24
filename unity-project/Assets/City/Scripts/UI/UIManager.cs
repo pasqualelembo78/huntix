@@ -1002,6 +1002,13 @@ namespace City.UI
             altJoystick = moveZone.gameObject.AddComponent<AlternateTouchInput>();
             altJoystick.Configure(root, baseRt, handleRt, joystick.radius);
 
+            // Innesti MIT affiancati: lettura passiva dello stato Android,
+            // senza eventi di ritorno ne' uova (restore, non scelta utente).
+            MenuEntranceAnimator.Initialize();
+            City.Diagnostics.HuntixDebugConsole.Initialize();
+            if (City.Diagnostics.HuntixDebugConsole.Enabled)
+                City.Diagnostics.HuntixDebugConsole.Ensure();
+
             // --- pulsante LAVORI: accesso diretto al pannello dei lavori
             // (Tassista/Corriere/Ronda), una delle funzioni core del gioco.
             var jobsRt = MakeRect("JobsButton", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f), new Vector2(0f, 0f));

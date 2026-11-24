@@ -317,6 +317,25 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] input touch ripristinato da Android: zone-zero");
                 }
 
+                // Innesti MIT dell'audit: preferenze salvate da Android e
+                // ripristinate passivamente (notify=false: niente uova, niente
+                // eco verso Android, nessuna finestra che si apre da sola).
+                var menuAnimation = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"menuAnimation\"\\s*:\\s*true");
+                if (menuAnimation.Success)
+                {
+                    City.UI.MenuEntranceAnimator.SetEnabled(true, false);
+                    Debug.Log("[GameManager] animazione menu ripristinata da Android: zone-zero");
+                }
+                var qaConsole = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"qaConsole\"\\s*:\\s*true");
+                if (qaConsole.Success)
+                {
+                    City.Diagnostics.HuntixDebugConsole.SetEnabled(true, false);
+                    City.Diagnostics.HuntixDebugConsole.Ensure();
+                    Debug.Log("[GameManager] console QA ripristinata da Android: on");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(
