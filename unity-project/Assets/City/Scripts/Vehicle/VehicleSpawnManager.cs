@@ -275,7 +275,12 @@ namespace City.Vehicle
 
                 // I FBX Kenney sono importati senza materiali: senza questa
                 // riparazione le auto del mondo chunked restano grigie.
-                VehicleMaterialFix.Apply(go);
+                // Escluso il kit Sketchfab (licenza non verificata): i suoi
+                // UV non usano l'atlas Kenney e verrebbe solo alterato.
+                if (def.prefabKey == null ||
+                    !def.prefabKey.StartsWith("Sketchfab/",
+                        System.StringComparison.OrdinalIgnoreCase))
+                    VehicleMaterialFix.Apply(go);
             }
             else
             {

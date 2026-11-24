@@ -24,7 +24,7 @@ namespace City.Vehicle
     /// ispirato l'idea di uno stato di ingresso/uscita già presente in Game.
     ///
     /// Ogni salita è un evento Unity → Android (`VehicleMountChanged`) con
-    /// tipo, posto, codice veicolo e coordinate; Android lo persistono e lo
+    /// tipo, posto, codice veicolo e coordinate; Android lo persiste e lo
     /// restituisce a Unity all'apertura successiva (`RestoreFromAndroid`).
     /// </summary>
     public static class VehicleMountProfile
@@ -58,8 +58,8 @@ namespace City.Vehicle
         }
 
         /// <summary>Posizione del pivot del player (i piedi) rispetto al veicolo.
-        /// Per le auto si riuse il sedile già costruito da VehicleInterior; per
-        /// il pullman la cabina è più alta e più avanti; sui due ruoti il
+        /// Per le auto si riusa il sedile già costruito da VehicleInterior; per
+        /// il pullman la cabina è più alta e più avanti; sui due ruote il
         /// personaggio sale sopra la sella, non dentro la carrozzeria.</summary>
         public static Vector3 DriverLocalPosition(VehicleController vc)
         {
@@ -85,7 +85,7 @@ namespace City.Vehicle
             return new Vector3(seat.x, Mathf.Max(0.1f, seat.y - 0.15f), seat.z);
         }
 
-        /// <summary>Camera di guida per tipo di mezzo: i due ruoti hanno una
+        /// <summary>Camera di guida per tipo di mezzo: i due ruote hanno una
         /// spring arm più corta e più bassa, il pullman più alta e più larga.
         /// I valori delle auto restano quelli storici (12 / 5 / 15).</summary>
         public static void CameraProfile(VehicleMountKind kind, string vehicleName,

@@ -257,6 +257,7 @@ class TestVehicleMaterials(unittest.TestCase):
     def test_percorso_chunked_applica_la_riparazione(self):
         self.assertIn("VehicleMaterialFix.Apply(go)", self.spawn)
         self.assertIn("VehicleMaterialFix.Apply(inst)", self.traffic)
+        self.assertIn('!def.prefabKey.StartsWith("Sketchfab/"', self.spawn)
 
     def test_attribuzione_cc0_e_asset_esclusi(self):
         self.assertIn("Kenney Car Kit", self.notice)
