@@ -429,3 +429,61 @@ attribuzioni esistenti.
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit
 occorre: (1) verificare la licenza specifica del file, (2) aggiungere il testo della licenza e
 l'attribuzione in questo documento, (3) conservare gli avvisi di copyright nei file sorgente.
+
+---
+
+## Trasformazione grafica cinematografica — asset CC0 importati (2026-11-24)
+
+A differenza dell'audit dei repository Unity (dove nessun binario è stato
+importato), per la modalità cinematografica sono stati **effettivamente
+scaricati, verificati e importati** solo asset con licenza CC0 esplicita.
+Tutti i file sorgente grezzi sono in `assets/` (inventario:
+`assets/INVENTORY.md`, rigenerazione: `assets/restore.sh`).
+
+### Poly Haven — texture PBR CC0
+
+- Sito: https://polyhaven.com/ — licenza **CC0 1.0**,
+  https://polyhaven.com/license. API pubbliche `https://api.polyhaven.com/files/<id>`.
+- Texture scaricate in 1K JPG, ognuna verificata per **MD5** contro il valore
+  restituito dall'API: `asphalt_01`, `asphalt_03`, `brick_pavement_02`,
+  `brushed_concrete`, `brick_wall_001`, `sparse_grass`. Mappe: Diffuse,
+  nor_gl (Normal), AO, Rough.
+- Destinazione: `unity-project/Assets/Resources/Cinematic/Textures/` (13 file
+  + 13 `.meta`). Normal map importate come `NormalMap`, sRGB disattivato,
+  aniso 4, mipmap attive. Nessuna texture supera 1024 px.
+- Utilizzo: modalità cinematografica opt-in, asfalto/marciapiede/facciate/
+  veicoli. I materiali del renderer originale restano invarianti a switch spento.
+
+### Kenney — CC0 1.0
+
+- Sito: https://kenney.nl/assets — licenza **CC0 1.0**,
+  https://creativecommons.org/publicdomain/zero/1.0/. Ogni zip conserva il
+  proprio `License.txt` originale in `assets/<pack>/`.
+- Pacchetti grezzi in `assets/`: `characters.zip` (Animated Characters Retro),
+  `road.zip` (City Kit Roads 2.0), `kenney_nature-kit.zip`,
+  `kenney_skyboxes.zip`, `kenney_car-kit.zip`, city kit commercial/suburban/
+  industrial, `furniture.zip`, `cube-pets.zip`.
+- **Importati davvero in Unity** da `assets/road`: 6 FBX (coni, barriere,
+  lampioni, cartelli, attraversamento) in
+  `unity-project/Assets/Resources/Cinematic/RawCc0/` con colormap e licenza.
+  Usati a runtime da `CinematicGraphics.PlaceRawProps` solo con lo switch
+  "Asset CC0 grezzi" attivo; i collider delle istanze vengono disattivati per
+  non alterare la fisica di guida. Gli altri pack sono già integrati nel
+  progetto da commit precedenti (vedi `assets/INVENTORY.md`).
+
+### Quaternius — CC0 1.0 (pack specifico)
+
+- `kit/quaternius.zip` (`assets/quaternius-downtown/`): Downtown City MegaKit
+  **FREE**, il cui `License_Standard.txt` dichiara esplicitamente
+  "CC0 1.0 Universal (CC0 1.0) Public Domain Dedication".
+  https://quaternius.com/packs/downtowncitymegakit.html
+- I modelli Quaternius già presenti in `Assets/Resources/Quaternius` restano
+  regolati dalle attribuzioni esistenti; la copia grezza in `assets/` è solo
+  archivio di sorgente.
+
+### Non importato: licenza non verificabile
+
+- `character/character1.unitypackage` ("Stylized Player Character (Free)"):
+  il README interno non dichiara alcuna licenza. Pur essendo tecnicamente
+  compatibile (Unity 6, URP, 30.682 triangoli), **non è stato importato né
+  usato**: i personaggi di Huntix restano Kenney CC0.

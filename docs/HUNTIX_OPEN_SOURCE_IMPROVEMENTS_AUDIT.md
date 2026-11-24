@@ -330,3 +330,19 @@ errori C#.
 - Prossimo passo operativo (fuori sessione): collaudo su dispositivo delle opzioni opt-in e
   delle misure `PerfProbe`/`SessionTelemetry`.
 - Report di sintesi: `docs/HUNTIX_OPEN_SOURCE_IMPROVEMENTS_SUMMARY.md`.
+
+---
+
+## Estensione 2026-11-24 — Trasformazione grafica cinematografica
+
+Dopo l'interruttore unico dell'audit è stato aggiunto un **secondo gruppo
+indipendente** di opzioni visive (`huntix_gfx_*`), con evento Android
+`CinematicFeatureChanged` e chiave di ripristino `cinematicFeatures`.
+A differenza dell'audit (zero binari), qui sono stati importati e usati
+veramente 13 texture PBR CC0 (Poly Haven, MD5 verificato) e 6 modelli Kenney
+CC0 da `assets/road`, tutti opt-in dal menu hamburger.
+
+Report completo con 20 punti, shortlist di 40 pacchetti e stato dei test:
+`docs/HUNTIX_TRASFORMAZIONE_GRAFICA_REPORT.md`.
+Inventario sorgenti: `assets/INVENTORY.md`; licenze: `THIRD_PARTY_NOTICES.md`.
+I 17 token dell'audit e i suoi 99 test restano invariati.
