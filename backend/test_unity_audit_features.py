@@ -170,7 +170,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
     def test_slot_probe_e_telemetria(self):
         # SlotCount sale con gli slot "bait" e "harvest" della Fase 2; gli
         # slot preesistenti (traffic incluso) restano tutti presenti.
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -710,7 +710,7 @@ class TestFase2ConsumabiliEsca(unittest.TestCase):
         self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
         self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
         self.assertIn('"bait"', self.probe)
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
         self.assertIn('Measure("bait")', self.manager)
         self.assertIn("Aromi disponibili: {0}", self.manager)
 
@@ -764,7 +764,7 @@ class TestFase2RaccoltaRisorse(unittest.TestCase):
         self.assertIn('Measure("harvest")', self.manager_cs)
         self.assertIn('Measure("harvest")', self.interaction)
         self.assertIn('"harvest"', self.probe)
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
         self.assertIn("Raccolte: {0}", self.manager_cs)
 
     def test_ui_italiano_senza_consumare_inventari_esistenti(self):
@@ -837,7 +837,7 @@ class TestFase2Crafting(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_fusion_craft_count"', self.manager_cs)
         self.assertIn('Measure("craft")', self.manager_cs)
         self.assertIn('"craft"', self.probe)
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
 
     def test_ui_italiana_senza_secondario_inventario(self):
         self.assertIn('android:name=".CraftActivity"', self.manifest)
@@ -903,7 +903,7 @@ class TestFase2InventarioEvoluto(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_inventory_egg_count"', self.manager_cs)
         self.assertIn('Measure("inventory")', self.manager_cs)
         self.assertIn('"inventory"', self.probe)
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
 
     def test_ui_italiana_senza_secondario_inventario(self):
         self.assertIn('android:name=".EggCollectionActivity"', self.manifest)
@@ -965,7 +965,7 @@ class TestFase2Ricette(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_recipe_discovered_count"', self.manager_cs)
         self.assertIn('Measure("recipe")', self.manager_cs)
         self.assertIn('"recipe"', self.probe)
-        self.assertIn("SlotCount = 20", self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
 
     def test_ui_sola_lettura_senza_nuova_activity(self):
         self.assertIn("Ricette di fusione — ", self.activity)
@@ -974,6 +974,36 @@ class TestFase2Ricette(unittest.TestCase):
         self.assertIn("Ricette di fusione (guida)", self.menu_cs)
         self.assertIn("prt.sizeDelta = new Vector2(360f, 1220f)", self.menu_cs)
         self.assertIn("Le ricette sono una guida", self.activity)
+
+
+class TestEventBusSubscribeOnceIntegration(unittest.TestCase):
+    """rob1997/Controller (MIT): SubscribeOnce one-shot, senza handler appesi."""
+
+    def setUp(self):
+        self.bus = read(os.path.join(UNITY, "City", "Scripts", "Environment", "EventBus.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_api_esistente_invariata(self):
+        for token in ("public static void Subscribe<T>(Action<T> handler) where T : struct",
+                      "public static void Unsubscribe<T>(Action<T> handler) where T : struct",
+                      "public static void Publish<T>(T evt) where T : struct",
+                      "public static void Clear()"):
+            self.assertIn(token, self.bus)
+
+    def test_subscribe_once_si_auto_disiscrive(self):
+        self.assertIn("public static void SubscribeOnce<T>(Action<T> handler) where T : struct", self.bus)
+        self.assertIn("Unsubscribe(wrapper);", self.bus)
+        self.assertIn("Robel Getnet Geremew", self.bus)
+        self.assertIn("public struct EggHintObservedEvent", self.bus)
+
+    def test_collegamento_al_primo_indizio_uovo(self):
+        self.assertIn("EventBus.SubscribeOnce<City.Environment.EggHintObservedEvent>", self.game)
+        self.assertIn("SendFirstEggHintDiary(evt)", self.game)
+        self.assertIn("EventBus.Publish(\n                new City.Environment.EggHintObservedEvent(featureId, lat, lng))", self.game)
+        self.assertIn('"ActivityLogEvent", json', self.game)
+        self.assertIn('"egg-hint"', self.probe)
+        self.assertIn("SlotCount = 21", self.probe)
 
 
 if __name__ == "__main__":

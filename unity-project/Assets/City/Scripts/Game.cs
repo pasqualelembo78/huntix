@@ -142,6 +142,15 @@ namespace City
             // Telemetria di sessione verso AppLog Android (analisi pregi/difetti)
             try { City.Diagnostics.SessionTelemetry.Ensure(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] SessionTelemetry.Ensure FALLITO: " + e.Message); }
+            // rob1997/Controller (MIT): iscrizione one-shot al primo indizio
+            // uovo della sessione. SubscribeOnce si auto-disiscrive, quindi il
+            // diario riceve una sola voce e non lascia handler appesi.
+            try
+            {
+                City.Environment.EventBus.SubscribeOnce<City.Environment.EggHintObservedEvent>(
+                    evt => SendFirstEggHintDiary(evt));
+            }
+            catch (System.Exception e) { OsmDiag.Log("[Game] SubscribeOnce FALLITO: " + e.Message); }
             // Profili grafici Low/Medium/High: tetto qualitativo scelto dal
             // giocatore, il governor continua ad adattare i raggi in automatico.
             try { City.Diagnostics.QualityProfileSelector.Ensure(); }
@@ -339,7 +348,25 @@ namespace City
                 "\",\"tsMt\":" + ts + "}";
             try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("FeatureEggHidden", json); }
             catch (System.Exception e) { OsmDiag.Log("[Egg] FeatureEggHidden failed: " + e.Message); }
+            City.Environment.EventBus.Publish(
+                new City.Environment.EggHintObservedEvent(featureId, lat, lng));
             if (ui != null) ui.ShowToast("Hai scovato un uovo: " + label + "!");
+        }
+
+        /// <summary>Voce unica nel diario Android al primo indizio uovo della
+        /// sessione. EventBus.SubscribeOnce garantisce che non si ripeta;</summary>
+        private void SendFirstEggHintDiary(City.Environment.EggHintObservedEvent evt)
+        {
+            using (City.Diagnostics.PerfProbe.Measure("egg-hint"))
+            {
+                string json = "{\"kind\":\"uovo\",\"label\":\"" +
+                    JsonEscape("Primo indizio uovo: " + evt.Feature) +
+                    "\",\"place\":\"" + JsonEscape("città→indizio") +
+                    "\",\"lat\":\"" + evt.Lat + "\",\"lng\":\"" + evt.Lng +
+                    "\",\"tsMt\":" + System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + "}";
+                try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("ActivityLogEvent", json); }
+                catch (System.Exception e) { OsmDiag.Log("[Game] EggHint diary failed: " + e.Message); }
+            }
         }
 
         // ── Input routing ──────────────────────────────────────────

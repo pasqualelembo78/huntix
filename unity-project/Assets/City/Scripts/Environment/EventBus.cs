@@ -47,6 +47,24 @@ namespace City.Environment
             }
         }
 
+        /// <summary>
+        /// Iscrivi un handler che si auto-disiscrive dopo la prima invocazione.
+        /// Ispirato al pattern SubscribeOneTime di rob1997/Controller (MIT,
+        /// Copyright 2023 Robel Getnet Geremew); adattato al design struct-based
+        /// di Huntix senza cambiare le firme esistenti.
+        /// </summary>
+        public static void SubscribeOnce<T>(Action<T> handler) where T : struct
+        {
+            if (handler == null) return;
+            Action<T> wrapper = null;
+            wrapper = evt =>
+            {
+                Unsubscribe(wrapper);
+                handler.Invoke(evt);
+            };
+            Subscribe(wrapper);
+        }
+
         /// <summary>Rimuovi tutti gli handler (chiamare al logout/destroy).</summary>
         public static void Clear()
         {
@@ -92,5 +110,18 @@ namespace City.Environment
     {
         public readonly float Percent;
         public FuelLowEvent(float pct) { Percent = pct; }
+    }
+
+    /// <summary>
+    /// Primo indizio uovo della sessione. Pubblicato una sola volta per uovo
+    /// feature e consumato da Game con SubscribeOnce: nessun handler resta appeso.
+    /// </summary>
+    public struct EggHintObservedEvent
+    {
+        public readonly string Feature;
+        public readonly string Lat;
+        public readonly string Lng;
+        public EggHintObservedEvent(string feature, string lat, string lng)
+        { Feature = feature; Lat = lat; Lng = lng; }
     }
 }

@@ -14,7 +14,7 @@ namespace City.Diagnostics
     /// </summary>
     public static class PerfProbe
     {
-        private const int SlotCount = 20;
+        private const int SlotCount = 21;
         // "spawn" = istanziazione NPC/veicoli, "roads" = meshing asfalto e
         // marciapiedi. Aggiunti dopo il log 23/11: move/camera/ik/chunk/input
         // sommavano 6-13 ms mentre il frame era a 266-300 ms, quindi il tempo
@@ -33,8 +33,10 @@ namespace City.Diagnostics
         // nessun lavoro per frame, solo lo scambio con Android.
         // "inventory" copre lo specchio della collezione (Fase 2 · voce 11).
         // "recipe" copre la scoperta delle ricette di fusione (voce 16).
+        // "egg-hint" copre la voce unica del diario al primo indizio uovo
+        // (adattamento EventBus.SubscribeOnce da rob1997/Controller, MIT).
         private static readonly string[] Names =
-            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait", "harvest", "craft", "inventory", "recipe" };
+            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait", "harvest", "craft", "inventory", "recipe", "egg-hint" };
         private static readonly float[] Sum = new float[SlotCount];
         private static readonly float[] Peak = new float[SlotCount];
         private static readonly int[] Samples = new int[SlotCount];
