@@ -9,9 +9,11 @@ e **non sono stati eseguiti**. Analisi dettagliata: `docs/AUDIT_REPOSITORY_UNITY
 **Nessun file di codice o asset dei repository sotto elencati è stato copiato tale quale.**
 Dove una soluzione è stata riutilizzata, è stata **reimplementata da zero** partendo dal solo
 pattern architetturale, perché la licenza del progetto d'origine non lo consentiva oppure
-perché l'implementazione Huntix esistente era già più completa. L'unica eccezione è il codice
-MIT di Zone Zero espressamente indicato al punto 10: adattato, con attribuzione e con le
-dipendenze non permissive rimosse. Nessun asset binario di alcun repository è stato importato. Le attribuzioni sotto servono a
+perché l'implementazione Huntix esistente era già più completa. Le eccezioni sono il codice
+MIT di Zone Zero indicato al punto 10 e gli innesti del 24/11 elencati nella sezione
+"Integrazioni con codice adattato": in entrambi i casi il codice è stato **adattato**, non
+copiato tale quale, mantenendo copyright, licenza e dichiarazione delle modifiche.
+Nessun asset binario di alcun repository è stato importato. Le attribuzioni sotto servono a
 documentare la provenienza delle idee e a non perdere il collegamento con le licenze originali.
 
 I marchi e i nomi dei progetti restano dei rispettivi proprietari. Huntix non incorpora modelli,
@@ -187,7 +189,82 @@ prodotto, non come import. Nessuna attribuzione aggiuntiva è quindi dovuta.
 
 ---
 
-## Aggiornamenti futuri
+## Integrazioni con codice adattato (2026-11-24)
+
+Inventario completo e gate legale/tecnico: `docs/INVENTARIO_INTEGRAZIONI_CLONE_20261124.md`.
+I file sotto sono stati **adattati**, non copiati tale quale; ogni file Huntix conserva
+l'intestazione con copyright e licenza. Nessun asset dei repository è stato importato.
+
+### Zone Zero — MIT, Copyright (c) 2026 Mishal Bhasim
+
+Testo licenza integrale dal file `/tmp/opencode/research/Zone-Zero/LICENSE`:
+
+```
+MIT License
+
+Copyright (c) 2026 Mishal Bhasim
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+- `Assets/_Project/Scripts/UI/MainMenu/MainMenuAnimator.cs` →
+  `unity-project/Assets/City/Scripts/UI/MenuEntranceAnimator.cs`.
+  **Modifiche**: rimosso `using TMPro` (inutilizzato) e il pulse infinito del pulsante;
+  tre riferimenti fissi sostituiti da una raccolta generica di righe `M_*`; aggiunti
+  flag opzionale con `PlayerPrefs`, bridge Android `MenuAnimationChanged`, riflesso uova
+  con posizione, `SessionTelemetry.Mark` e `PerfProbe.Measure("menu")`; ripristino degli
+  alpha alla chiusura. Il pannello esistente resta invariato quando il flag è disattivato.
+- `Assets/Editor/BakeTransformIntoMesh.cs` e `Assets/Editor/EnableGPUInstancing.cs` →
+  `unity-project/Assets/City/Editor/CityMeshTools.cs`.
+  **Modifiche**: voci menu italiane sotto `Huntix/Strumenti (MIT Zone Zero)`, messaggi e
+  `Undo` espliciti, nessuna esecuzione automatica, avviso di misurare con `PerfProbe`
+  prima di tenere il flag di instancing. Sono strumenti Editor, non componenti runtime:
+  non toccano profilo, uova, `PlayerPrefs` o Android e quindi non hanno bridge.
+
+**Non copiati**: `Assets/StarterAssets/**` (Unity Companion License), `Photon/**`,
+`PlayFabSDK/**`, `BigRookGames/**`, `ProceduralTerrainPainter/**` (Asset Store EULA),
+prefab e AppId. Il joystick di Zone Zero era già stato adattato in
+`AlternateTouchInput.cs` (punto 10) e non è stato reimportato.
+
+### SanAndreasUnity — MIT, Copyright (c) 2015 James King
+
+Il testo licenza integrale è già riportato alla sezione 1, dal file
+`/tmp/opencode/research/sanandreasunity/LICENSE`. Fonte usata: **solo upstream MIT**,
+non il fork `Grand-Road-Auto` (la cui `LICENSE` è proprietaria BlackRoad).
+
+- `Assets/Scripts/Commands/CommandManager.cs` →
+  `unity-project/Assets/City/Scripts/Diagnostics/HuntixCommandManager.cs`.
+  **Modifiche**: rimossi `SanAndreasUnity.Net.Player`, `NetStatus`, `Player.onDisable` e
+  i permessi server; registri locali, rate-limit per comando, risposte in italiano,
+  comando `prof` collegato a `PerfProbe`. Nessun comando può modificare il mondo.
+- `Assets/Scripts/UI/Console.cs` e `Assets/Scripts/UI/ConsoleLogEventSubscriber.cs` →
+  `unity-project/Assets/City/Scripts/Diagnostics/HuntixDebugConsole.cs`.
+  **Modifiche**: rimossi `PauseMenuWindow`, `UGameCore.Utilities.ConcurrentQueue`,
+  `GUIUtils` e le stack trace lunghe; coda con `lock`, viewer IMGUI locale con filtri e
+  raggruppamento, flag opzionale, bridge `QaConsoleChanged`, riflesso uova con posizione,
+  `SessionTelemetry.Mark` e `PerfProbe.Measure("console")`. Nessun dato lascia il device.
+
+**Non copiati**: `Assets/RagdollBuilder.cs` (Unity Reference Only License), qualsiasi
+dato/asset GTA, `NVorbis` (licenza non inclusa), i file duplicativi legati a LOD, rete
+e costanti veicolo già coperte da sistemi Huntix.
+
+### Aggiornamenti futuri
 
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit
 occorre: (1) verificare la licenza specifica del file, (2) aggiungere il testo della licenza e
