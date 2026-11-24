@@ -46,6 +46,16 @@ data class LocationBadge(
             list.add(badge)
             val json = "[" + list.joinToString(",") { it.toJson() } + "]"
             ctx.getSharedPreferences(PREFS, 0).edit().putString(KEY, json).apply()
+            // Stesso diario delle uova: il badge e' un luogo ricordato, con
+            // coordinate reali. Nessun nuovo archivio parallelo.
+            com.intelligame.huntix.managers.EggWhereLog.recordActivity(
+                ctx,
+                com.intelligame.huntix.managers.EggWhereLog.KIND_BADGE,
+                "Badge sbloccato: ${badge.name}",
+                "luogo→${badge.id}",
+                badge.lat,
+                badge.lon
+            )
         }
     }
 }

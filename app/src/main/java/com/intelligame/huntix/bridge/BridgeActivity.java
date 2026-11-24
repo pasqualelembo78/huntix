@@ -150,6 +150,12 @@ public class BridgeActivity extends UnityPlayerActivity {
                         if (compName != null && !compName.isEmpty()) j.put("npcCompanionName", compName);
                         if (compId != null && !compId.isEmpty()) j.put("npcCompanionId", compId);
                     }
+                    // Fase 1 · registro attività: Unity deve sapere quante voci
+                    // (uova con luogo + attività) Android conserva nel diario.
+                    // Viene passato il solo contatore, non la cronologia: il
+                    // dettaglio resta nel profilo Android, dove e' consultabile.
+                    j.put("activityLogCount",
+                            com.intelligame.huntix.managers.EggWhereLog.INSTANCE.count(this));
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

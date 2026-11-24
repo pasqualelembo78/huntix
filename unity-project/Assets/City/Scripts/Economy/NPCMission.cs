@@ -4,6 +4,8 @@ using UnityEngine;
 using TMPro;
 using City.World;
 using City.NPC;
+using City.OSM;
+using Huntix.Bridge;
 
 namespace City.Economy
 {
@@ -234,11 +236,48 @@ namespace City.Economy
             }
 
             MissionManager.Instance?.CompleteMission(this);
+            // Fase 1 · registro attività: la missione finisce nel diario
+            // Android con luogo e coordinate, insieme alle uova catturate.
+            // Non e' un premio aggiuntivo: solo una voce di cronologia.
+            SendDiaryEntry(paid);
             ShowToast("Missione completata! +€" + paid +
                 (paid != reward ? (spouse ? " (prezzo coniuge +25%)" : " (prezzo amico)") : ""));
 
             // Respawn marker after delay for new mission
             StartCoroutine(RespawnMarkerDelayed());
+        }
+
+        /// <summary>Fase 1 · diario attività: la missione completata diventa
+        /// una voce del registro Android con luogo e coordinate reali. Non
+        /// tocca il premio, la relazione NPC ne' il respawn del marker.</summary>
+        private void SendDiaryEntry(int paid)
+        {
+            string lat = "0", lng = "0";
+            if (WorldOrigin.Initialized)
+            {
+                var g = WorldOrigin.ToGeo(transform.position);
+                lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            string name = string.IsNullOrEmpty(description) ? missionId : description;
+            string label = "Missione completata: " + name + " (+€" + paid + ")";
+            string place = "città→missione→" + missionId;
+            string json = "{\"kind\":\"missione\",\"label\":\"" + Escape(label) +
+                "\",\"place\":\"" + Escape(place) + "\",\"lat\":\"" + lat +
+                "\",\"lng\":\"" + lng + "\",\"tsMt\":" +
+                System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + "}";
+            try { UnityBridge.SendMessageToAndroid("ActivityLogEvent", json); }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[NPCMission] diario attività non inviato: " + e.Message);
+            }
+        }
+
+        private static string Escape(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            return text.Replace("\\", "\\\\").Replace("\"", "\\\"")
+                .Replace("\n", " ").Replace("\r", " ");
         }
 
         private System.Collections.IEnumerator RespawnMarkerDelayed()

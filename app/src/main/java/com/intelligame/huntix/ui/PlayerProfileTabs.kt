@@ -481,7 +481,16 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
         addView(rowText("📅 Sett. corrente","${p?.weeklyEggsFound ?: 0}", "#00FF88", "#A5D6A7"))
         // Memoria condivisa "DOVE ho trovato l'uovo" (universo unico Unity+Android)
         addView(rowText("🗺️ Bestiario città","${p?.cityEggDexCount ?: 0} voci scoperte", "#66FFB2", "#A5D6A7"))
-        addView(rowText("📍 Dove le ho trovate","${p?.cityEggWhere ?: 0} luoghi salvati", "#66FFB2", "#A5D6A7"))
+        // Fase 1 · registro attività: la riga diventa l'ingresso al diario
+        // consultabile, con filtri e cronologia delle uova posizionali.
+        addView(rowText("📍 Dove le ho trovate","${p?.cityEggWhere ?: 0} luoghi salvati →", "#66FFB2", "#A5D6A7")
+            .also { row ->
+                row.isClickable = true
+                row.setOnClickListener {
+                    startActivity(Intent(this@buildStatsTab,
+                        com.intelligame.huntix.ActivityLogActivity::class.java))
+                }
+            })
         val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))

@@ -238,6 +238,10 @@ object Bridge {
             "NpcCompanionChanged" -> handleNpcCompanionChanged(jsonData)
             "CompanionRecruited" -> handleCompanionRecruited(jsonData)
             "CompanionEggSpotted" -> handleCompanionEggSpotted(jsonData)
+            // ── Registro attività (Fase 1): Miacittà racconta al diario
+            //    una missione/un evento compiuto; la cronologia resta una
+            //    sola con le uova posizionali. ──
+            "ActivityLogEvent" -> handleActivityLogEvent(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -475,6 +479,28 @@ object Bridge {
             "Uovo segnalato da ${j.optString("name", "compagno")} " +
                 "(${j.optString("npcId", "-")}) lat=${j.optDouble("lat", 0.0)} " +
                 "lng=${j.optDouble("lng", 0.0)} place=${j.optString("place", "-")}"
+        )
+    }
+
+    /** Registro attività (Fase 1): una missione completata in Miacittà entra
+     *  nello stesso diario delle uova, con categoria e luogo. Non versa premi:
+     *  il premio e' gia' gestito da Wallet lato Unity. */
+    private fun handleActivityLogEvent(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val ctx = UnityAppContext.context ?: return
+        val label = j.optString("label", "").trim()
+        if (label.isEmpty()) return
+        com.intelligame.huntix.managers.EggWhereLog.recordActivity(
+            ctx,
+            j.optString("kind", com.intelligame.huntix.managers.EggWhereLog.KIND_EVENT),
+            label,
+            j.optString("place", "citta"),
+            j.optDouble("lat", 0.0),
+            j.optDouble("lng", 0.0),
+            j.optString("name", "")
+        )
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Diario attività: $label (${j.optString("place", "citta")})"
         )
     }
 

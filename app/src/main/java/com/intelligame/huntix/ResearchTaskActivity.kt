@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import com.intelligame.huntix.managers.EggWhereLog
 import com.intelligame.huntix.managers.ResearchTaskManager
 import com.intelligame.huntix.managers.SavedManager
 
@@ -138,6 +139,13 @@ class ResearchTaskActivity : BaseNavActivity() {
                 val rewards = ResearchTaskManager.claimReward(c, task.id)
                 if (rewards != null) {
                     SavedManager.addMvc(c, rewards.first.toDouble())
+                    // Diario attività: il riscatto lascia una traccia con
+                    // categoria e obiettivo, senza cambiare i premi esistenti.
+                    EggWhereLog.recordActivity(
+                        c, EggWhereLog.KIND_QUEST,
+                        "Obiettivo completato: ${task.emoji} ${task.title}",
+                        "obiettivi→${task.type}→${task.id}"
+                    )
                     Toast.makeText(c, "💰 +${rewards.first} MVC · ⚡ +${rewards.second} XP", Toast.LENGTH_SHORT).show()
                     recreate()
                 }

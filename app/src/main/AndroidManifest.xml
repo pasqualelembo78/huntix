@@ -180,6 +180,9 @@
             android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".ResearchTaskActivity"
             android:exported="false" android:screenOrientation="portrait"/>
+        <!-- Fase 1: registro attività / diario uova posizionali -->
+        <activity android:name=".ActivityLogActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".RaidBattleActivity"
             android:exported="false" android:screenOrientation="portrait"/>
 

@@ -36,6 +36,7 @@ object UnityIpc {
         "AltTouchChanged", "WorldModeChanged", "VehicleMountChanged",
         "MenuAnimationChanged", "QaConsoleChanged",
         "NpcCompanionChanged", "CompanionRecruited", "CompanionEggSpotted",
+        "ActivityLogEvent",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

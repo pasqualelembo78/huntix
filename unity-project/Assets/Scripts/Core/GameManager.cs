@@ -355,6 +355,30 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] compagno NPC ripristinato da Android");
                 }
 
+                // Fase 1 · registro attività: Android comunica quante voci del
+                // diario possiede (uova posizionali + missioni/check-in/badge).
+                // Unity conserva il contatore e lo segna in telemetria: non
+                // ricostruisce la cronologia (di competenza del profilo Android)
+                // e non genera uova su un ripristino passivo.
+                var activityLogCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"activityLogCount\"\\s*:\\s*(\\d+)");
+                if (activityLogCount.Success)
+                {
+                    int entries;
+                    if (int.TryParse(activityLogCount.Groups[1].Value, out entries))
+                    {
+                        using (City.Diagnostics.PerfProbe.Measure("diary"))
+                        {
+                            PlayerPrefs.SetInt("huntix_activity_log_count", entries);
+                            if (City.Diagnostics.SessionTelemetry.Instance != null)
+                                City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                    "Diario attività: {0} voci", entries);
+                        }
+                        Debug.Log("[GameManager] diario attività ripristinato da Android: " +
+                            entries + " voci");
+                    }
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(

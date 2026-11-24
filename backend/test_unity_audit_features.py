@@ -168,7 +168,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 14", self.probe)
+        self.assertIn("SlotCount = 15", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -574,6 +574,72 @@ class TestNpcCompanion(unittest.TestCase):
         self.assertIn("NpcCompanion.RestoreFromAndroid(", self.manager)
         self.assertIn("Restore passivo", self.manager)
         self.assertIn("nessun uovo viene dato", self.companion)
+
+
+class TestFase1RegistroAttivita(unittest.TestCase):
+    """Fase 1 · voce 2: diario unico uova+attività, senza duplicare il log."""
+
+    def setUp(self):
+        app = os.path.join(ROOT, "app", "src", "main")
+        java = os.path.join(app, "java", "com", "intelligame", "huntix")
+        self.log = read(os.path.join(java, "managers", "EggWhereLog.kt"))
+        self.activity = read(os.path.join(java, "ActivityLogActivity.kt"))
+        self.profile = read(os.path.join(java, "ui", "PlayerProfileTabs.kt"))
+        self.quests = read(os.path.join(java, "ResearchTaskActivity.kt"))
+        self.streak = read(os.path.join(java, "DailyStreakActivity.kt"))
+        self.badge = read(os.path.join(java, "LocationBadge.kt"))
+        self.manifest = read(os.path.join(app, "AndroidManifest.xml"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.manager = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.mission = read(os.path.join(UNITY, "City", "Scripts", "Economy",
+                                         "NPCMission.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                       "PerfProbe.cs"))
+
+    def test_unico_archivio_con_categorie_e_compatibilita(self):
+        self.assertIn("private const val KEY_LOG = \"egg_where_log\"", self.log)
+        self.assertIn("const val KIND_EGG = \"uovo\"", self.log)
+        self.assertIn("fun recordActivity(", self.log)
+        self.assertIn("optString(\"kind\", KIND_EGG)", self.log)
+        self.assertIn("MAX = 500", self.log)
+        # Le uova continuano apassare da record(): nessun doppio archivio.
+        self.assertIn("fun record(ctx: Context, rarityId: String", self.log)
+
+    def test_diario_consultabile_dal_profilo(self):
+        self.assertIn(".ActivityLogActivity\"", self.manifest)
+        self.assertIn("class ActivityLogActivity : BaseNavActivity()", self.activity)
+        self.assertIn("EggWhereLog.getLog(c)", self.activity)
+        self.assertIn("entry.optDouble(\"lat\"", self.activity)
+        self.assertIn("EggRarity.values()", self.activity)
+        self.assertIn("com.intelligame.huntix.ActivityLogActivity::class.java",
+                      self.profile)
+        self.assertIn("luoghi salvati →", self.profile)
+
+    def test_eventi_gioco_alimentano_il_diario(self):
+        self.assertIn("EggWhereLog.recordActivity(", self.quests)
+        self.assertIn("EggWhereLog.KIND_QUEST", self.quests)
+        self.assertIn("EggWhereLog.recordActivity(", self.streak)
+        self.assertIn("EggWhereLog.KIND_LOGIN", self.streak)
+        self.assertIn("EggWhereLog.KIND_BADGE", self.badge)
+        self.assertIn("SendDiaryEntry(paid)", self.mission)
+        self.assertIn('"ActivityLogEvent"', self.mission)
+        self.assertIn('"città→missione→"', self.mission)
+
+    def test_bridge_bidirezionale_e_misure(self):
+        self.assertIn('"ActivityLogEvent"', self.ipc)
+        self.assertIn('"ActivityLogEvent" -> handleActivityLogEvent', self.bridge)
+        self.assertIn("EggWhereLog.recordActivity(", self.bridge)
+        self.assertIn('j.put("activityLogCount",', self.bridge_activity)
+        self.assertIn("EggWhereLog.INSTANCE.count(this)", self.bridge_activity)
+        self.assertIn(r'\"activityLogCount\"', self.manager)
+        self.assertIn('PlayerPrefs.SetInt("huntix_activity_log_count"', self.manager)
+        self.assertIn('Measure("diary")', self.manager)
+        self.assertIn("Diario attività: {0} voci", self.manager)
+        self.assertIn('"diary"', self.probe)
+        # Il ripristino NON genera uova ne' compagni.
+        self.assertIn("ricostruisce la cronologia", self.manager)
 
 
 if __name__ == "__main__":

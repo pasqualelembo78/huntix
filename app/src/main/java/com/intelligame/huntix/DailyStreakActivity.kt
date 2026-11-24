@@ -10,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.intelligame.huntix.managers.DailyStreakManager
+import com.intelligame.huntix.managers.EggWhereLog
 import com.intelligame.huntix.managers.SavedManager
 
 class DailyStreakActivity : BaseNavActivity() {
@@ -70,6 +71,12 @@ class DailyStreakActivity : BaseNavActivity() {
                 val (claimed, rewardAmount) = DailyStreakManager.claimToday(c)
                 if (claimed) {
                     SavedManager.addMvc(c, rewardAmount.toDouble())
+                    EggWhereLog.recordActivity(
+                        c, EggWhereLog.KIND_LOGIN,
+                        "Check-in giorno $currentStreak" +
+                            if (DailyStreakManager.isMilestone(currentStreak)) " · traguardo" else "",
+                        "profilo→streak→giorno$currentStreak"
+                    )
                     val milestone = DailyStreakManager.isMilestone(currentStreak)
                     val msg = if (milestone) "🎉 MILESTONE! +$rewardAmount MVC!" else "+$rewardAmount MVC"
                     Toast.makeText(c, msg, Toast.LENGTH_SHORT).show()
