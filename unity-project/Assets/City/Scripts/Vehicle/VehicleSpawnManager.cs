@@ -333,6 +333,12 @@ namespace City.Vehicle
             if (def.name == "Pullman")
                 return BuildBusProcedural();
 
+            // Moto/scooter/bici: modello originale a due ruote, non il vecchio
+            // cubo a quattro ruote. Nessun asset preso dai repository auditati.
+            if (def.name == "Moto" || def.name == "Scooter" ||
+                def.name == "Bici Elettrica")
+                return BuildTwoWheelerProcedural(def, colorSeed);
+
             var go = new GameObject("Parked_" + def.name);
 
             Color[] colors = new Color[]
@@ -432,6 +438,92 @@ namespace City.Vehicle
                     Object.Destroy(wObj.GetComponent<Collider>());
                 }
 
+            return go;
+        }
+
+        // Mezzi a due ruote: telaio, forcella, sella, manubrio e DUE ruote.
+        // I nodi si chiamano "wheel-*" per WheelSpinner (già presente) e il
+        // BoxCollider resta quello uniforme aggiunto da BuildVehicle: la fisica
+        // non cambia, cambia solo la forma visibile.
+        private static GameObject BuildTwoWheelerProcedural(VehicleDef def, int colorSeed)
+        {
+            var go = new GameObject("Parked_" + def.name);
+
+            Color[] colors = new Color[]
+            {
+                new Color(0.8f, 0.15f, 0.15f), new Color(0.15f, 0.15f, 0.15f),
+                new Color(0.9f, 0.9f, 0.9f), new Color(0.2f, 0.2f, 0.7f),
+                new Color(0.1f, 0.6f, 0.2f), new Color(0.9f, 0.6f, 0.1f),
+            };
+            Color paint = colors[((colorSeed % colors.Length) + colors.Length) % colors.Length];
+            Material bodyMat = MakeMat(paint);
+            Material dark = MakeMat(new Color(0.11f, 0.11f, 0.13f));
+            Material chrome = MakeMat(new Color(0.55f, 0.57f, 0.60f));
+            Material lamp = MakeMat(new Color(1f, 0.92f, 0.62f));
+            Material tail = MakeMat(new Color(0.85f, 0.12f, 0.12f));
+
+            float l = def.l > 0f ? def.l : 1.8f;
+            float w = def.w > 0f ? def.w : 0.7f;
+            bool bike = def.name == "Bici Elettrica";
+            float wr = bike ? 0.26f : 0.30f;
+            float zf = l * 0.40f;
+            float zr = -l * 0.40f;
+
+            PlaceTwoWheel(go.transform, "wheel-front", new Vector3(0f, wr, zf), wr, dark);
+            PlaceTwoWheel(go.transform, "wheel-rear", new Vector3(0f, wr, zr), wr, dark);
+
+            AddBox(go.transform, "Frame", new Vector3(0f, wr + 0.24f, -0.05f),
+                new Vector3(w * 0.20f, 0.12f, l * 0.70f), bodyMat);
+            AddBox(go.transform, "Fork", new Vector3(0f, wr + 0.30f, zf),
+                new Vector3(0.08f, 0.58f, 0.08f), chrome);
+            AddBox(go.transform, "Saddle", new Vector3(0f, wr + 0.50f, zr + 0.14f),
+                new Vector3(w * 0.48f, 0.10f, 0.42f), dark);
+            AddBox(go.transform, "Handlebar", new Vector3(0f, wr + 0.60f, zf - 0.06f),
+                new Vector3(w * 1.30f, 0.06f, 0.06f), chrome);
+
+            if (!bike)
+            {
+                AddBox(go.transform, "Fairing", new Vector3(0f, wr + 0.38f, zf - 0.14f),
+                    new Vector3(w * 0.85f, 0.26f, 0.18f), bodyMat);
+            }
+            else
+            {
+                AddBox(go.transform, "Pedal", new Vector3(0f, wr + 0.10f, -0.10f),
+                    new Vector3(0.30f, 0.05f, 0.10f), chrome);
+            }
+
+            AddBox(go.transform, "Headlight", new Vector3(0f, wr + 0.46f, zf + 0.02f),
+                new Vector3(w * 0.35f, 0.12f, 0.06f), lamp);
+            AddBox(go.transform, "Taillight", new Vector3(0f, wr + 0.43f, zr - 0.02f),
+                new Vector3(w * 0.30f, 0.08f, 0.06f), tail);
+            return go;
+        }
+
+        private static void PlaceTwoWheel(Transform parent, string name,
+            Vector3 pos, float r, Material mat)
+        {
+            var w = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            w.name = name;
+            w.transform.SetParent(parent, false);
+            w.transform.localPosition = pos;
+            w.transform.localScale = new Vector3(r * 2f, 0.08f, r * 2f);
+            w.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            w.GetComponent<Renderer>().sharedMaterial = mat;
+            var col = w.GetComponent<Collider>();
+            if (col != null) Object.Destroy(col);
+        }
+
+        private static GameObject AddBox(Transform parent, string name,
+            Vector3 pos, Vector3 scale, Material mat)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = pos;
+            go.transform.localScale = scale;
+            go.GetComponent<Renderer>().sharedMaterial = mat;
+            var col = go.GetComponent<Collider>();
+            if (col != null) Object.Destroy(col);
             return go;
         }
 

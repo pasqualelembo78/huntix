@@ -225,6 +225,9 @@ object Bridge {
             // ── Città Gioco (mondo Reale / Città Gioco): preferenza
             //    persistente, rispedita a Unity all'apertura successiva. ──
             "WorldModeChanged" -> handleWorldModeChanged(jsonData)
+            // ── Posto a bordo scelto guidando in MiCittà: preferenza
+            //    persistente, rispedita a Unity all'apertura successiva. ──
+            "VehicleMountChanged" -> handleVehicleMountChanged(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -364,6 +367,25 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync",
             "Mondo MiCittà: $mode (ricetta=${j.optString("recipe", "-")})"
+        )
+    }
+
+    /** Ultimo mezzo guidato in MiCittà (auto/moto/pullman): Android ne diventa
+     *  proprietario e lo rimanda a Unity in openUnityActivity, come già fa per
+     *  qualità, input touch e mondo. Nessun nuovo file di preferenze. */
+    private fun handleVehicleMountChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val type = j.optString("type", "").trim()
+        if (type.isBlank()) return
+        val mount = j.optString("mount", "inside").lowercase()
+        if (mount !in setOf("inside", "straddled")) return
+        val ctx = UnityAppContext.context ?: return
+        ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+            .edit().putString("vehicle_mount", "$type|$mount").apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Veicolo MiCittà: $type ($mount) code=${j.optString("code", "-")} " +
+                "lat=${j.optDouble("lat", 0.0)} lng=${j.optDouble("lng", 0.0)}"
         )
     }
 

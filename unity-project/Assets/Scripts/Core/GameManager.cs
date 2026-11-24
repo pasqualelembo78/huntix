@@ -316,6 +316,19 @@ namespace Huntix.Core
                     City.UI.AlternateTouchInput.SetEnabled(true, false);
                     Debug.Log("[GameManager] input touch ripristinato da Android: zone-zero");
                 }
+
+                // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
+                // ripristino passivo, senza salire in auto e senza uova.
+                var vehicleMount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"vehicleMount\"\\s*:\\s*\"([^\"]+)\"");
+                if (vehicleMount.Success)
+                {
+                    string[] parts = vehicleMount.Groups[1].Value.Split('|');
+                    City.Vehicle.VehicleMountProfile.RestoreFromAndroid(
+                        parts[0], parts.Length > 1 ? parts[1] : "inside");
+                    Debug.Log("[GameManager] ultimo veicolo ripristinato da Android: " +
+                        parts[0]);
+                }
             }
             catch (System.Exception e)
             {

@@ -146,6 +146,9 @@ namespace City
             // giocatore, il governor continua ad adattare i raggi in automatico.
             try { City.Diagnostics.QualityProfileSelector.Ensure(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] QualityProfileSelector.Ensure FALLITO: " + e.Message); }
+            // Ultimo mezzo salvato da Android: ripristino passivo, senza uova.
+            try { VehicleMountProfile.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] VehicleMountProfile.Initialize FALLITO: " + e.Message); }
 
             // Realtà aumentata: pulsante PASSA A AR (camera + ARCore + piano).
             try { City.AR.ArCityController.Ensure(); }
@@ -188,6 +191,8 @@ namespace City
         private bool qualityEggGranted;
         private bool touchEggGranted;
         private bool fictionalCityEggGranted;
+        private bool mountInsideEggGranted;
+        private bool mountStraddledEggGranted;
 
         /// <summary>Pulsante touch "FRENO A MANO" della HUD guida. Delega al
         /// veicolo e, la prima volta che si derapa in movimento, nasconde un
@@ -239,6 +244,27 @@ namespace City
             GrantFeatureEgg("fictional-city", "Uovo della città di carta",
                 City.Economy.EggController.Rarity.Epic,
                 "città→città-gioco→ricetta-osm");
+        }
+
+        /// <summary>Riflesso uova del profilo di guida: la prima volta che si
+        /// sale dentro un mezzo e la prima volta che si sale sopra un due ruote
+        /// lasciano un uovo accanto al veicolo. Il nome del mezzo finisce nel
+        /// luogo registrato, così il profilo Android può dire dove è stato
+        /// trovato (città → veicolo → dentro/sopra → tipo).</summary>
+        public void OnVehicleMounted(VehicleMountKind kind, string vehicleType)
+        {
+            bool straddled = kind == VehicleMountKind.Straddled;
+            if (straddled ? mountStraddledEggGranted : mountInsideEggGranted) return;
+            if (straddled) mountStraddledEggGranted = true;
+            else mountInsideEggGranted = true;
+
+            string place = straddled ? "sopra" : "dentro";
+            string id = "vehicle-mount-" + place;
+            string label = straddled
+                ? "Uovo del guidatore in sella"
+                : "Uovo del guidatore";
+            GrantFeatureEgg(id, label, EggController.Rarity.Rare,
+                "città→veicolo→" + place + "→" + vehicleType);
         }
 
         /// <summary>Piazza un uovo legato a una funzionalita' appena scoperta
@@ -952,17 +978,32 @@ namespace City
                     StopCoroutine(bob);
                 }
 
+                // Profilo di guida: il personaggio resta VISIBILE e sale dove
+                // il mezzo lo prevede (dentro auto/pullman, sopra due ruote).
+                // Il CharacterController resta spento: la posizione è fissata
+                // al veicolo e la guida continua a usare il Rigidbody di vc.
+                VehicleMountKind mountKind = VehicleMountProfile.KindOf(vc.data);
+                string vehicleType = vc.data != null ? vc.data.vehicleName : "veicolo";
+                float camDistance, camHeight, camPitch;
+                VehicleMountProfile.CameraProfile(mountKind, vehicleType,
+                    out camDistance, out camHeight, out camPitch);
+
                 CharacterController cc =
                     player.GetComponent<CharacterController>();
                 if (cc != null) cc.enabled = false;
-                player.gameObject.SetActive(false);
-
-                player.transform.SetParent(vc.transform, false);
-                player.transform.localPosition = new Vector3(0f, 1.2f, 0f);
-                // azzera lo yaw residuo della camminata: prima la camera di
-                // guida inseguiva questo angolo e se eri entrato di lato la
-                // vista restava perpendicolare all'auto
-                player.transform.localRotation = Quaternion.identity;
+                using (City.Diagnostics.PerfProbe.Measure("mount"))
+                {
+                    // Era nascosto in guida nel vecchio comportamento: ora il
+                    // modello deve essere visibile dentro/sopra il mezzo.
+                    player.gameObject.SetActive(true);
+                    player.transform.SetParent(vc.transform, false);
+                    player.transform.localPosition =
+                        VehicleMountProfile.DriverLocalPosition(vc);
+                    // azzera lo yaw residuo della camminata: prima la camera di
+                    // guida inseguiva questo angolo e se eri entrato di lato la
+                    // vista restava perpendicolare all'auto
+                    player.transform.localRotation = Quaternion.identity;
+                }
 
                 // riallinea subito la camera dietro al veicolo, guardando
                 // nel suo stesso verso: dopo il fade sei gia' in guida
@@ -977,7 +1018,7 @@ namespace City
                     VehicleOwnershipApi.Instance.ClearAbandonedIfFound(
                         enteredVi.vehicleCode);
 
-                if (rig != null) rig.SetDrivingMode(true);
+                if (rig != null) rig.SetDrivingMode(true, camDistance, camHeight, camPitch);
 
                 CurrentVehicle = vc;
                 IsDriving = true;
@@ -985,10 +1026,18 @@ namespace City
                 try
                 {
                     City.Diagnostics.SessionTelemetry.Instance?.Driving(true,
-                        vc.data != null ? vc.data.vehicleName : "auto",
+                        vehicleType,
                         enteredVi != null ? enteredVi.vehicleCode : "");
+                    // Ponte bidirezionale + telemetria del posto a bordo.
+                    VehicleMountProfile.Notify(vc, mountKind,
+                        enteredVi != null ? enteredVi.vehicleCode : "");
+                    // Riflesso uova: dentro e sopra sono due scoperte distinte.
+                    OnVehicleMounted(mountKind, vehicleType);
                 }
-                catch (System.Exception) {}
+                catch (System.Exception e)
+                {
+                    OsmDiag.Log("[Game] VehicleMount notify/uovo FALLITO: " + e.Message);
+                }
 
                 if (ui != null)
                 {

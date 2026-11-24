@@ -168,8 +168,8 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 10", self.probe)
-        self.assertIn('"spawn", "roads", "traffic", "fictional"', self.probe)
+        self.assertIn("SlotCount = 11", self.probe)
+        self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
 
@@ -263,6 +263,73 @@ class TestVehicleMaterials(unittest.TestCase):
         self.assertIn("CC0 1.0", self.notice)
         self.assertIn("ConceptCar006.fbx", self.notice)
         self.assertNotIn("VehicleMaterialFix.Apply(prefabSketchfabKit)", self.spawn)
+
+
+class TestVehicleMount(unittest.TestCase):
+    """Profilo di guida originale: dentro/sopra, ponte e uova."""
+
+    def setUp(self):
+        self.profile = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                         "VehicleMountProfile.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.spawn = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                       "VehicleSpawnManager.cs"))
+        self.controller = read(os.path.join(UNITY, "City", "Scripts", "Vehicle",
+                                            "VehicleController.cs"))
+        self.camera = read(os.path.join(UNITY, "City", "Scripts", "Player",
+                                        "CameraRig.cs"))
+        self.manager = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(APP, "BridgeActivity.java"))
+
+    def test_posti_dentro_e_sopra(self):
+        self.assertIn("enum VehicleMountKind", self.profile)
+        self.assertIn("Inside,", self.profile)
+        self.assertIn("Straddled", self.profile)
+        self.assertIn("VehicleCategory.Motorcycle", self.profile)
+        self.assertIn("VehicleCategory.EBike", self.profile)
+        self.assertIn('name.IndexOf("Pullman"', self.profile)
+        self.assertIn("interior.driverSeatPos", self.profile)
+        self.assertIn("VehicleMountProfile.DriverLocalPosition(vc)", self.game)
+        self.assertNotIn("player.gameObject.SetActive(false)", self.game)
+
+    def test_camera_per_tipo_senza_cambiare_quella_auto(self):
+        self.assertIn("SetDrivingMode(bool driving, float distance,", self.camera)
+        self.assertIn("DefaultDriveDistance = 12f", self.camera)
+        self.assertIn("rig.SetDrivingMode(true, camDistance, camHeight, camPitch)", self.game)
+        self.assertIn("distance = 7.5f; height = 2.6f; pitch = 8f;", self.profile)
+
+    def test_modelli_due_ruote_originali(self):
+        self.assertIn("BuildTwoWheelerProcedural", self.spawn)
+        self.assertIn('"wheel-front"', self.spawn)
+        self.assertIn('"wheel-rear"', self.spawn)
+        self.assertIn('"Saddle"', self.spawn)
+        self.assertIn('"Handlebar"', self.spawn)
+        self.assertNotIn("WheelCollider", self.spawn)
+
+    def test_uovo_ponte_e_telemetria(self):
+        self.assertIn("OnVehicleMounted(mountKind, vehicleType)", self.game)
+        self.assertIn('string id = "vehicle-mount-" + place;', self.game)
+        self.assertIn("GrantFeatureEgg(id, label, EggController.Rarity.Rare,", self.game)
+        self.assertIn('"Uovo del guidatore"', self.game)
+        self.assertIn('"Uovo del guidatore in sella"', self.game)
+        self.assertIn('SendMessageToAndroid("VehicleMountChanged", json)', self.profile)
+        self.assertIn('PerfProbe.Measure("mount")', self.game)
+        self.assertIn("telemetry.Mark(\"VEICOLO salita", self.profile)
+
+    def test_bridge_bidirezionale(self):
+        self.assertIn('"VehicleMountChanged"', self.ipc)
+        self.assertIn('"VehicleMountChanged" -> handleVehicleMountChanged(jsonData)', self.bridge)
+        self.assertIn('putString("vehicle_mount"', self.bridge)
+        self.assertIn('j.put("vehicleMount", vehicleMount)', self.activity)
+        self.assertIn(r'\"vehicleMount\"', self.manager)
+        self.assertIn("VehicleMountProfile.RestoreFromAndroid(", self.manager)
+
+    def test_abitacolo_solo_dentro(self):
+        self.assertIn("VehicleMountProfile.KindOf(data) == VehicleMountKind.Inside",
+                      self.controller)
+        self.assertIn("interior.BuildIfNeeded()", self.controller)
 
 
 if __name__ == "__main__":

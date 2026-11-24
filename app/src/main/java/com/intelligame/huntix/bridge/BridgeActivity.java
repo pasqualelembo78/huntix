@@ -122,6 +122,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                     String worldMode = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
                             .getString("world_mode", "real");
                     if ("fictional".equals(worldMode)) j.put("worldMode", "fictional");
+                    // Ultimo mezzo guidato salvato da Android -> Unity (posto
+                    // a bordo e tipo). Non fa salire il player in auto.
+                    String vehicleMount = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getString("vehicle_mount", null);
+                    if (vehicleMount != null && !vehicleMount.isEmpty()) {
+                        j.put("vehicleMount", vehicleMount);
+                    }
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

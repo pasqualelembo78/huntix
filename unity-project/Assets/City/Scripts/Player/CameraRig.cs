@@ -75,9 +75,15 @@ namespace City.Player
         private float _nextHeroSearch;
 
         private bool drivingMode;
-        private readonly float driveDistance = 12f;
-        private readonly float driveHeight = 5f;
-        private readonly float drivePitch = 15f;
+        // Valori storici delle auto. Il profilo di guida può cambiarli solo
+        // mentre si è a bordo (moto/scooter/bici più bassi, pullman più alto):
+        // a piedi e all'uscita si torna sempre a questi valori.
+        private const float DefaultDriveDistance = 12f;
+        private const float DefaultDriveHeight = 5f;
+        private const float DefaultDrivePitch = 15f;
+        private float driveDistance = DefaultDriveDistance;
+        private float driveHeight = DefaultDriveHeight;
+        private float drivePitch = DefaultDrivePitch;
 
         // ── Override per interni aperti (negozi/case e concessionaria/officina/garage) ──
         // Owner-keyed: ogni sistema che avvicina la camera dentro un interno usa
@@ -255,6 +261,27 @@ namespace City.Player
 
         public void SetDrivingMode(bool driving)
         {
+            SetDrivingMode(driving, DefaultDriveDistance,
+                DefaultDriveHeight, DefaultDrivePitch);
+        }
+
+        /// <summary>Modalità di guida con camera specifica per tipo di mezzo.
+        /// La firma storica resta invariata per gli altri chiamanti.</summary>
+        public void SetDrivingMode(bool driving, float distance,
+            float height, float pitch)
+        {
+            if (driving)
+            {
+                driveDistance = distance > 0f ? distance : DefaultDriveDistance;
+                driveHeight = height > 0f ? height : DefaultDriveHeight;
+                drivePitch = pitch;
+            }
+            else
+            {
+                driveDistance = DefaultDriveDistance;
+                driveHeight = DefaultDriveHeight;
+                drivePitch = DefaultDrivePitch;
+            }
             if (drivingMode == driving) return;
             drivingMode = driving;
             ApplyModelVisibility();

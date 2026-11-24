@@ -343,8 +343,14 @@ namespace City.Vehicle
             // puo' vederlo davvero. BuildIfNeeded e' idempotente.
             try
             {
-                var interior = GetComponent<VehicleInterior>();
-                if (interior != null) interior.BuildIfNeeded();
+                // L'abitacolo ha senso solo dentro auto/furgoni/pullman: sulle
+                // moto il guidatore sta sopra la sella e i sedili fluttuanti
+                // sarebbero visibili accanto a lui.
+                if (VehicleMountProfile.KindOf(data) == VehicleMountKind.Inside)
+                {
+                    var interior = GetComponent<VehicleInterior>();
+                    if (interior != null) interior.BuildIfNeeded();
+                }
             }
             catch (System.Exception e)
             {
