@@ -381,6 +381,15 @@ namespace Huntix.Core
                 // Unity conserva il contatore e lo segna in telemetria: non
                 // ricostruisce la cronologia (di competenza del profilo Android)
                 // e non genera uova su un ripristino passivo.
+                // Audit open source: ripristino passivo delle opzioni addittive.
+                // Nessun evento, nessun uovo: Android e' il proprietario dello
+                // stato, Unity si limita a sincronizzare i propri handler.
+                var osFlags = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"openSourceFeatures\"\\s*:\\s*\"([^\"]*)\"");
+                if (osFlags.Success)
+                    City.Diagnostics.OpenSourceFeatureBridge.RestoreFromAndroid(
+                        osFlags.Groups[1].Value);
+
                 var activityLogCount = System.Text.RegularExpressions.Regex.Match(
                     json, "\"activityLogCount\"\\s*:\\s*(\\d+)");
                 if (activityLogCount.Success)
