@@ -332,7 +332,8 @@ sistema input, perché è il punto con minor rischio sull'Universo Unico (DEM, A
   della distanza braccio con la stessa costante di tempo (righe 650-658); duplicarlo avrebbe
   solo introdotto un secondo filtro sullo stesso segnale.
 - **Verifiche**: `cscheck` OK; `backend/test_unity_audit_features.py` → **17 test OK**;
-  `backend/test_audit_regressions.py` → 8 test OK. APK finale e hash nella sezione 12.
+  `backend/test_audit_regressions.py` → 8 test OK. Build e hash dell'epoca nella sezione 12;
+  APK corrente nella sezione 17.
 - **Secondo slice — misura traffico (diagnostica, non policy)**: aggiunto
   `TrafficYieldMeter.cs` e uno slot `traffic` in `PerfProbe` (8→9). `CarAgent.CheckObstacle`
   conta le frenate già presenti davanti a player/pedoni e scrive
@@ -378,18 +379,82 @@ scelta di prodotto, senza importare codice o asset.
   toggle a caldo e persistenza Android→Unity. Nessuna dichiarazione di "più fluido" o
   "sostituzione riuscita" senza collaudo reale.
 
-## 17. Conclusioni e prossimi passi
+## 17. Fase 4 — guida dentro/sopra e colori dei veicoli (24/11)
+
+Dopo la richiesta sulle auto grigie e sulla guidabilità ho aggiunto due slice, sempre
+con il principio **affianca e misura**: nessun sistema di fisica, traffico o rendering
+è stato rimosso, disattivato o sostituito.
+
+- **Colori dei veicoli**: i FBX Kenney Car Kit (CC0, già nel progetto) sono importati
+  con `materialImportMode: 0`, quindi i Renderer restano con il materiale predefinito
+  grigio. `VehicleMaterialFix.cs` applica URP/Lit e l'atlas
+  `Vehicles/Textures/colormap.png` con **un solo materiale condiviso**, innestato sia
+  in `VehicleSpawnManager` (auto parcheggiate) sia in `TrafficCar` (traffico). Il kit
+  Sketchfab dalla licenza non verificata è **esplicitamente escluso** dalla
+  riparazione: conserva i suoi materiali. Nessun modello o codice preso dai 13 clone.
+- **Profilo di guida**: `VehicleMountProfile.cs` distingue `Inside` (auto, furgoni,
+  pullman) da `Straddled` (moto, scooter, bici). Il player resta visibile e viene
+  ancorato al sedile esistente (`driverSeatPos`) oppure sopra la sella; per il pullman
+  esiste una posizione dedicata in cabina. La camera ha profili per tipo (auto
+  invariata `12/5/15`, due ruote `7.5/2.6/8`, pullman `14/6/16`) e torna ai valori
+  storici all'uscita.
+- **Modelli due ruote originali**: `BuildTwoWheelerProcedural` crea telaio, forcella,
+  sella, manubrio e **due** ruote con nodi `wheel-*` già riconosciuti da
+  `WheelSpinner`. Nessun `WheelCollider` aggiunto, nessuna modifica a massa, velocità
+  o numero di veicoli. L'abitacolo lazy viene costruito solo per i mezzi chiusi, così
+  sui due ruote non compaiono sedili fluttuanti.
+- **Riflesso uova**: prima salita dentro → `Uovo del guidatore` (Rare); prima salita
+  sopra → `Uovo del guidatore in sella` (Rare). Percorso canonico `GrantFeatureEgg` →
+  `FeatureEggHidden` → `EggCapturedInCity`, con lat/lng e timestamp.
+- **Bridge bidirezionale**: `VehicleMountChanged{type,mount,code,lat,lng,tsMt}` →
+  Android salva `vehicle_mount` in `huntix_prefs`; `BridgeActivity` lo restituisce a
+  Unity come `vehicleMount` → `GameManager` → `VehicleMountProfile.RestoreFromAndroid`
+  (`notify=false`: nessun evento o uovo duplicato al ripristino).
+- **Misura**: nuovo slot `PerfProbe` `mount` (10→11) per il positioning del guidatore
+  e mark `SessionTelemetry` `VEICOLO salita/presenza`.
+- **Verifiche statiche**: `cscheck` OK; `backend/test_unity_audit_features.py` →
+  **32 test OK**; `backend/test_audit_regressions.py` → 8 test OK;
+  `backend/test_city_recipe.py` → 3 test OK.
+
+### Build finale del profilo di guida (24/11)
+
+Comando: `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 ./build_release.sh --auto`
+(`BUILD_EXIT=0`, AAR Unity/IL2CPP ricreato, `BUILD SUCCESSFUL` due volte, APK firmato,
+nessun `error CS` nel log). Log: `/tmp/opencode/build_vehicle_final.log`.
+
+- APK: `app/build/outputs/apk/release/app-release-signed.apk` —
+  **192.544.881 byte** (184 MiB), SHA-256
+  `03edaee467a1f0593a0c66fd595d8d0cae2884e9137c51cdf8ab3717ce98566e`.
+- `global-metadata.dat` contiene `VehicleMountChanged` (2), `Uovo del guidatore` (2),
+  `VehicleMaterialFix` (4), `BuildTwoWheelerProcedural` (1), `vehicle-mount-` (1),
+  `huntix.vehicle.lastMount` (4), `wheel-front` (1), `straddled` (1),
+  `mountStraddledEggGranted` (1), `driverSeatPos` (1): profilo, uova, materiali e
+  modello due ruote sono compilati in IL2CPP.
+- `classes2.dex` contiene `VehicleMountChanged` (2), `vehicle_mount` (1) e
+  `vehicleMount` (1): il giro completo Unity → Android → Unity è nell'APK.
+- Effetti collaterali della build su `link.xml.meta`, `PlayerLocomotion.controller` e
+  `PlayerHero.prefab` ripristinati prima del commit.
+- **Non verificato su device**: posa seduta (non esiste alcuna clip di animazione
+  seduta nel progetto e non ne è stata importata una), visibilità del modello dentro
+  la carrozzeria, comportamento della camera in movimento, colori percepiti,
+  collisioni, persistenza runtime e fluidità. Nessun claim di "guida migliore" o di
+  miglioramento visivo senza collaudo reale.
+
+## 18. Conclusioni e prossimi passi
 
 L'audit ha prodotto un quadro verificabile dei 13 repository; la fase 2 ha innestato un sistema
 di input opzionale con attribuzione MIT e una misurazione diagnostica del traffico; la fase 3 ha
-affiancato la Città Gioco generata da ricetta. Nessun sistema esistente è stato copiato, duplicato
-o rimosso. Compilazione statica, test e build APK sono passati; **il giudizio finale
+affiancato la Città Gioco generata da ricetta; la fase 4 ha ripristinato i colori Kenney e aggiunto
+il profilo di guida dentro/sopra con bridge e uova. Nessun sistema esistente è stato copiato,
+duplicato o rimosso. Compilazione statica, test e build APK sono passati; **il giudizio finale
 sull'esperienza di gioco resta sospeso fino al collaudo su dispositivo** e alla risoluzione dello
 stall di build del terreno segnalato nel log.
 
 Prossimi passi consigliati: (1) installare l'APK su device e verificare touch/derapata/qualità/uova;
 (2) provare il toggle `Mondo` e leggere `world=`, `citta-gioco:` e `prof=fictional` insieme a
-`touch=`/`crosswalk:`; (3) confrontare sullo stesso device la città OSM e il quartiere fittizio
-prima di decidere cambi di predefinito; (4) raccogliere un nuovo log con i marker del builder per
-diagnosticare lo stall; (5) solo dopo misure, valutare una reimplementazione locale dell'IDM con
-semafori adattivi; (6) decidere se perseguire TLS sul server.
+`touch=`/`crosswalk:`; (3) entrare in un'auto, in un pullman, in una moto e in una bici, leggendo
+`VEICOLO salita` e `mount=` in telemetria e controllando che il personaggio sia visibile dentro
+oppure sopra; (4) confrontare sullo stesso device la città OSM e il quartiere fittizio prima di
+decidere cambi di predefinito; (5) raccogliere un nuovo log con i marker del builder per
+diagnosticare lo stall; (6) solo dopo misure, valutare una reimplementazione locale dell'IDM con
+semafori adattivi; (7) decidere se perseguire TLS sul server.
