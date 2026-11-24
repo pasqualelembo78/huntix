@@ -1,0 +1,15 @@
+# Raw CC0 asset library estratta dai pacchetti tracciati in kit/.
+# Rigenerabile con ./assets/restore.sh: non duplichiamo ~370 MB in Git.
+# I soli asset CC0 effettivamente importati in Unity vivono in
+# unity-project/Assets/Resources/Cinematic/RawCc0/ e sono tracciati.
+characters/
+road/
+nature/
+skyboxes/
+car-kit/
+city-commercial/
+city-suburban/
+city-industrial/
+furniture/
+cube-pets/
+quaternius-downtown/

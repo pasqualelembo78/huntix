@@ -1,0 +1,70 @@
+{
+  "packs": [
+    {
+      "name": "characters",
+      "source": "kit/characters.zip",
+      "sha256": "1d03f1fb001f3cf629425b69c898df58261a316616220ea25b58bd35298e6882",
+      "files": 12
+    },
+    {
+      "name": "road",
+      "source": "kit/road.zip",
+      "sha256": "2c1644a293a85d98837ef788b0cbc4b9d53dffb1280fbe9a4f927b644aaba4b0",
+      "files": 372
+    },
+    {
+      "name": "nature",
+      "source": "kit/kenney_nature-kit.zip",
+      "sha256": "fa7974a0d342bfe63c38664ba9f8ec1a4aab8ea25f099bdc56870e33588c4d9d",
+      "files": 3618
+    },
+    {
+      "name": "skyboxes",
+      "source": "kit/kenney_skyboxes.zip",
+      "sha256": "ff339713105fe1b777ecafa0b66094e8fb1431cfcf88df761b9ad015aadf4028",
+      "files": 12
+    },
+    {
+      "name": "car-kit",
+      "source": "kit/kenney_car-kit.zip",
+      "sha256": "fac7dacac5c7874348cf19729af3ef205f3d366493edaf0a827d93f4fdf3d0c4",
+      "files": 259
+    },
+    {
+      "name": "city-commercial",
+      "source": "kit/kenney_city-kit-commercial_2.1.zip",
+      "sha256": "f8b09b081c2bb88bcc126e2dec1cb40fd0dad7e7e591b6c26aaefe96fb35276b",
+      "files": 219
+    },
+    {
+      "name": "city-suburban",
+      "source": "kit/kenney_city-kit-suburban_20.zip",
+      "sha256": "5869c35cf30b1c87bdb2d197b6d325eebadd2ef08ea27f04797e8e08d77a9a39",
+      "files": 216
+    },
+    {
+      "name": "city-industrial",
+      "source": "kit/kenney_city-kit-industrial_1.0.zip",
+      "sha256": "99a09ff148056678c0c3b7977ad9dbce55d2f243e06fbfc7c28642accef4dd9e",
+      "files": 141
+    },
+    {
+      "name": "furniture",
+      "source": "kit/furniture.zip",
+      "sha256": "e67652d0932cee41683f74711c03d3e192a2af9979ef8e6b237711f5482d46b0",
+      "files": 1546
+    },
+    {
+      "name": "cube-pets",
+      "source": "kit/kenney_cube-pets_1.0.zip",
+      "sha256": "b3bdc99a2ec92c687b875718c5d01e9231d2711ed0e2845f295b474bb42a1283",
+      "files": 129
+    },
+    {
+      "name": "quaternius-downtown",
+      "source": "kit/quaternius.zip",
+      "sha256": "5b1a945576d54cdbb4ccc9c3d52711e6d530da74c74c586407ecc28b165335da",
+      "files": 691
+    }
+  ]
+}
