@@ -14,7 +14,7 @@ namespace City.Diagnostics
     /// </summary>
     public static class PerfProbe
     {
-        private const int SlotCount = 16;
+        private const int SlotCount = 17;
         // "spawn" = istanziazione NPC/veicoli, "roads" = meshing asfalto e
         // marciapiedi. Aggiunti dopo il log 23/11: move/camera/ik/chunk/input
         // sommavano 6-13 ms mentre il frame era a 266-300 ms, quindi il tempo
@@ -27,8 +27,10 @@ namespace City.Diagnostics
         // "diary" copre il ripristino del contatore del registro attività.
         // "bait" copre il ripristino dell'esca attiva e il consumo indoor
         // (Fase 2 · consumabili): nessuna misura per frame, solo gli scambi.
+        // "harvest" copre l'invio della raccolta risorse e il suo ripristino
+        // passivo (Fase 2 · voce 14): solo eventi espliciti del giocatore.
         private static readonly string[] Names =
-            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait" };
+            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait", "harvest" };
         private static readonly float[] Sum = new float[SlotCount];
         private static readonly float[] Peak = new float[SlotCount];
         private static readonly int[] Samples = new int[SlotCount];

@@ -501,6 +501,15 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
                         com.intelligame.huntix.BaitActivity::class.java))
                 }
             })
+        // Fase 2 · voce 14: dove sono state raccolte le risorse e le uova.
+        addView(rowText("🧺 Raccolte nel mondo","vedi uova e luoghi →", "#A5D6A7", "#C8E6C9")
+            .also { row ->
+                row.isClickable = true
+                row.setOnClickListener {
+                    startActivity(Intent(this@buildStatsTab,
+                        com.intelligame.huntix.ResourceHarvestActivity::class.java))
+                }
+            })
         val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))

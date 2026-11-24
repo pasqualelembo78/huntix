@@ -186,6 +186,9 @@
         <!-- Fase 2: scelta esche/consumabili collegati alla cattura -->
         <activity android:name=".BaitActivity"
             android:exported="false" android:screenOrientation="portrait"/>
+        <!-- Fase 2: registro delle risorse raccolte e delle uova posizionali -->
+        <activity android:name=".ResourceHarvestActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".RaidBattleActivity"
             android:exported="false" android:screenOrientation="portrait"/>
 

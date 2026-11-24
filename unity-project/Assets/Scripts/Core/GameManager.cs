@@ -418,6 +418,30 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] esche ripristinate da Android");
                 }
 
+                // Fase 2 · raccolta risorse: Android rimanda solo i contatori.
+                // Unity li conserva per HUD/telemetria; non genera uova e non
+                // applica premi: la fonte di verita' resta il profilo Android.
+                var harvestCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"resourceHarvestCount\"\\s*:\\s*(\\d+)");
+                var harvestKinds = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"resourceHarvestKinds\"\\s*:\\s*(\\d+)");
+                if (harvestCount.Success || harvestKinds.Success)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("harvest"))
+                    {
+                        int raccolte = 0;
+                        int tipi = 0;
+                        if (harvestCount.Success) int.TryParse(harvestCount.Groups[1].Value, out raccolte);
+                        if (harvestKinds.Success) int.TryParse(harvestKinds.Groups[1].Value, out tipi);
+                        PlayerPrefs.SetInt("huntix_resource_harvest_count", raccolte);
+                        PlayerPrefs.SetInt("huntix_resource_harvest_kinds", tipi);
+                        if (City.Diagnostics.SessionTelemetry.Instance != null)
+                            City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                "Raccolte: {0} · tipi: {1}", raccolte, tipi);
+                    }
+                    Debug.Log("[GameManager] raccolte ripristinate da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(

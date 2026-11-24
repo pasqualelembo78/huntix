@@ -168,9 +168,9 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        # SlotCount sale a 16 con lo slot "bait" della Fase 2; gli slot
-        # preesistenti (traffic incluso) restano tutti presenti.
-        self.assertIn("SlotCount = 16", self.probe)
+        # SlotCount sale con gli slot "bait" e "harvest" della Fase 2; gli
+        # slot preesistenti (traffic incluso) restano tutti presenti.
+        self.assertIn("SlotCount = 17", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -710,9 +710,73 @@ class TestFase2ConsumabiliEsca(unittest.TestCase):
         self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
         self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
         self.assertIn('"bait"', self.probe)
-        self.assertIn("SlotCount = 16", self.probe)
+        self.assertIn("SlotCount = 17", self.probe)
         self.assertIn('Measure("bait")', self.manager)
         self.assertIn("Aromi disponibili: {0}", self.manager)
+
+
+class TestFase2RaccoltaRisorse(unittest.TestCase):
+    """Fase 2 · voce 14: raccolta additiva, senza toccare cattura o valute."""
+
+    def setUp(self):
+        app_main = os.path.join(ROOT, "app", "src", "main")
+        java = os.path.join(app_main, "java", "com", "intelligame", "huntix")
+        self.manager_kt = read(os.path.join(java, "managers", "EggResourceHarvestManager.kt"))
+        self.activity = read(os.path.join(java, "ResourceHarvestActivity.kt"))
+        self.profile = read(os.path.join(java, "ui", "PlayerProfileTabs.kt"))
+        self.manifest = read(os.path.join(app_main, "AndroidManifest.xml"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.manager_cs = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.interaction = read(os.path.join(UNITY, "Scripts", "Indoor", "InteractionManager.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_evento_dedicato_senza_cattura_o_valute(self):
+        self.assertIn('"ResourceHarvested"', self.ipc)
+        self.assertIn('"ResourceHarvested" -> handleResourceHarvested', self.bridge)
+        self.assertIn('UnityBridge.SendMessageToAndroid("ResourceHarvested", harvestJson)',
+                      self.interaction)
+        self.assertIn('_currentTarget.action == "collect"', self.interaction)
+        # Una raccolta non genera anche un ConsumableUsed: una sola voce nel
+        # diario e nessun consumo di aroma.
+        self.assertIn('_currentTarget.action != "collect"', self.interaction)
+        # Nessun collegamento al bonus di cattura o alle valute.
+        self.assertNotIn("catchBonus", self.manager_kt)
+        self.assertNotIn("MVC", self.manager_kt)
+        self.assertNotIn("gems", self.manager_kt)
+        self.assertIn("COOLDOWN_MS = 15_000L", self.manager_kt)
+
+    def test_riflesso_uova_posizionale_e_diario_unico(self):
+        self.assertIn('val eggId = "harvest_$id"', self.manager_kt)
+        self.assertIn("EggInventoryManager.getInventory(ctx).any { it.eggId == eggId }",
+                      self.manager_kt)
+        self.assertIn("EggWhereLog.record(ctx, rarity.id, where, lat, lng, name)", self.manager_kt)
+        self.assertIn("EggWhereLog.recordActivity(", self.manager_kt)
+        self.assertIn("OutdoorManager.lastKnownLocation(ctx)", self.manager_kt)
+        self.assertIn("xpReward = 0", self.manager_kt)
+
+    def test_bridge_bidirezionale_e_misure(self):
+        self.assertIn('j.put("resourceHarvestCount"', self.bridge_activity)
+        self.assertIn('j.put("resourceHarvestKinds"', self.bridge_activity)
+        self.assertIn(r'\"resourceHarvestCount\"', self.manager_cs)
+        self.assertIn('PlayerPrefs.SetInt("huntix_resource_harvest_count"', self.manager_cs)
+        self.assertIn('Measure("harvest")', self.manager_cs)
+        self.assertIn('Measure("harvest")', self.interaction)
+        self.assertIn('"harvest"', self.probe)
+        self.assertIn("SlotCount = 17", self.probe)
+        self.assertIn("Raccolte: {0}", self.manager_cs)
+
+    def test_ui_italiano_senza_consumare_inventari_esistenti(self):
+        self.assertIn('android:name=".ResourceHarvestActivity"', self.manifest)
+        self.assertIn("class ResourceHarvestActivity : BaseNavActivity()", self.activity)
+        self.assertIn("com.intelligame.huntix.ResourceHarvestActivity::class.java", self.profile)
+        self.assertIn("val manager = EggResourceHarvestManager", self.activity)
+        self.assertIn("manager.total(c)", self.activity)
+        self.assertIn("manager.allCounts(c)", self.activity)
+        # La raccolta non scala le esche e non usa il secchiello di cattura.
+        self.assertNotIn("EggNutrimentManager.consume", self.manager_kt)
+        self.assertNotIn("CatchToolManager", self.manager_kt)
 
 
 if __name__ == "__main__":

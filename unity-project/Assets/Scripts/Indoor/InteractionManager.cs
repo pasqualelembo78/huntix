@@ -122,11 +122,16 @@ namespace Huntix.Indoor
             // Fase 2 · voce 13: il consumo indoor diventa una voce del diario
             // Android con luogo e coordinate. Nessun premio aggiuntivo: chi
             // gestisce la quantita' e' EggNutrimentManager lato Android.
+            // Fase 2 · voce 14: la raccolta usa un evento DEDICATO, così non
+            // consuma esche e non passa dalla cattura.
             string consumedId = string.IsNullOrEmpty(_currentTarget.itemId)
                 ? _currentTarget.interactionName
                 : _currentTarget.itemId;
-            if (!string.IsNullOrEmpty(consumedId) &&
-                _currentTarget.action != "talk" && _currentTarget.action != "heal")
+            bool isConsumable = !string.IsNullOrEmpty(consumedId) &&
+                _currentTarget.action != "talk" && _currentTarget.action != "heal" &&
+                _currentTarget.action != "collect";
+            bool isHarvest = _currentTarget.action == "collect";
+            if (isConsumable || isHarvest)
             {
                 string lat = "0", lng = "0";
                 if (City.OSM.WorldOrigin.Initialized)
@@ -135,11 +140,25 @@ namespace Huntix.Indoor
                     lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
                     lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
                 }
-                string json = "{\"itemId\":\"" + Esc(consumedId) + "\"," +
-                    "\"action\":\"" + Esc(_currentTarget.action) + "\"," +
-                    "\"place\":\"" + Esc(_currentTarget.interactionName) + "\"," +
-                    "\"lat\":" + lat + ",\"lng\":" + lng + "}";
-                UnityBridge.SendMessageToAndroid("ConsumableUsed", json);
+                string place = Esc(_currentTarget.interactionName);
+                if (isConsumable)
+                {
+                    string json = "{\"itemId\":\"" + Esc(consumedId) + "\"," +
+                        "\"action\":\"" + Esc(_currentTarget.action) + "\"," +
+                        "\"place\":\"" + place + "\"," +
+                        "\"lat\":" + lat + ",\"lng\":" + lng + "}";
+                    UnityBridge.SendMessageToAndroid("ConsumableUsed", json);
+                }
+                if (isHarvest)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("harvest"))
+                    {
+                        string harvestJson = "{\"itemId\":\"" + Esc(consumedId) + "\"," +
+                            "\"place\":\"" + place + "\"," +
+                            "\"lat\":" + lat + ",\"lng\":" + lng + "}";
+                        UnityBridge.SendMessageToAndroid("ResourceHarvested", harvestJson);
+                    }
+                }
             }
 
             // Apply need effect via LocalNeeds (Unity → Android → LocalNeeds.applyAction)

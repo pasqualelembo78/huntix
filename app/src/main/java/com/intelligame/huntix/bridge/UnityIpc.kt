@@ -40,6 +40,9 @@ object UnityIpc {
         // Fase 2 · consumabili: Unity segnala l'oggetto usato indoor; Android
         // consuma la quantita' e registra luogo/coordinate nel diario.
         "ConsumableUsed",
+        // Fase 2 · raccolta risorse: Miacittà segnala l'oggetto raccolto;
+        // Android registra contatore, uovo posizionale e voce nel diario.
+        "ResourceHarvested",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

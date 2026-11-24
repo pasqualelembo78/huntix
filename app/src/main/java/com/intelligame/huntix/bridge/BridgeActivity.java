@@ -166,6 +166,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                         j.put("activeBaitBonus", bait.optDouble("bonus", 1.0));
                         j.put("baitCount", bait.optInt("count", 0));
                     }
+                    // Fase 2 · raccolta risorse: solo lo specchio dei contatori.
+                    // Nessun uovo generato e nessun premio su un ripristino.
+                    org.json.JSONObject harvest =
+                            com.intelligame.huntix.managers.EggResourceHarvestManager.INSTANCE.snapshot(this);
+                    j.put("resourceHarvestCount", harvest.optInt("resourceHarvestCount", 0));
+                    j.put("resourceHarvestKinds", harvest.optInt("resourceHarvestKinds", 0));
+                    j.put("resourceHarvestDetail", harvest.optString("resourceHarvestDetail", ""));
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

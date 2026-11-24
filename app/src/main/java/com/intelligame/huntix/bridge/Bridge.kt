@@ -246,6 +246,9 @@ object Bridge {
             //    Android consuma la quantità solo se corrisponde a un aroma
             //    noto, e registra luogo/coordinate nello stesso diario. ──
             "ConsumableUsed" -> handleConsumableUsed(jsonData)
+            // ── Fase 2 · raccolta risorse: oggetto raccolto in Miacittà.
+            //    Contatore locale, uovo posizionale una tantum e diario. ──
+            "ResourceHarvested" -> handleResourceHarvested(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -537,6 +540,25 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync", "Consumabile usato: $itemId (${j.optString("place", "Miacittà→indoor")})"
         )
+    }
+
+    /**
+     * Fase 2 · voce 14: risorsa raccolta in Miacittà. Evento separato da
+     * `ConsumableUsed` per non consumare esche e non toccare la cattura.
+     * Nessun premio in valuta: solo il contatore, l'uovo posizionale e la
+     * voce nel diario con luogo e coordinate.
+     */
+    private fun handleResourceHarvested(jsonData: String) {
+        val ctx = UnityAppContext.context ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val msg = com.intelligame.huntix.managers.EggResourceHarvestManager.harvest(
+            ctx,
+            j.optString("itemId", ""),
+            j.optString("place", "Miacittà→indoor"),
+            j.optDouble("lat", 0.0),
+            j.optDouble("lng", 0.0)
+        ) ?: return
+        com.intelligame.huntix.AppLog.i("HuntixSync", msg)
     }
 
     /**
