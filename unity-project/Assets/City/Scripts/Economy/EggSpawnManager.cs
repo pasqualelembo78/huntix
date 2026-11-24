@@ -196,6 +196,15 @@ namespace City.Economy
         {
             if (!spawned || player == null) return;
 
+            // SanAndreasUnity (MIT): opzione opt-in con grazia 3 s e isteresi
+            // 60/70 m, un solo controllo al secondo. Se disattivata (default)
+            // la scansione per frame qui sotto resta esattamente la stessa.
+            if (EggCullGrace.Enabled)
+            {
+                EggCullGrace.Tick(eggs, player, Time.time);
+                return;
+            }
+
             // Performance: disable distant eggs
             Vector3 pp = player.position;
             for (int i = 0; i < eggs.Count; i++)

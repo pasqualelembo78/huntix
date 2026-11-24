@@ -158,6 +158,12 @@ namespace City
             // Ultimo mezzo salvato da Android: ripristino passivo, senza uova.
             try { VehicleMountProfile.Initialize(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] VehicleMountProfile.Initialize FALLITO: " + e.Message); }
+            // Audit open source: inizializzazione passiva (nessun uovo all'avvio)
+            // e comandi QA per le opzioni addittive, tutti opt-in.
+            try { City.Economy.EggCullGrace.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] EggCullGrace.Initialize FALLITO: " + e.Message); }
+            try { City.Diagnostics.OpenSourceFeatureCommands.Register(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] OpenSourceFeatureCommands FALLITO: " + e.Message); }
 
             // Realtà aumentata: pulsante PASSA A AR (camera + ARCore + piano).
             try { City.AR.ArCityController.Ensure(); }

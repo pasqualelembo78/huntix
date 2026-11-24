@@ -1041,5 +1041,65 @@ class TestOpenSourceFeatureBridgeInfrastructure(unittest.TestCase):
         self.assertIn('SessionTelemetry.Instance.Mark("os feature %s=%s"', self.bridge)
 
 
+class TestEggCullGraceIntegration(unittest.TestCase):
+    """SanAndreasUnity (MIT): culling uova a 1 Hz con grazia e isteresi."""
+
+    def setUp(self):
+        self.grace = read(os.path.join(UNITY, "City", "Scripts", "Economy", "EggCullGrace.cs"))
+        self.spawn = read(os.path.join(UNITY, "City", "Scripts", "Economy", "EggSpawnManager.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_opt_in_e_valori_invariati(self):
+        self.assertIn("public static bool Enabled { get; private set; }", self.grace)
+        self.assertIn("public const float DeactivateDistance = 60f;", self.grace)
+        self.assertIn("public const float ReactivateDistance = 70f;", self.grace)
+        self.assertIn("public const float GraceSeconds = 3f;", self.grace)
+        self.assertIn("public const float TickSeconds = 1f;", self.grace)
+        self.assertIn("James King", self.grace)
+
+    def test_integrazione_senza_cancellazione(self):
+        self.assertIn("if (EggCullGrace.Enabled)", self.spawn)
+        self.assertIn("EggCullGrace.Tick(eggs, player, Time.time);", self.spawn)
+        self.assertIn("egg.SetActive(false);", self.grace)
+        self.assertIn("egg.SetActive(true);", self.grace)
+        self.assertNotIn("Destroy(", self.grace)
+        self.assertIn("City.Economy.EggCullGrace.Initialize();", self.game)
+        self.assertIn('OpenSourceFeatureBridge.Register(Id, on =>', self.grace)
+
+
+class TestOpenSourceAuditIntegration(unittest.TestCase):
+    """Unity-Rpg, OpenStash, Grand Road Auto e Quaternius: audit locali."""
+
+    def setUp(self):
+        self.audit = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "OpenSourceAudit.cs"))
+        self.menu = read(os.path.join(ROOT, "unity-project", "Assets", "Editor",
+                                      "OpenSourceAuditMenu.cs"))
+        self.commands = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                          "OpenSourceFeatureCommands.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_quattro_sorgenti_distinte(self):
+        for source in ("asset-handles", "resource-defs", "load-lifecycle", "asset-packs"):
+            self.assertIn('"' + source + '"', self.audit)
+
+    def test_controlli_senza_modifiche(self):
+        self.assertIn("GetRawConstantValue()", self.audit)
+        self.assertIn("UnloadRadius", self.audit)
+        self.assertIn("CarsPerTile", self.audit)
+        self.assertIn("PackManifest", self.audit)
+        self.assertIn("CC0", self.audit)
+        self.assertIn("QAL", self.audit)
+        self.assertNotIn("SetValue(", self.audit)
+        self.assertNotIn("TypeNameHandling", self.audit)
+
+    def test_menu_editor_e_console_qa(self):
+        for item in ("Huntix/Audit asset handles", "Huntix/Audit resource definitions",
+                     "Huntix/Audit load lifecycle", "Huntix/Audit pack licenses"):
+            self.assertIn('[MenuItem("' + item + '")]', self.menu)
+        self.assertIn('"osfeature"', self.commands)
+        self.assertIn('"osaudit"', self.commands)
+        self.assertIn("OpenSourceFeatureCommands.Register();", self.game)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
