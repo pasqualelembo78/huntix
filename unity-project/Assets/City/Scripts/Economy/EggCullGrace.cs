@@ -73,6 +73,12 @@ namespace City.Economy
                         changed = true;
                     }
                 }
+                else if (shown && d <= DeactivateDistance)
+                {
+                    // Rientro nel raggio: azzera sempre la tolleranza, altrimenti
+                    // una seconda uscita verrebbe conteggiata dal primo timer.
+                    OutsideSince.Remove(egg);
+                }
                 else if (!shown && d < ReactivateDistance)
                 {
                     egg.SetActive(true);

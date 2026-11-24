@@ -32,7 +32,7 @@ namespace Huntix.Editor
             City.Diagnostics.OpenSourceFeatureBridge.Report(
                 "resource-defs", "Uovo delle risorse", "città→risorse",
                 "file presenti=" + found + "/" + paths.Length,
-                found == paths.Length, paths.Length);
+                found == paths.Length);
         }
 
         [MenuItem("Huntix/Audit load lifecycle")]

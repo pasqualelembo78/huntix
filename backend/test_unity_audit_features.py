@@ -1062,6 +1062,8 @@ class TestEggCullGraceIntegration(unittest.TestCase):
         self.assertIn("EggCullGrace.Tick(eggs, player, Time.time);", self.spawn)
         self.assertIn("egg.SetActive(false);", self.grace)
         self.assertIn("egg.SetActive(true);", self.grace)
+        self.assertIn("shown && d <= DeactivateDistance", self.grace)
+        self.assertIn("OutsideSince.Remove(egg);", self.grace)
         self.assertNotIn("Destroy(", self.grace)
         self.assertIn("City.Economy.EggCullGrace.Initialize();", self.game)
         self.assertIn('OpenSourceFeatureBridge.Register(Id, on =>', self.grace)
