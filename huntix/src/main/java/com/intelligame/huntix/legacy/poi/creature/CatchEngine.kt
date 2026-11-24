@@ -8,13 +8,18 @@ class CatchEngine(private val trainer: Trainer) {
 
     data class CatchResult(val caught: Boolean, val creature: Creature?, val expGuadagnata: Int)
 
-    fun tryCatch(poi: PoiStore, distance: Float): CatchResult {
+    /**
+     * @param catchBonus il valore predefinito 1f lascia INVARIATO il comportamento storico:
+     *        solo l'esca scelta dal giocatore puo' alzare la probabilita'.
+     */
+    fun tryCatch(poi: PoiStore, distance: Float, catchBonus: Float = 1f): CatchResult {
         val specie = speciePerPoi(poi)
         val dentroRaggio = distance <= CATCH_RAGGIO
         if (!dentroRaggio) return CatchResult(false, null, 0)
 
         val roll = rollCattura(specie.rarita)
-        val caught = if (roll) Random.nextDouble(0.0, 1.0) < probabilita(specie.rarita) else false
+        val chance = (probabilita(specie.rarita) * catchBonus.toDouble()).coerceAtMost(0.98)
+        val caught = if (roll) Random.nextDouble(0.0, 1.0) < chance else false
         val exp = if (caught) specie.expBase else 0
         if (caught) notifyCatch(specie, poi)
 

@@ -183,6 +183,9 @@
         <!-- Fase 1: registro attività / diario uova posizionali -->
         <activity android:name=".ActivityLogActivity"
             android:exported="false" android:screenOrientation="portrait"/>
+        <!-- Fase 2: scelta esche/consumabili collegati alla cattura -->
+        <activity android:name=".BaitActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".RaidBattleActivity"
             android:exported="false" android:screenOrientation="portrait"/>
 

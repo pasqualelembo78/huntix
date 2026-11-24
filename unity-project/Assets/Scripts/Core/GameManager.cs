@@ -230,6 +230,12 @@ namespace Huntix.Core
                 case "MVCUpdated":
                     HandleMVCUpdated(jsonData);
                     break;
+                // Fase 2 · consumabili: Android comunica l'aroma scelto (o lo
+                // azzera dopo il lancio). Solo specchio + telemetria: nessun
+                // uovo e nessun premio su questo evento.
+                case "ActiveBaitChanged":
+                    HandleActiveBaitChanged(jsonData);
+                    break;
                 case "setTargetCoord":
                     City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
                     break;
@@ -379,6 +385,39 @@ namespace Huntix.Core
                     }
                 }
 
+                // Fase 2 · consumabili: ripristino passivo dell'esca scelta e
+                // del numero di aromi in inventario. Non si applica alcun
+                // bonus alla cattura e non viene generata nessun uovo: e' uno
+                // specchio dello stato Android, non una nuova autorità.
+                var activeBait = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"activeBaitId\"\\s*:\\s*\"([^\"]+)\"");
+                var baitCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"baitCount\"\\s*:\\s*(\\d+)");
+                var baitBonus = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"activeBaitBonus\"\\s*:\\s*([0-9.]+)");
+                if (activeBait.Success || baitCount.Success)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("bait"))
+                    {
+                        string baitId = activeBait.Success ? activeBait.Groups[1].Value : string.Empty;
+                        PlayerPrefs.SetString("huntix_active_bait", baitId);
+                        int aromi = 0;
+                        if (baitCount.Success) int.TryParse(baitCount.Groups[1].Value, out aromi);
+                        PlayerPrefs.SetInt("huntix_bait_count", aromi);
+                        float multiplier = 1f;
+                        if (baitBonus.Success)
+                            float.TryParse(baitBonus.Groups[1].Value,
+                                System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out multiplier);
+                        PlayerPrefs.SetFloat("huntix_active_bait_bonus", multiplier);
+                        if (City.Diagnostics.SessionTelemetry.Instance != null)
+                            City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                "Aromi disponibili: {0} · esca {1}", aromi,
+                                string.IsNullOrEmpty(baitId) ? "nessuna" : baitId);
+                    }
+                    Debug.Log("[GameManager] esche ripristinate da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(
@@ -422,6 +461,34 @@ namespace Huntix.Core
         private void HandleMVCUpdated(string jsonData)
         {
             Debug.Log($"[GameManager] MVC updated: {jsonData}");
+        }
+
+        /// <summary>
+        /// Fase 2 · voce 13: riceve da Android l'esca attiva. Il bonus non
+        /// viene applicato qui (la cattura resta di competenza Android): Unity
+        /// conserva solo lo specchio per HUD/telemetria.
+        /// </summary>
+        private void HandleActiveBaitChanged(string jsonData)
+        {
+            var foodId = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"foodId\"\\s*:\\s*\"([^\"]+)\"");
+            var bonus = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"bonus\"\\s*:\\s*([0-9.]+)");
+            float multiplier = 1f;
+            if (bonus.Success)
+                float.TryParse(bonus.Groups[1].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out multiplier);
+            string id = foodId.Success ? foodId.Groups[1].Value : string.Empty;
+            using (City.Diagnostics.PerfProbe.Measure("bait"))
+            {
+                PlayerPrefs.SetString("huntix_active_bait", id);
+                PlayerPrefs.SetFloat("huntix_active_bait_bonus", multiplier);
+                if (City.Diagnostics.SessionTelemetry.Instance != null)
+                    City.Diagnostics.SessionTelemetry.Instance.Mark(
+                        "Esca {0} · bonus x{1}", string.IsNullOrEmpty(id) ? "nessuna" : id, multiplier);
+            }
+            Debug.Log("[GameManager] esca da Android: " +
+                (string.IsNullOrEmpty(id) ? "nessuna" : id) + " x" + multiplier);
         }
 
         // ── Esplora: ricezione POI da Android (Overpass) ─────────────

@@ -33,7 +33,15 @@ class CatchController(
         }
     }
 
-    fun attemptCatch(poiId: String, onResult: (CatchOutcome?) -> Unit) {
+    /**
+     * Il bonus dell'esca (Fase 2 · voce 13) e' passato solo da chi ha scelto
+     * esplicitamente un aroma; il default 1f conserva la cattura storica.
+     */
+    fun attemptCatch(
+        poiId: String,
+        onResult: (CatchOutcome?) -> Unit,
+        catchBonus: Float = 1f
+    ) {
         CoroutineScope(Dispatchers.IO).launch {
             val loc = outdoor.currentLocationSync()
             if (loc == null) { onResult(null); return@launch }
@@ -45,7 +53,7 @@ class CatchController(
             val dist = distance(poi, loc)
             val trainer = Persistence.trainer()
             val engine = CatchEngine(trainer)
-            val result = engine.tryCatch(poi, dist)
+            val result = engine.tryCatch(poi, dist, catchBonus)
 
             val outcome = if (result.caught) {
                 val updated = trainer.aggiungiEsperienza(result.expGuadagnata)

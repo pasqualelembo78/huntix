@@ -37,6 +37,9 @@ object UnityIpc {
         "MenuAnimationChanged", "QaConsoleChanged",
         "NpcCompanionChanged", "CompanionRecruited", "CompanionEggSpotted",
         "ActivityLogEvent",
+        // Fase 2 · consumabili: Unity segnala l'oggetto usato indoor; Android
+        // consuma la quantita' e registra luogo/coordinate nel diario.
+        "ConsumableUsed",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

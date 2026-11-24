@@ -168,7 +168,9 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 15", self.probe)
+        # SlotCount sale a 16 con lo slot "bait" della Fase 2; gli slot
+        # preesistenti (traffic incluso) restano tutti presenti.
+        self.assertIn("SlotCount = 16", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -640,6 +642,77 @@ class TestFase1RegistroAttivita(unittest.TestCase):
         self.assertIn('"diary"', self.probe)
         # Il ripristino NON genera uova ne' compagni.
         self.assertIn("ricostruisce la cronologia", self.manager)
+
+
+class TestFase2ConsumabiliEsca(unittest.TestCase):
+    """Fase 2 · voce 13: esca collegata alla cattura senza cambiare default."""
+
+    def setUp(self):
+        app_main = os.path.join(ROOT, "app", "src", "main")
+        java = os.path.join(app_main, "java", "com", "intelligame", "huntix")
+        legacy = os.path.join(ROOT, "huntix", "src", "main", "java",
+                              "com", "intelligame", "huntix", "legacy", "poi")
+        self.bait = read(os.path.join(java, "managers", "EggBaitManager.kt"))
+        self.activity = read(os.path.join(java, "BaitActivity.kt"))
+        self.nutriment = read(os.path.join(java, "EggNutrimentManager.kt"))
+        self.profile = read(os.path.join(java, "ui", "PlayerProfileTabs.kt"))
+        self.manifest = read(os.path.join(app_main, "AndroidManifest.xml"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.controller = read(os.path.join(legacy, "game", "CatchController.kt"))
+        self.engine = read(os.path.join(legacy, "creature", "CatchEngine.kt"))
+        self.manager = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.interaction = read(os.path.join(UNITY, "Scripts", "Indoor", "InteractionManager.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_esca_usa_inventario_esistente_e_default_invariato(self):
+        self.assertIn("EggNutrimentManager.consume(ctx, food)", self.bait)
+        self.assertIn("EggNutrimentManager.calculateCatchBonus(bait.food, element)", self.bait)
+        self.assertIn("fun calculateCatchBonus(food: EggFood, eggElement: EggElement): Float",
+                      self.nutriment)
+        self.assertIn("fun giveStarterKit(ctx: Context)", self.nutriment)
+        self.assertIn("COOLDOWN_MS = 30_000L", self.bait)
+        self.assertIn("DURATION_MS = 5 * 60 * 1000L", self.bait)
+        self.assertIn("catchBonus: Float = 1f", self.engine)
+        self.assertIn("catchBonus: Float = 1f", self.controller)
+        self.assertIn("engine.tryCatch(poi, dist, catchBonus)", self.controller)
+        self.assertIn("coerceAtMost(0.98)", self.engine)
+        self.assertIn("val catchBonus = com.intelligame.huntix.managers.EggBaitManager.consumeForCatch(ctx)",
+                      self.bridge)
+
+    def test_riflesso_uova_posizionale_e_unico(self):
+        self.assertIn('val eggId = "bait_${food.id}"', self.bait)
+        self.assertIn("EggInventoryManager.getInventory(ctx).any { it.eggId == eggId }", self.bait)
+        self.assertIn("EggWhereLog.record(ctx, rarity.id", self.bait)
+        self.assertIn("EggWhereLog.recordActivity(", self.bait)
+        self.assertIn("OutdoorManager.lastKnownLocation(ctx)", self.bait)
+
+    def test_bridge_bidirezionale(self):
+        self.assertIn('"ConsumableUsed"', self.ipc)
+        self.assertIn('"ConsumableUsed" -> handleConsumableUsed', self.bridge)
+        self.assertIn('"ActiveBaitChanged"', self.bait)
+        self.assertIn('PoiUnityBridge.sendEvent("ActiveBaitChanged"', self.bait)
+        self.assertIn('UnityBridge.SendMessageToAndroid("ConsumableUsed", json)', self.interaction)
+        # WorldOrigin vive in City.OSM: il namespace errato City.World non
+        # compila nella build Unity (cscheck non copre Assets/Scripts/Indoor).
+        self.assertIn("City.OSM.WorldOrigin.Initialized", self.interaction)
+        self.assertIn("City.OSM.WorldOrigin.ToGeo", self.interaction)
+        self.assertIn('case "ActiveBaitChanged":', self.manager)
+        self.assertIn('j.put("activeBaitId"', self.bridge_activity)
+        self.assertIn('j.put("baitCount"', self.bridge_activity)
+        self.assertIn(r'\"activeBaitId\"', self.manager)
+        self.assertIn('PlayerPrefs.SetString("huntix_active_bait"', self.manager)
+
+    def test_ui_e_misure(self):
+        self.assertIn('android:name=".BaitActivity"', self.manifest)
+        self.assertIn("class BaitActivity : BaseNavActivity()", self.activity)
+        self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
+        self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
+        self.assertIn('"bait"', self.probe)
+        self.assertIn("SlotCount = 16", self.probe)
+        self.assertIn('Measure("bait")', self.manager)
+        self.assertIn("Aromi disponibili: {0}", self.manager)
 
 
 if __name__ == "__main__":

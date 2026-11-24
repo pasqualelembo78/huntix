@@ -491,6 +491,16 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
                         com.intelligame.huntix.ActivityLogActivity::class.java))
                 }
             })
+        // Fase 2 · voce 13: ingresso alle esche; la quantita' resta quella di
+        // EggNutrimentManager, qui si sceglie solo l'aroma da usare nel lancio.
+        addView(rowText("🍎 Esche per le uova","scegli un aroma →", "#FFCC80", "#FFE0B2")
+            .also { row ->
+                row.isClickable = true
+                row.setOnClickListener {
+                    startActivity(Intent(this@buildStatsTab,
+                        com.intelligame.huntix.BaitActivity::class.java))
+                }
+            })
         val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))

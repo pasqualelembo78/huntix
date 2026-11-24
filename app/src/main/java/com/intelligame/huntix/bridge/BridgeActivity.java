@@ -156,6 +156,16 @@ public class BridgeActivity extends UnityPlayerActivity {
                     // dettaglio resta nel profilo Android, dove e' consultabile.
                     j.put("activityLogCount",
                             com.intelligame.huntix.managers.EggWhereLog.INSTANCE.count(this));
+                    // Fase 2 · consumabili: solo lo specchio dell'esca attiva e
+                    // il numero di aromi disponibili. Nessun premio, nessun
+                    // uovo generato su un ripristino passivo.
+                    String baitSnapshot = com.intelligame.huntix.managers.EggBaitManager.INSTANCE.snapshot(this);
+                    if (baitSnapshot != null && !baitSnapshot.isEmpty()) {
+                        org.json.JSONObject bait = new org.json.JSONObject(baitSnapshot);
+                        j.put("activeBaitId", bait.optString("activeBaitId", ""));
+                        j.put("activeBaitBonus", bait.optDouble("bonus", 1.0));
+                        j.put("baitCount", bait.optInt("count", 0));
+                    }
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

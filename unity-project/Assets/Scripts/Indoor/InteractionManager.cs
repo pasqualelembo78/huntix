@@ -119,6 +119,29 @@ namespace Huntix.Indoor
             // Send result to Android
             UnityBridge.SendMessageToAndroid("IndoorInteractionResult", _currentTarget.ToJson());
 
+            // Fase 2 · voce 13: il consumo indoor diventa una voce del diario
+            // Android con luogo e coordinate. Nessun premio aggiuntivo: chi
+            // gestisce la quantita' e' EggNutrimentManager lato Android.
+            string consumedId = string.IsNullOrEmpty(_currentTarget.itemId)
+                ? _currentTarget.interactionName
+                : _currentTarget.itemId;
+            if (!string.IsNullOrEmpty(consumedId) &&
+                _currentTarget.action != "talk" && _currentTarget.action != "heal")
+            {
+                string lat = "0", lng = "0";
+                if (City.OSM.WorldOrigin.Initialized)
+                {
+                    var g = City.OSM.WorldOrigin.ToGeo(transform.position);
+                    lat = g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                    lng = g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture);
+                }
+                string json = "{\"itemId\":\"" + Esc(consumedId) + "\"," +
+                    "\"action\":\"" + Esc(_currentTarget.action) + "\"," +
+                    "\"place\":\"" + Esc(_currentTarget.interactionName) + "\"," +
+                    "\"lat\":" + lat + ",\"lng\":" + lng + "}";
+                UnityBridge.SendMessageToAndroid("ConsumableUsed", json);
+            }
+
             // Apply need effect via LocalNeeds (Unity → Android → LocalNeeds.applyAction)
             if (!string.IsNullOrEmpty(_currentTarget.need) && _currentTarget.gain > 0)
             {
@@ -142,6 +165,13 @@ namespace Huntix.Indoor
             _currentTarget = null;
 
             UnityBridge.SendMessageToAndroid("IndoorInteractable", "{\"found\":false}");
+        }
+
+        private static string Esc(string value)
+        {
+            return string.IsNullOrEmpty(value)
+                ? string.Empty
+                : value.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         public InteractionComponent GetCurrentTarget() => _currentTarget;

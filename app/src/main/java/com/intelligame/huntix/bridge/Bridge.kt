@@ -242,6 +242,10 @@ object Bridge {
             //    una missione/un evento compiuto; la cronologia resta una
             //    sola con le uova posizionali. ──
             "ActivityLogEvent" -> handleActivityLogEvent(jsonData)
+            // ── Fase 2 · consumabili: oggetto usato indoor in Miacittà.
+            //    Android consuma la quantità solo se corrisponde a un aroma
+            //    noto, e registra luogo/coordinate nello stesso diario. ──
+            "ConsumableUsed" -> handleConsumableUsed(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -505,6 +509,37 @@ object Bridge {
     }
 
     /**
+     * Fase 2 · voce 13: Miacittà ha usato un oggetto consumabile indoor.
+     * Non versa premi e non tocca il wallet: se l'itemId corrisponde a un
+     * aroma noto ne scala la quantità e scrive una voce nel diario, con
+     * luogo e coordinate ricevute da WorldOrigin.
+     */
+    private fun handleConsumableUsed(jsonData: String) {
+        val ctx = UnityAppContext.context ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val itemId = j.optString("itemId", "").trim()
+        if (itemId.isEmpty()) return
+        val food = com.intelligame.huntix.EggNutrimentManager.EggFood.fromId(itemId)
+        if (food != null && com.intelligame.huntix.EggNutrimentManager.getQuantity(ctx, food) > 0) {
+            com.intelligame.huntix.EggNutrimentManager.consume(ctx, food)
+        }
+        val label = if (food != null) "Consumabile: ${food.emoji} ${food.displayName}"
+                    else "Consumabile: $itemId"
+        com.intelligame.huntix.managers.EggWhereLog.recordActivity(
+            ctx,
+            com.intelligame.huntix.managers.EggWhereLog.KIND_EVENT,
+            label,
+            j.optString("place", "Miacittà→indoor"),
+            j.optDouble("lat", 0.0),
+            j.optDouble("lng", 0.0),
+            ""
+        )
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Consumabile usato: $itemId (${j.optString("place", "Miacittà→indoor")})"
+        )
+    }
+
+    /**
      * Uovo del budget comparso in MiCittà: il frame time e' restato sotto
      * soglia per 5 secondi. Non versa nulla nell'inventario (lo fara' la
      * cattura canonica EggCapturedInCity); registra solo l'evento nel mirror
@@ -646,11 +681,14 @@ object Bridge {
         val outdoor = OutdoorManager.get(ctx)
         val repo = PoiRepository(ctx)
         val controller = CatchController(outdoor, repo)
-        controller.attemptCatch(storeId) { outcome ->
+        // Fase 2 · esca: il bonus vale 1f se nessun aroma e' stato scelto,
+        // quindi la cattura storica resta byte-per-byte identica.
+        val catchBonus = com.intelligame.huntix.managers.EggBaitManager.consumeForCatch(ctx)
+        controller.attemptCatch(storeId, { outcome ->
             outcome ?: return@attemptCatch
             val res = outcome.toJson(storeId)
             PoiUnityBridge.sendEvent("CatchResult", res)
-        }
+        }, catchBonus)
     }
     private fun extractJsonField(json: String, key: String): String? =
         "\"$key\"\\s*:\\s*\"([^\"]*)\"".toRegex().find(json)?.groupValues?.get(1)
