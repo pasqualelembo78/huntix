@@ -1710,6 +1710,9 @@ namespace City.UI
         public void ShowDialog(string npcName, string[] lines, System.Action<int> callback)
         {
             if (dialogPanel == null) return;
+            // unity-ai-npc (MIT): solo contenuto offline, opzionale. Senza
+            // persona assegnata l'array e' restituito identico.
+            lines = City.NPC.CityNpcPersonaDefinition.Decorate(npcName, lines);
             dialogLines = lines;
             dialogIndex = 0;
             dialogCallback = callback;

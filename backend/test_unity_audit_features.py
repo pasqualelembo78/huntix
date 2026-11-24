@@ -1101,5 +1101,172 @@ class TestOpenSourceAuditIntegration(unittest.TestCase):
         self.assertIn("OpenSourceFeatureCommands.Register();", self.game)
 
 
+class TestDoorLatchIntegration(unittest.TestCase):
+    """MafiaUnity (Apache-2.0): latch 1s solo dopo teleport riuscito."""
+
+    def setUp(self):
+        self.door = read(os.path.join(UNITY, "City", "Scripts", "World", "InteractDoor.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_default_invariato_e_solo_ramo_teleport(self):
+        self.assertIn("public bool useDoorLatch = false;", self.door)
+        self.assertIn("if (opensShop && shop != null)", self.door)
+        self.assertIn("if (useDoorLatch && Time.unscaledTime < _latchUntil) return;", self.door)
+        self.assertIn("Game.Instance.TeleportPlayer(destination.position, destinationRotation);",
+                      self.door)
+        self.assertIn("_latchUntil = Time.unscaledTime + 1f;", self.door)
+        self.assertIn("public static void SetLatchAll(bool on)", self.door)
+
+    def test_inizializzazione_e_riflesso_uovo_once(self):
+        self.assertIn("City.World.InteractDoor.Initialize();", self.game)
+        self.assertIn("OpenSourceFeatureBridge.Register(\n                \"door-latch\"", self.door)
+        self.assertIn("if (!_eggGranted)", self.door)
+        self.assertIn("\"door-latch\", \"Uovo dietro la porta\"", self.door)
+        self.assertNotIn("DoorEggHint", self.door)  # usa il canale condiviso
+
+
+class TestEggJournalIntegration(unittest.TestCase):
+    """3ddriving (senza licenza): cache atomica dell'idea, non del codice."""
+
+    def setUp(self):
+        self.journal = read(os.path.join(UNITY, "City", "Scripts", "Economy", "EggJournal.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_scrittura_atomica_e_versione(self):
+        self.assertIn("public const int Version = 1;", self.journal)
+        self.assertIn("public const int MaxEntries = 200;", self.journal)
+        for token in ('FileName = "egg-journal.json"', 'BackupName = "egg-journal.backup.json"',
+                      'TempName = "egg-journal.json.tmp"'):
+            self.assertIn(token, self.journal)
+        self.assertIn("File.WriteAllText(tmp, JsonUtility.ToJson(data));", self.journal)
+        self.assertIn("File.Copy(main, backup, true);", self.journal)
+        self.assertIn("File.Copy(tmp, main, true);", self.journal)
+        self.assertIn("File.Delete(tmp);", self.journal)
+
+    def test_sanitize_e_non_autoritativo(self):
+        self.assertIn("public static JournalData Sanitize(JournalData input)", self.journal)
+        self.assertIn("result.entries.Count < MaxEntries", self.journal)
+        self.assertIn("!seen.Add(e.eggId)", self.journal)
+        self.assertIn("e.capturedAt > now", self.journal)
+        self.assertIn("City.Diagnostics.OpenSourceFeatureBridge.Enabled(Id)", self.journal)
+        self.assertIn("City.Economy.EggJournal.Record(featureId, lat, lng", self.game)
+        self.assertIn("City.Economy.EggJournal.Initialize();", self.game)
+        self.assertIn("non autoritativa", self.journal)
+        self.assertNotIn("SaveData(", self.journal)
+
+
+class TestEggCompassAssistIntegration(unittest.TestCase):
+    """Android_Unity3D_OpenWorld (senza licenza): idea della soglia, non codice."""
+
+    def setUp(self):
+        self.assist = read(os.path.join(UNITY, "City", "Scripts", "Player", "EggCompassAssist.cs"))
+        self.rig = read(os.path.join(UNITY, "City", "Scripts", "Player", "CameraRig.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_soglia_e_limite_angolare(self):
+        self.assertIn("public const float SpeedThresholdMps = 2f;", self.assist)
+        self.assertIn("public const float MaxDegreesPerSecond = 15f;", self.assist)
+        self.assertIn("public const float MaxTargetDistanceM = 120f;", self.assist)
+        self.assertIn("if (speedMps >= SpeedThresholdMps) return;", self.assist)
+        self.assertIn("Quaternion.RotateTowards(rig.MovementBasis, target,", self.assist)
+        self.assertIn("rig.SetYaw(next);", self.assist)
+        self.assertIn('PerfProbe.Measure("camera")', self.assist)
+
+    def test_hook_dentro_update_e_opt_in(self):
+        self.assertIn("City.Player.EggCompassAssist.Enabled && Game.Instance != null", self.rig)
+        self.assertIn("CurrentVehicle.GetCurrentSpeedKmh() / 3.6f", self.rig)
+        self.assertIn("City.Player.EggCompassAssist.Initialize();", self.game)
+        self.assertIn("OpenSourceFeatureBridge.Register(Id, on => Enabled = on);", self.assist)
+        # Lo hook deve stare dentro Update(): il metodo seguente e' LateUpdate.
+        update = self.rig.index("private void Update()")
+        late = self.rig.index("private void LateUpdate()")
+        hook = self.rig.index("EggCompassAssist.Apply(this")
+        self.assertTrue(update < hook < late, "hook bussola fuori da Update()")
+        self.assertIn("Nessun codice o asset del repository e' stato copiato", self.assist)
+
+
+class TestCameraCollisionRadiusIntegration(unittest.TestCase):
+    """dbrizov (MIT): raggio frustum additivo, default 0.22 invariato."""
+
+    def setUp(self):
+        self.radius = read(os.path.join(UNITY, "City", "Scripts", "Player",
+                                        "CameraCollisionRadius.cs"))
+        self.rig = read(os.path.join(UNITY, "City", "Scripts", "Player", "CameraRig.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_formula_e_clamp(self):
+        self.assertIn("public static float FromCamera(float fovDegrees, float aspect,", self.radius)
+        self.assertIn("Mathf.Deg2Rad", self.radius)
+        self.assertIn("Mathf.Tan(halfFov)", self.radius)
+        self.assertIn("halfWidth = halfHeight * aspect", self.radius)
+        self.assertIn("Mathf.Clamp(radius * multiplier, MinRadius, MaxRadius)", self.radius)
+        self.assertIn("Copyright (c) 2015 Denis", self.radius)
+
+    def test_default_invariato(self):
+        self.assertIn("private const float ArmRadius = 0.22f;", self.rig)
+        self.assertIn("public bool useFrustumCollisionRadius = false;", self.rig)
+        self.assertIn("float castRadius = ArmRadius;", self.rig)
+        self.assertIn("if (useFrustumCollisionRadius && _sceneCamera != null)", self.rig)
+        self.assertIn("CameraCollisionRadius.FromCamera(", self.rig)
+        self.assertIn("City.Player.CameraCollisionRadius.Initialize();", self.game)
+        self.assertIn("nessun cambio del\n// raggio 0.22 m esistente", self.radius)
+
+
+class TestNpcPersonaDefinitionIntegration(unittest.TestCase):
+    """unity-ai-npc (MIT): persona offline, zero rete/LLM."""
+
+    def setUp(self):
+        self.persona = read(os.path.join(UNITY, "City", "Scripts", "NPC",
+                                         "CityNpcPersonaDefinition.cs"))
+        self.ui = read(os.path.join(UNITY, "City", "Scripts", "UI", "UIManager.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_solo_contenuto_offline(self):
+        self.assertIn("class CityNpcPersonaDefinition : ScriptableObject", self.persona)
+        self.assertIn("public string eggHintLine;", self.persona)
+        self.assertIn("public string eggPlaceHint;", self.persona)
+        self.assertIn("public static string[] Decorate(string npcName, string[] lines)",
+                      self.persona)
+        self.assertIn("Revealed.Contains(persona.npcName)", self.persona)
+        for forbidden in ("UnityWebRequest", "HttpClient", "apiKey",
+                          "OpenAIProvider", "ILLMProvider"):
+            self.assertNotIn(forbidden, self.persona)
+        self.assertIn("Harun Doğacan", self.persona)
+
+    def test_dialogo_identico_senza_persona(self):
+        self.assertIn("lines = City.NPC.CityNpcPersonaDefinition.Decorate(npcName, lines);",
+                      self.ui)
+        self.assertIn("City.NPC.CityNpcPersonaDefinition.Initialize();", self.game)
+        self.assertIn("return lines;", self.persona)
+
+
+class TestNpcMissionDefinitionIntegration(unittest.TestCase):
+    """ai-npc-quest (MIT): definizione opzionale, generatore intatto."""
+
+    def setUp(self):
+        self.definition = read(os.path.join(UNITY, "City", "Scripts", "Economy",
+                                            "NpcMissionDefinition.cs"))
+        self.mission = read(os.path.join(UNITY, "City", "Scripts", "Economy", "NPCMission.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+
+    def test_apply_senza_sostituire_il_generatore(self):
+        self.assertIn("class NpcMissionDefinition : ScriptableObject", self.definition)
+        self.assertIn("public static void TryApply(ref NPCMission.MissionData data)",
+                      self.definition)
+        self.assertIn("NpcMissionDefinition.TryApply(ref data);", self.mission)
+        self.assertIn("data.missionId = \"mission_\" + seed;", self.mission)
+        self.assertIn("City.Economy.NpcMissionDefinition.Initialize();", self.game)
+        self.assertIn("Copyright (c) 2025 Elitania", self.definition)
+        for forbidden in ("SQLiteConnection", "OpenAIProvider", "APIManager"):
+            self.assertNotIn(forbidden, self.definition)
+
+    def test_meta_unity_presenti(self):
+        for rel in ("Economy/EggJournal.cs", "Economy/NpcMissionDefinition.cs",
+                    "NPC/CityNpcPersonaDefinition.cs", "Player/CameraCollisionRadius.cs",
+                    "Player/EggCompassAssist.cs"):
+            path = os.path.join(UNITY, "City", "Scripts", rel + ".meta")
+            self.assertTrue(os.path.exists(path), "meta mancante: " + path)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

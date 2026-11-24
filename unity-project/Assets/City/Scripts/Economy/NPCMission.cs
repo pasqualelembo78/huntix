@@ -73,6 +73,9 @@ namespace City.Economy
             }
 
             data.missionId = "mission_" + seed;
+            // ai-npc-quest-framework (MIT): definizione opzionale, nessun
+            // cambio al generatore quando non ci sono asset assegnati.
+            NpcMissionDefinition.TryApply(ref data);
             return data;
         }
 
