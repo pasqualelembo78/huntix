@@ -232,6 +232,12 @@ object Bridge {
             //    Preferenze persistenti, rispedite a Unity in openUnityActivity. ──
             "MenuAnimationChanged" -> handleMenuAnimationChanged(jsonData)
             "QaConsoleChanged" -> handleQaConsoleChanged(jsonData)
+            // ── Compagno NPC (pattern MIT SanAndreasUnity): preferenza e
+            //    avvistamenti uovo con posizione, rimandati a Unity in
+            //    openUnityActivity. Nessun nuovo file di preferenze. ──
+            "NpcCompanionChanged" -> handleNpcCompanionChanged(jsonData)
+            "CompanionRecruited" -> handleCompanionRecruited(jsonData)
+            "CompanionEggSpotted" -> handleCompanionEggSpotted(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -415,6 +421,60 @@ object Bridge {
             .edit().putBoolean("qa_console", j.optBoolean("enabled", false)).apply()
         com.intelligame.huntix.AppLog.i(
             "HuntixSync", "Console QA MiCittà: ${j.optBoolean("enabled", false)}"
+        )
+    }
+
+    /** Compagno NPC: preferenza scelta in MiCittà. Rimandata a Unity
+     *  all'apertura successiva; lo spegnimento dimentica il nome del pedone. */
+    private fun handleNpcCompanionChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val ctx = UnityAppContext.context ?: return
+        val enabled = j.optBoolean("enabled", false)
+        val editor = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE).edit()
+        editor.putBoolean("npc_companion", enabled)
+        if (!enabled) {
+            editor.remove("npc_companion_name")
+            editor.remove("npc_companion_id")
+        }
+        editor.apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Compagno NPC MiCittà: $enabled"
+        )
+    }
+
+    /** Pedone reclutato (o congedato, quando name e' vuoto): Android ricorda
+     *  chi segue il player e il luogo dell'arruolamento per il ripristino. */
+    private fun handleCompanionRecruited(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val ctx = UnityAppContext.context ?: return
+        val name = j.optString("name", "").trim()
+        val editor = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE).edit()
+        if (name.isEmpty()) {
+            editor.remove("npc_companion_name")
+            editor.remove("npc_companion_id")
+        } else {
+            editor.putString("npc_companion_name", name)
+            editor.putString("npc_companion_id", j.optString("npcId", ""))
+        }
+        editor.apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Compagno MiCittà: name=$name npcId=${j.optString("npcId", "-")} " +
+                "lat=${j.optDouble("lat", 0.0)} lng=${j.optDouble("lng", 0.0)} " +
+                "place=${j.optString("place", "-")}"
+        )
+    }
+
+    /** Avvistamento uovo da parte del compagno: l'uovo vero passa da
+     *  FeatureEggHidden e dalla cattura canonica. Qui si registra solo chi
+     *  l'ha segnalato e dove, senza versare ricompense. */
+    private fun handleCompanionEggSpotted(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Uovo segnalato da ${j.optString("name", "compagno")} " +
+                "(${j.optString("npcId", "-")}) lat=${j.optDouble("lat", 0.0)} " +
+                "lng=${j.optDouble("lng", 0.0)} place=${j.optString("place", "-")}"
         )
     }
 

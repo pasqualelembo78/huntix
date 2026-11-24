@@ -303,6 +303,23 @@ namespace City
             if (EggSpawnManager.Instance == null || player == null) return;
             Vector3 at = player.transform.position +
                 player.transform.right * 2.5f + Vector3.up * 0.4f;
+            SpawnFeatureEggAt(featureId, label, rarity, place, at);
+        }
+
+        /// <summary>Uovo del compagno NPC: stessa cattura canonica delle altre
+        /// uova-feature, ma piazzato accanto al pedone reclutato. Il bridge
+        /// FeatureEggHidden e EggCapturedInCity restano identici, cosi'
+        /// Android registra luogo e coordinate senza nuovi formati.</summary>
+        public void GrantCompanionEgg(string featureId, string label, Vector3 at, string place)
+        {
+            if (EggSpawnManager.Instance == null || player == null) return;
+            SpawnFeatureEggAt(featureId, label,
+                EggController.Rarity.Rare, place, at);
+        }
+
+        private void SpawnFeatureEggAt(string featureId, string label,
+            City.Economy.EggController.Rarity rarity, string place, Vector3 at)
+        {
             var egg = EggSpawnManager.Instance.SpawnRewardEgg(
                 at, rarity, City.Economy.EggController.EggType.Strada, place);
             if (egg == null) return;

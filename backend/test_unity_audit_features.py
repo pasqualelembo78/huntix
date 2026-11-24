@@ -168,7 +168,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
         self.assertNotIn("currentSpeed = Mathf.Min", self.meter)
 
     def test_slot_probe_e_telemetria(self):
-        self.assertIn("SlotCount = 13", self.probe)
+        self.assertIn("SlotCount = 14", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -496,6 +496,84 @@ class TestEditorMeshTools(unittest.TestCase):
         self.assertIn("Undo.RecordObject", self.tools)
         self.assertNotIn("MonoBehaviour", self.tools)
         self.assertIn("non componenti runtime", self.tools)
+
+
+class TestNpcCompanion(unittest.TestCase):
+    """Compagno NPC: pattern MIT riscritto, affiancato, con uovo e bridge."""
+
+    def setUp(self):
+        self.companion = read(os.path.join(UNITY, "City", "Scripts", "NPC",
+                                          "NpcCompanion.cs"))
+        self.npc = read(os.path.join(UNITY, "City", "Scripts", "NPC",
+                                     "NPCController.cs"))
+        self.actions = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                         "ContextActionController.cs"))
+        self.ui = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                    "UIManager.cs"))
+        self.menu = read(os.path.join(UNITY, "City", "Scripts", "UI",
+                                      "HamburgerMenu.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(ROOT, "unity-project", "Assets", "Scripts",
+                                         "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(ROOT, "app", "src", "main", "java",
+                                          "com", "intelligame", "huntix",
+                                          "bridge", "BridgeActivity.java"))
+
+    def test_attribuzione_e_riscrittura_originale(self):
+        self.assertIn("SanAndreasUnity", self.companion)
+        self.assertIn("James King", self.companion)
+        self.assertIn("Riscritto da zero", self.companion)
+        # Le dipendenze rimosse possono comparire nelle note di attribuzione:
+        # il controllo verte sul codice effettivo, non sui commenti.
+        code = "\n".join(line for line in self.companion.splitlines()
+                         if not line.lstrip().startswith("//"))
+        for banned in ("using SanAndreasUnity", "using Mirror", "using UGameCore",
+                       "PedestrianDef", "NodeReader", "UnityEditor", "GTA"):
+            self.assertNotIn(banned, code)
+        self.assertNotIn("RagdollBuilder", code)
+
+    def test_default_inattivo_e_affiancato(self):
+        self.assertIn("PlayerPrefs.GetInt(PrefsKey, 0)", self.companion)
+        self.assertIn("public static bool Enabled", self.companion)
+        self.assertIn("Compagno NPC: Off", self.menu)
+        self.assertIn("ToggleNpcCompanion()", self.menu)
+        self.assertIn("City.NPC.NpcCompanion.Initialize()", self.ui)
+        self.assertIn('Make("PORTA CON TE"', self.actions)
+        self.assertIn("TryRecruit(nearNPC)", self.actions)
+
+    def test_follow_mode_non_distrugge_il_pedone(self):
+        self.assertIn("public bool FollowMode;", self.npc)
+        self.assertIn("if (FollowMode)", self.npc)
+        self.assertIn("private void TickFollow()", self.npc)
+        self.assertIn("SnapToGround();", self.npc)
+        self.assertIn("_companion.FollowTarget = game.player.transform.position",
+                      self.companion)
+        self.assertIn("PerfProbe.Measure(\"companion\")", self.companion)
+
+    def test_uovo_con_posizione_e_cattura_canonica(self):
+        self.assertIn("GrantCompanionEgg(\"companion-recruit\"", self.companion)
+        self.assertIn("GrantCompanionEgg(\"companion-spot-\" + _spots", self.companion)
+        self.assertIn("public void GrantCompanionEgg(", self.game)
+        self.assertIn("SpawnFeatureEggAt(featureId, label,", self.game)
+        self.assertIn('"FeatureEggHidden"', self.game)
+        self.assertIn("WorldOrigin.ToGeo(at)", self.companion)
+        self.assertIn("città→pedone→compagno→", self.companion)
+        self.assertIn("città→compagno→avvistamento→", self.companion)
+
+    def test_bridge_bidirezionale_e_ripristino_passivo(self):
+        for token in ('"NpcCompanionChanged"', '"CompanionRecruited"',
+                      '"CompanionEggSpotted"'):
+            self.assertIn(token, self.ipc)
+            self.assertIn(token + ' -> ', self.bridge)
+        self.assertIn('putBoolean("npc_companion"', self.bridge)
+        self.assertIn('putString("npc_companion_name"', self.bridge)
+        self.assertIn('j.put("npcCompanion", true)', self.activity)
+        self.assertIn(r'\"npcCompanion\"', self.manager)
+        self.assertIn("NpcCompanion.RestoreFromAndroid(", self.manager)
+        self.assertIn("Restore passivo", self.manager)
+        self.assertIn("nessun uovo viene dato", self.companion)
 
 
 if __name__ == "__main__":

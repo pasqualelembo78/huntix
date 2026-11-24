@@ -1008,6 +1008,7 @@ namespace City.UI
             City.Diagnostics.HuntixDebugConsole.Initialize();
             if (City.Diagnostics.HuntixDebugConsole.Enabled)
                 City.Diagnostics.HuntixDebugConsole.Ensure();
+            City.NPC.NpcCompanion.Initialize();
 
             // --- pulsante LAVORI: accesso diretto al pannello dei lavori
             // (Tassista/Corriere/Ronda), una delle funzioni core del gioco.

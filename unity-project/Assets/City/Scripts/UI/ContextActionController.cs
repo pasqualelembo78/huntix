@@ -122,6 +122,13 @@ namespace City.UI
                 if (FamilyManager.IsSpouse(cid)) return "CONIUGE";
                 if (FamilyManager.CanMarry(cid)) return "SPOSATI";
                 if (FamilyManager.CanEngage(cid)) return "FIDANZATI";
+                // Innesto affiancato: la nuova azione compare solo se l'utente
+                // ha attivato il compagno e non ne ha gia' uno.
+                if (City.NPC.NpcCompanion.Enabled &&
+                    nearNPC.GetComponent<City.Economy.NPCMission>() == null &&
+                    (City.NPC.NpcCompanion.Instance == null ||
+                     !City.NPC.NpcCompanion.Instance.HasCompanion))
+                    return "PORTA CON TE";
                 return "PARLA";
             }
             if (g != null && g.CurrentVehicleFocus != null &&
@@ -192,6 +199,13 @@ namespace City.UI
             if (nearNPC != null)
             {
                 outList.Add(Make("PARLA", () => DoTalk()));
+                if (City.NPC.NpcCompanion.Enabled)
+                {
+                    var comp = City.NPC.NpcCompanion.Ensure();
+                    if (!comp.HasCompanion &&
+                        nearNPC.GetComponent<City.Economy.NPCMission>() == null)
+                        outList.Add(Make("PORTA CON TE", () => comp.TryRecruit(nearNPC)));
+                }
                 AddFamilyActions(outList);
                 outList.Add(Make("CALCIO", () => DoKick(true)));
                 outList.Add(Make("SPINTONA", () => DoKick(false)));
@@ -565,6 +579,11 @@ namespace City.UI
             if (m != null)
             {
                 m.OnPlayerInteract();
+            }
+            else if (City.NPC.NpcCompanion.Enabled &&
+                     City.NPC.NpcCompanion.Ensure().TryRecruit(nearNPC))
+            {
+                return;
             }
             else
             {

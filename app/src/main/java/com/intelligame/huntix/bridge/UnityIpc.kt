@@ -35,6 +35,7 @@ object UnityIpc {
         "EggCapturedInCity", "BudgetEggSpawned", "FeatureEggHidden", "CityQualityChanged",
         "AltTouchChanged", "WorldModeChanged", "VehicleMountChanged",
         "MenuAnimationChanged", "QaConsoleChanged",
+        "NpcCompanionChanged", "CompanionRecruited", "CompanionEggSpotted",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

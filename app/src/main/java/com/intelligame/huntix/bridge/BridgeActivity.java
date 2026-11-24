@@ -137,6 +137,19 @@ public class BridgeActivity extends UnityPlayerActivity {
                     boolean qaConsole = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
                             .getBoolean("qa_console", false);
                     if (qaConsole) j.put("qaConsole", true);
+                    // Compagno NPC: preferenza e ultimo pedone salvati da Android,
+                    // ripristinati passivamente in GameManager (nessun uovo all'avvio).
+                    boolean npcCompanion = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                            .getBoolean("npc_companion", false);
+                    if (npcCompanion) {
+                        j.put("npcCompanion", true);
+                        String compName = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                                .getString("npc_companion_name", null);
+                        String compId = getSharedPreferences("huntix_prefs", MODE_PRIVATE)
+                                .getString("npc_companion_id", null);
+                        if (compName != null && !compName.isEmpty()) j.put("npcCompanionName", compName);
+                        if (compId != null && !compId.isEmpty()) j.put("npcCompanionId", compId);
+                    }
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

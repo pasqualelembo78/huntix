@@ -336,6 +336,25 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] console QA ripristinata da Android: on");
                 }
 
+                // Compagno NPC: Android rimanda la preferenza e il nome dell'
+                // ultimo pedone. Restore passivo: nessun compagno appare e
+                // nessun uovo viene assegnato all'avvio.
+                var npcCompanion = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"npcCompanion\"\\s*:\\s*true");
+                if (npcCompanion.Success)
+                {
+                    var compName = System.Text.RegularExpressions.Regex.Match(
+                        json, "\"npcCompanionName\"\\s*:\\s*\"([^\"]+)\"");
+                    var compId = System.Text.RegularExpressions.Regex.Match(
+                        json, "\"npcCompanionId\"\\s*:\\s*\"([^\"]+)\"");
+                    City.NPC.NpcCompanion.Initialize();
+                    City.NPC.NpcCompanion.Ensure();
+                    City.NPC.NpcCompanion.RestoreFromAndroid(
+                        compName.Success ? compName.Groups[1].Value : "",
+                        compId.Success ? compId.Groups[1].Value : "");
+                    Debug.Log("[GameManager] compagno NPC ripristinato da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(

@@ -28,6 +28,7 @@ namespace City.UI
         private Text _worldLabel;
         private Text _menuAnimLabel;
         private Text _qaConsoleLabel;
+        private Text _companionLabel;
         private Transform _canvas;
 
         private static readonly Color Bg = new Color(0.09f, 0.11f, 0.16f, 0.97f);
@@ -165,7 +166,7 @@ namespace City.UI
             prt.anchorMin = prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
             prt.anchoredPosition = new Vector2(-16f, 0f);
-            prt.sizeDelta = new Vector2(360f, 908f);
+            prt.sizeDelta = new Vector2(360f, 982f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -182,6 +183,7 @@ namespace City.UI
                 "Mondo: Reale",
                 "Animazione menu: Huntix",
                 "Console QA: Off",
+                "Compagno NPC: Off",
             };
             System.Action[] actions =
             {
@@ -226,6 +228,7 @@ namespace City.UI
                 () => ToggleWorldMode(),
                 () => ToggleMenuAnimation(),
                 () => ToggleQaConsole(),
+                () => ToggleNpcCompanion(),
             };
 
             for (int i = 0; i < labels.Length; i++)
@@ -250,6 +253,7 @@ namespace City.UI
                 if (idx == 9) _worldLabel = lbl;
                 if (idx == 10) _menuAnimLabel = lbl;
                 if (idx == 11) _qaConsoleLabel = lbl;
+                if (idx == 12) _companionLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -299,6 +303,7 @@ namespace City.UI
                 RefreshWorldLabel();
                 RefreshMenuAnimLabel();
                 RefreshQaConsoleLabel();
+                RefreshNpcCompanionLabel();
             }
             panel.SetActive(v);
         }
@@ -395,6 +400,25 @@ namespace City.UI
             City.Diagnostics.HuntixDebugConsole.SetEnabled(
                 !City.Diagnostics.HuntixDebugConsole.Enabled, true);
             RefreshQaConsoleLabel();
+        }
+
+        // ---- compagno NPC (pattern MIT SanAndreasUnity, riscritto) ----
+
+        private void RefreshNpcCompanionLabel()
+        {
+            if (_companionLabel == null) return;
+            _companionLabel.text = "Compagno NPC: " +
+                (City.NPC.NpcCompanion.Enabled ? "On" : "Off");
+        }
+
+        private void ToggleNpcCompanion()
+        {
+            City.NPC.NpcCompanion.SetEnabled(!City.NPC.NpcCompanion.Enabled, true);
+            RefreshNpcCompanionLabel();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(City.NPC.NpcCompanion.Enabled
+                    ? "Compagno NPC: avvicinati a un pedone e scegli 'PORTA CON TE'"
+                    : "Compagno NPC disattivato");
         }
 
         // ---- stile edifici (fluidita' / qualita') ----

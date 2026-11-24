@@ -18,6 +18,16 @@ namespace City.NPC
         public float pauseMin = 2f;
         public float pauseMax = 6f;
 
+        // ── modalita' compagno (innesto affiancato 24/11) ──
+        // Finche' FollowMode e' false il pedone fa ESATTAMENTE quello che
+        // faceva prima: waypoint, routine giornaliera, bisogni. Quando un
+        // compagno viene reclutato, NpcCompanion scrive qui il bersaglio in
+        // coordinate mondo e il pedone lo segue mantenendo lo snap a terra.
+        public bool FollowMode;
+        public Vector3 FollowTarget;
+        public float followSpeed = 3.1f;
+        public float followStopDistance = 2.2f;
+
         private Vector3[] waypoints;
         private int currentTarget;
         private bool walking;
@@ -888,6 +898,14 @@ namespace City.NPC
             // non restano appesi a y=0.12 quando si fermano sul marciapiede.
             SnapToGround();
 
+            // Compagno: sostituisce solo lo spostamento verso il waypoint.
+            // Culling, nome, bisogni, routine e snap a terra restano attivi.
+            if (FollowMode)
+            {
+                TickFollow();
+                return;
+            }
+
             if (!walking)
             {
                 pauseTimer -= Time.deltaTime;
@@ -1007,6 +1025,43 @@ namespace City.NPC
         }
 
         private float _flightLogNextAt;
+
+        /// <summary>Spostamento del compagno verso il player. I waypoint del
+        /// pedone restano intatti: se il compagno viene congedato, riprende
+        /// la passeggiata da dove era senza ricostruire nulla.</summary>
+        private void TickFollow()
+        {
+            Vector3 localTarget = transform.parent != null
+                ? transform.parent.InverseTransformPoint(FollowTarget)
+                : FollowTarget;
+            Vector3 npcLocal = transform.localPosition;
+            Vector3 dir = localTarget - npcLocal;
+            dir.y = 0f;
+            float dist = dir.magnitude;
+            float stop = Mathf.Max(0.5f, followStopDistance);
+
+            if (dist <= stop)
+            {
+                walking = false;
+                SetAnimSpeed(0f);
+                return;
+            }
+
+            walking = true;
+            float speed = Mathf.Max(0.2f, followSpeed);
+            // Non superare il bersaglio in un singolo frame (framerate basso):
+            // il compagno si ferma esattamente alla distanza di sicurezza.
+            if (speed * Time.deltaTime > dist - stop)
+                speed = Mathf.Max(0.2f, (dist - stop) / Mathf.Max(0.001f, Time.deltaTime));
+            Vector3 move = dir.normalized * speed * Time.deltaTime;
+            npcLocal += move;
+            transform.localPosition = npcLocal;
+
+            Quaternion look = Quaternion.LookRotation(dir.normalized,
+                TileElevation.SlopeUpAtWorld(transform.position, MaxPedInclineDeg));
+            transform.rotation = Quaternion.Slerp(transform.rotation, look, 8f * Time.deltaTime);
+            SetAnimSpeed(speed);
+        }
 
         private CharacterWalker walker;
         private Animator animator;
