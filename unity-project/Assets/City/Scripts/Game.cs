@@ -162,6 +162,18 @@ namespace City
             // e comandi QA per le opzioni addittive, tutti opt-in.
             try { City.Economy.EggCullGrace.Initialize(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] EggCullGrace.Initialize FALLITO: " + e.Message); }
+            try { City.World.InteractDoor.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] InteractDoor.Initialize FALLITO: " + e.Message); }
+            try { City.Economy.EggJournal.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] EggJournal.Initialize FALLITO: " + e.Message); }
+            try { City.Player.EggCompassAssist.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] EggCompassAssist.Initialize FALLITO: " + e.Message); }
+            try { City.Player.CameraCollisionRadius.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] CameraCollisionRadius.Initialize FALLITO: " + e.Message); }
+            try { City.NPC.CityNpcPersonaDefinition.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] CityNpcPersonaDefinition.Initialize FALLITO: " + e.Message); }
+            try { City.Economy.NpcMissionDefinition.Initialize(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] NpcMissionDefinition.Initialize FALLITO: " + e.Message); }
             try { City.Diagnostics.OpenSourceFeatureCommands.Register(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] OpenSourceFeatureCommands FALLITO: " + e.Message); }
 
@@ -362,6 +374,9 @@ namespace City
                 "\",\"tsMt\":" + ts + "}";
             try { Huntix.Bridge.UnityBridge.SendMessageToAndroid("FeatureEggHidden", json); }
             catch (System.Exception e) { OsmDiag.Log("[Egg] FeatureEggHidden failed: " + e.Message); }
+            // 3ddriving (idea, non codice): cache locale opzionale del diario
+            // uova, scritta solo su questo evento esplicito, mai per frame.
+            City.Economy.EggJournal.Record(featureId, lat, lng, rarity.ToString(), ts);
             City.Environment.EventBus.Publish(
                 new City.Environment.EggHintObservedEvent(featureId, lat, lng));
             if (ui != null) ui.ShowToast("Hai scovato un uovo: " + label + "!");

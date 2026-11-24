@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace City.World
@@ -11,11 +12,42 @@ namespace City.World
         public bool opensShop;
         public Shop shop;
 
+        // MafiaUnity (Apache-2.0): latch temporale dopo un teleport riuscito.
+        // Il valore predefinito resta false: le porte esistenti non cambiano.
+        public bool useDoorLatch = false;
+
+        private static readonly HashSet<InteractDoor> AllDoors = new HashSet<InteractDoor>();
+        private static bool _eggGranted;
         private bool focused;
+        private float _latchUntil;
 
         public bool IsFocused
         {
             get { return focused; }
+        }
+
+        /// <summary>Inizializzazione passiva: nessun uovo all'avvio.</summary>
+        public static void Initialize()
+        {
+            City.Diagnostics.OpenSourceFeatureBridge.Register(
+                "door-latch", on => SetLatchAll(on));
+        }
+
+        public static void SetLatchAll(bool on)
+        {
+            foreach (var door in AllDoors)
+                if (door != null) door.useDoorLatch = on;
+        }
+
+        private void Awake()
+        {
+            AllDoors.Add(this);
+            useDoorLatch = City.Diagnostics.OpenSourceFeatureBridge.Enabled("door-latch");
+        }
+
+        private void OnDestroy()
+        {
+            AllDoors.Remove(this);
         }
 
         public void SetDestination(Transform dst, Quaternion rot)
@@ -46,7 +78,20 @@ namespace City.World
                 return;
             }
             if (destination == null) return;
+            // Solo il ramo teleport ha il latch: "BUSSA" e le porte negozio
+            // restano sempre utilizzabili (nessun cambio di comportamento).
+            if (useDoorLatch && Time.unscaledTime < _latchUntil) return;
             Game.Instance.TeleportPlayer(destination.position, destinationRotation);
+            if (!useDoorLatch) return;
+            // Tempo NON scalato: in pausa il latch non puo' rimanere forever.
+            _latchUntil = Time.unscaledTime + 1f;
+            if (!_eggGranted)
+            {
+                _eggGranted = true;
+                City.Diagnostics.OpenSourceFeatureBridge.Report(
+                    "door-latch", "Uovo dietro la porta", "città→porta",
+                    "latch 1s dopo teleport", true);
+            }
         }
     }
 }
