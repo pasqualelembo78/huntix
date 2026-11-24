@@ -115,6 +115,23 @@ namespace City.OSM
             get { if (_roadMat == null) _roadMat = TerrainChunk.RoadMaterial(); return _roadMat; }
         }
 
+        private Material _wornRoadMat;
+
+        public Material SharedWornRoadMaterial
+        {
+            get { if (_wornRoadMat == null) _wornRoadMat = TerrainChunk.WornRoadMaterial(); return _wornRoadMat; }
+        }
+
+        /// <summary>
+        /// Due soli materiali condivisi: un quarto delle strade usa l'asfalto
+        /// usurato, il resto quello standard. Nessun materiale per chunk.
+        /// </summary>
+        public Material RoadMaterialFor(Vector2Int index)
+        {
+            return (((index.x * 7 + index.y * 13) & 3) == 0)
+                ? SharedWornRoadMaterial : SharedRoadMaterial;
+        }
+
         public Material SharedSidewalkMaterial
         {
             get { if (_sidewalkMat == null) _sidewalkMat = TerrainChunk.SidewalkMaterial(); return _sidewalkMat; }

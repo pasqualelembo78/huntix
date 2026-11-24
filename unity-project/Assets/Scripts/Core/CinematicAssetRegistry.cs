@@ -23,6 +23,11 @@ namespace Huntix.Core
         public Texture2D brickWallNormal;
         public Texture2D grassDiffuse;
 
+        // Modelli Kenney CC0 grezzi importati da assets/road (lampioni,
+        // coni, barriere, segnali): usati solo dallo switch "Asset CC0 grezzi".
+        public GameObject[] rawProps;
+        public Texture2D rawPropsColormap;
+
         public Texture2D Get(string key)
         {
             switch (key)

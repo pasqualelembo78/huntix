@@ -171,6 +171,18 @@ public class BridgeActivity extends UnityPlayerActivity {
                         }
                     }
                     j.put("openSourceFeatures", osFlags.toString());
+                    // Grafica cinematografica: secondo gruppo di preferenze,
+                    // rimandato a Unity con chiave dedicata (huntix_gfx_*).
+                    StringBuilder gfxFlags = new StringBuilder();
+                    for (java.util.Map.Entry<String, ?> e : osPrefs.getAll().entrySet()) {
+                        String k = e.getKey();
+                        if (k.startsWith("huntix_gfx_") && e.getValue() instanceof Boolean) {
+                            if (gfxFlags.length() > 0) gfxFlags.append(',');
+                            gfxFlags.append(k.substring("huntix_gfx_".length()))
+                                    .append(((Boolean) e.getValue()) ? "=1" : "=0");
+                        }
+                    }
+                    j.put("cinematicFeatures", gfxFlags.toString());
                     // Fase 2 · consumabili: solo lo specchio dell'esca attiva e
                     // il numero di aromi disponibili. Nessun premio, nessun
                     // uovo generato su un ripristino passivo.

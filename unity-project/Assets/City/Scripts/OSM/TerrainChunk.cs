@@ -270,12 +270,23 @@ namespace City.OSM
         {
             var mat = SafeMaterial(new Color(0.27f, 0.27f, 0.30f), 0.15f);
             if (mat == null) mat = new Material(Shader.Find("Legacy Shaders/Diffuse"));
+            City.Cinematic.CinematicGraphics.ApplyRoad(mat);
+            return mat;
+        }
+
+        public static Material WornRoadMaterial()
+        {
+            var mat = SafeMaterial(new Color(0.25f, 0.25f, 0.27f), 0.11f);
+            if (mat == null) mat = new Material(Shader.Find("Legacy Shaders/Diffuse"));
+            City.Cinematic.CinematicGraphics.ApplyWornRoad(mat);
             return mat;
         }
 
         public static Material ParkMaterial()
         {
-            return SafeMaterial(new Color(0.33f, 0.58f, 0.28f), 0f);
+            var mat = SafeMaterial(new Color(0.33f, 0.58f, 0.28f), 0f);
+            City.Cinematic.CinematicGraphics.ApplyPark(mat);
+            return mat;
         }
 
         public static Material WaterMaterial()
@@ -290,6 +301,7 @@ namespace City.OSM
         {
             var mat = SafeMaterial(new Color(0.58f, 0.58f, 0.56f), 0.05f);
             if (mat == null) mat = new Material(Shader.Find("Legacy Shaders/Diffuse"));
+            City.Cinematic.CinematicGraphics.ApplySidewalk(mat);
             return mat;
         }
     }

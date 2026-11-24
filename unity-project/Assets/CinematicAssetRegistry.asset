@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ccc487d00bb46c5b602669a78b4111d, type: 3}
+  m_Name: CinematicAssetRegistry
+  m_EditorClassIdentifier: 
+  asphaltDiffuse: {fileID: 2800000, guid: 0b32105932a04e0f88b6ff25c719117f, type: 3}
+  asphaltNormal: {fileID: 2800000, guid: 62fb57dce11b44dc964144a710651d0b, type: 3}
+  asphaltAO: {fileID: 2800000, guid: 787689e30b094bed9195b8ac9d45b674, type: 3}
+  asphaltRoughness: {fileID: 2800000, guid: 0579caf73e29475c90c574112c04f933, type: 3}
+  asphaltWornDiffuse: {fileID: 2800000, guid: dad148d0b2c448828084affa02ab7f79, type: 3}
+  asphaltWornNormal: {fileID: 2800000, guid: df01082940ed449daa6470f6a048707c, type: 3}
+  pavementDiffuse: {fileID: 2800000, guid: 1ed94d316c704f35a4880fc6f9dea6a2, type: 3}
+  pavementNormal: {fileID: 2800000, guid: ee03bd13ff7b495292701ef8fb58f168, type: 3}
+  concreteDiffuse: {fileID: 2800000, guid: ce643337fedf4db7b8f02ed501d156ce, type: 3}
+  concreteNormal: {fileID: 2800000, guid: 41b379d646524fab945412329a84894b, type: 3}
+  brickWallDiffuse: {fileID: 2800000, guid: 8c49cdec757f41efbba42af76ed32f8a, type: 3}
+  brickWallNormal: {fileID: 2800000, guid: 5f737752a4a042529322031c15bffefd, type: 3}
+  grassDiffuse: {fileID: 2800000, guid: 2e3302147a65481c92244daa7341f40d, type: 3}
+  rawProps:
+  - {fileID: 919132149155446097, guid: ec71f27282a24e23bdff51ea283710d6, type: 3}
+  - {fileID: 919132149155446097, guid: e76d3727b8014dd8a057bf3e69fcf070, type: 3}
+  - {fileID: 919132149155446097, guid: 432efd20788d4ab3a65fe3cb92f873d6, type: 3}
+  - {fileID: 919132149155446097, guid: 003ba8bf09d84c9bb3e8ae43413196f9, type: 3}
+  - {fileID: 919132149155446097, guid: e4404d863d20480597e1f4b7b766f42b, type: 3}
+  - {fileID: 919132149155446097, guid: 94b87a503cb64609b0235de14d6c00f4, type: 3}
+  rawPropsColormap: {fileID: 2800000, guid: 37d4c25e4fac46f780d4a1a26d10024d, type: 3}

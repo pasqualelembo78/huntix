@@ -176,6 +176,8 @@ namespace City
             catch (System.Exception e) { OsmDiag.Log("[Game] NpcMissionDefinition.Initialize FALLITO: " + e.Message); }
             try { City.Diagnostics.OpenSourceFeatureCommands.Register(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] OpenSourceFeatureCommands FALLITO: " + e.Message); }
+            try { City.Cinematic.CinematicGraphics.Register(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] CinematicGraphics FALLITO: " + e.Message); }
 
             // Realtà aumentata: pulsante PASSA A AR (camera + ARCore + piano).
             try { City.AR.ArCityController.Ensure(); }

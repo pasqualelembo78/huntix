@@ -329,6 +329,8 @@ namespace UnityEngine
         public void SetInt(string n, int v) {} public int GetInt(string n) => 0;
         public void EnableKeyword(string k) {} public void DisableKeyword(string k) {}
         public void SetTexture(string n, Texture t) {}
+        public void SetTextureScale(string n, Vector2 v) {}
+        public void SetTextureOffset(string n, Vector2 v) {}
         public Texture GetTexture(string n) => null;
         public void SetMainTexture(Texture t) {}
         public void SetOverrideTag(string k, string v) {}

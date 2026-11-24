@@ -59,6 +59,7 @@ namespace City.Vehicle
             {
                 cached.SetColor("_Color", Color.white);
             }
+            City.Cinematic.CinematicGraphics.ApplyVehicle(cached);
             return cached;
         }
     }

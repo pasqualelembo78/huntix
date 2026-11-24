@@ -237,6 +237,7 @@ namespace City.OSM
                 for (int j = 0; j < ms.Length; j++)
                     if (ms[j] != null) ConvertToURP(ms[j]);
             }
+            City.Cinematic.CinematicGraphics.ApplyFacade(inst);
         }
 
         // Materiale del segnaposto porta condiviso tra tutti gli ingressi

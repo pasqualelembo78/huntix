@@ -128,6 +128,9 @@ namespace Huntix.EditorTools
             // ── Registry texture PBR CC0: modalita' cinematografica ──
             CinematicAssetsSetup.Populate();
 
+            // ── Modelli grezzi Kenney CC0 (lampioni/props stradali) ──
+            CinematicRawAssetsSetup.Populate();
+
             // ── Addressables (Laugh Little Lamb) ──────────────────────────────
             // Builda il contenuto addressable (scene di menu/livello e i 6 prefab
             // dei livelli) PRIMA del BuildPlayer, così i bundle finiscono dentro

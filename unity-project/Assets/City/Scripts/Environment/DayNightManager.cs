@@ -17,6 +17,12 @@ namespace City.Environment
         /// <summary>Durata in secondi reali di 24 ore in-game.</summary>
         public static float DayLengthSeconds = 600f;
 
+        /// <summary>Usato dalla modalita' cinematografica per luci e foschia.</summary>
+        public static bool IsNight
+        {
+            get { return Instance != null && (Instance.clockHours < 5.5f || Instance.clockHours > 19.5f); }
+        }
+
         private float clockHours;
 
         /// <summary>Ora del giorno (0-24), per le routine quotidiane
@@ -153,6 +159,17 @@ namespace City.Environment
             RenderSettings.fogColor = isNight ? nightFog : new Color(0.78f, 0.84f, 0.92f);
             RenderSettings.fogMode = FogMode.Exponential;
             RenderSettings.fogDensity = isNight ? 0.0012f : 0.0009f;
+
+            // Modalita' cinematografica (opt-in): atmosfera piu' densa,
+            // contrasto notturno maggiore e lampioni accesi di notte.
+            if (City.Cinematic.CinematicGraphics.AtmosphereEnabled)
+            {
+                RenderSettings.fogDensity = isNight ? 0.0022f : 0.0014f;
+                RenderSettings.fogColor = Color.Lerp(RenderSettings.fogColor,
+                    isNight ? new Color(0.10f, 0.13f, 0.20f) : new Color(0.72f, 0.78f, 0.86f), 0.35f);
+                RenderSettings.ambientIntensity = Mathf.Lerp(0.3f, 0.9f, dayNight) * 1.08f;
+                City.Cinematic.CinematicGraphics.UpdateLampLights(isNight);
+            }
         }
     }
 }

@@ -9,6 +9,19 @@ namespace Huntix.Core
         public GameObject Get(string name) => null;
     }
 
+    // Stub del registry PBR CC0: il file reale sta in Assets/Scripts/Core,
+    // fuori dallo scope di check.sh (che compila solo Assets/City/Scripts).
+    public class CinematicAssetRegistry : ScriptableObject
+    {
+        public Texture2D asphaltDiffuse, asphaltNormal, asphaltAO, asphaltRoughness;
+        public Texture2D asphaltWornDiffuse, asphaltWornNormal;
+        public Texture2D pavementDiffuse, pavementNormal;
+        public Texture2D concreteDiffuse, concreteNormal;
+        public Texture2D brickWallDiffuse, brickWallNormal, grassDiffuse;
+        public GameObject[] rawProps;
+        public Texture2D rawPropsColormap;
+    }
+
     public class ScriptableObject : Object
     {
         public static T[] LoadAll<T>(string path) where T : Object => new T[0];
@@ -18,6 +31,7 @@ namespace Huntix.Core
     {
         public static GameManager Instance => null;
         public CityKitAssetRegistry cityKitRegistry;
+        public CinematicAssetRegistry cinematicRegistry;
     }
 
     // Stub dell'API di ErrorSurface: il file reale sta in Assets/Scripts/Core,

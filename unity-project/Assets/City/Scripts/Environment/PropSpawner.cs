@@ -116,6 +116,8 @@ namespace City.Environment
             placed += Take(points, dirs, rng, benches, parent, BuildBench);
             placed += Take(points, dirs, rng, bins, parent, BuildBin);
             placed += Take(points, dirs, rng, fountains, parent, BuildFountain);
+            City.Cinematic.CinematicGraphics.PlaceLamps(parent, points, dirs);
+            City.Cinematic.CinematicGraphics.PlaceRawProps(parent, points, dirs);
             return placed;
         }
 

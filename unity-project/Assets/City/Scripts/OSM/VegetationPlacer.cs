@@ -171,6 +171,13 @@ namespace City.OSM
             }
         }
 
+        /// <summary>Riaggiorna il materiale parchi quando cambia lo switch PBR.</summary>
+        public static void RefreshParkMaterial()
+        {
+            if (_parkMat == null) return;
+            City.Cinematic.CinematicGraphics.ApplyPark(_parkMat);
+        }
+
         private static void BuildSignal(Transform parent, Vector3 p)
         {
             // p.y e' la quota DEM (gia' sollevata dal chiamante): il palo parte

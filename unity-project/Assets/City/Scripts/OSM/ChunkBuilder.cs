@@ -214,7 +214,7 @@ namespace City.OSM
                         chunk.roadsGo.transform.SetParent(chunk.root.transform, false);
                         chunk.roadsGo.GetComponent<MeshFilter>().sharedMesh = roadMesh;
                         chunk.roadsGo.GetComponent<MeshRenderer>().sharedMaterial =
-                            mgr.SharedRoadMaterial;
+                            mgr.RoadMaterialFor(chunk.index);
                         // Collider fisico = asfalto VISIBILE (quota roadMesh):
                         // il player/NPC camminano sulla strada vera, niente
                         // sospensione tra terreno (-0.05) e asfalto (0.03).
@@ -705,7 +705,7 @@ namespace City.OSM
                             typeof(MeshCollider));
                         chunk.roadsGo.transform.SetParent(rootT, false);
                         chunk.roadsGo.GetComponent<MeshRenderer>().sharedMaterial =
-                            mgr.SharedRoadMaterial;
+                            mgr.RoadMaterialFor(chunk.index);
                     }
                     SwapSharedMesh(chunk.roadsGo, roadMesh);
                     var roadCol = chunk.roadsGo.GetComponent<MeshCollider>();

@@ -245,6 +245,9 @@ object Bridge {
             // ── Audit open source: stato delle migliorie addittive. La
             //    preferenza torna a Unity nel JSON di setMode, senza premi. ──
             "OpenSourceFeatureChanged" -> handleOpenSourceFeatureChanged(jsonData)
+            // ── Grafica cinematografica: preferenze visive opt-in
+            //    (asfalto, facciate, lampioni, atmosfera, veicoli). ──
+            "CinematicFeatureChanged" -> handleCinematicFeatureChanged(jsonData)
             // ── Fase 2 · consumabili: oggetto usato indoor in Miacittà.
             //    Android consuma la quantità solo se corrisponde a un aroma
             //    noto, e registra luogo/coordinate nello stesso diario. ──
@@ -378,6 +381,26 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync",
             "Miglioria open source: $id on=${j.optBoolean("on", false)} " +
+                "detail=${j.optString("detail", "")}"
+        )
+        if (j.optBoolean("egg", false)) handleFeatureEggHidden(jsonData)
+    }
+
+    /**
+     * Stato di una miglioria visiva della modalità cinematografica. Prefisso
+     * dedicato huntix_gfx_: non interferisce con huntix_os_ dell'audit. Lo
+     * stato torna a Unity nel JSON di setMode come cinematicFeatures.
+     */
+    private fun handleCinematicFeatureChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val id = j.optString("feature", "")
+        if (id.isBlank()) return
+        val ctx = UnityAppContext.context ?: return
+        val prefs = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("huntix_gfx_$id", j.optBoolean("on", false)).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Grafica cinematografica: $id on=${j.optBoolean("on", false)} " +
                 "detail=${j.optString("detail", "")}"
         )
         if (j.optBoolean("egg", false)) handleFeatureEggHidden(jsonData)

@@ -40,6 +40,9 @@ object UnityIpc {
         // Audit open source: preferenze delle migliorie addittive (Unity ->
         // app). Il ritorno viaggia nel JSON di setMode openSourceFeatures.
         "OpenSourceFeatureChanged",
+        // Grafica cinematografica: secondo gruppo di preferenze visive, con
+        // ritorno nel JSON di setMode come cinematicFeatures (huntix_gfx_*).
+        "CinematicFeatureChanged",
         // Fase 2 · consumabili: Unity segnala l'oggetto usato indoor; Android
         // consuma la quantita' e registra luogo/coordinate nel diario.
         "ConsumableUsed",

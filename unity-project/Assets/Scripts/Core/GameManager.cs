@@ -394,6 +394,14 @@ namespace Huntix.Core
                     City.Diagnostics.OpenSourceFeatureBridge.RestoreFromAndroid(
                         osFlags.Groups[1].Value);
 
+                // Grafica cinematografica: secondo gruppo di preferenze,
+                // ripristino passivo senza uova ne' notifiche.
+                var gfxFlags = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"cinematicFeatures\"\\s*:\\s*\"([^\"]*)\"");
+                if (gfxFlags.Success)
+                    City.Diagnostics.CinematicFeatureBridge.RestoreFromAndroid(
+                        gfxFlags.Groups[1].Value);
+
                 var activityLogCount = System.Text.RegularExpressions.Regex.Match(
                     json, "\"activityLogCount\"\\s*:\\s*(\\d+)");
                 if (activityLogCount.Success)

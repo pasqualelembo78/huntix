@@ -21,6 +21,7 @@ namespace City.UI
         private GameObject panel;
         private GameObject skinPanel;
         private GameObject profilePanel;
+        private GameObject cinematicPanel;
         private GameObject skinSelRow;
         private Text _styleLabel;
         private Text _qualityLabel;
@@ -29,6 +30,8 @@ namespace City.UI
         private Text _menuAnimLabel;
         private Text _qaConsoleLabel;
         private Text _openSourceLabel;
+        private Text _cinematicLabel;
+        private Text[] _cinematicDetailLabels;
         private Text _companionLabel;
         private Transform _canvas;
 
@@ -169,7 +172,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1300f);
+            prt.sizeDelta = new Vector2(360f, 1470f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -191,6 +194,8 @@ namespace City.UI
                 "Fondi le uova (crafting)",
                 "Le tue uova (collezione)",
                 "Ricette di fusione (guida)",
+                "Modalità cinematografica: Off",
+                "Dettagli grafica cinematografica",
             };
             System.Action[] actions =
             {
@@ -283,6 +288,8 @@ namespace City.UI
                         Debug.LogWarning("[HamburgerMenu] RecipeRequest: " + e.Message);
                     }
                 },
+                () => ToggleCinematicAll(),
+                () => OpenCinematicPanel(),
             };
 
             for (int i = 0; i < labels.Length; i++)
@@ -309,6 +316,7 @@ namespace City.UI
                 if (idx == 11) _qaConsoleLabel = lbl;
                 if (idx == 12) _openSourceLabel = lbl;
                 if (idx == 13) _companionLabel = lbl;
+                if (idx == 17) _cinematicLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -359,6 +367,7 @@ namespace City.UI
                 RefreshMenuAnimLabel();
                 RefreshQaConsoleLabel();
                 RefreshOpenSourceLabel();
+                RefreshCinematicLabel();
                 RefreshNpcCompanionLabel();
             }
             panel.SetActive(v);
@@ -478,6 +487,88 @@ namespace City.UI
                     : "Opzioni audit open source disattivate");
         }
 
+        // ---- modalita' grafica cinematografica (opt-in) ----
+
+        private void RefreshCinematicLabel()
+        {
+            if (_cinematicLabel == null) return;
+            _cinematicLabel.text = "Modalità cinematografica: " +
+                (City.Diagnostics.CinematicFeatureBridge.AllEnabled ? "On" : "Off");
+        }
+
+        private void ToggleCinematicAll()
+        {
+            bool on = !City.Diagnostics.CinematicFeatureBridge.AllEnabled;
+            City.Diagnostics.CinematicFeatureBridge.SetAll(on);
+            RefreshCinematicLabel();
+            RefreshCinematicDetailLabels();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(on
+                    ? "Modalità cinematografica attivata"
+                    : "Modalità cinematografica disattivata");
+        }
+
+        private void OpenCinematicPanel()
+        {
+            SetVisible(false);
+            if (cinematicPanel == null) BuildCinematicPanel();
+            RefreshCinematicDetailLabels();
+            cinematicPanel.SetActive(true);
+        }
+
+        private void BuildCinematicPanel()
+        {
+            cinematicPanel = MakeSubPanel("CinematicPanel", 470f, 660f);
+            AddHeader(cinematicPanel, "DETTAGLI GRAFICA CINEMATOGRAFICA");
+            string[] ids = City.Diagnostics.CinematicFeatureBridge.AllIds;
+            _cinematicDetailLabels = new Text[ids.Length];
+            for (int i = 0; i < ids.Length; i++)
+            {
+                int idx = i;
+                string id = ids[i];
+                var row = new GameObject("G_" + i, typeof(Image), typeof(Button));
+                row.transform.SetParent(cinematicPanel.transform, false);
+                var rt = row.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.anchoredPosition = new Vector2(20f, -190f - i * 68f);
+                rt.sizeDelta = new Vector2(-40f, 62f);
+                row.GetComponent<Image>().color = RowBg;
+                row.GetComponent<Button>().onClick.AddListener(() => ToggleCinematicDetail(idx));
+                var lbl = NewLabel(row.transform);
+                lbl.alignment = TextAnchor.MiddleLeft;
+                lbl.rectTransform.anchorMin = Vector2.zero;
+                lbl.rectTransform.anchorMax = Vector2.one;
+                lbl.rectTransform.sizeDelta = Vector2.zero;
+                lbl.rectTransform.offsetMin = new Vector2(14f, 0f);
+                lbl.rectTransform.offsetMax = new Vector2(-14f, 0f);
+                _cinematicDetailLabels[i] = lbl;
+            }
+        }
+
+        private void RefreshCinematicDetailLabels()
+        {
+            if (_cinematicDetailLabels == null) return;
+            string[] ids = City.Diagnostics.CinematicFeatureBridge.AllIds;
+            for (int i = 0; i < ids.Length && i < _cinematicDetailLabels.Length; i++)
+                _cinematicDetailLabels[i].text = City.Diagnostics.CinematicFeatureBridge.LabelFor(ids[i]) +
+                    ": " + (City.Diagnostics.CinematicFeatureBridge.Enabled(ids[i]) ? "On" : "Off");
+        }
+
+        private void ToggleCinematicDetail(int idx)
+        {
+            string[] ids = City.Diagnostics.CinematicFeatureBridge.AllIds;
+            if (idx < 0 || idx >= ids.Length) return;
+            string id = ids[idx];
+            bool on = !City.Diagnostics.CinematicFeatureBridge.Enabled(id);
+            City.Diagnostics.CinematicFeatureBridge.SetToggle(id, on,
+                City.Diagnostics.CinematicFeatureBridge.LabelFor(id),
+                City.Diagnostics.CinematicFeatureBridge.AllPlace);
+            RefreshCinematicLabel();
+            RefreshCinematicDetailLabels();
+        }
+
         // ---- compagno NPC (pattern MIT SanAndreasUnity, riscritto) ----
 
         private void RefreshNpcCompanionLabel()
@@ -576,6 +667,7 @@ namespace City.UI
             if (panel != null) panel.SetActive(false);
             if (skinPanel != null) skinPanel.SetActive(false);
             if (profilePanel != null) profilePanel.SetActive(false);
+            if (cinematicPanel != null) cinematicPanel.SetActive(false);
         }
 
         private static readonly string[] SkinNames =
