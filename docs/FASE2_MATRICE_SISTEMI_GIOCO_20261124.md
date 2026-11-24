@@ -1,5 +1,12 @@
 # Fase 2 dell'audit — matrice sistemi di gioco (24/11/2026)
 
+> **Stato finale aggregato (sempre 24/11/2026):** la tabella qui sotto è la
+> ricognizione iniziale, precedente agli interventi. Le voci 13, 14, 15, 11 e 16
+> sono state integrate rispettivamente con `8215f7cc`, `d96f62fb`, `0aaa470e`,
+> `fc7c3b4a` ed `eb806994`; le voci 12, 17, 18, 19 e 20 sono state lasciate
+> intatte perché sensibili o mancanti. Il dettaglio è in
+> `docs/FASE2_VOCI_RIMASTE_20261124.md` e nei documenti delle singole slice.
+
 ## Criterio seguito
 
 Le 10 funzionalità della Fase 2 sono state cercate nel codice esistente **prima**
