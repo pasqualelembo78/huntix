@@ -286,6 +286,144 @@ License), `DeadBody.cs`/`PedModel.cs` (Mirror + dati GTA), `PedestrianDef.cs`
 battle-island-mobile e tutti i repo senza licenza. Nessun asset dei repo è
 stato importato.
 
+---
+
+## Audit open source 2026-11-24 — 12 progetti (branch `integrazione-open-source`)
+
+Analisi completa: `docs/HUNTIX_OPEN_SOURCE_IMPROVEMENTS_AUDIT.md`. I repository sono stati
+clonati in `/tmp/opencode/open-source-audit/` e **non eseguiti**. Qui è una regola assoluta:
+**nessun file di codice o asset dei 12 progetti è stato copiato tale quale**. Dove la licenza
+lo consente è stato adattato il solo pattern, riscrivendo ogni riga con tipi Huntix e conservando
+copyright/licenza/dichiarazione delle modifiche nell'intestazione del file. Dove la licenza non
+è verificabile è stata adottata solo l'idea generale. Nessuna mesh, texture, audio o prefab dei
+progetti è stato importato.
+
+### Licenze con codice adattato
+
+I cinque progetti sotto dichiarano MIT. Testo comune della licenza (dal file `LICENSE` /
+`LICENSE.md` di ciascun repository, verificato durante l'audit):
+
+```
+MIT License
+
+Copyright (c) 2015 Denis Rizov
+Copyright (c) 2023 Robel Getnet Geremew
+Copyright (c) 2025 Elitania Ceciliano
+Copyright (c) 2026 Harun Doğacan Kutlu
+Copyright (c) 2021 Timothy O'Barr
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+- **dbrizov/Unity-CharacterController** — https://github.com/dbrizov/Unity-CharacterController,
+  MIT, `Copyright (c) 2015 Denis Rizov`. Fonte `Assets/NaughtyCharacter/_Scripts/SpringArm.cs`.
+  File Huntix: `unity-project/Assets/City/Scripts/Player/CameraCollisionRadius.cs`.
+  **Modifiche**: formula del raggio isolata in metodo puro `FromCamera(fov, aspect, nearClip)`,
+  clamp 0,12–0,60 m, opt-in disattivato, nessuna dipendenza dal `Character` del repository,
+  raggio fisso 0,22 m di `CameraRig` conservato.
+- **rob1997/Controller** — https://github.com/rob1997/Controller, MIT,
+  `Copyright (c) 2023 Robel Getnet Geremew`. Fonte
+  `Packages/com.ekaka.core/Runtime/Common/EventBus.cs`. File Huntix:
+  `unity-project/Assets/City/Scripts/Environment/EventBus.cs`.
+  **Modifiche**: solo il concetto one-shot, adattato all'EventBus struct-based esistente come
+  `SubscribeOnce<T>` che si auto-disiscrive; API esistenti invariate; nessun pacchetto
+  `com.ekaka.*` importato.
+- **unity-ai-npc** — https://github.com/dogacankutlu/unity-ai-npc, MIT,
+  `Copyright (c) 2026 Harun Doğacan Kutlu`. Fonte
+  `Assets/AIConversationSystem/Runtime/NPC/NPCPersona.cs`. File Huntix:
+  `unity-project/Assets/City/Scripts/NPC/CityNpcPersonaDefinition.cs`.
+  **Modifiche**: mantenuta solo la separazione dati/contenuto in ScriptableObject; rimossi
+  rete, provider OpenAI, chiavi API, CancellationToken e UI accoppiata; aggiunti indizio uovo
+  una volta, opt-in e ponte Android esistente.
+- **ai-npc-quest-framework** — https://github.com/bceciliano/ai-npc-quest-framework, MIT,
+  `Copyright (c) 2025 Elitania Ceciliano`. Fonte
+  `QuestSystem/QuestsObjects/QuestData.cs`. File Huntix:
+  `unity-project/Assets/City/Scripts/Economy/NpcMissionDefinition.cs`.
+  **Modifiche**: solo definizione opzionale applicata con `TryApply(ref MissionData)`; rimossi
+  SQLite, OpenAI/APIManager e UI coupling; generatore procedurale `NPCMission` invariato.
+- **Unity-Rpg** — https://github.com/weirdbeardgame/Unity-Rpg, MIT,
+  `Copyright (c) 2021 Timothy O'Barr`. Fonte `Assets/Game/GameAssetManager.cs`.
+  File Huntix: `unity-project/Assets/City/Scripts/Diagnostics/OpenSourceAudit.cs` (sorgente
+  `asset-handles`) e `unity-project/Assets/Editor/OpenSourceAuditMenu.cs`.
+  **Modifiche**: il concetto di ID stabile/provenienza diventa un controllo di sola lettura sui
+  registry Huntix già esistenti; **non** usati `Guid`, `TypeNameHandling.All` di Json.NET né
+  `Resources.Load`; nessun JSON di quest importato.
+
+### Apache-2.0 con attribuzione prudenziale
+
+- **MafiaUnity** — https://github.com/MafiaHub/MafiaUnity, Apache License 2.0
+  (https://www.apache.org/licenses/LICENSE-2.0), `NOTICE`: Copyright (c) 2018 Dominik Madarász,
+  Dávid Svitana, Roman Dobiáš. Fonte `Assets/Scripts/Game/Archetypes/Door.cs` (`isMoving` come
+  latch temporale). File Huntix: `unity-project/Assets/City/Scripts/World/InteractDoor.cs`.
+  **Modifiche**: latch di 1 s con `Time.unscaledTime` solo dopo teleport riuscito, opt-in
+  `useDoorLatch=false`; `BUSSA` e porte negozio mai bloccate; nessun asset Mafia, nessuna
+  state machine di animazione copiata. Il codice è riscritto da zero: l'attribuzione è
+  prudenziale perché è stato adottato il pattern.
+
+### Solo idea generale, zero codice (licenza non concessa o non verificabile)
+
+- **SanAndreasUnity** — https://github.com/in0finite/SanAndreasUnity, MIT,
+  `Copyright (c) 2015 James King` (testo integrale nella sezione 1). Fonte
+  `OutOfRangeDestroyer.cs`/`FocusPointManager.cs`. File Huntix:
+  `unity-project/Assets/City/Scripts/Economy/EggCullGrace.cs`. **Modifiche**: nessuna
+  distruzione di oggetti, culling del solo render a 1 Hz con grazia 3 s e isteresi 60/70 m,
+  opt-in. Nessun dato/asset GTA.
+- **Android_Unity3D_OpenWorld** — https://github.com/nikunjsingh93/Android_Unity3D_OpenWorld,
+  **nessuna licenza per il codice** (solo `README.md`; evidenza da assembly decompilato in
+  `/tmp/opencode/ao_cs.il`). File Huntix:
+  `unity-project/Assets/City/Scripts/Player/EggCompassAssist.cs`. Solo il principio della soglia
+  di velocità per la rotazione della camera, riscritto da zero: opt-in, <2 m/s, max 15°/s.
+- **3ddriving** — https://github.com/Tritone1/3ddriving, **nessuna licenza per i C#**
+  (il `THIRD_PARTY_NOTICES.md` interno copre solo asset). File Huntix:
+  `unity-project/Assets/City/Scripts/Economy/EggJournal.cs`. Solo il pattern atomico
+  `.tmp` → `.backup.json` → file e la validazione, riscritti da zero; cache non autoritativa.
+- **OpenStash** — https://github.com/unity3d-open-tools/openstash, MIT dichiarato al
+  `README.md:18-19` ma **file LICENSE assente e titolare non verificabile**. File Huntix:
+  `unity-project/Assets/City/Scripts/Diagnostics/OpenSourceAudit.cs` (sorgente
+  `resource-defs`). Solo il controllo editor dei path `Resources`; non importati la griglia
+  multi-slot, `prefabPath`, `canDrop` né `SignalNeighbors`.
+- **Grand Road Auto** — https://github.com/BlackRoad-Forge/Grand-Road-Auto, **licenza
+  proprietaria BlackRoad OS, Inc.** File Huntix:
+  `unity-project/Assets/City/Scripts/Diagnostics/OpenSourceAudit.cs` (sorgente
+  `load-lifecycle`). Solo il principio generale dei guard-rail sui budget, applicato come
+  verifica in sola lettura dei valori Huntix già presenti. Nessuna riga, asset o pattern coperto
+  dalla licenza proprietaria è stato riprodotto.
+
+### Quaternius — CC0 / QAL per singolo pack
+
+https://quaternius.com/ — licenza sito **QAL v1.0** (aggiornata 28/08/2026),
+https://quaternius.com/license.html. Pagine verificate: `packs/simplenature.html` (Simple Nature
+Pack, 13 modelli, **CC0**), `packs/downtowncitymegakit.html` (Downtown City MegaKit, 315 modelli,
+**CC0**, parzialmente gratuito), `packs/stylizednaturemegakit.html`, `packs/ultimatenature.html`,
+`packs/ultimatestylizednature.html`, `packs/texturedfantasynature.html` (tutti **CC0**) e
+`packs/charactersfantasyraces.html` (Characters – Fantasy Races, **QAL**, non CC0).
+CC0: https://creativecommons.org/publicdomain/zero/1.0/legalcode.it — rinuncia irrevocabile,
+nessun credito obbligatorio, "così com'è", nessuna garanzia su marchi/brevetti. QAL v1.0:
+commerciale gratuito, nessun credito richiesto, divieto di rivendere/redistribuire gli asset
+come asset e di falsa attribuzione.
+
+File Huntix: `unity-project/Assets/City/Scripts/Diagnostics/OpenSourceAudit.cs` (sorgente
+`asset-packs`). È stato aggiunto **solo il manifesto** con URL, licenza e URL licenza; nessuna
+mesh o texture è stata scaricata o importata in questa sessione. I modelli Quaternius già
+presenti nel progetto (Downtown via `BuildingPlacer`, UAL2 CC0) restano regolati dalle
+attribuzioni esistenti.
+
 ### Aggiornamenti futuri
 
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit
