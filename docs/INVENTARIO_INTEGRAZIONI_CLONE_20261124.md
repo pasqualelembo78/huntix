@@ -58,6 +58,37 @@ componente runtime dedicato con bridge e uovo posizionale.
 | 3ddriving, CarRace, Traffic Rider Clone, Unity AI Racing Cars, Smart City Digital Twin | Nessuna licenza per il codice sorgente: nessun permesso di riuso. |
 | Third Person Controller Android | GPLv3 copyleft incompatibile con la distribuzione Huntix. |
 
+## Interazione NPC: esito della ricerca (24/11, seconda passata)
+
+Huntix copre già missioni NPC (`NPCMission`), pedoni con bisogni/relazioni
+(`NPCController`), prompt di prossimità (`ContextActionController`), dialoghi
+indoor/outdoor con tasto `E` (`OutdoorDialogueUI.cs:20`), tap-to-talk con bridge
+(`TouchInputHandler.cs:223-237`), chat reale e job di consegna (`JobManager.cs`).
+
+**Nessun clone contiene un sistema "talk to NPC / quest-giver / negoziante"
+legalmente e tecnicamente superiore.** In dettaglio:
+
+| Repo | Contenuto NPC | Esito |
+|---|---|---|
+| SanAndreasUnity (MIT) | Nessun dialogo, quest, bisogno, negozio o consegna. Solo `FollowState`/`PedAI.Recruit` (leader, segui, reazioni di gruppo) e percezione `UnderAimInfo` | **Unico spunto nuovo**: compagno/scorta. Riscritto da zero in `NpcCompanion.cs` |
+| SanAndreasUnity | `RagdollBuilder.cs` (Unity Reference Only License), `DeadBody.cs`/`PedModel.cs` (Mirror + GTA) | **Non integrabile**: sottolicenza e asset GTA |
+| FuzzyTown (Apache 2.0) | `Person.cs`/`Crossing.cs`: pedone che attende il traffico | Spunto per il "passaggio sicuro"; da riscrivere, prefab `Simple People` esclusi |
+| Zone Zero (MIT) | FSM allerta→sparo con NavMesh | Tono incompatibile, dipende da Photon |
+| battle-island-mobile (MIT) | Loot da casse, bot ostili | Non pertinente: nessun loot da NPC |
+| CarGame, RaceRider3d | Spawner pedoni, semafori, camera follow | Duplicativi |
+| 3ddriving, CarRace, traffic-rider-clone, smart-city-digital-twin | Missioni, selezione con raycast | **Senza licenza**: non integrabili |
+| Third Person Controller Android | GPLv3, solo `.unitypackage`/`.rar` | Escluso |
+
+Nessuno dei clone ha un bridge Android (zero `.java`/`.kt` tranne il plugin
+Google Play Games). Il nuovo compagno ha quindi bridge dedicato
+(`NpcCompanionChanged`, `CompanionRecruited`, `CompanionEggSpotted`) e uovo
+posizionale con la cattura canonica `FeatureEggHidden`/`EggCapturedInCity`.
+
+Le lacune ancora aperte e **non** coperte dai clone: dialogo per pedone Miacittà
+senza missione (ora coperto solo nel caso compagno), tasto `E` in città,
+consegna uova a NPC come quest, bridge dei contatori missioni in
+`CityWorldSync`, quest-slot NPC ↔ Android, città fittizia senza abitanti.
+
 ## Verifica e limiti
 
 - Ogni integrazione runtime è **affiancata e opzionale**: default invariato

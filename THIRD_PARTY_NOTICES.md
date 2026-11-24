@@ -264,6 +264,28 @@ non il fork `Grand-Road-Auto` (la cui `LICENSE` è proprietaria BlackRoad).
 dato/asset GTA, `NVorbis` (licenza non inclusa), i file duplicativi legati a LOD, rete
 e costanti veicolo già coperte da sistemi Huntix.
 
+### Pattern NPC riscritto da zero (2026-11-24, seconda passata)
+
+Dallo stesso upstream MIT di SanAndreasUnity è stato riutilizzato **solo il
+pattern**, non il codice: il meccanismo di `FollowState.cs` (leader, distanza di
+scorta, reazioni al gruppo) e di `PedAI.Recruit` ha ispirato
+`unity-project/Assets/City/Scripts/NPC/NpcCompanion.cs`.
+
+**Modifiche sostanziali**: riscrittura integrale con tipi e sistemi Huntix;
+nessun dato GTA, `Mirror`, `UGameCore`, `NodeReader`, arma o NavMesh; aggiunti
+preferenza opzionale con `PlayerPrefs`, azione `PORTA CON TE`, bridge Android
+bidirezionale (`NpcCompanionChanged`, `CompanionRecruited`,
+`CompanionEggSpotted`), uovo posizionale con cattura canonica, cooldown e limite
+di avvistamenti, slot `PerfProbe` e marker `SessionTelemetry`. Il comportamento
+originario di `NPCController` resta invariato finché `FollowMode` non viene
+attivato.
+
+**Esclusi esplicitamente**: `Assets/RagdollBuilder.cs` (Unity Reference Only
+License), `DeadBody.cs`/`PedModel.cs` (Mirror + dati GTA), `PedestrianDef.cs`
+(modello dati GTA), FSM armate di Zone Zero (Photon), AI ostile di
+battle-island-mobile e tutti i repo senza licenza. Nessun asset dei repo è
+stato importato.
+
 ### Aggiornamenti futuri
 
 Se in seguito verrà importato del codice reale da uno di questi progetti, prima del commit
