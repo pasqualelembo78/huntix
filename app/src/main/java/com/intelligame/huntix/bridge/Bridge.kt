@@ -242,6 +242,9 @@ object Bridge {
             //    una missione/un evento compiuto; la cronologia resta una
             //    sola con le uova posizionali. ──
             "ActivityLogEvent" -> handleActivityLogEvent(jsonData)
+            // ── Audit open source: stato delle migliorie addittive. La
+            //    preferenza torna a Unity nel JSON di setMode, senza premi. ──
+            "OpenSourceFeatureChanged" -> handleOpenSourceFeatureChanged(jsonData)
             // ── Fase 2 · consumabili: oggetto usato indoor in Miacittà.
             //    Android consuma la quantità solo se corrisponde a un aroma
             //    noto, e registra luogo/coordinate nello stesso diario. ──
@@ -357,6 +360,27 @@ object Bridge {
             "HuntixSync",
             "Uovo nascosto: $label ($feature) place=$place lat=$lat lng=$lng"
         )
+    }
+
+    /**
+     * Stato di una miglioria acquisita dall'audit open source. Android resta
+     * proprietario della preferenza: la salva e la rispedisce a Unity nel JSON
+     * di setMode. L'evento puo' portare un indizio uovo, registrato con lo
+     * stesso canale FeatureEggHidden (nessun premio, nessuna valuta).
+     */
+    private fun handleOpenSourceFeatureChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val id = j.optString("feature", "")
+        if (id.isBlank()) return
+        val ctx = UnityAppContext.context ?: return
+        val prefs = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("huntix_os_$id", j.optBoolean("on", false)).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Miglioria open source: $id on=${j.optBoolean("on", false)} " +
+                "detail=${j.optString("detail", "")}"
+        )
+        if (j.optBoolean("egg", false)) handleFeatureEggHidden(jsonData)
     }
 
     /** Profilo grafico Low/Medium/High scelto in MiCittà: lo stesso valore

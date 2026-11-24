@@ -156,6 +156,21 @@ public class BridgeActivity extends UnityPlayerActivity {
                     // dettaglio resta nel profilo Android, dove e' consultabile.
                     j.put("activityLogCount",
                             com.intelligame.huntix.managers.EggWhereLog.INSTANCE.count(this));
+                    // Audit open source: rimanda a Unity solo le preferenze
+                    // delle migliorie addittive (id=1/0), mai il diario o le
+                    // uova: Android resta l'unico proprietario dello stato.
+                    android.content.SharedPreferences osPrefs =
+                            getSharedPreferences("huntix_prefs", MODE_PRIVATE);
+                    StringBuilder osFlags = new StringBuilder();
+                    for (java.util.Map.Entry<String, ?> e : osPrefs.getAll().entrySet()) {
+                        String k = e.getKey();
+                        if (k.startsWith("huntix_os_") && e.getValue() instanceof Boolean) {
+                            if (osFlags.length() > 0) osFlags.append(',');
+                            osFlags.append(k.substring("huntix_os_".length()))
+                                    .append(((Boolean) e.getValue()) ? "=1" : "=0");
+                        }
+                    }
+                    j.put("openSourceFeatures", osFlags.toString());
                     // Fase 2 · consumabili: solo lo specchio dell'esca attiva e
                     // il numero di aromi disponibili. Nessun premio, nessun
                     // uovo generato su un ripristino passivo.

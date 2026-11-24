@@ -1006,5 +1006,40 @@ class TestEventBusSubscribeOnceIntegration(unittest.TestCase):
         self.assertIn("SlotCount = 21", self.probe)
 
 
+class TestOpenSourceFeatureBridgeInfrastructure(unittest.TestCase):
+    """Ponte bidirezionale comune: preferenza Android, uovo e telemetria."""
+
+    def setUp(self):
+        self.bridge = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics",
+                                        "OpenSourceFeatureBridge.cs"))
+        self.game = read(os.path.join(UNITY, "City", "Scripts", "Game.cs"))
+        self.manager = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.kt_bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.activity = read(os.path.join(APP, "BridgeActivity.java"))
+
+    def test_unity_ver_android(self):
+        self.assertIn('"OpenSourceFeatureChanged"', self.bridge)
+        self.assertIn('"OpenSourceFeatureChanged"', self.ipc)
+        self.assertIn('"OpenSourceFeatureChanged" -> handleOpenSourceFeatureChanged(jsonData)',
+                      self.kt_bridge)
+        self.assertIn('prefs.edit().putBoolean("huntix_os_$id"', self.kt_bridge)
+        self.assertIn("handleFeatureEggHidden(jsonData)", self.kt_bridge)
+
+    def test_android_ver_unity(self):
+        self.assertIn('j.put("openSourceFeatures", osFlags.toString())', self.activity)
+        self.assertIn("openSourceFeatures", self.manager)
+        self.assertIn("OpenSourceFeatureBridge.RestoreFromAndroid(", self.manager)
+        self.assertIn("public static void Register(string id, Action<bool> handler)", self.bridge)
+
+    def test_riflesso_uovo_e_misura(self):
+        self.assertIn("Game.Instance.GrantAuditEgg(id", self.bridge)
+        self.assertIn("public void GrantAuditEgg(string featureId", self.game)
+        self.assertIn("GrantFeatureEgg(featureId, label, EggController.Rarity.Uncommon, place)",
+                      self.game)
+        self.assertIn('using (PerfProbe.Measure("menu"))', self.bridge)
+        self.assertIn('SessionTelemetry.Instance.Mark("os feature %s=%s"', self.bridge)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

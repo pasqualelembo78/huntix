@@ -37,6 +37,9 @@ object UnityIpc {
         "MenuAnimationChanged", "QaConsoleChanged",
         "NpcCompanionChanged", "CompanionRecruited", "CompanionEggSpotted",
         "ActivityLogEvent",
+        // Audit open source: preferenze delle migliorie addittive (Unity ->
+        // app). Il ritorno viaggia nel JSON di setMode openSourceFeatures.
+        "OpenSourceFeatureChanged",
         // Fase 2 · consumabili: Unity segnala l'oggetto usato indoor; Android
         // consuma la quantita' e registra luogo/coordinate nel diario.
         "ConsumableUsed",

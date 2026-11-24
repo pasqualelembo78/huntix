@@ -326,6 +326,14 @@ namespace City
                 EggController.Rarity.Rare, place, at);
         }
 
+        /// <summary>Uovo-indizio delle migliorie dell'audit open source: stesso
+        /// canale FeatureEggHidden delle altre feature, senza premi ne' valute.
+        /// </summary>
+        public void GrantAuditEgg(string featureId, string label, string place)
+        {
+            GrantFeatureEgg(featureId, label, EggController.Rarity.Uncommon, place);
+        }
+
         private void SpawnFeatureEggAt(string featureId, string label,
             City.Economy.EggController.Rarity rarity, string place, Vector3 at)
         {
