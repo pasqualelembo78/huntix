@@ -54,12 +54,16 @@ nessun tocco a valute, Firestore, drop o P2P. Tutte le opzioni sono **opt-in**.
 - `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` — **8 OK**.
 - `cd backend/preprocessing/cscheck && ./check.sh` — **OK**, 0 errori, 194 warning noti.
 - `./gradlew :app:compileReleaseKotlin --offline -q` — **OK**.
+- `./build_release.sh --auto` con `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1` — **BUILD SUCCESSFUL in 5m 1s**: export Unity, AAR IL2CPP, APK firmato da 184 MB.
+- `apksigner verify` — **firma valida** (`CN=Huntix`, certificato SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`).
+- APK: `app/build/outputs/apk/release/app-release-signed.apk`, SHA-256 `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8`.
+- Token nell'APK — **14/14** nei dex (`OpenSourceFeatureChanged`, `openSourceFeatures`, `huntix_os_`) e nella metadata IL2CPP (12 ID delle feature).
 
 ## Non eseguiti / rischi residui
 
-- Nessun device o emulatore: touch, camera in guida, porte e dialoghi non collaudati a runtime.
-- La build Unity AAR/APK non è ancora stata ricostruita in questa sessione: `cscheck` non copre
-  `GameManager.cs`, `HamburgerMenu.cs` e i file esclusi dal suo elenco.
+- Nessun device o emulatore: touch, camera in guida, porte e dialoghi non collaudati a runtime; l'APK firmato non è stato installato.
+- La build Unity reale è stata eseguita con successo e ha corretto un errore in `Assets/Editor`
+  sfuggito a `cscheck`; restano non verificati solo i comportamenti runtime su device.
 - Nessun risultato di performance inventato: i target `PerfProbe` sono solo strumentati.
 - Rischi principali: bussola auto-rotante (mitigata da soglia/limite angolare), journal locale
   non autoritativo, latch porte 1 s, raggio camera in interni stretti, audit via reflection

@@ -210,6 +210,9 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 - `e19a0d36` — latch porte e diario uova atomico (MafiaUnity, 3ddriving).
 - `aaa5e1f0` — bussola uova e raggio camera dal frustum (android_openworld, dbrizov).
 - `c06dce1b` — persona NPC offline e definizioni missioni (unity-ai-npc, ai-npc-quest) + test statici.
+- `a7be02c0` — report finale, matrice comparativa e attribuzioni aggiornate.
+- `82de6e8b` — `.meta` mancante del ponte open source.
+- `687b188b` — grazia culling azzerata al rientro e firma `Report` allineata nel menu Editor.
 
 ---
 
@@ -246,16 +249,26 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 | `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` | **8 test OK** |
 | `cd backend/preprocessing/cscheck && ./check.sh` | **CSCHECK OK**, 0 errori, 194 warning pre-esistenti. Stubs allineati alle nuove API (`MissionData`, `City.World.InteractDoor`, `Mathf.Tan`, `Camera.aspect`, `Quaternion.RotateTowards`) |
 | `./gradlew :app:compileReleaseKotlin --offline -q` | **OK** (handler `OpenSourceFeatureChanged`, pref e `openSourceFeatures`) |
+| `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 ./build_release.sh --auto` | **BUILD SUCCESSFUL in 5m 1s** (89 task, 682 nodi IL2CPP, 0 falliti); export Unity, `:unityLibrary:assembleRelease` Il2Cpp e APK firmato da 184 MB. Log: `/tmp/opencode/build_release_open_source.log` |
+| `apksigner verify --print-certs app/build/outputs/apk/release/app-release-signed.apk` | **firma valida**, certificato `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c` |
+| `sha256sum app/build/outputs/apk/release/app-release-signed.apk` | `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8` |
+| Verifica token nell'APK (`classes*.dex` + `assets/bin/Data/Managed/Metadata/global-metadata.dat`) | **14/14 presenti**: `OpenSourceFeatureChanged`, `openSourceFeatures`, `huntix_os_`, `egg-cull`, `egg-compass`, `egg-journal`, `door-latch`, `npc-persona`, `quest-def`, `camera-radius`, `egg-hint`, `resource-defs`, `load-lifecycle`, `asset-packs`. I bridge sono nei dex, gli ID Unity nella metadata IL2CPP |
+| `md5sum -c /tmp/opencode/pre_build_hashes.txt` | **OK su 5/5** dopo il ripristino dei noti effetti collaterali della build (`link.xml.meta`, `PlayerHero.prefab`, `PlayerLocomotion.controller`) |
+
+La build Unity reale ha individuato un errore sfuggito a `cscheck` (cartella `Assets/Editor`
+non inclusa): `OpenSourceAuditMenu.cs` passava 6 argomenti a `OpenSourceFeatureBridge.Report`
+che ne accetta 5. Corretto in `687b188b`; la successiva compilazione batchmode non ha riportato
+errori C#.
 
 ### Non eseguiti (dichiarazione esplicita)
 
 - **Collaudo su dispositivo/emulatore**: non disponibile in questa sessione. Touch, camera in
   guida, rotazione bussola, latch porte e dialoghi NPC non sono verificati a runtime.
-- **Unity Editor batchmode / build AAR**: da eseguire nella fase di build release; `cscheck`
-  non copre `GameManager.cs`, `HamburgerMenu.cs` e i file esclusi dall'elenco dello script.
 - **MisurazioniPerfProbe/SessionTelemetry su device**: gli slot sono presenti e collegati,
   ma i target (distanze/s uova, p95 scrittura journal, 0 correzioni sopra soglia) restano
   da validare sul campo. Nessun risultato numerico è stato inventato.
+- **Test di installazione/avvio APK su device**: l'APK è firmato e verificato, ma non installato
+  (nessun device/emulatore disponibile).
 
 ---
 
@@ -275,7 +288,8 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 5. **Audit con reflection**: se una costante viene rinominata, l'audit riporta "skip" invece
    di rompere la build; non modifica mai i valori (`SetValue` assente, verificato da test).
 6. **Stubs cscheck**: i nuovi componenti sono verificati contro stub allineati, non contro
-   l'API Unity reale; la build AAR resta l'autorità finale.
+   l'API Unity reale; la build AAR è stata eseguita con successo ed è l'autorità finale, ma non
+   copre il comportamento a runtime su device.
 
 ---
 
@@ -300,9 +314,13 @@ invariato**; i percorsi storici restano attivi quando l'opzione è spenta.
 ## Fase 9 — Stato finale
 
 - Branch `integrazione-open-source`, 10 commit della sessione, `main` intoccato, **nulla pushato**.
-- Working tree: solo i noti log `docs/huntix_log_*` pre-esistenti da non toccare, più i due
-  documenti finali di questo audit.
-- Prossimo passo operativo: build release con AAR Unity ricostruito
-  (`BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1`), verifica token
-  nell'APK e ripristino dei noti effetti collaterali della build Unity.
+- Build release completata: AAR Unity IL2CPP ricostruito e APK firmato
+  `app/build/outputs/apk/release/app-release-signed.apk` (184 MB, SHA-256
+  `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8`). Tutti i 14 token
+  delle integrazioni sono presenti nell'APK; effetti collaterali noti della build Unity
+  ripristinati e verificati con `md5sum -c`.
+- Working tree: solo i noti log `docs/huntix_log_*` pre-esistenti da non toccare; i documenti
+  finali di questo audit sono committati nella sessione.
+- Prossimo passo operativo (fuori sessione): collaudo su dispositivo delle opzioni opt-in e
+  delle misure `PerfProbe`/`SessionTelemetry`.
 - Report di sintesi: `docs/HUNTIX_OPEN_SOURCE_IMPROVEMENTS_SUMMARY.md`.
