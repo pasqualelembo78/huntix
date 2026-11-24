@@ -67,10 +67,10 @@ dormienti finché non si aggiungono i dati.
 - `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` — **8 OK**.
 - `cd backend/preprocessing/cscheck && ./check.sh` — **OK**, 0 errori, 194 warning noti.
 - `./gradlew :app:compileReleaseKotlin --offline -q` — **OK**.
-- `./build_release.sh --auto` con `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1` — **BUILD SUCCESSFUL in 5m 1s**: export Unity, AAR IL2CPP, APK firmato da 184 MB.
+- `./build_release.sh --auto` con `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1` — **BUILD SUCCESSFUL**: export/Il2Cpp 4m 35s, app 1m 49s, APK firmato da 184 MB.
 - `apksigner verify` — **firma valida** (`CN=Huntix`, certificato SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`).
-- APK: `app/build/outputs/apk/release/app-release-signed.apk`, SHA-256 `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8`.
-- Token nell'APK — **14/14** nei dex (`OpenSourceFeatureChanged`, `openSourceFeatures`, `huntix_os_`) e nella metadata IL2CPP (12 ID delle feature).
+- APK: `app/build/outputs/apk/release/app-release-signed.apk`, SHA-256 `587859d3575746976713ba6ce801418a122c643756082916c50821edeeab4585`.
+- Token nell'APK — **17/17** nei dex (`OpenSourceFeatureChanged`, `openSourceFeatures`, `huntix_os_`) e nella metadata IL2CPP (14 token, inclusi `os-all` e le etichette del menu).
 
 ## Non eseguiti / rischi residui
 

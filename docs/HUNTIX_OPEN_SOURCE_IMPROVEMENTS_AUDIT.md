@@ -218,6 +218,7 @@ spenta.
 - `82de6e8b` — `.meta` mancante del ponte open source.
 - `687b188b` — grazia culling azzerata al rientro e firma `Report` allineata nel menu Editor.
 - `dc7abdac` — esito build release, firma APK e verifica token documentati.
+- `d098b740` — interruttore unico “Opzioni audit open source” nel menu hamburger.
 
 ---
 
@@ -254,11 +255,11 @@ spenta.
 | `cd backend && ./venv/bin/python -m unittest -q test_audit_regressions` | **8 test OK** |
 | `cd backend/preprocessing/cscheck && ./check.sh` | **CSCHECK OK**, 0 errori, 194 warning pre-esistenti. Stubs allineati alle nuove API (`MissionData`, `City.World.InteractDoor`, `Mathf.Tan`, `Camera.aspect`, `Quaternion.RotateTowards`) |
 | `./gradlew :app:compileReleaseKotlin --offline -q` | **OK** (handler `OpenSourceFeatureChanged`, pref e `openSourceFeatures`) |
-| `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 ./build_release.sh --auto` | **BUILD SUCCESSFUL in 5m 1s** (89 task, 682 nodi IL2CPP, 0 falliti); export Unity, `:unityLibrary:assembleRelease` Il2Cpp e APK firmato da 184 MB. Log: `/tmp/opencode/build_release_open_source.log` |
+| `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 ./build_release.sh --auto` | **BUILD SUCCESSFUL** (export/Il2Cpp 4m 35s, app 1m 49s); AAR Unity ricostruito e APK firmato da 184 MB. Log: `/tmp/opencode/build_release_open_source.log` |
 | `apksigner verify --print-certs app/build/outputs/apk/release/app-release-signed.apk` | **firma valida**, certificato `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c` |
-| `sha256sum app/build/outputs/apk/release/app-release-signed.apk` | `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8` |
-| Verifica token nell'APK (`classes*.dex` + `assets/bin/Data/Managed/Metadata/global-metadata.dat`) | **14/14 presenti**: `OpenSourceFeatureChanged`, `openSourceFeatures`, `huntix_os_`, `egg-cull`, `egg-compass`, `egg-journal`, `door-latch`, `npc-persona`, `quest-def`, `camera-radius`, `egg-hint`, `resource-defs`, `load-lifecycle`, `asset-packs`. I bridge sono nei dex, gli ID Unity nella metadata IL2CPP |
-| `md5sum -c /tmp/opencode/pre_build_hashes.txt` | **OK su 5/5** dopo il ripristino dei noti effetti collaterali della build (`link.xml.meta`, `PlayerHero.prefab`, `PlayerLocomotion.controller`) |
+| `sha256sum app/build/outputs/apk/release/app-release-signed.apk` | `587859d3575746976713ba6ce801418a122c643756082916c50821edeeab4585` |
+| Verifica token nell'APK (`classes*.dex` + `assets/bin/Data/Managed/Metadata/global-metadata.dat`) | **17/17 presenti**: i 14 precedenti più `os-all`, “Opzioni audit open source attivate”, “Opzioni audit open source disattivate”. I bridge sono nei dex, gli ID e le etichette Unity nella metadata IL2CPP |
+| `md5sum -c /tmp/opencode/pre_build_hashes.txt` | **OK su 6/6** dopo il ripristino dei noti effetti collaterali della build (`link.xml`, `link.xml.meta`, `PlayerHero.prefab`, `PlayerLocomotion.controller` e relativi `.meta`) |
 
 La build Unity reale ha individuato un errore sfuggito a `cscheck` (cartella `Assets/Editor`
 non inclusa): `OpenSourceAuditMenu.cs` passava 6 argomenti a `OpenSourceFeatureBridge.Report`
@@ -318,12 +319,12 @@ errori C#.
 
 ## Fase 9 — Stato finale
 
-- Branch `integrazione-open-source`, 10 commit della sessione, `main` intoccato, **nulla pushato**.
+- Branch `integrazione-open-source`, 13 commit della sessione, `main` intoccato, **nulla pushato**.
 - Build release completata: AAR Unity IL2CPP ricostruito e APK firmato
   `app/build/outputs/apk/release/app-release-signed.apk` (184 MB, SHA-256
-  `6ea4e40d2993690885972591ed02809cd9697df02a97a5091ab5c5ae2772aeb8`). Tutti i 14 token
-  delle integrazioni sono presenti nell'APK; effetti collaterali noti della build Unity
-  ripristinati e verificati con `md5sum -c`.
+  `587859d3575746976713ba6ce801418a122c643756082916c50821edeeab4585`). Tutti i 17 token
+  delle integrazioni — incluso l'interruttore unico — sono presenti nell'APK; effetti
+  collaterali noti della build Unity ripristinati e verificati con `md5sum -c`.
 - Working tree: solo i noti log `docs/huntix_log_*` pre-esistenti da non toccare; i documenti
   finali di questo audit sono committati nella sessione.
 - Prossimo passo operativo (fuori sessione): collaudo su dispositivo delle opzioni opt-in e
