@@ -18,6 +18,10 @@ namespace Huntix.Core
         // Registry asset Kenney City Kit (strade/edifici/arredo urbano, CC0).
         public CityKitAssetRegistry cityKitRegistry;
 
+        // Registry delle 13 texture PBR CC0 della modalita' cinematografica.
+        // Riferimento diretto: Resources.Load non risolve nel build Android.
+        public CinematicAssetRegistry cinematicRegistry;
+
         public string CurrentMode { get; private set; }
         public bool IsInUnity { get; private set; }
 
