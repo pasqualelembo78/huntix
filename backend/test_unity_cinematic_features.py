@@ -95,7 +95,12 @@ class TestCinematicBridge(unittest.TestCase):
         self.assertIn('CinematicFeatureBridge.AllEnabled', self.menu)
         self.assertIn('RefreshCinematicDetailLabels()', self.menu)
         self.assertIn('MakeSubPanel("CinematicPanel"', self.menu)
-        self.assertIn('1470f', self.menu)
+        self.assertIn('1540f', self.menu)
+        # Chiusura esplicita: voce nel menu e chiusura generica dei sub-panel.
+        self.assertIn('"Chiudi menu"', self.menu)
+        self.assertIn('() => CloseAll(),', self.menu)
+        self.assertIn('private readonly List<GameObject> _subPanels', self.menu)
+        self.assertIn('for (int i = 0; i < _subPanels.Count; i++)', self.menu)
 
     def test_effetti_collegati_senza_toccare_fisica(self):
         self.assertIn('CinematicGraphics.ApplyRoad(mat)', read(
@@ -121,6 +126,12 @@ class TestCinematicBridge(unittest.TestCase):
             self.assertIn(token, self.graphics)
         # Gli switch devono essere reversibili: snapshot e restore dei materiali.
         self.assertIn('class MatSnapshot', self.graphics)
+        # Nessun GetTexture senza HasProperty: Sprites/Default non ha
+        # _OcclusionMap né _MetallicGlossMap e loggava errori a schermo.
+        self.assertIn('private static Texture GetTex(Material m, string prop)', self.graphics)
+        self.assertIn('m.HasProperty("_BumpMap")', self.graphics)
+        self.assertNotIn('m.GetTexture("_OcclusionMap")', self.graphics)
+        self.assertNotIn('m.GetTexture("_MetallicGlossMap")', self.graphics)
         self.assertIn('private static void Save(Material m)', self.graphics)
         self.assertIn('private static void Restore(Material m)', self.graphics)
         self.assertIn('AtmosphereEnabled', self.graphics)

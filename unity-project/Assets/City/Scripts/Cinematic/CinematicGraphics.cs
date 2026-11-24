@@ -30,16 +30,29 @@ namespace City.Cinematic
             public float bumpScale, occlusionStrength, smoothness, metallic, glossScale;
         }
 
+        // Material.GetTexture() logga un errore se la proprieta' non esiste
+        // nello shader (es. Sprites/Default non ha _OcclusionMap): controlare
+        // sempre HasProperty prima di leggere.
+        private static Texture GetTex(Material m, string prop)
+        {
+            return m != null && m.HasProperty(prop) ? m.GetTexture(prop) : null;
+        }
+
+        private static bool HasTex(Material m, string prop)
+        {
+            return GetTex(m, prop) != null;
+        }
+
         private static void Save(Material m)
         {
             if (m == null || _saved.ContainsKey(m)) return;
             _saved[m] = new MatSnapshot
             {
-                baseMap = m.GetTexture("_BaseMap"),
-                mainTex = m.GetTexture("_MainTex"),
-                bump = m.GetTexture("_BumpMap"),
-                occlusion = m.GetTexture("_OcclusionMap"),
-                gloss = m.GetTexture("_MetallicGlossMap"),
+                baseMap = GetTex(m, "_BaseMap"),
+                mainTex = GetTex(m, "_MainTex"),
+                bump = GetTex(m, "_BumpMap"),
+                occlusion = GetTex(m, "_OcclusionMap"),
+                gloss = GetTex(m, "_MetallicGlossMap"),
                 bumpScale = m.HasProperty("_BumpScale") ? m.GetFloat("_BumpScale") : 0f,
                 occlusionStrength = m.HasProperty("_OcclusionStrength") ? m.GetFloat("_OcclusionStrength") : 0f,
                 smoothness = m.HasProperty("_Smoothness") ? m.GetFloat("_Smoothness") : 0f,
@@ -264,7 +277,16 @@ namespace City.Cinematic
             {
                 var m = ms[j];
                 if (m == null || _facadeDone.Contains(m)) continue;
-                if (m.GetTexture("_BaseMap") != null || m.GetTexture("_MainTex") != null) continue;
+                // Solo materiali 3D con supporto normal map: esclude sprite,
+                // UI, testo e unlit, che non hanno _BumpMap e genererebbero
+                // errori "doesn't have a texture property".
+                if (!m.HasProperty("_BumpMap")) continue;
+                var sh = m.shader;
+                if (sh != null && sh.name != null &&
+                    (sh.name.StartsWith("Sprites/") || sh.name.StartsWith("UI/") ||
+                     sh.name.StartsWith("TextMeshPro/") || sh.name.StartsWith("Particles/")))
+                    continue;
+                if (HasTex(m, "_BaseMap") || HasTex(m, "_MainTex")) continue;
                 if (!_facadeDone.Add(m)) continue;
                 Save(m);
                 var scale = new Vector2(2f, 2f);

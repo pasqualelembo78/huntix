@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using City.OSM;
@@ -22,6 +23,9 @@ namespace City.UI
         private GameObject skinPanel;
         private GameObject profilePanel;
         private GameObject cinematicPanel;
+        // Tutti i sotto-pannelli creati a runtime: CloseAll li chiude anche se
+        // non sono campi dedicati, così nessuna funzione resta aperta.
+        private readonly List<GameObject> _subPanels = new List<GameObject>();
         private GameObject skinSelRow;
         private Text _styleLabel;
         private Text _qualityLabel;
@@ -172,7 +176,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1470f);
+            prt.sizeDelta = new Vector2(360f, 1540f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -196,6 +200,7 @@ namespace City.UI
                 "Ricette di fusione (guida)",
                 "Modalità cinematografica: Off",
                 "Dettagli grafica cinematografica",
+                "Chiudi menu",
             };
             System.Action[] actions =
             {
@@ -290,6 +295,7 @@ namespace City.UI
                 },
                 () => ToggleCinematicAll(),
                 () => OpenCinematicPanel(),
+                () => CloseAll(),
             };
 
             for (int i = 0; i < labels.Length; i++)
@@ -518,7 +524,7 @@ namespace City.UI
 
         private void BuildCinematicPanel()
         {
-            cinematicPanel = MakeSubPanel("CinematicPanel", 470f, 660f);
+            cinematicPanel = MakeSubPanel("CinematicPanel", 470f, 720f);
             AddHeader(cinematicPanel, "DETTAGLI GRAFICA CINEMATOGRAFICA");
             string[] ids = City.Diagnostics.CinematicFeatureBridge.AllIds;
             _cinematicDetailLabels = new Text[ids.Length];
@@ -665,9 +671,10 @@ namespace City.UI
         private void CloseAll()
         {
             if (panel != null) panel.SetActive(false);
-            if (skinPanel != null) skinPanel.SetActive(false);
-            if (profilePanel != null) profilePanel.SetActive(false);
-            if (cinematicPanel != null) cinematicPanel.SetActive(false);
+            // Chiude ogni sotto-pannello, anche quelli creati in futuro senza
+            // un campo dedicato: dopo "Chiudi menu" non resta nulla aperto.
+            for (int i = 0; i < _subPanels.Count; i++)
+                if (_subPanels[i] != null) _subPanels[i].SetActive(false);
         }
 
         private static readonly string[] SkinNames =
@@ -887,6 +894,7 @@ namespace City.UI
             rt.sizeDelta = new Vector2(w, h);
             sp.GetComponent<Image>().color = Bg;
             sp.SetActive(false);
+            if (!_subPanels.Contains(sp)) _subPanels.Add(sp);
 
             var close = new GameObject("Close", typeof(Image), typeof(Button));
             close.transform.SetParent(sp.transform, false);
@@ -895,7 +903,7 @@ namespace City.UI
             crt.anchorMax = new Vector2(1f, 1f);
             crt.pivot = new Vector2(1f, 1f);
             crt.anchoredPosition = new Vector2(-16f, -16f);
-            crt.sizeDelta = new Vector2(120f, 64f);
+            crt.sizeDelta = new Vector2(160f, 72f);
             close.GetComponent<Image>().color = BtnBg;
             close.GetComponent<Button>().onClick.AddListener(() => { CloseAll(); });
             var lbl = NewLabel(close.transform);

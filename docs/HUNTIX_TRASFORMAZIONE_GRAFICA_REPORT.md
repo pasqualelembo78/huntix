@@ -137,6 +137,15 @@ texture) restano dietro lo switch preesistente `Stile edifici`.
   exist in the current context` — Unity aveva compilato una versione
   intermedia di `CinematicGraphics.cs` mentre il metodo veniva aggiunto.
   Risolto completando il metodo e rilanciando la build (vedi §19).
+- Errori a runtime segnalati dall'utente all'attivazione della modalità:
+  `Material 'Sprites/Default' ... doesn't have a texture property
+  '_OcclusionMap'` e `'_MetallicGlossMap'`. Causa: `Save()` leggeva le texture
+  senza verificare `HasProperty`, e `RefreshFacades()` considerava anche
+  materiali Sprite/UI. Risolto con getter protetti da `HasProperty` e filtro
+  esplicito degli shader non 3D (`_BumpMap` richiesto).
+- Menu hamburger senza chiusura esplicita: aggiunta voce "Chiudi menu",
+  pulsante CHIUDI più grande nei sub-panel e `CloseAll()` che chiude tutti i
+  sub-panel registrati, anche futuri.
 
 ## 16. Problemi risolti
 
@@ -171,19 +180,18 @@ verificabili; hiccup di importazione Unity evitato con `.meta` e GUID espliciti.
 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1
 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 ./build_release.sh --auto`
 
-**Esito: riuscita.** `BUILD SUCCESSFUL` sia per l'AAR Unity (4m 28s) sia per
-l'APK (1m 56s); `:app:compileReleaseKotlin` e `:huntix:compileReleaseKotlin`
-OK, firma e zipalign verificati. Log: `/tmp/opencode/build_cinematic_final.log`.
+**Esito: riuscita.** `BUILD SUCCESSFUL` sia per l'AAR Unity (4m 30s) sia per
+l'APK (1m 40s); `:app:compileReleaseKotlin` e `:huntix:compileReleaseKotlin`
+OK, firma e zipalign verificati. Log: `/tmp/opencode/build_cinematic_fix.log`.
 
 APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
 
 - Dimensione: **199.459.830 byte** (191 MB)
-- SHA-256: `ca116cb660fc88fc29f09e85c624cd4c6c21fb7bf93e1f00e00c13895ba445f7`
+- SHA-256: `e4dc235846bf6f40e485d0597c10d7d7693023d6bf5f2bc7a2bd9036eca9aa3a`
 
-Il precedente tentativo con codice intermedio era fallito per il `RefreshFacades`
-mancante (§15); l'hash qui sopra si riferisce alla build finale con tutte le 13
-texture collegate. `TileClient.CacheVersion` resta 5: il formato geo/graph non
-è cambiato.
+L'hash comprende anche le correzioni runtime segnalate dall'utente (§15):
+getter `HasProperty`-safe e chiusura esplicita del menu. `TileClient.CacheVersion`
+resta 5: il formato geo/graph non è cambiato.
 
 Effetti collaterali noti della build Unity (`link.xml.meta`,
 `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati con
