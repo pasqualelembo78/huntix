@@ -93,8 +93,11 @@ object EggFusionCraftManager {
         if (!canCraft(ctx)) return null
 
         // Snapshot prima di toccare qualsiasi cosa: serve a verificare che la
-        // fusione storica abbia consumato esattamente le uova negli slot.
-        val expected = slots(ctx).filterNotNull().map { it.istanzaId }.sorted()
+        // fusione storica abbia consumato esattamente le uova negli slot e a
+        // ricordare il livello di partenza per la scoperta della ricetta.
+        val before = slots(ctx).filterNotNull()
+        val expected = before.map { it.istanzaId }.sorted()
+        val fromLevel = before.firstOrNull()?.level ?: 1
 
         val fused = try {
             SavedManager.executeFusionSlots(ctx)
@@ -158,8 +161,15 @@ object EggFusionCraftManager {
                 "Fusione ripetuta: $name", where, lat, lng, name)
         }
 
+        // Fase 2 · voce 16: la ricetta usata viene "scoperta" una sola volta.
+        // È un evento additivo: non cambia la fusione, aggiunge solo un uovo
+        // posizionale dedicato e una voce nello stesso diario delle uova.
+        val discovered = EggFusionRecipeManager.markUsed(
+            ctx, fromLevel, rarity.id, fused.displayName, place, lat, lng)
+
         val tail = if (inventoryFull) " · inventario pieno: controlla le uova schiuse" else ""
-        val msg = "${fused.emoji} ${fused.displayName} creato! ${fused.levelTag} · ricordo nel diario 🥚$tail"
+        val msg = "${fused.emoji} ${fused.displayName} creato! ${fused.levelTag} · ricordo nel diario 🥚$tail" +
+                  (if (discovered != null) " · $discovered" else "")
         AppLog.i(TAG, "$msg ($eggId a $lat,$lng)")
         notifyUnity(ctx, fused, eggId, msg)
         return msg

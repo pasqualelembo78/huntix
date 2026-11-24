@@ -187,6 +187,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                     j.put("inventoryCount", inventory.optInt("inventoryCount", 0));
                     j.put("inventoryTeamCount", inventory.optInt("inventoryTeamCount", 0));
                     j.put("inventorySortMode", inventory.optString("inventorySortMode", "recent"));
+                    // Fase 2 · ricette: solo contatori di scoperta; nessuna
+                    // ricetta viene "usata" e nessun uovo generato all'avvio.
+                    org.json.JSONObject recipes =
+                            com.intelligame.huntix.managers.EggFusionRecipeManager.INSTANCE.snapshot(this);
+                    j.put("recipeDiscoveredCount", recipes.optInt("recipeDiscoveredCount", 0));
+                    j.put("recipeLastId", recipes.optString("recipeLastId", ""));
+                    j.put("recipeUses", recipes.optInt("recipeUses", 0));
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

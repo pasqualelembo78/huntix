@@ -48,6 +48,9 @@ object UnityIpc {
         "CraftRequest",
         // Fase 2 · inventario evoluto: Unity apre la collezione uova Android.
         "InventoryViewRequest",
+        // Fase 2 · ricette: Unity apre il ricettario (in CraftActivity) oppure
+        // chiede il solo specchio delle ricette scoperte.
+        "RecipeRequest",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"

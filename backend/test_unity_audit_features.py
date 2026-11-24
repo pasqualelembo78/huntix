@@ -170,7 +170,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
     def test_slot_probe_e_telemetria(self):
         # SlotCount sale con gli slot "bait" e "harvest" della Fase 2; gli
         # slot preesistenti (traffic incluso) restano tutti presenti.
-        self.assertIn("SlotCount = 19", self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -710,7 +710,7 @@ class TestFase2ConsumabiliEsca(unittest.TestCase):
         self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
         self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
         self.assertIn('"bait"', self.probe)
-        self.assertIn("SlotCount = 19", self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
         self.assertIn('Measure("bait")', self.manager)
         self.assertIn("Aromi disponibili: {0}", self.manager)
 
@@ -764,7 +764,7 @@ class TestFase2RaccoltaRisorse(unittest.TestCase):
         self.assertIn('Measure("harvest")', self.manager_cs)
         self.assertIn('Measure("harvest")', self.interaction)
         self.assertIn('"harvest"', self.probe)
-        self.assertIn("SlotCount = 19", self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
         self.assertIn("Raccolte: {0}", self.manager_cs)
 
     def test_ui_italiano_senza_consumare_inventari_esistenti(self):
@@ -837,7 +837,7 @@ class TestFase2Crafting(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_fusion_craft_count"', self.manager_cs)
         self.assertIn('Measure("craft")', self.manager_cs)
         self.assertIn('"craft"', self.probe)
-        self.assertIn("SlotCount = 19", self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
 
     def test_ui_italiana_senza_secondario_inventario(self):
         self.assertIn('android:name=".CraftActivity"', self.manifest)
@@ -903,7 +903,7 @@ class TestFase2InventarioEvoluto(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_inventory_egg_count"', self.manager_cs)
         self.assertIn('Measure("inventory")', self.manager_cs)
         self.assertIn('"inventory"', self.probe)
-        self.assertIn("SlotCount = 19", self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
 
     def test_ui_italiana_senza_secondario_inventario(self):
         self.assertIn('android:name=".EggCollectionActivity"', self.manifest)
@@ -914,6 +914,66 @@ class TestFase2InventarioEvoluto(unittest.TestCase):
         self.assertIn("mgr.toggleTeam(c, egg.istanzaId)", self.activity)
         self.assertIn("squadra uova è diversa", self.activity)
         self.assertNotIn("addEgg", self.activity)
+
+
+class TestFase2Ricette(unittest.TestCase):
+    """Fase 2 · voce 16: ricettario in sola lettura, scoperte addittive."""
+
+    def setUp(self):
+        java = os.path.join(ROOT, "app", "src", "main", "java", "com", "intelligame", "huntix")
+        self.manager = read(os.path.join(java, "managers", "EggFusionRecipeManager.kt"))
+        self.craft_manager = read(os.path.join(java, "managers", "EggFusionCraftManager.kt"))
+        self.activity = read(os.path.join(java, "CraftActivity.kt"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.manager_cs = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.menu_cs = read(os.path.join(UNITY, "City", "Scripts", "UI", "HamburgerMenu.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_catalogo_aderente_al_motore_senza_livelli_uguali(self):
+        self.assertIn('Recipe(1, 2, "𝄞 Cristallo Potenziato"', self.manager)
+        self.assertIn('Recipe(2, 3, "✧ Cristallo Supremo"', self.manager)
+        self.assertIn('Recipe(3, 4, "✦ Cristallo MAXIMUM"', self.manager)
+        self.assertIn("3 uova Lv.1 della stessa creatura → 1 uovo Lv.2 (potenza ×2)",
+                      self.manager)
+        self.assertIn("non occorre che i tre livelli siano uguali", self.activity)
+        self.assertIn("EggFusionCraftManager.available(ctx)", self.manager)
+        for token in ("SavedManager.executeFusionSlots(ctx)", "SavedManager.canFuse(ctx)",
+                      "spendMvc", "spendGems", "dropTable"):
+            self.assertNotIn(token, self.manager)
+
+    def test_riflesso_uovo_posizionale_distinto_dalla_fusione(self):
+        self.assertIn('val id: String get() = "recipe_${fromLevel}_to_${toLevel}"', self.manager)
+        self.assertIn('"fusion_" + actual.joinToString("_")', self.craft_manager)
+        self.assertIn("EggFusionRecipeManager.markUsed(\n            ctx, fromLevel, rarity.id, fused.displayName, place, lat, lng)",
+                      self.craft_manager)
+        self.assertIn('none { it.eggId == id }', self.manager)
+        self.assertIn("EggWhereLog.record(ctx, rarity.id, where, lat, lng, name)", self.manager)
+        self.assertIn("EggWhereLog.recordActivity(", self.manager)
+        self.assertIn("xpReward = 0", self.manager)
+        self.assertIn("PoiUnityBridge.sendEvent(\"RecipeDiscoveryChanged\"", self.manager)
+
+    def test_bridge_bidirezionale_e_misure(self):
+        self.assertIn('"RecipeRequest"', self.ipc)
+        self.assertIn('"RecipeRequest" -> handleRecipeRequest', self.bridge)
+        self.assertIn('EggFusionRecipeManager\n                .report(', self.bridge)
+        self.assertIn('SendMessageToAndroid(\n                            "RecipeRequest", "{\\"action\\":\\"open\\"}"',
+                      self.menu_cs)
+        self.assertIn('case "RecipeDiscoveryChanged":', self.manager_cs)
+        self.assertIn('j.put("recipeDiscoveredCount"', self.bridge_activity)
+        self.assertIn('PlayerPrefs.SetInt("huntix_recipe_discovered_count"', self.manager_cs)
+        self.assertIn('Measure("recipe")', self.manager_cs)
+        self.assertIn('"recipe"', self.probe)
+        self.assertIn("SlotCount = 20", self.probe)
+
+    def test_ui_sola_lettura_senza_nuova_activity(self):
+        self.assertIn("Ricette di fusione — ", self.activity)
+        self.assertIn("EggFusionRecipeManager.views(c).forEach", self.activity)
+        self.assertIn("Non avvia fusioni", self.activity)
+        self.assertIn("Ricette di fusione (guida)", self.menu_cs)
+        self.assertIn("prt.sizeDelta = new Vector2(360f, 1220f)", self.menu_cs)
+        self.assertIn("Le ricette sono una guida", self.activity)
 
 
 if __name__ == "__main__":

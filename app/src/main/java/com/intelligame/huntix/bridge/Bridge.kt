@@ -256,6 +256,9 @@ object Bridge {
             // ── Fase 2 · inventario evoluto: apre la collezione uova Android;
             //    A→U risponde con EggInventoryChanged (solo contatori). ──
             "InventoryViewRequest" -> handleInventoryViewRequest(jsonData)
+            // ── Fase 2 · ricette di fusione: apre il ricettario in sola
+            //    lettura; A→U risponde con RecipeDiscoveryChanged. ──
+            "RecipeRequest" -> handleRecipeRequest(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -547,6 +550,25 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync", "Consumabile usato: $itemId (${j.optString("place", "Miacittà→indoor")})"
         )
+    }
+
+    /**
+     * Fase 2 · voce 16: Miacittà chiede il ricettario di fusione. La sezione
+     * è in sola lettura dentro CraftActivity: non avvia fusioni e non tocca
+     * le valute. `action=snapshot` aggiorna solo lo specchio Unity.
+     */
+    private fun handleRecipeRequest(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { JSONObject() }
+        if (j.optString("action", "open") == "snapshot") {
+            com.intelligame.huntix.managers.EggFusionRecipeManager
+                .report(UnityAppContext.context ?: return)
+            return
+        }
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val intent = Intent(ctx, com.intelligame.huntix.CraftActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
     }
 
     /**

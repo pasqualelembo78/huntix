@@ -246,6 +246,11 @@ namespace Huntix.Core
                 case "EggInventoryChanged":
                     HandleEggInventoryChanged(jsonData);
                     break;
+                // Fase 2 · ricette: Android manda solo i contatori di scoperta;
+                // il ricettario resta in sola lettura dentro l'app.
+                case "RecipeDiscoveryChanged":
+                    HandleRecipeDiscoveryChanged(jsonData);
+                    break;
                 case "setTargetCoord":
                     City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
                     break;
@@ -495,6 +500,26 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] collezione uova ripristinata da Android");
                 }
 
+                // Fase 2 · ricette: specchio passivo di scoperte e utilizzi.
+                var recipeCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"recipeDiscoveredCount\"\\s*:\\s*(\\d+)");
+                var recipeUses = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"recipeUses\"\\s*:\\s*(\\d+)");
+                if (recipeCount.Success || recipeUses.Success)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("recipe"))
+                    {
+                        int scoperte = recipeCount.Success ? int.Parse(recipeCount.Groups[1].Value) : 0;
+                        int usi = recipeUses.Success ? int.Parse(recipeUses.Groups[1].Value) : 0;
+                        PlayerPrefs.SetInt("huntix_recipe_discovered_count", scoperte);
+                        PlayerPrefs.SetInt("huntix_recipe_uses", usi);
+                        if (City.Diagnostics.SessionTelemetry.Instance != null)
+                            City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                "Ricette: {0} scoperte · {1} usi", scoperte, usi);
+                    }
+                    Debug.Log("[GameManager] ricette ripristinate da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(
@@ -623,6 +648,35 @@ namespace Huntix.Core
                         uova, squadra, ordine);
             }
             Debug.Log("[GameManager] collezione da Android: " + uova + " uova, squadra " + squadra);
+        }
+
+        /// <summary>
+        /// Fase 2 · voce 16: una ricetta è stata usata per la prima volta (o
+        /// riutilizzata). Unity conserva solo lo specchio dei contatori; la
+        /// scoperta e l'uovo posizionale restano di competenza Android.
+        /// </summary>
+        private void HandleRecipeDiscoveryChanged(string jsonData)
+        {
+            var count = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"recipeDiscoveredCount\"\\s*:\\s*(\\d+)");
+            var uses = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"recipeUses\"\\s*:\\s*(\\d+)");
+            var last = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"recipeLastId\"\\s*:\\s*\"([^\"]+)\"");
+            int scoperte = count.Success ? int.Parse(count.Groups[1].Value) : 0;
+            int usi = uses.Success ? int.Parse(uses.Groups[1].Value) : 0;
+            string ultima = last.Success ? last.Groups[1].Value : "";
+            using (City.Diagnostics.PerfProbe.Measure("recipe"))
+            {
+                PlayerPrefs.SetInt("huntix_recipe_discovered_count", scoperte);
+                PlayerPrefs.SetInt("huntix_recipe_uses", usi);
+                if (!string.IsNullOrEmpty(ultima))
+                    PlayerPrefs.SetString("huntix_recipe_last_id", ultima);
+                if (City.Diagnostics.SessionTelemetry.Instance != null)
+                    City.Diagnostics.SessionTelemetry.Instance.Mark(
+                        "Ricetta {0} · scoperte {1} · usi {2}", ultima, scoperte, usi);
+            }
+            Debug.Log("[GameManager] ricetta da Android: " + ultima + " (scoperte " + scoperte + ")");
         }
 
         // ── Esplora: ricezione POI da Android (Overpass) ─────────────

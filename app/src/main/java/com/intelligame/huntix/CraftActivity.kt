@@ -10,6 +10,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.intelligame.huntix.managers.EggFusionCraftManager
+import com.intelligame.huntix.managers.EggFusionRecipeManager
 
 /**
  * Fase 2 · voce 15: UI italiana della fusione uova già esistente.
@@ -110,6 +111,44 @@ class CraftActivity : BaseNavActivity() {
                 gravity = Gravity.CENTER
             }))
         }
+
+        // Fase 2 · voce 16: ricettario in sola lettura. Non avvia fusioni:
+        // il giocatore continua a riempire gli slot qui sopra. La guida non
+        // impone livelli uguali, come non li impone il motore di fusione.
+        children.add(UiKit.section(c, "Ricette di fusione — " +
+            "${EggFusionRecipeManager.discoveredCount(c)}/${EggFusionRecipeManager.catalog().size} scoperte"))
+        EggFusionRecipeManager.views(c).forEach { view ->
+            val r = view.recipe
+            val mark = if (view.discovered) "📖" else "❔"
+            children.add(UiKit.card(c,
+                TextView(c).apply {
+                    text = "$mark ${r.title}  ·  ${r.targetTag}"
+                    textSize = 14f
+                    setTextColor(if (view.discovered) Color.WHITE
+                                 else Color.parseColor(UiKit.TEXT_DIM))
+                },
+                TextView(c).apply {
+                    text = r.description
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#A5D6A7"))
+                },
+                TextView(c).apply {
+                    text = if (view.readyGroups > 0)
+                        "Pronte: ${view.readyGroups} creature con uova adatte"
+                        else "Nessun gruppo pronto al momento"
+                    textSize = 11f
+                    setTextColor(Color.parseColor(
+                        if (view.readyGroups > 0) "#FFD54F" else UiKit.TEXT_DIM))
+                }
+            ))
+        }
+        children.add(UiKit.card(c, TextView(c).apply {
+            text = "Le ricette sono una guida: il motore prende il livello della " +
+                   "prima uovo nello slot, quindi non occorre che i tre livelli siano uguali. " +
+                   "Usate ${EggFusionRecipeManager.uses(c)} volte."
+            textSize = 12f
+            setTextColor(Color.parseColor("#FFCC80"))
+        }))
 
         children.add(UiKit.card(c, TextView(c).apply {
             text = "Fusioni completate: ${mgr.total(c)} · ultimo livello: ${mgr.lastLevel(c)}"

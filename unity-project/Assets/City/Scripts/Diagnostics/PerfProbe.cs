@@ -14,7 +14,7 @@ namespace City.Diagnostics
     /// </summary>
     public static class PerfProbe
     {
-        private const int SlotCount = 19;
+        private const int SlotCount = 20;
         // "spawn" = istanziazione NPC/veicoli, "roads" = meshing asfalto e
         // marciapiedi. Aggiunti dopo il log 23/11: move/camera/ik/chunk/input
         // sommavano 6-13 ms mentre il frame era a 266-300 ms, quindi il tempo
@@ -32,8 +32,9 @@ namespace City.Diagnostics
         // "craft" copre la conferma della fusione uova (Fase 2 · voce 15):
         // nessun lavoro per frame, solo lo scambio con Android.
         // "inventory" copre lo specchio della collezione (Fase 2 · voce 11).
+        // "recipe" copre la scoperta delle ricette di fusione (voce 16).
         private static readonly string[] Names =
-            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait", "harvest", "craft", "inventory" };
+            { "move", "camera", "ik", "chunk", "anim", "input", "spawn", "roads", "traffic", "fictional", "mount", "menu", "console", "companion", "diary", "bait", "harvest", "craft", "inventory", "recipe" };
         private static readonly float[] Sum = new float[SlotCount];
         private static readonly float[] Peak = new float[SlotCount];
         private static readonly int[] Samples = new int[SlotCount];

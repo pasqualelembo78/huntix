@@ -168,7 +168,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1130f);
+            prt.sizeDelta = new Vector2(360f, 1220f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -188,6 +188,7 @@ namespace City.UI
                 "Compagno NPC: Off",
                 "Fondi le uova (crafting)",
                 "Le tue uova (collezione)",
+                "Ricette di fusione (guida)",
             };
             System.Action[] actions =
             {
@@ -262,6 +263,21 @@ namespace City.UI
                     catch (System.Exception e)
                     {
                         Debug.LogWarning("[HamburgerMenu] InventoryViewRequest: " + e.Message);
+                    }
+                },
+                () =>
+                {
+                    // Fase 2 · voce 16: il ricettario e' una sezione in sola
+                    // lettura della UI crafting Android.
+                    SetVisible(false);
+                    try
+                    {
+                        Huntix.Bridge.UnityBridge.SendMessageToAndroid(
+                            "RecipeRequest", "{\"action\":\"open\"}");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning("[HamburgerMenu] RecipeRequest: " + e.Message);
                     }
                 },
             };
