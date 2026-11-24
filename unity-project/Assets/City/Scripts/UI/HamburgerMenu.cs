@@ -356,9 +356,9 @@ namespace City.UI
         /// letta da BuildingPlacer.PlaceLegacy al prossimo build.</summary>
         private void ToggleBuildingStyle()
         {
-            // I prefab Quaternius restano nel progetto, ma il loro caricamento
-            // e' inibito: il toggle non puo' riattivarli a caldo. Spieghiamo il
-            // motivo invece di far credere che la scelta sia cambiata.
+            // Quaternius riabilitato su richiesta del proprietario (24/11):
+            // il toggle torna a funzionare. Il guard resta come rete di
+            // sicurezza in caso di disattivazione futura.
             if (!CityStyle.CanUseQuaternius)
             {
                 if (UIManager.Instance != null)
