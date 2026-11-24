@@ -241,6 +241,11 @@ namespace Huntix.Core
                 case "FusionCrafted":
                     HandleFusionCrafted(jsonData);
                     break;
+                // Fase 2 · inventario evoluto: Android manda solo contatori e
+                // preferenza di vista, mai l'inventario uova completo.
+                case "EggInventoryChanged":
+                    HandleEggInventoryChanged(jsonData);
+                    break;
                 case "setTargetCoord":
                     City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
                     break;
@@ -470,6 +475,26 @@ namespace Huntix.Core
                     Debug.Log("[GameManager] fusioni ripristinate da Android");
                 }
 
+                // Fase 2 · inventario evoluto: specchio passivo dei contatori.
+                var invCount = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"inventoryCount\"\\s*:\\s*(\\d+)");
+                var invTeam = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"inventoryTeamCount\"\\s*:\\s*(\\d+)");
+                if (invCount.Success || invTeam.Success)
+                {
+                    using (City.Diagnostics.PerfProbe.Measure("inventory"))
+                    {
+                        int uova = invCount.Success ? int.Parse(invCount.Groups[1].Value) : 0;
+                        int squadra = invTeam.Success ? int.Parse(invTeam.Groups[1].Value) : 0;
+                        PlayerPrefs.SetInt("huntix_inventory_egg_count", uova);
+                        PlayerPrefs.SetInt("huntix_inventory_team_count", squadra);
+                        if (City.Diagnostics.SessionTelemetry.Instance != null)
+                            City.Diagnostics.SessionTelemetry.Instance.Mark(
+                                "Collezione: {0} uova · squadra {1}", uova, squadra);
+                    }
+                    Debug.Log("[GameManager] collezione uova ripristinata da Android");
+                }
+
                 // Ultimo mezzo a bordo salvato da Android (formato "tipo|posto"):
                 // ripristino passivo, senza salire in auto e senza uova.
                 var vehicleMount = System.Text.RegularExpressions.Regex.Match(
@@ -570,6 +595,34 @@ namespace Huntix.Core
                     City.UI.UIManager.Instance.ShowToast("🥚 " + label + " creato!");
             }
             Debug.Log("[GameManager] fusione da Android: " + label + " Lv." + livello);
+        }
+
+        /// <summary>
+        /// Fase 2 · voce 11: specchio della collezione uova Android. Unity non
+        /// possiede l'inventario: conserva solo i contatori per HUD/telemetria.
+        /// </summary>
+        private void HandleEggInventoryChanged(string jsonData)
+        {
+            var count = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"inventoryCount\"\\s*:\\s*(\\d+)");
+            var team = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"inventoryTeamCount\"\\s*:\\s*(\\d+)");
+            var mode = System.Text.RegularExpressions.Regex.Match(
+                jsonData, "\"inventorySortMode\"\\s*:\\s*\"([^\"]+)\"");
+            int uova = count.Success ? int.Parse(count.Groups[1].Value) : 0;
+            int squadra = team.Success ? int.Parse(team.Groups[1].Value) : 0;
+            string ordine = mode.Success ? mode.Groups[1].Value : "recent";
+            using (City.Diagnostics.PerfProbe.Measure("inventory"))
+            {
+                PlayerPrefs.SetInt("huntix_inventory_egg_count", uova);
+                PlayerPrefs.SetInt("huntix_inventory_team_count", squadra);
+                PlayerPrefs.SetString("huntix_inventory_sort_mode", ordine);
+                if (City.Diagnostics.SessionTelemetry.Instance != null)
+                    City.Diagnostics.SessionTelemetry.Instance.Mark(
+                        "Collezione aggiornata: {0} uova · squadra {1} · ordine {2}",
+                        uova, squadra, ordine);
+            }
+            Debug.Log("[GameManager] collezione da Android: " + uova + " uova, squadra " + squadra);
         }
 
         // ── Esplora: ricezione POI da Android (Overpass) ─────────────

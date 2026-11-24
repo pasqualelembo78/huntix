@@ -166,7 +166,9 @@ namespace City.UI
             prt.anchorMin = prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
             prt.anchoredPosition = new Vector2(-16f, 0f);
-            prt.sizeDelta = new Vector2(360f, 982f);
+            // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
+            // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
+            prt.sizeDelta = new Vector2(360f, 1130f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -185,6 +187,7 @@ namespace City.UI
                 "Console QA: Off",
                 "Compagno NPC: Off",
                 "Fondi le uova (crafting)",
+                "Le tue uova (collezione)",
             };
             System.Action[] actions =
             {
@@ -244,6 +247,21 @@ namespace City.UI
                     catch (System.Exception e)
                     {
                         Debug.LogWarning("[HamburgerMenu] CraftRequest: " + e.Message);
+                    }
+                },
+                () =>
+                {
+                    // Fase 2 · voce 11: la collezione e' nell'app Android,
+                    // dove vive l'inventario uova reale.
+                    SetVisible(false);
+                    try
+                    {
+                        Huntix.Bridge.UnityBridge.SendMessageToAndroid(
+                            "InventoryViewRequest", "{\"action\":\"open\"}");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning("[HamburgerMenu] InventoryViewRequest: " + e.Message);
                     }
                 },
             };

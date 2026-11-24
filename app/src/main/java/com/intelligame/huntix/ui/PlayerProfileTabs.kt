@@ -519,6 +519,15 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
                         com.intelligame.huntix.CraftActivity::class.java))
                 }
             })
+        // Fase 2 · voce 11: collezione uova, ordinamenti e squadra separata.
+        addView(rowText("🥚 Le tue uova","ordina e squadra →", "#B39DDB", "#EDE7F6")
+            .also { row ->
+                row.isClickable = true
+                row.setOnClickListener {
+                    startActivity(Intent(this@buildStatsTab,
+                        com.intelligame.huntix.EggCollectionActivity::class.java))
+                }
+            })
         val homeTxt = p?.cityHome?.split("|")?.firstOrNull()?.takeIf { it.isNotBlank() }
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))

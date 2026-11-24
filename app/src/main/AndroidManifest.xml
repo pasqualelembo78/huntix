@@ -192,6 +192,9 @@
         <!-- Fase 2: fusione uova (crafting) sugli slot storici -->
         <activity android:name=".CraftActivity"
             android:exported="false" android:screenOrientation="portrait"/>
+        <!-- Fase 2: collezione uova, ordinamenti e squadra uova -->
+        <activity android:name=".EggCollectionActivity"
+            android:exported="false" android:screenOrientation="portrait"/>
         <activity android:name=".RaidBattleActivity"
             android:exported="false" android:screenOrientation="portrait"/>
 

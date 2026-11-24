@@ -180,6 +180,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                     j.put("fusionCraftCount", craft.optInt("fusionCraftCount", 0));
                     j.put("fusionCraftLastLevel", craft.optInt("fusionCraftLastLevel", 0));
                     j.put("fusionCraftLastRarity", craft.optString("fusionCraftLastRarity", ""));
+                    // Fase 2 · inventario evoluto: solo contatori e preferenza
+                    // di vista; nessun uovo generato sul ripristino.
+                    org.json.JSONObject inventory =
+                            com.intelligame.huntix.managers.EggInventoryViewManager.INSTANCE.snapshot(this);
+                    j.put("inventoryCount", inventory.optInt("inventoryCount", 0));
+                    j.put("inventoryTeamCount", inventory.optInt("inventoryTeamCount", 0));
+                    j.put("inventorySortMode", inventory.optString("inventorySortMode", "recent"));
                 }
             } catch (org.json.JSONException e) {
                 android.util.Log.w("HuntixBridge", "setMode json: " + e.getMessage());

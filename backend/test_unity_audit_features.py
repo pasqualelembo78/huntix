@@ -170,7 +170,7 @@ class TestTrafficYieldInstrumentation(unittest.TestCase):
     def test_slot_probe_e_telemetria(self):
         # SlotCount sale con gli slot "bait" e "harvest" della Fase 2; gli
         # slot preesistenti (traffic incluso) restano tutti presenti.
-        self.assertIn("SlotCount = 18", self.probe)
+        self.assertIn("SlotCount = 19", self.probe)
         self.assertIn('"spawn", "roads", "traffic", "fictional", "mount"', self.probe)
         self.assertIn("telemetry.Mark(\"crosswalk:", self.meter)
 
@@ -710,7 +710,7 @@ class TestFase2ConsumabiliEsca(unittest.TestCase):
         self.assertIn("EggBaitManager.select(c, food.id)", self.activity)
         self.assertIn("com.intelligame.huntix.BaitActivity::class.java", self.profile)
         self.assertIn('"bait"', self.probe)
-        self.assertIn("SlotCount = 18", self.probe)
+        self.assertIn("SlotCount = 19", self.probe)
         self.assertIn('Measure("bait")', self.manager)
         self.assertIn("Aromi disponibili: {0}", self.manager)
 
@@ -764,7 +764,7 @@ class TestFase2RaccoltaRisorse(unittest.TestCase):
         self.assertIn('Measure("harvest")', self.manager_cs)
         self.assertIn('Measure("harvest")', self.interaction)
         self.assertIn('"harvest"', self.probe)
-        self.assertIn("SlotCount = 18", self.probe)
+        self.assertIn("SlotCount = 19", self.probe)
         self.assertIn("Raccolte: {0}", self.manager_cs)
 
     def test_ui_italiano_senza_consumare_inventari_esistenti(self):
@@ -837,7 +837,7 @@ class TestFase2Crafting(unittest.TestCase):
         self.assertIn('PlayerPrefs.SetInt("huntix_fusion_craft_count"', self.manager_cs)
         self.assertIn('Measure("craft")', self.manager_cs)
         self.assertIn('"craft"', self.probe)
-        self.assertIn("SlotCount = 18", self.probe)
+        self.assertIn("SlotCount = 19", self.probe)
 
     def test_ui_italiana_senza_secondario_inventario(self):
         self.assertIn('android:name=".CraftActivity"', self.manifest)
@@ -847,6 +847,73 @@ class TestFase2Crafting(unittest.TestCase):
         self.assertIn("mgr.slots(c)", self.activity)
         self.assertIn("mgr.craft(c,", self.activity)
         self.assertNotIn("EggInventoryManager.addEgg", self.activity)
+
+
+class TestFase2InventarioEvoluto(unittest.TestCase):
+    """Fase 2 · voce 11: ordinamenti e squadra uova senza secondo inventario."""
+
+    def setUp(self):
+        app_main = os.path.join(ROOT, "app", "src", "main")
+        java = os.path.join(app_main, "java", "com", "intelligame", "huntix")
+        self.manager_kt = read(os.path.join(java, "managers", "EggInventoryViewManager.kt"))
+        self.activity = read(os.path.join(java, "EggCollectionActivity.kt"))
+        self.inventory = read(os.path.join(java, "EggInventoryManager.kt"))
+        self.profile = read(os.path.join(java, "ui", "PlayerProfileTabs.kt"))
+        self.manifest = read(os.path.join(app_main, "AndroidManifest.xml"))
+        self.ipc = read(os.path.join(APP, "UnityIpc.kt"))
+        self.bridge = read(os.path.join(APP, "Bridge.kt"))
+        self.bridge_activity = read(os.path.join(APP, "BridgeActivity.java"))
+        self.manager_cs = read(os.path.join(UNITY, "Scripts", "Core", "GameManager.cs"))
+        self.menu_cs = read(os.path.join(UNITY, "City", "Scripts", "UI", "HamburgerMenu.cs"))
+        self.probe = read(os.path.join(UNITY, "City", "Scripts", "Diagnostics", "PerfProbe.cs"))
+
+    def test_ordinamenti_sola_vista_e_api_storiche_intatte(self):
+        self.assertIn("EggInventoryManager.getSortedByRarity(ctx)", self.manager_kt)
+        self.assertIn("EggInventoryManager.getSortedByPower(ctx)", self.manager_kt)
+        self.assertIn("EggInventoryManager.getInventory(ctx)", self.manager_kt)
+        self.assertIn('prefs(ctx).edit().putString(KEY_MODE, SortMode.fromId(id).id)',
+                      self.manager_kt)
+        self.assertNotIn("saveInventory", self.manager_kt)
+        for api in ("fun getSortedByRarity", "fun getSortedByPower",
+                    "fun toggleBattleTeam", "fun getBattleTeam"):
+            self.assertIn(api, self.inventory)
+
+    def test_riflesso_uovo_posizionale_per_rarita(self):
+        self.assertIn('"inventory_team_$rarityId"', self.manager_kt)
+        self.assertIn('none { it.eggId == "inventory_team_$rarityId" }', self.manager_kt)
+        self.assertIn("EggWhereLog.record(ctx, rarityId, where, lat, lng, name)",
+                      self.manager_kt)
+        self.assertIn("EggWhereLog.recordActivity(", self.manager_kt)
+        self.assertIn("xpReward = 0", self.manager_kt)
+        self.assertIn("OutdoorManager.lastKnownLocation(ctx)", self.manager_kt)
+        # La squadra creature dei raid non viene toccata.
+        for token in ("RaidBattle", "SurpriseManager", "setBattleTeam"):
+            self.assertNotIn(token, self.manager_kt)
+
+    def test_bridge_bidirezionale_e_misure(self):
+        self.assertIn('"InventoryViewRequest"', self.ipc)
+        self.assertIn('"InventoryViewRequest" -> handleInventoryViewRequest', self.bridge)
+        self.assertIn('EggCollectionActivity::class.java', self.bridge)
+        self.assertIn('SendMessageToAndroid(\n                            "InventoryViewRequest", "{\\"action\\":\\"open\\"}"',
+                      self.menu_cs)
+        self.assertIn('case "EggInventoryChanged":', self.manager_cs)
+        self.assertIn('PoiUnityBridge.sendEvent(\n                "EggInventoryChanged"',
+                      self.manager_kt)
+        self.assertIn('j.put("inventoryCount"', self.bridge_activity)
+        self.assertIn('PlayerPrefs.SetInt("huntix_inventory_egg_count"', self.manager_cs)
+        self.assertIn('Measure("inventory")', self.manager_cs)
+        self.assertIn('"inventory"', self.probe)
+        self.assertIn("SlotCount = 19", self.probe)
+
+    def test_ui_italiana_senza_secondario_inventario(self):
+        self.assertIn('android:name=".EggCollectionActivity"', self.manifest)
+        self.assertIn("class EggCollectionActivity : BaseNavActivity()", self.activity)
+        self.assertIn("com.intelligame.huntix.EggCollectionActivity::class.java", self.profile)
+        self.assertIn("Le tue uova", self.activity)
+        self.assertIn("mgr.sorted(c)", self.activity)
+        self.assertIn("mgr.toggleTeam(c, egg.istanzaId)", self.activity)
+        self.assertIn("squadra uova è diversa", self.activity)
+        self.assertNotIn("addEgg", self.activity)
 
 
 if __name__ == "__main__":

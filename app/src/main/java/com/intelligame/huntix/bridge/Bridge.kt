@@ -253,6 +253,9 @@ object Bridge {
             //    la fusione sugli slot già pronti; A→U risponde con
             //    FusionCrafted. Nessun premio in valuta. ──
             "CraftRequest" -> handleCraftRequest(jsonData)
+            // ── Fase 2 · inventario evoluto: apre la collezione uova Android;
+            //    A→U risponde con EggInventoryChanged (solo contatori). ──
+            "InventoryViewRequest" -> handleInventoryViewRequest(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
@@ -544,6 +547,24 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync", "Consumabile usato: $itemId (${j.optString("place", "Miacittà→indoor")})"
         )
+    }
+
+    /**
+     * Fase 2 · voce 11: Miacittà chiede di aprire la collezione uova.
+     * L'inventario reale resta Android: Unity riceve solo lo specchio.
+     */
+    private fun handleInventoryViewRequest(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { JSONObject() }
+        if (j.optString("action", "open") == "snapshot") {
+            com.intelligame.huntix.managers.EggInventoryViewManager
+                .report(UnityAppContext.context ?: return)
+            return
+        }
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val intent = Intent(ctx, com.intelligame.huntix.EggCollectionActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
     }
 
     /**

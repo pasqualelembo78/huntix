@@ -46,6 +46,8 @@ object UnityIpc {
         // Fase 2 · crafting: Unity apre la UI fusione Android oppure chiede
         // direttamente la fusione sugli slot già pronti.
         "CraftRequest",
+        // Fase 2 · inventario evoluto: Unity apre la collezione uova Android.
+        "InventoryViewRequest",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
