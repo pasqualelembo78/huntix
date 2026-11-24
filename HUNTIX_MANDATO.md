@@ -224,3 +224,24 @@ perdere lavori non correlati.
 Concetto cardine: **mai impilare lavoro senza salvarlo**. Se un revert è
 necessario, deve poter annullare un singolo commit senza trascinare via
 mezz'ora di lavoro non ancora salvato.
+
+## 11 · AUTONOMIA DECISIONALE (24/11/2026)
+
+Nel caso di dubbi sul **procedere**, il tecnico deve andare avanti direttamente,
+senza fare domande all'utente: sceglie la soluzione migliore e più professionale
+per il gioco, indipendentemente dal tempo necessario all'integrazione o alla
+verifica. Non si ferma davanti a un bivio tecnico, a una priorità da ordinare o
+a una funzionalità da scegliere: decide, documenta la scelta e la esegue.
+
+Questa autonomia vale per:
+
+- la scelta del prossimo intervento e del suo percorso implementativo;
+- le decisioni di progettazione additiva (nuovo manager, nuovo evento bridge,
+  nuova UI) e le verifiche da eseguire prima del commit;
+- la risoluzione di ambiguità tecniche, compatibilità e priorità di lavoro.
+
+**Non autorizza** invece a eliminare, disattivare, sostituire o cambiare i
+valori predefiniti di sistemi esistenti: la REGOLA OBBLIGATORIA DI
+CONSERVAZIONE del §7 e il Riflesso della caccia alle uova restano pieni e
+prevalenti. In caso di dubbio su un'azione distruttiva si conserva; in caso di
+dubbio su come procedere con un'aggiunta si procede.
