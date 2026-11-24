@@ -57,7 +57,14 @@ namespace City.Economy
         public bool IsActive => false;
         public void OnPlayerInteract() {}
         public static NPCMission.MissionData GenerateMissionData(int seed) => new MissionData();
-        public struct MissionData { }
+        // Campi reali (Economy/NPCMission.cs, escluso dal check): servono a
+        // NpcMissionDefinition.cs per compilare contro lo stub.
+        public struct MissionData
+        {
+            public string missionId;
+            public string description;
+            public int targetCount;
+        }
         public void ApplyData(MissionData d) {}
         public void AttachToNPC(City.NPC.NPCController npc) {}
         public void Activate() {}

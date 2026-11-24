@@ -86,6 +86,7 @@ namespace UnityEngine
         public static Quaternion LookRotation(Vector3 dir) => new Quaternion();
         public static Quaternion LookRotation(Vector3 dir, Vector3 up) => new Quaternion();
         public static Quaternion Slerp(Quaternion a, Quaternion b, float t) => new Quaternion();
+        public static Quaternion RotateTowards(Quaternion a, Quaternion b, float maxDegrees) => a;
         public static Quaternion Lerp(Quaternion a, Quaternion b, float t) => new Quaternion();
         public static Quaternion AngleAxis(float deg, Vector3 axis) => new Quaternion();
         public static Quaternion FromToRotation(Vector3 from, Vector3 to) => new Quaternion();
@@ -114,7 +115,8 @@ namespace UnityEngine
     public static class Mathf { public const float Deg2Rad = 0.01745f; public const float Rad2Deg = 57.2958f;
         public const float PI = 3.141593f; public const float Epsilon = 1.19e-7f;
         public const float Infinity = float.PositiveInfinity;
-        public static float Cos(float f) => 0f; public static float Abs(float f) => f;
+        public static float Cos(float f) => 0f; public static float Tan(float f) => 0f;
+        public static float Abs(float f) => f;
         public static int Abs(int i) => i;
         public static float Max(float a, float b) => a; public static float Min(float a, float b) => a;
         public static int Max(int a, int b) => a; public static int Min(int a, int b) => a;
@@ -501,6 +503,7 @@ namespace UnityEngine
         public bool orthographic { get; set; }
         public float orthographicSize { get; set; }
         public float nearClipPlane { get; set; }
+        public float aspect { get; set; }
         public float fieldOfView { get; set; }
         public Rect rect { get; set; }
         public bool enabled { get; set; }

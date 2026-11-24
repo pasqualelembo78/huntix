@@ -2,13 +2,17 @@
 // Game.cs e UIManager.cs ora compilano davvero: i loro stub sono stati tolti.
 using UnityEngine;
 
-namespace City.Interior
+namespace City.World
 {
-    // stub di Interior/InteractDoor.cs (escluso dal check)
+    // stub di World/InteractDoor.cs (escluso dal check). Namespace e API
+    // allineati al file reale: Game.cs chiama Initialize() all'avvio.
     public class InteractDoor : MonoBehaviour
     {
         public bool IsFocused => false;
         public string label = "";
+        public bool useDoorLatch;
+        public static void Initialize() {}
+        public static void SetLatchAll(bool on) {}
         public void Interact() {}
     }
 }

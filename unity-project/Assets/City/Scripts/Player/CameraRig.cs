@@ -109,6 +109,10 @@ namespace City.Player
         // o il bordo di un cassetto non bucano piu' la camera. Un solo query
         // fisico per frame, buffer riusato, nessuna allocazione.
         private const float ArmRadius = 0.22f;
+        // dbrizov/Unity-CharacterController (MIT): raggio dal frustum, solo se
+        // esplicitamente attivato. Il valore predefinito resta 0.22 m.
+        public bool useFrustumCollisionRadius = false;
+        private Camera _sceneCamera;
         private const float ArmPivotHeight = 1.4f;
         private const int ArmHitSlots = 4;
         private readonly RaycastHit[] _armHits = new RaycastHit[ArmHitSlots];
@@ -177,6 +181,7 @@ namespace City.Player
                 return;
             }
             Instance = this;
+            _sceneCamera = GetComponent<Camera>();
             DontDestroyOnLoad(gameObject);
         }
 
@@ -546,6 +551,17 @@ namespace City.Player
                     pinchStartDistance = currDist;
                 }
             }
+
+            // Android_Unity3D_OpenWorld (senza licenza): assistenza bussola
+            // solo con opzione attiva, in guida e sotto 2 m/s. Sopra soglia la
+            // camera resta identica: nessun conflitto con la guida touch.
+            if (City.Player.EggCompassAssist.Enabled && Game.Instance != null &&
+                Game.Instance.IsDriving && Game.Instance.CurrentVehicle != null)
+            {
+                City.Player.EggCompassAssist.Apply(this,
+                    Game.Instance.CurrentVehicle.GetCurrentSpeedKmh() / 3.6f,
+                    Time.deltaTime);
+            }
         }
 
         // ── Diagnostica camminata ([WalkDiag] di PlayerController) ────────────
@@ -632,8 +648,13 @@ namespace City.Player
                 // del Mandato: mai il piu' alto/ultimo di RaycastAll).
                 Vector3 start = target.position + Vector3.up * ArmPivotHeight;
                 int mask = ~(1 << 8);   // layer 8 = edifici, invariato
-                int found = Physics.SphereCastNonAlloc(start, ArmRadius, armDir,
-                    _armHits, dist + ArmRadius, mask, QueryTriggerInteraction.Ignore);
+                float castRadius = ArmRadius;
+                if (useFrustumCollisionRadius && _sceneCamera != null)
+                    castRadius = CameraCollisionRadius.FromCamera(
+                        _sceneCamera.fieldOfView, _sceneCamera.aspect,
+                        _sceneCamera.nearClipPlane);
+                int found = Physics.SphereCastNonAlloc(start, castRadius, armDir,
+                    _armHits, dist + castRadius, mask, QueryTriggerInteraction.Ignore);
                 RaycastHit best = default(RaycastHit);
                 float bestDist = float.MaxValue;
                 bool blocked = false;
