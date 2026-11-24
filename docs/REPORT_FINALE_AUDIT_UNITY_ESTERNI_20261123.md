@@ -268,6 +268,24 @@ Log: `/tmp/opencode/build_citta_gioco.log`. Nessun errore Burst o `error CS` nel
   (`City/Scripts/Game`, `Resources/CityRecipes`) invece sono stati inclusi nel commit,
   così gli GUID restano stabili su ogni macchina.
 
+### Build del riabilitamento Quaternius (24/11)
+
+Comando: `BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1 SKIP_MAP_UPDATE=1 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 ./build_release.sh --auto`
+(`EXIT=0`, `BUILD SUCCESSFUL` due volte, nessun `error CS` o errore Burst nel log).
+Log: `/tmp/opencode/build_quaternius.log`.
+
+- APK: **192.532.593 byte** (184 MiB), SHA-256
+  `98d5be27bc3b898bb4c2a4f6214ec4db23213cfb91953b2ea6757996cbd5765d`.
+- La dimensione è identica alla build precedente perché la modifica è una costante booleana
+  (`CityStyle.QuaterniusAllowed` da `false` a `true`), non un nuovo asset.
+- Il confronto dei token in `global-metadata.dat` **non dimostra da solo** che il pulsante
+  funzioni: i letterali `Quaternius inibito` e `Edifici Kenney: Quaternius inibito` restano
+  nel codice come testi dei guard/toast e compaiono identici (2 e 1) in entrambi gli APK.
+  La prova effettiva è la lettura della costante nel sorgente (`CityStyle.cs`) e il collaudo
+  su device del percorso Hamburger → `Stile edifici`. Nessun assert di "miglioramento" visivo
+  o di fluidità è stato fatto senza collaudo.
+- Effetti collaterali della build ripristinati prima del commit.
+
 ## 13. Licenze e attribuzioni
 
 `THIRD_PARTY_NOTICES.md` raccoglie provenienza, licenza codice e licenza asset di tutti i 13 repo,
@@ -280,8 +298,11 @@ prefab, Photon/PlayFab o AppId copiato. Nessun asset GTA importato.
 ## 14. Ottimizzazioni Android e vincoli rispettati
 
 - Nessun `WheelCollider` aggiunto: la guida resta `Rigidbody` + velocità scalare già collaudata.
-- Nessun cambio di dipendenze, di versione Unity, di kit edifici o di numero di veicoli
-  (le due leve principali sul frame rate secondo il Mandato).
+- Nessun cambio di dipendenze, di versione Unity, di kit edifici predefinito o di numero di
+  veicoli (le due leve principali sul frame rate secondo il Mandato). Il 24/11, su richiesta
+  esplicita del proprietario, è stato **riabilitato il pulsante** `Stile edifici` del menu
+  hamburger (`CityStyle.QuaterniusAllowed` da `false` a `true`) per provare Quaternius sul
+  device: il default resta Kenney e nessun asset è stato rimosso.
 - Profili qualità usano i 6 livelli già definiti nel progetto; nessun livello/dipendenza nuova.
 - Riflesso uova applicato a ogni nuova feature, con posizione geografica inviata al bridge.
 - Bridge richiesto dal Mandato esteso in entrambi i sensi senza toccare i canali esistenti.
