@@ -1049,6 +1049,9 @@ private const float TerrainPhysxTimeoutS = 15f;
         {
             Vector3 from = pos + Vector3.up * 220f;
             float dem = TileElevation.HeightAtWorld(pos);
+            // Quota DEM non finita: il raggio partirebbe da NaN e non colpirebbe
+            // nulla. Si ignora e si usa l'origine storica y+220.
+            if (!WorldOrigin.IsFinite(dem)) dem = 0f;
             if (dem + 150f > from.y) from.y = dem + 150f;
             return from;
         }
@@ -1124,17 +1127,27 @@ private const float TerrainPhysxTimeoutS = 15f;
         {
             snapped = worldPos;
             colliderName = "";
+            // Ultima linea di difesa prima delle sonde: posizione o rotazione
+            // non finite (es. player già contaminato) non devono diventare uno
+            // snap NaN dentro Game.TeleportPlayer/SnapToGround.
+            if (!WorldOrigin.IsFinite(worldPos) || !WorldOrigin.IsFinite(clearance) ||
+                !WorldOrigin.IsFinite(maxDist)) return false;
             Vector3 from = RayStartAboveSurface(worldPos);
             Vector3 side = self != null ? self.right * GroundSnapper.ShortSpread
                 : Vector3.right * GroundSnapper.ShortSpread;
             Vector3 fwd = self != null ? self.forward * GroundSnapper.ShortSpread
                 : Vector3.forward * GroundSnapper.ShortSpread;
+            if (!WorldOrigin.IsFinite(from) || !WorldOrigin.IsFinite(side) ||
+                !WorldOrigin.IsFinite(fwd)) return false;
             RaycastHit best;
             if (!GroundSnapper.ProbeFootprint(from, side, fwd,
                     GroundSnapper.ShortRadius, maxDist, self,
                     float.PositiveInfinity, out best))
                 return false;
+            if (!WorldOrigin.IsFinite(best.point.y) || best.collider == null)
+                return false;
             snapped = new Vector3(worldPos.x, best.point.y + clearance, worldPos.z);
+            if (!WorldOrigin.IsFinite(snapped)) return false;
             colliderName = best.collider.name;
             return true;
         }

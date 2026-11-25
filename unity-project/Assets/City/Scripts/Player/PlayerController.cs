@@ -186,6 +186,13 @@ namespace City.Player
         private float _realHorizontalSpeed;
         private float _realHorizontalMeters;
 
+        // Ultimo stato di movimento riconosciuto finito. Se PhysX (o un altro
+        // sistema) scrive un NaN nel transform/velocity, qui si torna invece di
+        // propagare il NaN a chunk, rebase, mesh e HUD (log 2026-11-25).
+        private Vector3 _lastGoodPlayerPos;
+        private bool _hasLastGoodPlayerPos;
+        private int _invalidPlayerRecoveries;
+
         // telemetria camminata per le missioni WalkDistance: accumula i metri
         // percorsi e li notifica a ogni metro compiuto (MissionManager mai
         // aggiornato prima: le missioni "Cammina X metri" restavano al 0)
@@ -295,10 +302,74 @@ namespace City.Player
             if (app != null) app.Apply(skinName);
         }
 
+        private static bool Finite(Vector3 v)
+        {
+            return WorldOrigin.IsFinite(v.x) && WorldOrigin.IsFinite(v.y) &&
+                   WorldOrigin.IsFinite(v.z);
+        }
+
+        private static bool Finite(Vector2 v)
+        {
+            return WorldOrigin.IsFinite(v.x) && WorldOrigin.IsFinite(v.y);
+        }
+
+        private static bool Finite(Quaternion q)
+        {
+            return WorldOrigin.IsFinite(q.x) && WorldOrigin.IsFinite(q.y) &&
+                   WorldOrigin.IsFinite(q.z) && WorldOrigin.IsFinite(q.w);
+        }
+
+        /// <summary>Ripristino di emergenza: il CharacterController puo' ricevere
+        /// un Rigidbody cinematico (auto da salone) con transform corrotto e
+        /// scrivere NaN nel player. Si riparte dall'ultimo stato finito, con
+        /// il controller temporaneamente spento per non trascinare la sweep
+        /// interna. Il percorso con valori finiti non cambia.</summary>
+        private void RescueInvalidPlayer()
+        {
+            _invalidPlayerRecoveries++;
+            Vector3 bad = transform.position;
+            OsmDiag.LogThrottled("PlayerController",
+                "[PlayerController] SALVATAGGIO NaN #" + _invalidPlayerRecoveries +
+                " pos=" + bad.ToString("F2") + " -> " +
+                (_hasLastGoodPlayerPos ? "ultima posizione valida" : "origine+1.2m"));
+
+            Vector3 safe = _hasLastGoodPlayerPos && Finite(_lastGoodPlayerPos)
+                ? _lastGoodPlayerPos : new Vector3(0f, 1.2f, 0f);
+            bool ccWasEnabled = controller != null && controller.enabled;
+            if (controller != null) controller.enabled = false;
+            try
+            {
+                transform.position = safe;
+                velocity = Vector3.zero;
+                moveDirection = Vector3.zero;
+                currentSpeed = 0f;
+                _speedSmoothVel = 0f;
+                _realHorizontalSpeed = 0f;
+                _realHorizontalMeters = 0f;
+                if (walker != null) walker.SetSpeed(0f);
+                Physics.SyncTransforms();
+            }
+            finally
+            {
+                if (controller != null && ccWasEnabled) controller.enabled = true;
+            }
+        }
+
         private void Update()
         {
             using (City.Diagnostics.PerfProbe.Measure("move"))
             {
+            // Guard in ingresso: se il transform e' già NaN (o la velocita' e'
+            // stata avvelenata da un altro sistema) non calcolare nulla.
+            if (!Finite(transform.position) || !Finite(velocity) ||
+                !Finite(moveDirection) || !Finite(moveInput) ||
+                !Finite(transform.rotation) ||
+                !WorldOrigin.IsFinite(currentSpeed) ||
+                !WorldOrigin.IsFinite(_speedSmoothVel))
+            {
+                RescueInvalidPlayer();
+                return;
+            }
             // mini-gioco di cattura uova attivo: il player e' congelato
             if (City.Economy.EggCaptureMinigame.Instance != null &&
                 City.Economy.EggCaptureMinigame.Instance.IsActive)
@@ -324,6 +395,11 @@ namespace City.Player
                     : transform.forward;
                 Vector3 right = Vector3.Cross(Vector3.up, forward);
                 Vector3 dir = forward * moveInput.y + right * moveInput.x;
+                if (!Finite(forward) || !Finite(right) || !Finite(dir))
+                {
+                    RescueInvalidPlayer();
+                    return;
+                }
                 // FIX: la magnitudo NON deve moltiplicare anche lo spostamento.
                 // forward/right sono ortonormali, quindi |dir| = |stick|: senza
                 // questa normalize la velocita' reale era |stick|*currentSpeed
@@ -353,8 +429,23 @@ namespace City.Player
                 // un dosso si "sbilancia" senza mai cadere all'indietro.
                 Vector3 bodyUp = TileElevation.SlopeUpAtWorld(
                     transform.position, MaxBodyInclineDeg);
+                if (!Finite(bodyUp))
+                {
+                    RescueInvalidPlayer();
+                    return;
+                }
                 Quaternion targetRotation = Quaternion.LookRotation(dir, bodyUp);
+                if (!Finite(targetRotation))
+                {
+                    RescueInvalidPlayer();
+                    return;
+                }
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, turnSpeed * frameDt);
+                if (!Finite(transform.rotation))
+                {
+                    RescueInvalidPlayer();
+                    return;
+                }
             }
 
             if (sprintRemain > 0f) targetSpeed *= sprintBoost;
@@ -367,6 +458,12 @@ namespace City.Player
                 ? AccelSmoothS : BrakeSmoothS;
             currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed,
                 ref _speedSmoothVel, smoothTime, Mathf.Infinity, frameDt);
+            if (!WorldOrigin.IsFinite(currentSpeed) ||
+                !WorldOrigin.IsFinite(_speedSmoothVel))
+            {
+                RescueInvalidPlayer();
+                return;
+            }
             if (currentSpeed < 0f)
             {
                 currentSpeed = 0f;
@@ -389,6 +486,11 @@ namespace City.Player
             // Viene preso qui (non a inizio Update) per escludere qualunque
             // altra scrittura del transform e includere solo controller.Move.
             _moveStartPos = transform.position;
+            if (!Finite(_moveStartPos))
+            {
+                RescueInvalidPlayer();
+                return;
+            }
 
             // Velocita' orizzontale: default camminata, override se dash attivo.
             // moveDirection ritiene l'ultima direzione: al rilascio del
@@ -404,7 +506,16 @@ namespace City.Player
             if (flying && Realm == AfterlifeRealm.PARADISO)
             {
                 for (int step = 0; step < moveSteps; step++)
+                {
                     ApplyFlight(move, stepDt);
+                    if (!Finite(transform.position))
+                    {
+                        RescueInvalidPlayer();
+                        return;
+                    }
+                    _lastGoodPlayerPos = transform.position;
+                    _hasLastGoodPlayerPos = true;
+                }
             }
             else
             {
@@ -441,6 +552,15 @@ namespace City.Player
                     }
 
                     controller.Move(velocity * stepDt);
+                    // Guard subito dopo la sweep: e' qui che un collider
+                    // cinematico corrotto puo' iniettare NaN nel transform.
+                    if (!Finite(transform.position))
+                    {
+                        RescueInvalidPlayer();
+                        return;
+                    }
+                    _lastGoodPlayerPos = transform.position;
+                    _hasLastGoodPlayerPos = true;
                 }
 
                 // Pendio troppo ripido: il personaggio scivola e cade a terra
@@ -457,6 +577,15 @@ namespace City.Player
                     }
                 }
             }
+
+            if (!Finite(transform.position) || !Finite(velocity) ||
+                !Finite(_moveStartPos))
+            {
+                RescueInvalidPlayer();
+                return;
+            }
+            _lastGoodPlayerPos = transform.position;
+            _hasLastGoodPlayerPos = true;
 
             // GIORNO 4 - VELOCITA' REALE: all'Animator deve arrivare lo
             // spostamento effettivo, non l'input grezzo ne' currentSpeed

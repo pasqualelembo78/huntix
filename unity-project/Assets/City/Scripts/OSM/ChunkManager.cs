@@ -149,6 +149,14 @@ namespace City.OSM
 
         private Coroutine _tickLoop;
 
+        // Ultima posizione del target riconosciuta finita: se PhysX o un altro
+        // sistema scrive un NaN nel transform del player, il tick ripristina
+        // qui invece di propagare il NaN a origine/chunk/mesh.
+        private Vector3 _lastGoodTargetPos;
+        private bool _hasLastGoodTarget;
+        private float _lastInvalidTargetAt = -100f;
+        private int _invalidTargetCount;
+
         private void Start()
         {
             // autoSyncTransforms RESTA OFF (come in ProjectSettings/DynamicsManager.asset):
@@ -289,6 +297,16 @@ namespace City.OSM
                 return;
             }
 
+            // Guard anti-NAN: una posizione non finita arrivava fin qui,
+            // diventava chunk (0,0) e poi rebase NaN su tutto il mondo.
+            if (!WorldOrigin.IsFinite(target.position))
+            {
+                RescueInvalidTarget();
+                return;
+            }
+            _lastGoodTargetPos = target.position;
+            _hasLastGoodTarget = true;
+
             GeoCoord g = WorldOrigin.ToGeo(target.position);
             Vector2Int cur = CityGrid.ChunkIndexOf(g.lat, g.lng);
             if (!_loggedFirstTick)
@@ -359,6 +377,38 @@ namespace City.OSM
             return target != null;
         }
 
+        /// <summary>
+        /// Ripristino di emergenza del target: la fisica (tipicamente il
+        /// CharacterController appoggiato su un Rigidbody cinematico) puo'
+        /// scrivere un NaN nel transform. Senza questo ramo il NaN entrava in
+        /// ToGeo -> CityGrid -> TryRebase e si propagava a TUTTI i chunk.
+        /// La posizione di recupero e' l'ultima valida vista dal tick, oppure
+        /// l'origine corrente a 1.2 m (SpawnBridge) se non ne esiste ancora una.
+        /// </summary>
+        private void RescueInvalidTarget()
+        {
+            if (target == null) return;
+            _invalidTargetCount++;
+            if (Time.unscaledTime - _lastInvalidTargetAt > 2f)
+            {
+                _lastInvalidTargetAt = Time.unscaledTime;
+                OsmDiag.Log("[ChunkManager] SALVATAGGIO target non finito #" +
+                    _invalidTargetCount + " pos=" + target.position.ToString("F2") +
+                    " -> ripristino " +
+                    (_hasLastGoodTarget ? "ultima posizione valida" : "origine+1.2m"));
+            }
+
+            Vector3 safe = _hasLastGoodTarget && WorldOrigin.IsFinite(_lastGoodTargetPos)
+                ? _lastGoodTargetPos
+                : new Vector3(0f, 1.2f, 0f);
+            var cc = target.GetComponent<CharacterController>();
+            bool ccWasEnabled = cc != null && cc.enabled;
+            if (cc != null) cc.enabled = false;
+            target.position = safe;
+            if (cc != null && ccWasEnabled) cc.enabled = true;
+            Physics.SyncTransforms();
+        }
+
         private void EnqueueMissing(Vector2Int cur)
         {
             for (int dx = -LoadRadius; dx <= LoadRadius; dx++)
@@ -396,6 +446,11 @@ namespace City.OSM
             // risulta trascurabile rispetto a un build di chunk.
             if (ResolveTarget() && target != null)
             {
+                if (!WorldOrigin.IsFinite(target.position))
+                {
+                    RescueInvalidTarget();
+                    return;
+                }
                 GeoCoord g = WorldOrigin.ToGeo(target.position);
                 Vector2Int cur = CityGrid.ChunkIndexOf(g.lat, g.lng);
                 _pending.Sort((a, b) => Dist2(a, cur).CompareTo(Dist2(b, cur)));
@@ -1064,6 +1119,16 @@ private const int DiagnosticsMaxHits = 8;
 
         private void OnRebased(Vector3 delta)
         {
+            // Un delta non finito non deve mai raggiungere i root: il vecchio
+            // codice li spostava di NaN e lanciava l'Uncaught error visibile
+            // nel log 2026-11-25. Il guard in WorldOrigin.TryRebase rende questo
+            // caso impossibile, qui resta come difesa secondaria.
+            if (!WorldOrigin.IsFinite(delta))
+            {
+                OsmDiag.Log("[ChunkManager] REBASE IGNORATO: delta non finito " +
+                    delta.ToString("F2"));
+                return;
+            }
             foreach (var kv in _chunks)
             {
                 if (kv.Value.root != null)
@@ -1076,13 +1141,22 @@ private const int DiagnosticsMaxHits = 8;
                 // (il player puo' passare attraverso i collider appena
                 // ri-ribasato). Spegni-trasloca-riaccendi + sync esplicito.
                 var cc = target.GetComponent<CharacterController>();
+                bool ccWasEnabled = cc != null && cc.enabled;
                 if (cc != null) cc.enabled = false;
-                target.position -= delta;
-                var rb = target.GetComponentInParent<Rigidbody>();
-                if (rb == null) rb = target.GetComponentInChildren<Rigidbody>();
-                if (rb != null) rb.position -= delta;
-                Physics.SyncTransforms();
-                if (cc != null) cc.enabled = true;
+                try
+                {
+                    target.position -= delta;
+                    var rb = target.GetComponentInParent<Rigidbody>();
+                    if (rb == null) rb = target.GetComponentInChildren<Rigidbody>();
+                    if (rb != null) rb.position -= delta;
+                    Physics.SyncTransforms();
+                }
+                finally
+                {
+                    // Anche se un collider/rigidbody lancia, il player non resta
+                    // con il CharacterController spento.
+                    if (cc != null && ccWasEnabled) cc.enabled = true;
+                }
             }
         }
 

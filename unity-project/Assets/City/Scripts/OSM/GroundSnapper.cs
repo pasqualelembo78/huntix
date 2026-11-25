@@ -181,6 +181,16 @@ namespace City.OSM
             float maxSurfaceY, out RaycastHit best)
         {
             best = default(RaycastHit);
+            // Se un sistema a monte ha già avvelenato posizione/rotazione, una
+            // sphere-cast con origine NaN restituisce hit non finiti che il
+            // follower copia su tutto l'attore. La sonda resta un no-op.
+            // maxSurfaceY=+Infinity e' il valore legittimo usato dallo snap di
+            // spawn: va accettato, vanno bloccati solo NaN e -Infinity.
+            if (!WorldOrigin.IsFinite(center) || !WorldOrigin.IsFinite(side) ||
+                !WorldOrigin.IsFinite(fwd) || !WorldOrigin.IsFinite(radius) ||
+                !WorldOrigin.IsFinite(depth) ||
+                float.IsNaN(maxSurfaceY) || float.IsNegativeInfinity(maxSurfaceY))
+                return false;
             Transform bridge = CityChunkedWorld.Instance != null &&
                 CityChunkedWorld.Instance.SpawnBridge != null
                 ? CityChunkedWorld.Instance.SpawnBridge.transform : null;
@@ -192,6 +202,8 @@ namespace City.OSM
                     _probeHits, depth, WalkableMask, QueryTriggerInteraction.Ignore);
                 RaycastHit local;
                 if (!PickBest(_probeHits, n, self, bridge, out local)) continue;
+                if (!WorldOrigin.IsFinite(local.point.y) ||
+                    !WorldOrigin.IsFinite(local.distance)) continue;
                 if (local.point.y > maxSurfaceY) continue;
                 if (!found || local.point.y > best.point.y)
                 {
@@ -207,6 +219,7 @@ namespace City.OSM
         /// e lo SpawnBridge di sicurezza vengono esclusi dalla misura.</summary>
         public static GroundSample SampleGround(Vector3 pos, Transform self)
         {
+            if (!WorldOrigin.IsFinite(pos)) return GroundSample.Miss;
             SyncOnce();
 
             float feetY = pos.y;
@@ -218,6 +231,8 @@ namespace City.OSM
             Vector3 feet = new Vector3(pos.x, feetY + ShortStartAbove, pos.z);
             Vector3 side = self != null ? self.right * ShortSpread : Vector3.right * ShortSpread;
             Vector3 fwd = self != null ? self.forward * ShortSpread : Vector3.forward * ShortSpread;
+            if (!WorldOrigin.IsFinite(feet) || !WorldOrigin.IsFinite(side) ||
+                !WorldOrigin.IsFinite(fwd)) return GroundSample.Miss;
             RaycastHit near;
             if (ProbeFootprint(feet, side, fwd, ShortRadius, ShortDepth, self,
                     feetY + ShortMaxRise, out near))
@@ -229,7 +244,9 @@ namespace City.OSM
 
             // ── 2. Sonda lunga: fondo della colonna (dislivelli, tail) ──
             float dem = TileElevation.HeightAtWorld(new Vector3(pos.x, pos.y, pos.z));
+            if (!WorldOrigin.IsFinite(dem)) dem = 0f;
             float fromY = Mathf.Max(feetY + LongRise, dem + DemRelief);
+            if (!WorldOrigin.IsFinite(fromY)) return GroundSample.Miss;
             int hitCount = Physics.RaycastNonAlloc(
                 new Vector3(pos.x, fromY, pos.z), Vector3.down, _longHits,
                 LongDepth, WalkableMask, QueryTriggerInteraction.Ignore);
@@ -241,6 +258,7 @@ namespace City.OSM
                 if (h.collider == null) continue;
                 if (IsSelf(h.collider.transform, self)) continue;
                 if (IsBridge(h.collider.transform, bridge)) continue;
+                if (!WorldOrigin.IsFinite(h.point.y)) continue;
                 if (h.normal.y < LongNorm) continue;
                 // esclude le superfici SOPRA i piedi (deck/tetti che volano)
                 if (h.point.y > feetY + AboveFeetTolerance) continue;
@@ -262,7 +280,9 @@ namespace City.OSM
         /// Appesi a quota vecchia.</summary>
         public static GroundSample DemOnly(Vector3 pos)
         {
+            if (!WorldOrigin.IsFinite(pos)) return GroundSample.Miss;
             float dem = TileElevation.HeightAtWorld(pos);
+            if (!WorldOrigin.IsFinite(dem)) return GroundSample.Miss;
             if (dem > 0f)
                 return SampleFrom(dem, GroundSource.Dem, false, dem - pos.y, "DEM");
             return GroundSample.Miss;
@@ -271,6 +291,8 @@ namespace City.OSM
         private static GroundSample SampleFrom(float height, GroundSource source,
             bool near, float gap, string name)
         {
+            if (!WorldOrigin.IsFinite(height) || !WorldOrigin.IsFinite(gap))
+                return GroundSample.Miss;
             GroundSample s;
             s.found = true;
             s.height = height;
@@ -302,6 +324,8 @@ namespace City.OSM
                 if (h.collider == null) continue;
                 if (IsSelf(h.collider.transform, self)) continue;
                 if (IsBridge(h.collider.transform, bridge)) continue;
+                if (!WorldOrigin.IsFinite(h.point.y) ||
+                    !WorldOrigin.IsFinite(h.distance)) continue;
                 if (h.normal.y < ShortNorm) continue;
                 if (idx < 0 || h.distance < hits[idx].distance) idx = i;
             }
@@ -319,6 +343,13 @@ namespace City.OSM
             float targetFeet, float dt)
         {
             if (dt <= 0f) return feetY;
+            // Un target non finito (hit PhysX corrotto) non deve diventare la
+            // nuova quota dell'attore: il follower resta dove era e lascia al
+            // giocatore/ChunkManager il recupero dell'ultima posizione valida.
+            if (!WorldOrigin.IsFinite(st.vel)) st.vel = 0f;
+            if (!WorldOrigin.IsFinite(feetY) || !WorldOrigin.IsFinite(targetFeet) ||
+                !WorldOrigin.IsFinite(dt))
+                return feetY;
             float err = targetFeet - feetY;
             if (Mathf.Abs(err) < FollowDeadzone)
             {

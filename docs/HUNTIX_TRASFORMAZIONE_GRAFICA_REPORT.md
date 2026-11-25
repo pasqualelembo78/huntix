@@ -146,6 +146,10 @@ texture) restano dietro lo switch preesistente `Stile edifici`.
 - Menu hamburger senza chiusura esplicita: aggiunta voce "Chiudi menu",
   pulsante CHIUDI più grande nei sub-panel e `CloseAll()` che chiude tutti i
   sub-panel registrati, anche futuri.
+- Nuovo log `docs/huntix_log_20261125_073357.txt`: gli errori
+  `_OcclusionMap`/`_MetallicGlossMap` **non compaiono più** e tutti e 7 gli
+  switch cinematografici risultano `on=true`. Il successivo `player=(NaN,NaN)`
+  è stato analizzato separatamente (§22): non è causato dalla grafica CC0.
 
 ## 16. Problemi risolti
 
@@ -157,10 +161,10 @@ verificabili; hiccup di importazione Unity evitato con `.meta` e GUID espliciti.
 
 - Nessun device/emulatore disponibile: **verifica visiva a runtime non
   effettuata**. L'aspetto cinematografico va collaudato su telefono.
-- L'impatto FPS del set completo non è misurato su硬件 reale: usare
+- L'impatto FPS del set completo non è misurato su hardware reale: usare
   `PerfProbe`/`SessionTelemetry` e il menu per accendere un effetto alla volta.
 - I 6 FBX Kenney importati sono low-poly: il risultato è "coherentemente
-  stilizzato", non fotorealistico come Poly Haven; perPACK più dettagliati
+  stilizzato", non fotorealistico come Poly Haven; per pacchetti più dettagliati
   servirebbe un passo di LOD dedicato.
 
 ## 18. Verifiche effettuate
@@ -169,6 +173,7 @@ verificabili; hiccup di importazione Unity evitato con `.meta` e GUID espliciti.
 - `backend/test_unity_audit_features.py`: **99/99 OK**.
 - `backend/test_city_recipe.py`: **3/3 OK**.
 - `backend/test_unity_cinematic_features.py`: **9/9 OK**.
+- `backend/test_unity_nan_guards.py`: **8/8 OK**.
 - Kotlin release: **compilazione OK**.
 - MD5 delle 13 texture e SHA-256 dei 11 pacchetti: verificati.
 - `assets/restore.sh` eseguito da una directory diversa: rigenerazione
@@ -176,6 +181,8 @@ verificabili; hiccup di importazione Unity evitato con `.meta` e GUID espliciti.
 - Build Android: vedi §19.
 
 ## 19. Risultato della build
+
+### Build della grafica CC0 (prima build)
 
 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 BUILD_UNITY_AAR=1 FORCE_UNITY_AAR=1
 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 ./build_release.sh --auto`
@@ -186,12 +193,28 @@ OK, firma e zipalign verificati. Log: `/tmp/opencode/build_cinematic_fix.log`.
 
 APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
 
-- Dimensione: **199.459.830 byte** (191 MB)
+- Dimensione: 199.459.830 byte (191 MB)
 - SHA-256: `e4dc235846bf6f40e485d0597c10d7d7693023d6bf5f2bc7a2bd9036eca9aa3a`
+  (superato dalla build finale qui sotto)
 
-L'hash comprende anche le correzioni runtime segnalate dall'utente (§15):
-getter `HasProperty`-safe e chiusura esplicita del menu. `TileClient.CacheVersion`
-resta 5: il formato geo/graph non è cambiato.
+L'hash comprendeva anche le correzioni runtime segnalate dall'utente (§15):
+getter `HasProperty`-safe e chiusura esplicita del menu.
+
+### Build finale con i guard anti-NaN (§22)
+
+`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
+FORCE_UNITY_AAR=1 ./build_release.sh --auto`
+
+**Esito: riuscita.** `BUILD SUCCESSFUL` in 1m 56s; AAR Unity ricompilato,
+Kotlin Android e firma APK OK. Log: `/tmp/opencode/build_nan_guard.log`.
+
+APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
+
+- Dimensione: **199.463.926 byte** (191 MB)
+- SHA-256: `eed382149db28482173afbf59dd5bd80dfbce22d42a3f5a00689816a82977ded`
+
+`TileClient.CacheVersion` resta 5: il formato geo/graph non è cambiato e i
+guard non alterano interpolation, collider o fisica dei veicoli.
 
 Effetti collaterali noti della build Unity (`link.xml.meta`,
 `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati con
@@ -258,3 +281,45 @@ riscrittura.
 Fonte comune licenze: https://creativecommons.org/publicdomain/zero/1.0/.
 I pacchetti GTA/Mafia e i repo che richiedono il gioco originale restano
 esclusi per vincolo di proprietà intellettuale.
+
+## 22. Log 2026-11-25: NaN del player e guard anti-propagazione
+
+Sequenza ricostruita da `docs/huntix_log_20261125_073357.txt`:
+
+- `07:32:54-55`: i 7 effetti cinematografici vengono attivati (`on=true`);
+  il giocatore è ancora fermo e valido.
+- `07:33:09.645`: teleport valido a `(196,2,225,5) → (2687,9,-1719,9)`,
+  `y=2,40`, con snap su `SHOW_405220197_1_Furgone` (auto da salone).
+- `07:33:21.506`: ultima telemetria valida, `player=(2688,-1720)`, 13 fps,
+  carico chunk in corso (`C_0825_0871`).
+- `07:33:22.347`: primo NaN osservabile, `CityGrid` riceve
+  `lat=NaN lon=NaN`; quindi `WorldOrigin.TryRebase(NaN)`, chunk root e mesh
+  `TerrenoChunk` con bounds NaN, HUD/GPS `player=(NaN,NaN)`.
+
+Il NaN era **già presente nel transform del player** quando `ChunkManager.Tick()`
+lo ha letto. La causa scatenante resta non dimostrata (finestra non strumentata
+di ~840 ms; candidato più plausibile l'accoppiamento fra `CharacterController`
+e il Rigidbody cinematico del furgone durante `Physics.SyncTransforms()`), ma
+la catena di propagazione è dimostrata: `NaN < RebaseDistanceM` è falso, quindi
+il vecchio `TryRebase` accettava il NaN e lo scriveva in origine, chunk, mesh e
+GPS. **`CityConfig.WorldHeights = Flat` e la modalità cinematografica non sono
+la sorgente**: il DEM ritorna sempre 0 e i 7 switch erano già attivi da 27 s
+senza effetti sulla posizione.
+
+Barriere aggiunte (nessuna modifica ai valori finiti, nessun cambio di
+interpolazione/collider dei veicoli):
+
+- `WorldOrigin.cs`: `IsFinite(float/double/Vector3)`, guard su `Init()` e
+  `TryRebase()` (blocco prima del confronto di distanza e prima di invocare
+  `OnRebased`).
+- `ChunkManager.cs`: ultima posizione valida del target, `RescueInvalidTarget()`
+  in `Tick()`/`Update()`, `OnRebased()` ignora delta non finiti e riabilita
+  sempre il `CharacterController` con `try/finally`.
+- `GroundSnapper.cs`/`CityChunkedWorld.cs`: sonde e snap rifiutano origini, hit
+  e quote non finite; `+Infinity` resta ammesso come `maxSurfaceY` dello spawn.
+- `PlayerController.cs`: stato finito di posizione/rotazione/velocità, controllo
+  subito dopo ogni `controller.Move()` e `ApplyFlight()`, ripristino
+  dell'ultima posizione valida con log throttled.
+
+`TileClient.CacheVersion` resta 5: formato geo/graph, bridge Android, collider
+e fisica dei veicoli non sono cambiati.

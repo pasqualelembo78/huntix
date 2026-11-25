@@ -31,6 +31,28 @@ namespace City.OSM
         public static bool Initialized => _initialized;
 
         /// <summary>
+        /// Controllo di finitezza condiviso: usato prima di ogni conversione
+        /// geo/world e prima di ogni rebase. `float.IsFinite` non e' disponibile
+        /// su tutti i profili .NET raggiungibili dal player Android, quindi la
+        /// verifica e' esplicita. Un NaN che entra qui verrebbe altrimenti
+        /// replicato su origine, chunk, mesh e GPS (vedi log 2026-11-25).
+        /// </summary>
+        public static bool IsFinite(float v)
+        {
+            return !float.IsNaN(v) && !float.IsInfinity(v);
+        }
+
+        public static bool IsFinite(double v)
+        {
+            return !double.IsNaN(v) && !double.IsInfinity(v);
+        }
+
+        public static bool IsFinite(Vector3 v)
+        {
+            return IsFinite(v.x) && IsFinite(v.y) && IsFinite(v.z);
+        }
+
+        /// <summary>
         /// Incrementato a ogni Init() (cambio città / fix GPS definitivo).
         /// Il ChunkManager lo campiona quando accoda un chunk: se cambia
         /// mentre la tile è in download o la build è sospesa, il chunk è
@@ -41,6 +63,18 @@ namespace City.OSM
 
         public static void Init(double lat, double lng)
         {
+            // Un fix GPS/JSON non valido non puo' avvelenare l'origine: senza
+            // questo guard ToGeo() produrrebbe NaN su ogni chunk e il player
+            // cadrebbe fuori dal mondo caricato.
+            if (!IsFinite(lat) || !IsFinite(lng) ||
+                lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0)
+            {
+                OsmDiag.LogThrottled("WorldOrigin",
+                    "[WorldOrigin] INIT NON VALIDO ignorato (" +
+                    lat.ToString("F5") + "," + lng.ToString("F5") + ")");
+                if (!_initialized) { lat = 41.9028; lng = 12.4964; }
+                else return;
+            }
             // l'epoca cambia solo se l'origine si sposta DAVVERO (primo init,
             // fix GPS su altra citta'): un Init ripetuto sulle stesse coordinate
             // (reload scena, CoordinateConverter) non deve invalidare i chunk
@@ -84,7 +118,20 @@ namespace City.OSM
         /// </summary>
         public static bool TryRebase(Vector3 playerWorld)
         {
-            if (DistanceFromOrigin(playerWorld) < RebaseDistanceM)
+            // GUARD: con playerWorld=NaN, DistanceFromOrigin() restituisce NaN e
+            // `NaN < RebaseDistanceM` e' FALSE: il vecchio codice eseguiva il
+            // rebase comunque, scrivendo NaN in _lat/_lng e propagandolo a
+            // tutti i chunk tramite OnRebased. Blocchiamo qui l'infezione.
+            if (!IsFinite(playerWorld))
+            {
+                OsmDiag.LogThrottled("WorldOrigin",
+                    "[WorldOrigin] REBASE BLOCCATO: posizione player non finita " +
+                    playerWorld.ToString("F2"));
+                return false;
+            }
+
+            float dist = DistanceFromOrigin(playerWorld);
+            if (!IsFinite(dist) || dist < RebaseDistanceM)
                 return false;
 
             GeoCoord g = ToGeo(playerWorld);
@@ -93,6 +140,14 @@ namespace City.OSM
                 (float)((g.lng - _lng) * _mPerDegLon),
                 0f,
                 (float)((g.lat - _lat) * MetersPerDegLat));
+
+            if (!IsFinite(g.lat) || !IsFinite(g.lng) ||
+                !IsFinite(_mPerDegLon) || !IsFinite(delta))
+            {
+                OsmDiag.LogThrottled("WorldOrigin",
+                    "[WorldOrigin] REBASE BLOCCATO: origine calcolata non finita");
+                return false;
+            }
 
             _lat = g.lat;
             _lng = g.lng;
