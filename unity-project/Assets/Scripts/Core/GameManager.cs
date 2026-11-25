@@ -4,6 +4,7 @@ using System;
 using Huntix.Bridge;
 using Huntix.Outdoor;
 using Huntix.UI;
+using City.OSM;
 
 namespace Huntix.Core
 {
@@ -44,6 +45,11 @@ namespace Huntix.Core
         private void Start()
         {
             UnityBridge.Init();
+
+            // Stato dei pacchetti offline (ponte Android <-> Unity): serve per
+            // sapere se la citta' di spawn e' gia' sul dispositivo senza dover
+            // interrogare il server. Non modifica la logica di TileClient.
+            OfflinePackBridge.LogStatusOnce();
 
             // Se l'Activity Unity è stata lanciata con una modalità (es. Esplora),
             // carica subito la scena giusta (Esplora → Outdoor con personaggio + POI).
@@ -151,6 +157,15 @@ namespace Huntix.Core
         public void LoadScene(string sceneName)
         {
             SceneManager.LoadScene(sceneName);
+        }
+
+        /// <summary>
+        /// Android -> Unity: un pacchetto offline e' stato installato. Lo stato
+        /// e' gia' nelle prefs; qui aggiorniamo solo il log/UI di MiCittà.
+        /// </summary>
+        public void OnOfflinePackChanged(string json)
+        {
+            OfflinePackBridge.OnStatusFromAndroid(json);
         }
 
         // UnitySendMessage passa sempre un unico parametro stringa.

@@ -324,3 +324,62 @@ obbligatorio prima di considerare chiusa la QA visiva.
    delle uova, sempre senza valute o scommesse.
 5. Misurare il costo dei 10 eroi animati in stadio: se supera il budget,
    passare a 6-8 attori o a LOD più aggressivi, con dati alla mano.
+
+## 9. Mondo offline su richiesta (26/11/2026)
+
+Nuova funzionalità **additiva**, senza un secondo APK e senza cambiare il
+default di gioco: l'app resta cache-first e all'avvio precarica sempre la zona
+3×3. L'utente può però decidere di tenere sul dispositivo una città di spawn
+oppure l'intera Italia.
+
+### Flusso
+
+1. Dopo lo spawn, `HomeActivity` cerca il pacchetto città che contiene le
+   coordinate scelte (bbox della provincia, con fallback alla città più vicina
+   entro ~60 km).
+2. Se esiste un flag (`city_offline_packs_v1`) per quella città o per
+   `italia`, viene controllato lo **stato reale dei file** nella cache v5.
+   Se i file ci sono si entra subito in MiCittà, senza rete per le tile.
+3. Altrimenti appare la richiesta: **Scarica città / Tutta Italia / Gioca
+   online**, con opzione “Non chiedere più per questa città”. Il rifiuto non
+   cancella il flag: sembra smette di chiedere per quella città.
+4. Dalla Home, il pulsante **💾 Offline** apre `OfflinePacksActivity`: elenco
+   delle 38 città di spawn + “Tutta Italia”, checkbox per il flag, stato
+   Installato/Da scaricare, download singolo o dei selezionati.
+
+### Dati e spazio
+
+- `backend/preprocessing/offline_pack_manifest.py` genera
+  `app/src/main/assets/offline_packs.json` da `index.json`,
+  `city_to_province.json`, `italian_provinces.json` e dall'elenco di spawn.
+  Nessuna rete, 39 pacchetti, 3.451 tile.
+- Il downloader riutilizza `CityTilePreloader.downloadKeysSync`: scarica solo
+  grafo/geo mancanti, in parallelo (3 tile), con `.tmp` + rename atomico e
+  scrive gli stessi `.v5.graph.json` / `.v5.geo.json` letti da Unity.
+  `TileClient.CacheVersion` resta **5**, geo/graph invariati.
+- Dimensioni indicate nell'UI (stima con geo mancanti già generate): Foggia
+  115 tile (~22 MB compressi, ~130 MB in cache), Bari 32 (~19/~110 MB),
+  Roma 113 (~59/~360 MB), Milano 64 (~42/~270 MB), Tutta Italia 3.451 tile
+  (~1,21 GB compressi, ~7,26 GB in cache). Le geo non ancora presenti vengono
+  generate dal server durante il primo download del pacchetto.
+
+### Ponte e riflesso uova
+
+- Unity → Android: `getOfflinePackStatus`, `isTileOffline`,
+  `setOfflinePackFlag`, `requestOfflinePack`.
+- Android → Unity: `GameManager.OnOfflinePackChanged` con lo snapshot, e
+  aggiornamento del log di MiCittà senza riavviare la scena.
+- Riflesso uova: il primo pacchetto installato sblocca l'uovo-feature
+  **“Cacciatore Offline”** (`offline_pack_ready`) tramite lo stesso canale
+  `FeatureEggHidden` / `EggCapturedInCity` delle altre novelty.
+
+### Verifiche
+
+- `backend/test_offline_packs.py`: 13 test statici (manifest, flag vs disco,
+  cache v5, flusso di spawn, ponte, uova) — **OK**.
+- `python3 -m unittest discover` in `backend/`: **258 test OK**.
+- `cscheck`: **CSCHECK OK** (0 errori).
+- Build release: vedere il log `/tmp/opencode/build_offline_packs.log`.
+- **Non verificato su device**: nessun test visivo, nessuna misura FPS/RAM e
+  nessuna prova di download reale dal telefono sono stati eseguiti in questa
+  macchina.

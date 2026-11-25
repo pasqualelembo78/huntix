@@ -248,6 +248,7 @@
         
         <activity android:name=".ui.CityActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityDebugLogActivity" android:screenOrientation="portrait" android:exported="false"/>
+        <activity android:name=".ui.OfflinePacksActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CitySearchActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.CityMapActivity" android:screenOrientation="portrait" android:exported="false"/>
         <activity android:name=".ui.BuildingInteriorActivity" android:screenOrientation="portrait" android:exported="false"/>

@@ -94,6 +94,17 @@ class UnityAppCallback : IUnityCallback.Stub() {
                     StoreUnityBridge.setTileCacheDir(a.optString(0, ""))
                     ""
                 }
+                "getOfflinePackStatus" -> StoreUnityBridge.getOfflinePackStatus()
+                "isTileOffline" -> StoreUnityBridge.isTileOffline(a.optString(0, "")).toString()
+                "setOfflinePackFlag" -> {
+                    StoreUnityBridge.setOfflinePackFlag(
+                        a.optString(0, ""), a.optBoolean(1, false))
+                    ""
+                }
+                "requestOfflinePack" -> {
+                    StoreUnityBridge.requestOfflinePack(a.optString(0, ""))
+                    ""
+                }
 
                 // ── Snapshot città (uova della crescita incluse) ──
                 "getCityStateSync" -> StoreUnityBridge.getCityStateSync()

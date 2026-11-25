@@ -107,6 +107,13 @@ object CityTilePreloader {
     private fun fallbackTileDir(ctx: Context): File =
         File(ctx.filesDir, TILE_DIR)
 
+    /** Directory di cache v5 usata sia dal preload sia dai pacchetti offline. */
+    internal fun cacheDir(ctx: Context): File = unityTileDir(ctx) ?: fallbackTileDir(ctx)
+
+    /** File di cache di una tile, per controlli di installazione offline. */
+    internal fun cachedFile(ctx: Context, key: String, kind: String): File =
+        File(cacheDir(ctx), "$key.v$CACHE_VERSION.$kind.json")
+
     /** Preload "fire-and-forget" all'avvio dell'app (background). */
     fun preload(ctx: Context) {
         Thread {
@@ -121,16 +128,17 @@ object CityTilePreloader {
     /** Tile della zona da scaricare: grafo/geo mancanti su disco. */
     private data class Tile(val key: String, val needGraph: Boolean, val needGeo: Boolean)
 
+    private data class EnsureResult(
+        val allOk: Boolean,
+        val ok: Set<String>,
+        val cached: Set<String>
+    )
+
     /**
      * Scarica (se mancano) grafo+geo DELLE TILE della zona attorno a quella di
-     * spawn gestendo un download per volta e notificando la fase via [onPhase]
-     * come (fase, tile corrente, totale tile): fasi "cache" (gia' su disco),
-     * "tile", "graph", "geo", "done". Restituisce true se la tile di spawn e'
-     * disponibile (cache o download ok). Da chiamare su un thread: le chiamate
-     * di rete sono bloccanti e [onPhase] viene invocato dai thread di lavoro
-     * (chi la usa, salga sul main thread ove serva).
-     * @param center coordinate di spawn esplicite (scelte dal selettore); se
-     * null usa la posizione persistita (WorldPosCloud).
+     * spawn. Restituisce true se la tile di spawn e' disponibile (cache o
+     * download ok). Da chiamare su un thread: le chiamate di rete sono
+     * bloccanti e [onPhase] viene invocato dai thread di lavoro.
      */
     fun preloadSync(
         ctx: Context,
@@ -140,16 +148,42 @@ object CityTilePreloader {
     ): Boolean {
         val (lat, lng) = center ?: spawnPosition(ctx)
         val keys = tileKeysAround(lat, lng, radius)
-        val total = keys.size
+        val r = ensureKeysSync(ctx, keys, onPhase)
+        return keys.first() in r.cached || keys.first() in r.ok
+    }
 
-        val dir = unityTileDir(ctx) ?: fallbackTileDir(ctx)
+    /**
+     * Scarica un elenco ARBITRARIO di tile (usato dai pacchetti offline).
+     * Scrive esattamente nella cache v5 letta da TileClient, quindi Unity non
+     * distingue una tile venuta dal preload 3x3 da una del pacchetto.
+     * Restituisce true solo se TUTTE le tile sono disponibili a fine corsa.
+     */
+    fun downloadKeysSync(
+        ctx: Context,
+        keys: List<String>,
+        onPhase: (fase: String, current: Int, total: Int, bytes: Long) -> Unit
+    ): Boolean = ensureKeysSync(ctx, keys, onPhase).allOk
+
+    /** Cuore comune di [preloadSync] e [downloadKeysSync]. */
+    private fun ensureKeysSync(
+        ctx: Context,
+        keys: List<String>,
+        onPhase: (fase: String, current: Int, total: Int, bytes: Long) -> Unit
+    ): EnsureResult {
+        val total = keys.size
+        if (total == 0) {
+            onPhase("done", 0, 0, 0L)
+            return EnsureResult(true, emptySet(), emptySet())
+        }
+
+        val dir = cacheDir(ctx)
         if (!dir.exists()) dir.mkdirs()
 
         var cumulativeBytes = 0L
 
         // Cache-first come TileClient: se i file esistono non si tocca la rete.
         val pending = mutableListOf<Tile>()
-        val cachedCount = mutableListOf<String>()
+        val cached = mutableSetOf<String>()
         keys.forEachIndexed { idx, key ->
             val graphFile = File(dir, "$key.v$CACHE_VERSION.graph.json")
             val geoFile = File(dir, "$key.v$CACHE_VERSION.geo.json")
@@ -158,7 +192,7 @@ object CityTilePreloader {
             if (needGraph || needGeo) {
                 pending.add(Tile(key, needGraph, needGeo))
             } else {
-                cachedCount.add(key)
+                cached.add(key)
                 // Conta anche i file gia' in cache nel totale KB
                 cumulativeBytes += graphFile.length()
                 cumulativeBytes += geoFile.length()
@@ -167,16 +201,16 @@ object CityTilePreloader {
         }
 
         if (pending.isEmpty()) {
-            AppLog.d(TAG, "zona ${keys.joinToString()} gia' in cache, skip")
+            AppLog.d(TAG, "tile ${keys.joinToString()} gia' in cache, skip")
             onPhase("done", total, total, cumulativeBytes)
-            return true
+            return EnsureResult(true, emptySet(), cached)
         }
 
-        AppLog.d(TAG, "preload zona ${keys.size} tile attorno a ($lat,$lng): " +
-            "da scaricare ${pending.size}, gia' in cache ${cachedCount.size}")
+        AppLog.d(TAG, "download ${keys.size} tile: da scaricare ${pending.size}, " +
+            "gia' in cache ${cached.size}")
 
-        // Download paralleli (max PARALLEL_TILES): il centro (tile di spawn) e'
-        // il primo della lista, quindi il primo ad andare in esecuzione.
+        // Download paralleli (max PARALLEL_TILES): la tile di spawn e' la
+        // prima della lista 3x3, quindi il primo ad andare in esecuzione.
         val pool = java.util.concurrent.Executors.newFixedThreadPool(
             Math.min(PARALLEL_TILES, pending.size))
         val results = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -199,9 +233,9 @@ object CityTilePreloader {
         }
 
         val ok = results.filterValues { it }.keys
-        AppLog.d(TAG, "preload zona completato: ok ${ok.size}/${pending.size}")
+        AppLog.d(TAG, "download completato: ok ${ok.size}/${pending.size}")
         onPhase("done", total, total, cumulativeBytes)
-        return keys.first() in cachedCount || ok.contains(keys.first())
+        return EnsureResult(ok.size == pending.size, ok, cached)
     }
 
     /** Scarica (se manca) grafo+geo di una singola tile con guardia anti-doppio. */

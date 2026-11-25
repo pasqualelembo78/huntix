@@ -153,6 +153,64 @@ object StoreUnityBridge {
         }
     }
 
+    // ── Pacchetti offline (Unity <-> Android) ────────────────────────────
+
+    /** Unity chiede lo stato dei pacchetti: flag utente + stato reale su disco. */
+    @JvmStatic
+    fun getOfflinePackStatus(): String {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("getOfflinePackStatus", JSONArray().toString())
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return "{}"
+        return OfflinePackManager.statusJson(ctx)
+    }
+
+    /**Unity setterà/letterà i flag anche dal menu di MiCittà. */
+    @JvmStatic
+    fun setOfflinePackFlag(id: String, enabled: Boolean) {
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("setOfflinePackFlag",
+                JSONArray().put(id).put(enabled).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
+        OfflinePackManager.setFlag(ctx, id, enabled)
+    }
+
+    /** Richiesta di download arrivata da Unity: gira su thread di lavoro. */
+    @JvmStatic
+    fun requestOfflinePack(id: String) {
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("requestOfflinePack", JSONArray().put(id).toString())
+            return
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return
+        Thread {
+            try {
+                OfflinePackManager.downloadPack(ctx, id) { _, _, _, _ -> }
+            } catch (e: Exception) {
+                AppLog.w(TAG, "requestOfflinePack $id: ${e.message}")
+            }
+        }.start()
+    }
+
+    /** True se una tile e' completamente presente nella cache v5. */
+    @JvmStatic
+    fun isTileOffline(key: String): Boolean {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("isTileOffline",
+                JSONArray().put(key).toString()).toBoolean()
+        }
+        val ctx = UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+            ?: return false
+        val graph = CityTilePreloader.cachedFile(ctx, key, "graph")
+        val geo = CityTilePreloader.cachedFile(ctx, key, "geo")
+        return graph.exists() && graph.length() > 0L && geo.exists() && geo.length() > 0L
+    }
+
     /** Prefs lette da Unity (UnityBridge.GetSharedPreference): in :unity non
      *  esistono, quindi la lettura viene delegata al processo app. */
     @JvmStatic

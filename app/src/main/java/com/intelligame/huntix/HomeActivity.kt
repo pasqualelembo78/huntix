@@ -458,6 +458,10 @@ try {
             launchMiacittaWithLoading()
         })
         quickRow2.addView(spacerH(dp(6)))
+        quickRow2.addView(quickChip("\uD83D\uDCBE", "Offline", "#2E7D32") {
+            startActivity(Intent(this, OfflinePacksActivity::class.java))
+        })
+        quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
 
@@ -600,8 +604,8 @@ try {
         // Il GPS del dispositivo NON viene mai usato come posizione di partenza.
         com.intelligame.huntix.bridge.CitySpawnChooser.show(
             this,
-            onChosen = { _, _, lat, lng ->
-                runMiacittaPreload(lat, lng)
+            onChosen = { mode, name, lat, lng ->
+                runMiacittaPreload(mode, name, lat, lng)
             },
             onCanceled = { miacittaLoading = false }
         )
@@ -613,7 +617,9 @@ try {
      * quando Unity parte: l'attesa residua (build dei chunk in Unity) e' coperta
      * dall'overlay di caricamento che BridgeActivity mostra finche' Unity non
      * segnala i chunk pronti (CityReady). */
-    private fun runMiacittaPreload(spawnLat: Double, spawnLng: Double) {
+    private fun runMiacittaPreload(
+        mode: String, name: String, spawnLat: Double, spawnLng: Double
+    ) {
         // CITTA' GIOCO: la ricetta e' offline e il quartiere e' generato a
         // runtime in Unity. Nessuna tile/graph/geo viene scaricata: salta il
         // preload Android e apre subito l'Activity (lo splash di BridgeActivity
@@ -622,17 +628,141 @@ try {
             .getString("world_mode", "real")
         if (worldMode == "fictional") {
             com.intelligame.huntix.AppLog.i("HuntixSync", "Città Gioco: preload tile saltato (nessuna cartografia a runtime)")
-            miacittaLoading = false
-            Bridge.openUnityActivity(
-                this,
-                BridgeActivity.MODE_MIACITTA,
-                "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
-            )
+            openUnityCity()
             return
         }
-        // Splash screen: immagine di sfondo con scrim scuro in basso e barra
-        // di progresso sovrapposta. center-crop cosi' si adatta sia a schermi
-        // verticali che orizzontali.
+
+        val worldPack = com.intelligame.huntix.bridge.OfflinePackManager
+            .packs(this).firstOrNull { it.id == "italia" }
+        val cityPack = com.intelligame.huntix.bridge.OfflinePackManager
+            .packForLocation(this, spawnLat, spawnLng)
+        val wantsWorld = com.intelligame.huntix.bridge.OfflinePackManager.isFlagged(this, "italia")
+        val wantsCity = cityPack?.let {
+            com.intelligame.huntix.bridge.OfflinePackManager.isFlagged(this, it.id)
+        } == true
+
+        if (!wantsWorld && !wantsCity) {
+            if (cityPack != null && com.intelligame.huntix.bridge.OfflinePackManager
+                    .isDeclined(this, cityPack.id)) {
+                AppLog.i("HuntixSync", "MiCittà: online scelto in precedenza per ${cityPack.label}")
+                runOnlinePreloadAndOpen(spawnLat, spawnLng)
+            } else {
+                askOfflineDownload(name, spawnLat, spawnLng, cityPack)
+            }
+            return
+        }
+
+        // Il flag dice cosa l'utente VUOLE; il disco dice cosa c'e' DAVVERO.
+        Thread {
+            val worldReady = wantsWorld && worldPack?.let {
+                com.intelligame.huntix.bridge.OfflinePackManager.isInstalled(this, it)
+            } == true
+            val cityReady = wantsCity && cityPack?.let {
+                com.intelligame.huntix.bridge.OfflinePackManager.isInstalled(this, it)
+            } == true
+            val ready = worldReady || cityReady
+            runOnUiThread {
+                if (ready) {
+                    AppLog.i("HuntixSync", "MiCittà offline pronta: " +
+                        (if (worldReady) "Tutta Italia" else cityPack?.label))
+                    openUnityCity()
+                } else {
+                    askOfflineDownload(name, spawnLat, spawnLng, cityPack)
+                }
+            }
+        }.start()
+    }
+
+    private fun openUnityCity() {
+        miacittaLoading = false
+        Bridge.openUnityActivity(
+            this,
+            BridgeActivity.MODE_MIACITTA,
+            "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
+        )
+    }
+
+    /** Chiede all'utente se scaricare la citta'/mondo oppure giocare online. */
+    private fun askOfflineDownload(
+        name: String,
+        spawnLat: Double,
+        spawnLng: Double,
+        cityPack: com.intelligame.huntix.bridge.OfflinePackManager.Pack?
+    ) {
+        val padding = dp(16)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, 0)
+        }
+        box.addView(TextView(this).apply {
+            text = "La città selezionata ($name) non è ancora disponibile offline. " +
+                "Vuoi scaricarla sul dispositivo o giocare online (server sempre attivo)?"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+        })
+        val neverAsk = CheckBox(this).apply {
+            text = "Non chiedere più per questa città"
+            textSize = 13f
+            setTextColor(Color.parseColor("#B9A9D6"))
+            isChecked = cityPack?.let {
+                com.intelligame.huntix.bridge.OfflinePackManager.isDeclined(this@HomeActivity, it.id)
+            } == true
+            setPadding(0, dp(10), 0, 0)
+        }
+        box.addView(neverAsk)
+
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("💾 Mondo offline")
+            .setView(box)
+            .setCancelable(false)
+            .setPositiveButton("Scarica ${cityPack?.label ?: "Tutta Italia"}", null)
+            .setNeutralButton("Tutta Italia", null)
+            .setNegativeButton("Gioca online", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                dialog.dismiss()
+                val id = cityPack?.id ?: "italia"
+                com.intelligame.huntix.bridge.OfflinePackManager.setFlag(this, id, true)
+                val label = cityPack?.label ?: "Tutta Italia"
+                downloadOfflineThenOpen(listOf(id), label)
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                dialog.dismiss()
+                com.intelligame.huntix.bridge.OfflinePackManager.setFlag(this, "italia", true)
+                downloadOfflineThenOpen(listOf("italia"), "Tutta Italia")
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                dialog.dismiss()
+                cityPack?.let {
+                    com.intelligame.huntix.bridge.OfflinePackManager
+                        .markDeclined(this, it.id, neverAsk.isChecked)
+                }
+                runOnlinePreloadAndOpen(spawnLat, spawnLng)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun downloadOfflineThenOpen(ids: List<String>, label: String) {
+        runTileDownloadWithSplash("Download $label") { onPhase ->
+            com.intelligame.huntix.bridge.OfflinePackManager
+                .downloadPacks(this, ids, onPhase)
+        }
+    }
+
+    private fun runOnlinePreloadAndOpen(spawnLat: Double, spawnLng: Double) {
+        runTileDownloadWithSplash("Caricamento città…") { onPhase ->
+            com.intelligame.huntix.bridge.CityTilePreloader.preloadSync(
+                this, center = Pair(spawnLat, spawnLng), onPhase = onPhase)
+        }
+    }
+
+    /** Overlay di caricamento comune a preload online e download offline. */
+    private fun runTileDownloadWithSplash(
+        title: String,
+        task: (onPhase: (fase: String, current: Int, total: Int, bytes: Long) -> Unit) -> Boolean
+    ) {
         val splash = ImageView(this).apply {
             setImageResource(R.drawable.splashscreen)
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -645,7 +775,7 @@ try {
             layoutParams = LinearLayout.LayoutParams(LP_MW, dp(8))
         }
         val status = TextView(this).apply {
-            text = "Caricamento città…"
+            text = title
             textSize = 13f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -676,6 +806,7 @@ try {
         }
         val dialog = android.app.Dialog(this)
         dialog.apply {
+            setTitle(title)
             setCancelable(false)
             setContentView(overlay)
             window?.let { w ->
@@ -687,18 +818,14 @@ try {
 
         val startTimeNs = System.nanoTime()
         Thread {
-            // Preload sincrono della zona 3x3 attorno allo spawn scelto:
-            // notifica la fase + la tile corrente per aggiornare barra/messaggio.
-            val ok = com.intelligame.huntix.bridge.CityTilePreloader.preloadSync(
-                this,
-                center = Pair(spawnLat, spawnLng),
-                onPhase = { phase, current, total, bytes ->
+            val ok = try {
+                task { phase, current, total, bytes ->
                     runOnUiThread {
-                        val perTile = 100 / total
+                        val perTile = if (total > 0) 100 / total else 100
                         val progress = when (phase) {
                             "cache", "tile" -> ((current - 1) * perTile).coerceIn(2, 100)
                             "graph" -> (((current - 1) * perTile) + perTile / 3).coerceIn(2, 100)
-                            "geo" -> ((current) * perTile).coerceIn(2, 100)
+                            "geo" -> (current * perTile).coerceIn(2, 100)
                             "done" -> 100
                             else -> bar.progress
                         }
@@ -719,16 +846,15 @@ try {
                         }
                     }
                 }
-            )
+            } catch (e: Exception) {
+                AppLog.w("HomeActivity", "download MiCittà: ${e.message}")
+                runOnUiThread { status.text = "Errore: ${e.message}" }
+                false
+            }
             runOnUiThread {
                 if (ok) { bar.progress = 100; status.text = "Città pronta ✓" }
                 dialog.dismiss()
-                miacittaLoading = false
-                Bridge.openUnityActivity(
-                    this@HomeActivity,
-                    BridgeActivity.MODE_MIACITTA,
-                    "{\"id\":\"miacitta\",\"name\":\"Miacitta\"}"
-                )
+                openUnityCity()
             }
         }.start()
     }
