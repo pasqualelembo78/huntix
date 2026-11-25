@@ -104,6 +104,11 @@ namespace Huntix.EditorTools
             // build_release.sh chiama proprio questo metodo (non ConfigureAndExport).
             ShopPrefabSetup.EnsurePrefab();
 
+            // Casa visitabile OSM: prefabResources con slot normalizzati e
+            // nascondigli uova. Generato qui così l'AAR contiene sempre il
+            // layout coerente con VisitInteriorRegistry/Decorator.
+            HousePrefabSetup.EnsurePrefab();
+
             ConfigurePlayerSettings();
 
             // Path relativo al progetto: dobbiamo esportare in "<repo>/unity-export.gradle"

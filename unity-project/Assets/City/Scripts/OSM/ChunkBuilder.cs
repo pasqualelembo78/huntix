@@ -39,6 +39,9 @@ namespace City.OSM
             public TileBuildingRec rec;
             public Vector3 pos;
             public float dist2;
+            /// <summary> Casa visitabile configurata: va sistemata PRIMA del
+            /// taglio a 320 edifici e non viene scartata vicino ai POI. </summary>
+            public bool priority;
         }
 
         /// <summary>Sezione (italiano) attualmente in costruzione nell'ultimo
@@ -355,11 +358,16 @@ namespace City.OSM
                         // Tipi `building` non abitabili (roof/ruins/etc.): saltali
                         // PRIMA del placement cosi' niente porta/interno/prefab.
                         if (BuildingPlacer.IsSkippableBuildingType(b.t)) { skipDegenerate++; continue; }
-                        if (poiSpots != null && poiSpots.Count > 0 &&
+                        // La casa configurata resta candidata anche se cade in
+                        // una zona POI: è un edificio reale scelto a mano.
+                        bool priority =
+                            City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id);
+                        if (!priority && poiSpots != null && poiSpots.Count > 0 &&
                             IsNearPoi(poiSpots, p)) continue;
                         candidates.Add(new BuildingCandidate
                         {
-                            rec = b, pos = p, dist2 = p.sqrMagnitude
+                            rec = b, pos = p, dist2 = p.sqrMagnitude,
+                            priority = priority
                         });
                     }
                     catch (System.Exception e)
@@ -374,8 +382,14 @@ namespace City.OSM
                 }
 
                 // I piu' vicini al centro del chunk: la citta' resta compatta
-                // intorno al player invece di svuotarsi a caso.
-                candidates.Sort((a, b) => a.dist2.CompareTo(b.dist2));
+                // intorno al player invece di svuotarsi a caso. Le case
+                // visitabili configurate passano PRIMA, così il taglio a 320
+                // non può eliminare l'edificio associato a una visita reale.
+                candidates.Sort((a, b) =>
+                {
+                    if (a.priority != b.priority) return a.priority ? -1 : 1;
+                    return a.dist2.CompareTo(b.dist2);
+                });
                 int limit = Mathf.Min(candidates.Count, MaxPlacedBuildingsPerChunk);
                 for (int i = 0; i < limit; i++)
                 {

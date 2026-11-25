@@ -227,6 +227,10 @@ namespace City.Interior
             var marker = UniversalInteriorBuilder.FindMarker(interiorRoot);
             if (marker != null) UniversalInteriorState.MarkVisited(marker.key, marker.kind);
 
+            // Case visitabili (id OSM configurato): visita stabile + riflesso
+            // uova nei tre nascondigli dichiarati dal prefab della casa.
+            City.Interior.Visit.VisitInteriorManager.OnEntered(e);
+
             City.OSM.ColliderProbe.ProbeAt(g.player.transform.position, "inside");
         }
 
@@ -235,6 +239,7 @@ namespace City.Interior
             if (!IsInside) return;
 
             Game g = Game.Instance;
+            City.Interior.Visit.VisitInteriorManager.OnExited(e);
 
             // Edificio PREFAB (Quaternius): uscita scenografata con fade nero
             // per ripristinare l'esterno e riportare il player fuori dalla soglia.
@@ -270,6 +275,7 @@ namespace City.Interior
         /// soglia. La camera indoor si spegne e si sfuma.</summary>
         private IEnumerator ExitPrefabRoutine(BuildingEntrance e, Game g)
         {
+            City.Interior.Visit.VisitInteriorManager.OnExited(e);
             IsInside = false;
             ActiveShop = null;
             ActiveVehicleZone = null;

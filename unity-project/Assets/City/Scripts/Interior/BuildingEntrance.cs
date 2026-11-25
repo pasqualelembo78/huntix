@@ -17,6 +17,11 @@ namespace City.Interior
         public int floorCount = 1;
         public Shop shop;
 
+        /// <summary>Id OSM dell'edificio reale associato. Zero per gli ingressi
+        /// storici: solo gli id presenti in VisitInteriorRegistry diventano
+        /// case visitabili, tutti gli altri conservano il flusso attuale.</summary>
+        public long osmId;
+
         /// <summary>Zona POI veicolo associata (concessionaria/officina/garage):
         /// passata all'interno per il bancone che apre i menu veicolo.</summary>
         public City.Vehicle.VehiclePoiZone poiZone;

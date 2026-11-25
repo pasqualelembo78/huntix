@@ -1,0 +1,347 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &6927565207179247893
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8688097355323985243}
+  - component: {fileID: 2555982133057294246}
+  m_Layer: 0
+  m_Name: CasaVisitabileCC0
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8688097355323985243
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6927565207179247893}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2555982133057294246
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6927565207179247893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  slots:
+  - model: SofaThreeSeat
+    sceneName: DivanoSoggiorno
+    position: {x: 0.29, y: 0.2}
+    size: {x: 2.4, y: 1, z: 0.9}
+    yaw: 180
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: CoffeeTable
+    sceneName: TavolinoSoggiorno
+    position: {x: 0.29, y: 0.33}
+    size: {x: 1.1, y: 0.45, z: 0.6}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: TVUnit
+    sceneName: MobileTV
+    position: {x: 0.4, y: 0.4}
+    size: {x: 1.8, y: 0.5, z: 0.45}
+    yaw: 180
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Television
+    sceneName: Televisore
+    position: {x: 0.4, y: 0.4}
+    size: {x: 1.2, y: 0.8, z: 0.12}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Armchair
+    sceneName: PoltronaSoggiorno
+    position: {x: 0.14, y: 0.29}
+    size: {x: 0.9, y: 1, z: 0.8}
+    yaw: 90
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: FloorLamp
+    sceneName: LampadaSoggiorno
+    position: {x: 0.44, y: 0.16}
+    size: {x: 0.5, y: 1.7, z: 0.5}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Bookcase
+    sceneName: LibreriaSoggiorno
+    position: {x: 0.16, y: 0.43}
+    size: {x: 1, y: 1.8, z: 0.35}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: LivingRug
+    sceneName: TappetoSoggiorno
+    position: {x: 0.29, y: 0.27}
+    size: {x: 2.6, y: 0.03, z: 1.7}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: PlantLarge
+    sceneName: PiantaSoggiorno
+    position: {x: 0.45, y: 0.45}
+    size: {x: 0.7, y: 0.9, z: 0.7}
+    yaw: 0
+    room: soggiorno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: DiningTable
+    sceneName: TavoloCucina
+    position: {x: 0.27, y: -0.12}
+    size: {x: 1.6, y: 0.8, z: 0.9}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: DiningChair
+    sceneName: SediaCucina1
+    position: {x: 0.27, y: -0.23}
+    size: {x: 0.5, y: 0.9, z: 0.5}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: DiningChair
+    sceneName: SediaCucina2
+    position: {x: 0.27, y: -0.01}
+    size: {x: 0.5, y: 0.9, z: 0.5}
+    yaw: 180
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: BaseCabinet
+    sceneName: CredenzaCucina
+    position: {x: 0.42, y: -0.34}
+    size: {x: 1.6, y: 0.9, z: 0.6}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: DrawerBase
+    sceneName: Cassetto2Cucina
+    position: {x: 0.3, y: -0.42}
+    size: {x: 1, y: 0.8, z: 0.6}
+    yaw: 0
+    room: cucina
+    container: 1
+    featureId: casa-cucina-cassetto2
+    eggLabel: Uovo nel cassetto della cucina
+    place: "casa\u2192cucina\u2192cassetto2"
+  - model: WallCabinet
+    sceneName: PensileCucina
+    position: {x: 0.45, y: -0.27}
+    size: {x: 1.2, y: 0.8, z: 0.4}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: SinkUnit
+    sceneName: LavelloCucina
+    position: {x: 0.38, y: -0.2}
+    size: {x: 1, y: 0.9, z: 0.6}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Oven
+    sceneName: FornoCucina
+    position: {x: 0.45, y: -0.15}
+    size: {x: 0.7, y: 0.9, z: 0.6}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Hob
+    sceneName: PianoCottura
+    position: {x: 0.34, y: -0.17}
+    size: {x: 0.8, y: 0.1, z: 0.6}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Fridge
+    sceneName: FrigoCucina
+    position: {x: 0.46, y: -0.43}
+    size: {x: 0.9, y: 1.9, z: 0.8}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: KitchenIsland
+    sceneName: IsolaCucina
+    position: {x: 0.18, y: -0.33}
+    size: {x: 1.6, y: 0.9, z: 0.9}
+    yaw: 0
+    room: cucina
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: DoubleBed
+    sceneName: LettoCamera
+    position: {x: -0.26, y: -0.25}
+    size: {x: 2, y: 0.6, z: 2}
+    yaw: 0
+    room: camera
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: BedsideTable
+    sceneName: ComodinoCamera
+    position: {x: -0.4, y: -0.16}
+    size: {x: 0.5, y: 0.6, z: 0.45}
+    yaw: 0
+    room: camera
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Wardrobe
+    sceneName: ArmadioCamera
+    position: {x: -0.41, y: -0.39}
+    size: {x: 1.6, y: 2.1, z: 0.6}
+    yaw: 0
+    room: camera
+    container: 1
+    featureId: casa-camera-armadio
+    eggLabel: Uovo nell'armadio della camera
+    place: "casa\u2192camera\u2192armadio"
+  - model: Dresser
+    sceneName: CassettoCamera
+    position: {x: -0.17, y: -0.42}
+    size: {x: 1.2, y: 0.9, z: 0.5}
+    yaw: 0
+    room: camera
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: BedroomRug
+    sceneName: TappetoCamera
+    position: {x: -0.26, y: -0.1}
+    size: {x: 2.2, y: 0.03, z: 1.6}
+    yaw: 0
+    room: camera
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Bath
+    sceneName: VascaBagno
+    position: {x: -0.38, y: 0.35}
+    size: {x: 1.7, y: 0.6, z: 0.8}
+    yaw: 0
+    room: bagno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: ShowerCubicle
+    sceneName: DocciaBagno
+    position: {x: -0.43, y: 0.12}
+    size: {x: 0.9, y: 2, z: 0.9}
+    yaw: 0
+    room: bagno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: Toilet
+    sceneName: WCBagno
+    position: {x: -0.21, y: 0.38}
+    size: {x: 0.5, y: 0.8, z: 0.6}
+    yaw: 0
+    room: bagno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 
+  - model: BasinUnit
+    sceneName: LavandinoBagno
+    position: {x: -0.32, y: 0.45}
+    size: {x: 0.8, y: 0.9, z: 0.5}
+    yaw: 0
+    room: bagno
+    container: 1
+    featureId: casa-bagno-lavandino
+    eggLabel: Uovo nel lavandino del bagno
+    place: "casa\u2192bagno\u2192lavandino"
+  - model: TowelRail
+    sceneName: PortaAsciugamani
+    position: {x: -0.45, y: 0.42}
+    size: {x: 0.6, y: 0.8, z: 0.1}
+    yaw: 0
+    room: bagno
+    container: 0
+    featureId: 
+    eggLabel: 
+    place: 

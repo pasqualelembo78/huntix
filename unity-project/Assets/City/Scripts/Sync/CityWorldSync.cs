@@ -146,6 +146,11 @@ namespace City.Sync
             // Stesso snapshot, nessun secondo canale di salvataggio.
             j.universalInteriors = City.Interior.UniversalInteriorState.Export();
 
+            // Case visitabili OSM: visite, id edificio e uova dei nascondigli.
+            // Stesso snapshot bidirezionale: Android conserva il mirror e lo
+            // restituisce al ripristino senza canali di salvataggio paralleli.
+            j.houseVisitState = City.Interior.Visit.HouseInteriorState.Export();
+
             // Switch A/B del negozio: sistema Huntix o prefabbricato CC0.
             j.shopStyle = City.Interior.ShopStyle.Export();
 
@@ -210,6 +215,7 @@ namespace City.Sync
             public string foundContainerEggs = "";
             public string shopStates = "";
             public string universalInteriors = "";
+            public string houseVisitState = "";
             public string shopStyle = "";
             public string venueEventState = "";
             public bool budgetEggSpawned;
@@ -377,6 +383,9 @@ namespace City.Sync
 
             // Interni universali: unione non distruttiva dei locali visitati.
             City.Interior.UniversalInteriorState.Import(j.universalInteriors);
+
+            // Case visitabili: visite e uova raccolte tornano da Android.
+            City.Interior.Visit.HouseInteriorState.Import(j.houseVisitState);
 
             // Switch negozio: vince il timestamp più recente (Android→Unity).
             City.Interior.ShopStyle.Import(j.shopStyle);

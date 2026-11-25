@@ -66,6 +66,20 @@ namespace City.Interior
         private string _placeHint = "";
         private string _eggKey = "";
 
+        // ── CASE VISITABILI (riflesso uova) ───────────────────────────
+        // A differenza degli edifici ordinari (un solo contenitore casuale,
+        // 50% di probabilità), una casa configurata ha UNA uovo per ogni
+        // nascondiglio dichiarato nel prefab: cassetto cucina, armadio camera,
+        // lavandino bagno. Stesso EggController e stesso bridge di cattura.
+        private sealed class HouseEggEntry
+        {
+            public Transform container;
+            public GameObject egg;
+            public string place = "";
+            public bool revealed;
+        }
+        private readonly List<HouseEggEntry> _houseEggs = new List<HouseEggEntry>();
+
         private void Update()
         {
             var g = Game.Instance;
@@ -80,6 +94,23 @@ namespace City.Interior
                 return;
             }
             if (root != _root) BeginBuilding(root);
+
+            // Casa visitabile: più uova, una per contenitore dichiarato. La
+            // rivelazione resta proximity-based come nel cassetto ordinario.
+            if (_houseEggs.Count > 0)
+            {
+                for (int i = 0; i < _houseEggs.Count; i++)
+                {
+                    HouseEggEntry e = _houseEggs[i];
+                    if (e == null || e.revealed || e.egg == null ||
+                        e.container == null) continue;
+                    if (Vector3.Distance(g.player.transform.position,
+                            e.container.position) <= RevealDist)
+                        RevealHouseEgg(e, g);
+                }
+                return;
+            }
+
             if (_busy || _chosen == null || _activeEgg== null) return;
 
             float d = Vector3.Distance(g.player.transform.position, _chosen.position);
@@ -90,6 +121,16 @@ namespace City.Interior
         {
             ResetState();
             _root = root;
+
+            // Case visitabili: i nascondigli sono ESPLICITI (tre), non casuali.
+            // Il vecchio percorso resta identico per tutti gli altri interni.
+            Visit.HouseEggSpot[] houseSpots =
+                root.GetComponentsInChildren<Visit.HouseEggSpot>(true);
+            if (houseSpots.Length > 0)
+            {
+                BeginHouseEggs(houseSpots);
+                return;
+            }
 
             var containers = new List<Transform>();
             Transform[] all = root.GetComponentsInChildren<Transform>(true);
@@ -184,6 +225,64 @@ namespace City.Interior
             _busy = false;
         }
 
+        /// <summary>Uno uovo per nascondiglio della casa visitabile. La chiave
+        /// featureId è stabile (id OSM + stanza + oggetto), quindi Android la
+        /// riconosce nello snapshot dopo un rebuild dei chunk.</summary>
+        private void BeginHouseEggs(Visit.HouseEggSpot[] spots)
+        {
+            for (int i = 0; i < spots.Length; i++)
+            {
+                var spot = spots[i];
+                if (spot == null || string.IsNullOrEmpty(spot.featureId)) continue;
+                if (Visit.HouseInteriorState.HasEgg(spot.featureId) ||
+                    IsFound(spot.featureId)) continue; // già raccolto, non rinace
+
+                System.Random rng = new System.Random(StableHash(spot.featureId));
+                City.Economy.EggController.Rarity rarity = RollRarity(rng);
+                Vector3 pos = spot.EggPosition;
+                var go = new GameObject("Egg_Casa_" + spot.featureId);
+                go.transform.SetParent(spot.transform, true);
+                var col = go.AddComponent<SphereCollider>();
+                col.radius = 0.5f;
+                col.isTrigger = true;
+                var egg = go.AddComponent<City.Economy.EggController>();
+                egg.Init(pos, rarity, City.Economy.EggController.EggType.Edificio);
+                // Luogo testuale canonicale per il profilo Android:
+                // "casa→cucina→cassetto2" (e analoghi per camera/bagno).
+                egg.placeHint = string.IsNullOrEmpty(spot.place)
+                    ? "casa→" + spot.room + "→" + spot.featureId : spot.place;
+                egg.containerEggKey = spot.featureId;
+                go.SetActive(false); // nascosto finché il player si avvicina
+
+                _houseEggs.Add(new HouseEggEntry
+                {
+                    container = spot.transform,
+                    egg = go,
+                    place = egg.placeHint
+                });
+            }
+            // Nessun uovo rimasto: evita di riscrivere lo stato ogni frame.
+            if (_houseEggs.Count == 0) _busy = true;
+            else
+            {
+                _busy = false;
+                UnityBridge.LogToAndroid(Visit.VisitInteriorRegistry.Tag,
+                    "uova casa nascoste: " + _houseEggs.Count +
+                    " contenitori (cucina, camera, bagno)");
+            }
+        }
+
+        private static void RevealHouseEgg(HouseEggEntry entry, Game g)
+        {
+            entry.revealed = true;
+            if (entry.egg == null) return;
+            entry.egg.SetActive(true);
+            if (g != null && g.ui != null)
+                g.ui.ShowToast("In " + entry.place + " c'e' un uovo che luccica!");
+            UnityBridge.LogToAndroid(Visit.VisitInteriorRegistry.Tag,
+                "uovo rivelato in " + entry.place);
+        }
+
         private static City.Economy.EggController.Rarity RollRarity(System.Random rng)
         {
             double rr = rng.NextDouble();
@@ -237,6 +336,9 @@ namespace City.Interior
             if (Found.Contains(egg.containerEggKey)) return;
             Found.Add(egg.containerEggKey);
             PersistFound();
+            // Case visitabili: la chiave casa-* entra nello snapshot dedicato,
+            // oltre al found generico già esportato da CityWorldSync.
+            Visit.VisitInteriorManager.OnEggCollected(egg.containerEggKey);
         }
 
         /// <summary>Elenco delle chiavi gia' raccolte, esportato in CityWorldSync.</summary>
@@ -346,6 +448,12 @@ namespace City.Interior
             _busy = false;
             _placeHint = "";
             _eggKey = "";
+            // Uova casa non raccolte: distrutte allo stato "fuori" per non
+            // duplicarle quando il player rientra nello stesso interno.
+            for (int i = 0; i < _houseEggs.Count; i++)
+                if (_houseEggs[i] != null && _houseEggs[i].egg != null)
+                    UnityEngine.Object.Destroy(_houseEggs[i].egg);
+            _houseEggs.Clear();
         }
     }
 }

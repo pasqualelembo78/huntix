@@ -431,7 +431,15 @@ namespace City
                 // automatico attraversando la porta. Qui si mostra solo il
                 // prompt d'interazione.
                 if (ui != null && !blocked && !inOpenPoi)
-                    ui.ShowInteract(entrance.IsShop ? "NEGOZIO" : "APRI");
+                {
+                    // Casa visitabile OSM: prompt dedicato in italiano. Le
+                    // altre porte conservano NEGOZIO/APRI esattamente come prima.
+                    bool visitHouse = City.Interior.Visit.VisitInteriorRegistry
+                        .IsConfigured(entrance.osmId);
+                    string prompt = visitHouse ? "ENTRA IN CASA"
+                        : (entrance.IsShop ? "NEGOZIO" : "APRI");
+                    ui.ShowInteract(prompt);
+                }
             }
             else if (entrance == null || currentEntrance == entrance)
             {

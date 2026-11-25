@@ -728,6 +728,7 @@ namespace City.OSM
                     entranceComp.shop,
                     box);
                 gen.SetEntrance(entranceComp);
+                gen.SetOsmId(b.id);
             }
             OsmDiag.LogDebug("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
                 "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +
@@ -750,8 +751,13 @@ namespace City.OSM
             Bounds baseB, float w, float d, float h,
             float sx, float sy, float sz)
         {
-            // Budget per chunk: esaurito, questo edificio resta solo esterno.
-            if (enterableBudget <= 0) return null;
+            // Case visitabili configurate: id OSM esplicito, NON consumano il
+            // budget ordinario degli 8 edifici entryable per chunk. Così la
+            // casa di Roma resta apribile anche in un chunk già saturo, senza
+            // togliere porte agli edifici che avevano già questo comportamento.
+            bool visitConfigured =
+                City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id);
+            if (!visitConfigured && enterableBudget <= 0) return null;
             string iType = MapInteriorType(b.t);
             // Ogni attività commerciale ha un bancone acquistabile: prima solo
             // "shop" ne aveva uno, quindi bar/concessionaria/resto città erano
@@ -795,6 +801,11 @@ namespace City.OSM
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
             entrance.buildingType = iType;
             entrance.buildingName = FriendlyBuildingName(iType, b.id);
+            entrance.osmId = b.id;
+            City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
+            if (visitConfigured && City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                    b.id, out visitSpec))
+                entrance.buildingName = visitSpec.label;
             entrance.buildingWidth = w;
             entrance.buildingDepth = d;
             entrance.buildingHeight = h;
@@ -813,7 +824,7 @@ namespace City.OSM
                 entrance.shop = shopComp;
             }
 
-            enterableBudget--;
+            if (!visitConfigured) enterableBudget--;
             return entrance;
         }
 

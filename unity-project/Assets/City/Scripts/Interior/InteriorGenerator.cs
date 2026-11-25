@@ -85,6 +85,12 @@ namespace City.Interior
         private float _lazyW, _lazyD, _lazyH;
         private Shop _lazyShop;
 
+        /// <summary>Id OSM del edificio: passa dal prefab all'interno lazy e
+        /// decide se il decorator della casa visitabile deve intervenire.</summary>
+        public long osmId;
+
+        public void SetOsmId(long id) { osmId = id; }
+
         /// <summary>True quando l'interno è già stato costruito.</summary>
         public bool InteriorBuilt { get; private set; }
 
@@ -301,6 +307,15 @@ namespace City.Interior
             else
                 UniversalInteriorBuilder.Build(parent, type, shop, w, d, floorH,
                     floors, buildingName);
+
+            // Livello ADDITIVO "casa visitabile": opera solo sull'id OSM
+            // dichiarato in VisitInteriorRegistry, sopra il Floor_0 già
+            // generato dai builder esistenti. Nessun geo/graph, nessun
+            // teleport, nessuna sostituzione degli arredi universali.
+            long visitId = osmId;
+            if (Entrance != null && Entrance.osmId != 0L) visitId = Entrance.osmId;
+            City.Interior.Visit.VisitInteriorDecorator.Decorate(parent, visitId,
+                type, shop, w, d, floorH, floors, buildingName);
             Log("BuildInterior DONE");
         }
 
