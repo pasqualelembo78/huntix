@@ -122,7 +122,7 @@ namespace City.Interior
             ResetState();
             _root = root;
 
-            // Case visitabili: i nascondigli sono ESPLICITI (tre), non casuali.
+            // Case visitabili: i nascondigli sono ESPLICITI (quattro), non casuali.
             // Il vecchio percorso resta identico per tutti gli altri interni.
             Visit.HouseEggSpot[] houseSpots =
                 root.GetComponentsInChildren<Visit.HouseEggSpot>(true);

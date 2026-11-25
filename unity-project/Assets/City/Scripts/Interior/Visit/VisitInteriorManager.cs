@@ -24,7 +24,7 @@ namespace City.Interior.Visit
 
         /// <summary>Chiamato da InteriorManager.MarkInside, dopo che lo stato
         /// "dentro" è stato committato. Registra la visita e mostra un indizio
-        /// in italiano: i tre nascondigli restano nell'intero, non nel prompt.</summary>
+        /// in italiano: i quattro nascondigli restano nell'intero, non nel prompt.</summary>
         public static void OnEntered(BuildingEntrance entrance)
         {
             if (!IsConfigured(entrance)) return;

@@ -107,11 +107,16 @@ namespace City.Interior.Visit
                 marker.eggHint = "Uova in cucina, camera e bagno della casa visitabile.";
             }
 
+            // Kit SENDU (licenza commerciale gratuita): si AGGIUNGE al livello
+            // CC0, non lo sostituisce. 32 arredi con palette texturizzate e
+            // un quarto nascondiglio nel cassetto della cucina.
+            SenduInteriorDecorator.Decorate(root.transform, W, D);
+
             try
             {
                 UnityBridge.LogToAndroid(VisitInteriorRegistry.Tag,
                     "casa visitabile pronta: " + spec.label + " (OSM " + osmId +
-                    ") — " + list.Count + " arredi CC0, 4 stanze, 3 uova");
+                    ") — " + list.Count + " arredi CC0 + 32 SENDU, 4 stanze, 4 uova");
             }
             catch (Exception) { }
             return true;

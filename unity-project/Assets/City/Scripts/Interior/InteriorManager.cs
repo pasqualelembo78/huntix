@@ -228,7 +228,7 @@ namespace City.Interior
             if (marker != null) UniversalInteriorState.MarkVisited(marker.key, marker.kind);
 
             // Case visitabili (id OSM configurato): visita stabile + riflesso
-            // uova nei tre nascondigli dichiarati dal prefab della casa.
+            // uova nei quattro nascondigli dichiarati dalla casa visitabile.
             City.Interior.Visit.VisitInteriorManager.OnEntered(e);
 
             City.OSM.ColliderProbe.ProbeAt(g.player.transform.position, "inside");
