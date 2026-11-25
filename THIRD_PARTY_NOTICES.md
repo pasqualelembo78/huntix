@@ -487,3 +487,21 @@ Tutti i file sorgente grezzi sono in `assets/` (inventario:
   il README interno non dichiara alcuna licenza. Pur essendo tecnicamente
   compatibile (Unity 6, URP, 30.682 triangoli), **non è stato importato né
   usato**: i personaggi di Huntix restano Kenney CC0.
+
+---
+
+## Asset degli eventi sportivi — 25/11/2026
+
+Come da Mandato §12 non ci si è limitati al CC0: sono stati acquisiti asset
+gratuiti con licenze compatibili e attribuzione. Elenco completo, URL, date,
+modifiche e motivi degli scarti in `unity-project/Assets/ThirdPartyLicenses.md`.
+
+- **CC0 1.0**, 3dassets.dev: `Football Soccer Stadium and Club Grounds`,
+  `Racecourse and Parade Ring`, `Horse Stables and Equestrian Yard` (106 modelli
+  GLB verificati via API, 105 convertiti in FBX; esclusi gli asset di scommesse).
+- **CC BY 4.0**, "Race Horse" by vinish.dev
+  (https://vinish.dev/free-3d-models/): modello animato con sei clip, mesh
+  decimata e convertita in FBX. Attribuzione obbligatoria riportata anche nei
+  crediti dell'app e nel report `docs/HUNTIX_EVENTI_SPORTIVI_REPORT.md`.
+- Non importato lo stadio Animatics: download solo tramite carrello/account e
+  licenza non verificabile in forma autorevole.
