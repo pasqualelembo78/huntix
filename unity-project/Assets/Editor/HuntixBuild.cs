@@ -99,6 +99,11 @@ namespace Huntix.EditorTools
             // fuori dall'editor prima di compilare (evita CS2001 su file rimossi).
             AssetDatabase.Refresh();
 
+            // Genera il prefabbricato CC0 dello switch negozi PRIMA del
+            // BuildPlayer: cosi' finisce nell'AAR e resta versionato nel repo.
+            // build_release.sh chiama proprio questo metodo (non ConfigureAndExport).
+            ShopPrefabSetup.EnsurePrefab();
+
             ConfigurePlayerSettings();
 
             // Path relativo al progetto: dobbiamo esportare in "<repo>/unity-export.gradle"

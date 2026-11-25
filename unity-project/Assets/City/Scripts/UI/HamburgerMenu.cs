@@ -28,6 +28,7 @@ namespace City.UI
         private readonly List<GameObject> _subPanels = new List<GameObject>();
         private GameObject skinSelRow;
         private Text _styleLabel;
+        private Text _shopLabel;
         private Text _qualityLabel;
         private Text _touchLabel;
         private Text _worldLabel;
@@ -176,7 +177,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1540f);
+            prt.sizeDelta = new Vector2(360f, 1620f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -200,6 +201,7 @@ namespace City.UI
                 "Ricette di fusione (guida)",
                 "Modalità cinematografica: Off",
                 "Dettagli grafica cinematografica",
+                "Negozio: Huntix",
                 "Chiudi menu",
             };
             System.Action[] actions =
@@ -295,6 +297,7 @@ namespace City.UI
                 },
                 () => ToggleCinematicAll(),
                 () => OpenCinematicPanel(),
+                () => ToggleShopStyle(),
                 () => CloseAll(),
             };
 
@@ -323,6 +326,7 @@ namespace City.UI
                 if (idx == 12) _openSourceLabel = lbl;
                 if (idx == 13) _companionLabel = lbl;
                 if (idx == 17) _cinematicLabel = lbl;
+                if (idx == 19) _shopLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -367,6 +371,7 @@ namespace City.UI
             if (v)
             {
                 RefreshStyleLabel();
+                RefreshShopLabel();
                 RefreshQualityLabel();
                 RefreshTouchLabel();
                 RefreshWorldLabel();
@@ -661,6 +666,52 @@ namespace City.UI
             // ReloadWorld() mette il SpawnBridge sotto il player PRIMA di
             // svuotare i chunk: senza ponte il player cadrebbe nel vuoto
             // durante il rebuild (stesso motivo di Teleport()).
+            var cw = City.OSM.CityChunkedWorld.Instance;
+            if (cw != null) cw.ReloadWorld();
+            SetVisible(false);
+        }
+
+        // ---- switch A/B del negozio (Huntix / prefabbricato CC0) ----
+
+        private void RefreshShopLabel()
+        {
+            if (_shopLabel == null) return;
+            _shopLabel.text = "Negozio: " + City.Interior.ShopStyle.Label;
+        }
+
+        /// <summary>Commuta lo strato arredi del negozio senza eliminare nessun
+        /// sistema: il prefab CC0 e il builder universale restano entrambi nel
+        /// progetto. Cambia solo quale viene usato al prossimo rebuild dei chunk.
+        /// Come per lo stile edifici, rifiuta il cambio dentro casa o in auto e
+        /// ricarica il mondo con il ponte sotto il player.</summary>
+        private void ToggleShopStyle()
+        {
+            var im = City.Interior.InteriorManager.Instance;
+            if (im != null && im.IsInside)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast("Esci dall'edificio prima di cambiare negozio");
+                SetVisible(false);
+                return;
+            }
+            var game = Game.Instance;
+            if (game != null && game.IsDriving)
+            {
+                if (UIManager.Instance != null)
+                    UIManager.Instance.ShowToast("Scendi dall'auto prima di cambiare negozio");
+                SetVisible(false);
+                return;
+            }
+
+            bool next = !City.Interior.ShopStyle.UsePrefab;
+            City.Interior.ShopStyle.Set(next);
+            RefreshShopLabel();
+            Vibration.Vibrate(25);
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(next
+                    ? "Negozio prefabbricato CC0. Mappa in ricarica..."
+                    : "Negozio Huntix (procedurale). Mappa in ricarica...");
+
             var cw = City.OSM.CityChunkedWorld.Instance;
             if (cw != null) cw.ReloadWorld();
             SetVisible(false);
