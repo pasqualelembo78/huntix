@@ -520,10 +520,20 @@ ricreati con URP/Lit. Dettagli completi, URL, scarti e modifiche:
 `unity-project/Assets/ThirdPartyLicenses.md` e
 `docs/HUNTIX_CASE_VISITABILI_REPORT.md`.
 
+**Importato anche** il kit completo **C — Cozy Interiors + Builder** di SENDU:
+339 FBX + 20 PNG (palette/pattern), licenza commerciale gratuita **non CC0**,
+shipping nel prodotto finale esplicitamente consentito, titolare "the author of
+Cozy Interiors + Builder" (`cholak.apps@gmail.com`), fonte
+https://sendudev.itch.io/cozy-interiors, acquisito il 25/11/2026 senza account.
+Testo integrale in `unity-project/Assets/Resources/HouseInteriors/Sendu/README_models.txt`.
+**Rispettate** le restrizioni: nessuna rivendita/condivisione dei sorgenti,
+nessuna inclusione in pack/template/marketplace, nessun uso come training data.
+Sono stati esclusi solo shader, script, prefab, layout e scene del kit Unity,
+che richiedono Unity 6000.6+/URP 17.6+ (Huntix usa 2022.3/URP 14.0.11).
+
 **Non importati**: A DOLLHOUSE e B House Interior (download bloccato da account
-Unity Asset Store, nessun bypass), C Cozy Interiors+SENDU (scaricato ma richiede
-Unity 6000.6+/URP 17.6+, incompatibile con Unity 2022.3; licenza gratuita
-personalizzata, non CC0), Quaternius Ultimate House Interior (quota Google Drive
-esaurita), KayKit Furniture Bits (checkout con dati personali obbligatori),
-Poly Pizza/OpenGameArt (licenze non verificabili). Nessun asset piratato, nessun
-pagamento, nessun account usato per aggirare un download.
+Unity Asset Store, nessun bypass), il solo kit Unity di C SENDU (incompatibile),
+Quaternius Ultimate House Interior (quota Google Drive esaurita), KayKit Furniture
+Bits (checkout con dati personali obbligatori), Poly Pizza/OpenGameArt (licenze
+non verificabili). Nessun asset piratato, nessun pagamento, nessun account usato
+per aggirare un download.

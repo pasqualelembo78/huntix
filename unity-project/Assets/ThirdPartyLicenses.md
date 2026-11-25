@@ -119,7 +119,7 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
   visitabile; i mobili non hanno collider (la navigazione usa solo paratie e
   guscio). Riflesso uova: cassetto cucina, armadio camera, lavandino bagno.
 
-### Asset di interni valutati ma NON usati
+### Asset di interni valutati (importati o esclusi)
 
 - **A — DOLLHOUSE - FREE** (FForgeWorks, https://assetstore.unity.com/packages/3d/props/interior/dollhouse-free-modular-low-poly-interiors-furniture-room-kit-411314):
   download solo con account Unity Asset Store, nessun URL anonimo; **non
@@ -130,11 +130,48 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
   compatibile ma non verificato).
 - **C — Cozy Interiors + Builder** (SENDU, https://sendudev.itch.io/cozy-interiors):
   **scaricato** (ZIP modelli FBX/GLB e unitypackage URP) con licenza gratuita
-  personalizzata non CC0, che consente il shipping nel gioco ma vieta la
-  rivendita dei sorgenti. Il kit Unity richiede **Unity 6000.6+ / URP 17.6+** e
-  shader custom incompatibili con Unity 2022.3: **non importato**. Nessun file
-  di quel pack è presente nel repository.
+  personalizzata non CC0. I **339 FBX e le 20 PNG sono stati importati** (vedi
+  sezione dedicata qui sotto); il solo **kit Unity** (shader/script/prefab)
+  resta **escluso** perché richiede **Unity 6000.6+ / URP 17.6+**.
 - **Quaternius Ultimate House Interior Pack**: download fallito per quota Google
   Drive; **non scaricato**. KayKit Furniture Bits: checkout con email e
   fatturazione obbligatorie; **non scaricato**. Poly Pizza / OpenGameArt:
   licenze non verificabili in forma autorevole; **nessun download**.
+
+---
+
+## Kit completo SENDU — licenza commerciale gratuita non CC0 (25/11/2026)
+
+- **Prodotto**: Cozy Interiors + Builder 1.0.1 — 339 modelli FBX + palette e
+  pattern PNG (10 stanze: Shell, Bedroom, Kitchen, Living, Bakery, Cafe,
+  Office, Bathroom, Kids, Decor).
+- **Fonte autorevole**: https://sendudev.itch.io/cozy-interiors — scaricato
+  senza account né pagamento tramite il flusso itch.io pubblico.
+- **Autore/titolare**: "the author of Cozy Interiors + Builder", contatto
+  `cholak.apps@gmail.com`. **Data acquisizione**: 25/11/2026.
+- **Licenza**: licenza gratuita **non esclusiva, mondiale e perpetua** per
+  progetti commerciali e non commerciali finiti (giochi, app, film, render).
+  **Il shipping dentro un gioco/app finito è esplicitamente consentito.**
+  Testo integrale conservato in
+  `unity-project/Assets/Resources/HouseInteriors/Sendu/README_models.txt`.
+- **Attribuzione**: non richiesta ("Credit is not required but appreciated").
+- **Restrizioni rispettate**: **divieto di rivendere, condividere o regalare i
+  sorgenti** (modelli, palette, pattern, materiali, prefab, layout, scene,
+  shader, script) e di includerli in un altro pack, template, marketplace o
+  content library; **divieto di uso come training data ML**. In Huntix gli
+  asset sono spediti solo dentro l'APK finito, mai come file separati.
+- **File importati**: `Assets/Resources/HouseInteriors/Sendu/FBX/<Stanza>/*.fbx`
+  (339), `.../Palettes/CI_Theme_*.png` (4), `.../Patterns/CI_Pattern_*.png`
+  (16), `README_models.txt`. Ogni file ha il proprio `.meta`.
+- **Modifiche dichiarate**: importati solo i FBX engine-agnostic e le PNG.
+  **Non importati** shader, script, prefab, layout e scene del kit Unity
+  (richiedono Unity 6000.6+/URP 17.6+, incompatibili con 2022.3/URP 14.0.11).
+  I materiali sono ricreati a runtime con URP/Lit e la palette 8x8 a 32 px
+  (`filterMode: Point`, mipmap disattivate, alpha = smoothness non opacità);
+  ogni FBX conserva i figli `_LOD0`/`_LOD1`, di cui il secondo viene
+  disattivato a runtime per evitare doppio disegno. 32 modelli sono usati
+  come arredi aggiuntivi nella casa visitabile; gli altri restano disponibili
+  in `Resources` per le prossime `Spec` (bar, caffetteria, ufficio, negozio).
+- **Uso in Huntix e riflesso uova**: i mobili non hanno collider; la casa ha
+  ora **4 nascondigli**, il quarto è `casa→cucina→cassetto-sendu` nel cassetto
+  SENDU, con posizione registrata e bridge Android come gli altri tre.
