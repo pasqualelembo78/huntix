@@ -61,6 +61,11 @@ object UnityIpc {
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
         // Negozi walk-in: contatori attività/stato negozio (Unity -> app).
         "ShopActivity",
+        // Interni universali: visita a un locale 3D (Unity -> app), mirror
+        // dei locali visitati nello stesso pref CityStateSync.
+        "UniversalInteriorVisited",
+        // Switch A/B dei negozi (Unity -> app): sistema Huntix o prefabbricato CC0.
+        "ShopStyleChanged",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
     )
 

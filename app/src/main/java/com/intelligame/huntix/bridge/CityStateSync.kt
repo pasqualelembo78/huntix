@@ -28,6 +28,8 @@ object CityStateSync {
     private const val KEY_SNAPSHOT = "city_snapshot_v1"
     private const val KEY_TS = "city_snapshot_ts"
     private const val KEY_SHOP_ACTIVITY = "city_shop_activity_v1"
+    private const val KEY_UNIVERSAL_INTERIORS = "city_universal_interiors_v1"
+    private const val KEY_SHOP_STYLE = "city_shop_style_v1"
 
     // ── persistenza snapshot ────────────────────────────────────
 
@@ -81,6 +83,115 @@ object CityStateSync {
             context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
                 .getString(KEY_SHOP_ACTIVITY, "") ?: ""
         } catch (e: Exception) { "" }
+    }
+
+    /** Interni universali (Unity → app): visita a un locale 3D. Il mirror e'
+     *  un JSON {chiave: visite}, unito per massimo (mai decrementato). */
+    fun onUniversalInteriorVisit(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val j = JSONObject(json)
+            val key = j.optString("key", "")
+            if (key.isBlank()) return
+            val visits = j.optInt("visits", 1).coerceAtLeast(0)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val mirror = try {
+                JSONObject(prefs.getString(KEY_UNIVERSAL_INTERIORS, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            if (visits > mirror.optInt(key, 0)) {
+                mirror.put(key, visits)
+                prefs.edit().putString(KEY_UNIVERSAL_INTERIORS, mirror.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onUniversalInteriorVisit failed: ${e.message}")
+        }
+    }
+
+    fun getUniversalInteriors(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_UNIVERSAL_INTERIORS, "{}") ?: "{}"
+        } catch (e: Exception) { "{}" }
+    }
+
+    /** Unisce il riepilogo degli interni dello snapshot nel mirror Android.
+     *  Chiamato anche al restore: Android conserva i locali visitati e li
+     *  restituisce a Unity senza un evento dedicato aggiuntivo. */
+    private fun mergeUniversalSnapshot(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val rows = JSONObject(json).optJSONArray("interiors") ?: return
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val mirror = try {
+                JSONObject(prefs.getString(KEY_UNIVERSAL_INTERIORS, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            var changed = false
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val key = row.optString("key", "")
+                if (key.isBlank()) continue
+                val visits = row.optInt("visits", 0).coerceAtLeast(0)
+                if (visits > mirror.optInt(key, 0)) {
+                    mirror.put(key, visits)
+                    changed = true
+                }
+            }
+            if (changed) {
+                prefs.edit().putString(KEY_UNIVERSAL_INTERIORS, mirror.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "mergeUniversalSnapshot failed: ${e.message}")
+        }
+    }
+
+    /** Switch A/B del negozio (Unity → app): sistema Huntix o prefabbricato
+     *  CC0. Il mirror conserva `{usePrefab, ts}` e fa vincere il timestamp
+     *  più recente, esattamente come ShopStyle lato Unity. */
+    fun onShopStyleChanged(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val incoming = JSONObject(json)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val local = try {
+                JSONObject(prefs.getString(KEY_SHOP_STYLE, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            if (incoming.optLong("ts", 0) > local.optLong("ts", 0)) {
+                val value = JSONObject()
+                value.put("usePrefab", incoming.optBoolean("usePrefab", false))
+                value.put("ts", incoming.optLong("ts", 0))
+                prefs.edit().putString(KEY_SHOP_STYLE, value.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onShopStyleChanged failed: ${e.message}")
+        }
+    }
+
+    fun getShopStyle(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_SHOP_STYLE, "{}") ?: "{}"
+        } catch (e: Exception) { "{}" }
+    }
+
+    /** Unisce lo switch dello snapshot senza mai farlo regredire: vince il
+     *  timestamp più alto, anche quando arriva da un restore Android→Unity. */
+    private fun mergeShopStyleSnapshot(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val incoming = JSONObject(json)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val local = try {
+                JSONObject(prefs.getString(KEY_SHOP_STYLE, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            if (incoming.optLong("ts", 0) > local.optLong("ts", 0)) {
+                val value = JSONObject()
+                value.put("usePrefab", incoming.optBoolean("usePrefab", false))
+                value.put("ts", incoming.optLong("ts", 0))
+                prefs.edit().putString(KEY_SHOP_STYLE, value.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "mergeShopStyleSnapshot failed: ${e.message}")
+        }
     }
 
     // ── profilo generale ────────────────────────────────────────
@@ -138,6 +249,10 @@ object CityStateSync {
             if (shopStates.isNotBlank() && shopStates != getShopActivity(context)) {
                 onShopActivity(context, shopStates)
             }
+            // Interni universali: mirror dei locali visitati nello snapshot.
+            mergeUniversalSnapshot(context, j.optString("universalInteriors", ""))
+            // Switch negozio A/B: lo specchio segue il timestamp dello snapshot.
+            mergeShopStyleSnapshot(context, j.optString("shopStyle", ""))
             // Casa MiCittà (nome|lat|lng|garage|garagemodel|stanze): il profilo
             // conserva il riepilogo completo per il sync bidirezionale.
             val home = j.optString("home", "")
@@ -234,6 +349,15 @@ object CityStateSync {
         report.put("containerEggs", containerEggs)
         report.put("shopStates", j.optString("shopStates", "").isNotBlank())
         report.put("shopActivityMirror", getShopActivity(context).isNotBlank())
+        report.put("universalInteriors", try {
+            JSONObject(getUniversalInteriors(context)).length()
+        } catch (e: Exception) { 0 })
+        report.put("universalInteriorsSnapshot",
+            j.optString("universalInteriors", "").isNotBlank())
+        report.put("shopStyle", try {
+            JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
+        } catch (e: Exception) { false })
+        report.put("shopStyleSnapshot", j.optString("shopStyle", "").isNotBlank())
         report.put("money", money)
         report.put("profilePeople", PlayerProfileManager.myProfile?.cityPeopleKnown ?: 0)
         report.put("profileEggDex", PlayerProfileManager.myProfile?.cityEggDexCount ?: 0)

@@ -312,6 +312,11 @@ namespace City.Interior
             bool kitchen = floor == 0 &&
                 (c.Contains("cassetto") || c.Contains("frigo") || c.Contains("forno") || c.Contains("lavello"));
             string room = kitchen ? "cucina" : "piano" + (floor + 1);
+            // Interni universali: il contenitore dichiara la stanza reale, così
+            // l'indizio e' "città→edificio→banco farmacia→cassetto" invece di
+            // un generico "piano1". Nessun cambiamento per i negozi esistenti.
+            var marker = container.GetComponent<UniversalContainerMarker>();
+            if (marker != null && !string.IsNullOrEmpty(marker.room)) room = marker.room;
             return "città→" + name + "→" + room + "→" + thing;
         }
 

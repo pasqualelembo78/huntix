@@ -142,6 +142,13 @@ namespace City.Sync
             // restituisce senza un secondo canale di salvataggio.
             j.shopStates = City.Economy.ShopState.Export();
 
+            // Interni universali: locali visitati (conteggio/ultima visita).
+            // Stesso snapshot, nessun secondo canale di salvataggio.
+            j.universalInteriors = City.Interior.UniversalInteriorState.Export();
+
+            // Switch A/B del negozio: sistema Huntix o prefabbricato CC0.
+            j.shopStyle = City.Interior.ShopStyle.Export();
+
             // Uovo del budget: stato, posizione e timestamp viaggiano nello
             // snapshot cosi' Android lo conserva e il restore non lo rifa' nascere.
             j.budgetEggSpawned = BudgetEggWatcher.Spawned;
@@ -198,6 +205,8 @@ namespace City.Sync
             public string eggDex = "";
             public string foundContainerEggs = "";
             public string shopStates = "";
+            public string universalInteriors = "";
+            public string shopStyle = "";
             public bool budgetEggSpawned;
             public bool budgetEggFound;
             public string budgetEggId = "";
@@ -360,6 +369,12 @@ namespace City.Sync
 
             // Stato negozi: merge non distruttivo (il valore più avanzato vince)
             City.Economy.ShopState.Import(j.shopStates);
+
+            // Interni universali: unione non distruttiva dei locali visitati.
+            City.Interior.UniversalInteriorState.Import(j.universalInteriors);
+
+            // Switch negozio: vince il timestamp più recente (Android→Unity).
+            City.Interior.ShopStyle.Import(j.shopStyle);
 
             // Uovo del budget: trofeo una sola volta, con posizione/timestamp.
             BudgetEggWatcher.ImportState(j.budgetEggSpawned, j.budgetEggFound,

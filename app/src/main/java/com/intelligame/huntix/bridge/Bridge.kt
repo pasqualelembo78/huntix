@@ -281,6 +281,18 @@ object Bridge {
                 val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
                 CityStateSync.onShopActivity(ctx, jsonData)
             }
+            // ── Interni universali: visita di un locale 3D di MiCittà → mirror
+            //    Android dei locali già visitati (snapshot bidirezionale). ──
+            "UniversalInteriorVisited" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onUniversalInteriorVisit(ctx, jsonData)
+            }
+            // ── Switch negozio A/B: sistema procedurale Huntix o prefab CC0.
+            //    Lo specchio Android viaggia nello stesso snapshot CityStateSync. ──
+            "ShopStyleChanged" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onShopStyleChanged(ctx, jsonData)
+            }
             // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
             //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
             "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)
