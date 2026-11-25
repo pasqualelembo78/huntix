@@ -287,7 +287,7 @@ namespace Huntix.Core
                 json, "\"lat\"\\s*:\\s*(-?[0-9.]+)");
             var mLng = System.Text.RegularExpressions.Regex.Match(
                 json, "\"lng\"\\s*:\\s*(-?[0-9.]+)");
-            double lat, lng;
+            double lat = 0, lng = 0;
             bool ok = mLat.Success && mLng.Success &&
                 double.TryParse(mLat.Groups[1].Value,
                     System.Globalization.NumberStyles.Float,
