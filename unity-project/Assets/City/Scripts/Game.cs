@@ -130,6 +130,11 @@ namespace City
             catch (System.Exception e) { OsmDiag.Log("[Game] DayNightManager.Ensure FALLITO: " + e.Message); }
             try { City.Environment.SimulationManager.Ensure(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] SimulationManager.Ensure FALLITO: " + e.Message); }
+            // Eventi sportivi/ambientali: direttore additivo, non sostituisce
+            // i due LiveEventManager esistenti e non carica nulla finche' il
+            // player non si avvicina a un impianto.
+            try { City.Events.VenueDirector.Ensure(); }
+            catch (System.Exception e) { OsmDiag.Log("[Game] VenueDirector.Ensure FALLITO: " + e.Message); }
             try { City.Environment.FurnitureInteract.Ensure(); }
             catch (System.Exception e) { OsmDiag.Log("[Game] FurnitureInteract.Ensure FALLITO: " + e.Message); }
             EnergySystem.EnsureHud();
@@ -543,6 +548,12 @@ namespace City
             if (currentEntrance != null)
             {
                 currentEntrance.Interact();
+                return;
+            }
+            // Ultima priorità: avvio/arresto della simulazione nello stadio o
+            // nell'ippodromo. Le priorità esistenti restano invariate.
+            if (City.Events.VenueDirector.TryInteractNearby())
+            {
                 return;
             }
         }

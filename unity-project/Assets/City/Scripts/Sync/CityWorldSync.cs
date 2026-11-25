@@ -149,6 +149,10 @@ namespace City.Sync
             // Switch A/B del negozio: sistema Huntix o prefabbricato CC0.
             j.shopStyle = City.Interior.ShopStyle.Export();
 
+            // Eventi sportivi/ambientali: stato del ciclo evento e meteo.
+            // Viaggia nello snapshot, non in un secondo canale di salvataggio.
+            j.venueEventState = City.Events.VenueEventState.Export();
+
             // Uovo del budget: stato, posizione e timestamp viaggiano nello
             // snapshot cosi' Android lo conserva e il restore non lo rifa' nascere.
             j.budgetEggSpawned = BudgetEggWatcher.Spawned;
@@ -207,6 +211,7 @@ namespace City.Sync
             public string shopStates = "";
             public string universalInteriors = "";
             public string shopStyle = "";
+            public string venueEventState = "";
             public bool budgetEggSpawned;
             public bool budgetEggFound;
             public string budgetEggId = "";
@@ -375,6 +380,9 @@ namespace City.Sync
 
             // Switch negozio: vince il timestamp più recente (Android→Unity).
             City.Interior.ShopStyle.Import(j.shopStyle);
+
+            // Eventi sportivi: merge per timestamp, mai uno stato più vecchio.
+            City.Events.VenueEventState.Import(j.venueEventState);
 
             // Uovo del budget: trofeo una sola volta, con posizione/timestamp.
             BudgetEggWatcher.ImportState(j.budgetEggSpawned, j.budgetEggFound,

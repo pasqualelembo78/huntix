@@ -29,6 +29,7 @@ namespace City.UI
         private GameObject skinSelRow;
         private Text _styleLabel;
         private Text _shopLabel;
+        private Text _venueLabel;
         private Text _qualityLabel;
         private Text _touchLabel;
         private Text _worldLabel;
@@ -177,7 +178,7 @@ namespace City.UI
             prt.anchoredPosition = new Vector2(-16f, 0f);
             // Altezza calcolata sulle voci del menu: l'aggiunta delle voci
             // Fase 2 non deve lasciare l'ultima riga fuori dal pannello.
-            prt.sizeDelta = new Vector2(360f, 1620f);
+            prt.sizeDelta = new Vector2(360f, 1670f);
             panel.GetComponent<Image>().color = Bg;
 
             string[] labels =
@@ -202,6 +203,7 @@ namespace City.UI
                 "Modalità cinematografica: Off",
                 "Dettagli grafica cinematografica",
                 "Negozio: Huntix",
+                "Eventi sportivi: Off",
                 "Chiudi menu",
             };
             System.Action[] actions =
@@ -298,6 +300,7 @@ namespace City.UI
                 () => ToggleCinematicAll(),
                 () => OpenCinematicPanel(),
                 () => ToggleShopStyle(),
+                () => ToggleVenueEvents(),
                 () => CloseAll(),
             };
 
@@ -327,6 +330,7 @@ namespace City.UI
                 if (idx == 13) _companionLabel = lbl;
                 if (idx == 17) _cinematicLabel = lbl;
                 if (idx == 19) _shopLabel = lbl;
+                if (idx == 20) _venueLabel = lbl;
                 lbl.alignment = TextAnchor.MiddleLeft;
                 lbl.rectTransform.anchorMin = Vector2.zero;
                 lbl.rectTransform.anchorMax = Vector2.one;
@@ -372,6 +376,7 @@ namespace City.UI
             {
                 RefreshStyleLabel();
                 RefreshShopLabel();
+                RefreshVenueLabel();
                 RefreshQualityLabel();
                 RefreshTouchLabel();
                 RefreshWorldLabel();
@@ -714,6 +719,31 @@ namespace City.UI
 
             var cw = City.OSM.CityChunkedWorld.Instance;
             if (cw != null) cw.ReloadWorld();
+            SetVisible(false);
+        }
+
+        // ---- eventi sportivi/ambientali (nuovo sistema additivo) ----
+
+        private void RefreshVenueLabel()
+        {
+            if (_venueLabel == null) return;
+            _venueLabel.text = "Eventi sportivi: " +
+                (City.Events.VenueDirector.EventsEnabled ? "Attivi" : "Off");
+        }
+
+        /// <summary>Attiva/disattiva solo il nostro direttore: nessun altro
+        /// sistema di eventi o di economia viene toccato. Gli impianti sono
+        /// costruiti lazy, quindi il costo resta zero finche' sono disattivi.</summary>
+        private void ToggleVenueEvents()
+        {
+            bool next = !City.Events.VenueDirector.EventsEnabled;
+            City.Events.VenueDirector.EventsEnabled = next;
+            RefreshVenueLabel();
+            Vibration.Vibrate(25);
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(next
+                    ? "Eventi sportivi attivi: cerca uno stadio o un ippodromo"
+                    : "Eventi sportivi disattivati");
             SetVisible(false);
         }
 

@@ -556,6 +556,22 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione PROPS: " + e);
             }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
+
+            // ── impianti sportivi ed eventi ambientali (carico lazy) ──
+            // Solo un'ancora leggera per chunk: la geometria viene istanziata
+            // dal VenueDirector quando il player si avvicina, in coroutine.
+            Section("Eventi sportivi");
+            try
+            {
+                City.Events.VenueDirector.Ensure().OnChunkBuilt(chunk);
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE sezione EVENTI: " + e);
+            }
 
             // Chiusura: un chunk scaricato non va mai marcato come costruito
             // (altrimenti LOD/fisica verrebbero applicati a una root morta).
