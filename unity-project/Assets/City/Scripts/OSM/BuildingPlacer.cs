@@ -301,6 +301,12 @@ namespace City.OSM
             if (ContainsAny(t, "car_repair", "repair", "mechanic")) return "repair";
             if (ContainsAny(t, "garage", "parking")) return "garage";
             if (ContainsAny(t, "dealer", "showroom", "cars")) return "dealer";
+            // Tipologie commerciali specifiche PRIMA del negozio generico.
+            if (ContainsAny(t, "clothes", "apparel", "boutique", "fashion")) return "clothes";
+            if (ContainsAny(t, "hairdresser", "beauty", "salon", "barber")) return "hairdresser";
+            if (ContainsAny(t, "dog_wash", "dogwash", "pet_grooming", "pet")) return "dogwash";
+            if (ContainsAny(t, "car_wash", "carwash")) return "carwash";
+            if (ContainsAny(t, "ticket", "train_station", "railway")) return "ticket";
             if (ContainsAny(t, "shop", "commercial", "retail", "supermarket", "market")) return "shop";
             if (ContainsAny(t, "bar", "cafe", "pub", "restaurant", "fast_food")) return "bar";
             if (ContainsAny(t, "bank", "atm", "office", "civic")) return "bank";
@@ -319,6 +325,11 @@ namespace City.OSM
             switch (iType)
             {
                 case "shop": return "Negozio " + id;
+                case "clothes": return "Abbigliamento " + id;
+                case "hairdresser": return "Parruccheria " + id;
+                case "dogwash": return "Lavaggio cani " + id;
+                case "carwash": return "Autolavaggio " + id;
+                case "ticket": return "Biglietteria " + id;
                 case "apartment": return "Palazzina " + id;
                 case "bar": return "Bar " + id;
                 case "hospital": return "Ospedale " + id;
@@ -742,7 +753,12 @@ namespace City.OSM
             // Budget per chunk: esaurito, questo edificio resta solo esterno.
             if (enterableBudget <= 0) return null;
             string iType = MapInteriorType(b.t);
-            bool shop = iType == "shop";
+            // Ogni attività commerciale ha un bancone acquistabile: prima solo
+            // "shop" ne aveva uno, quindi bar/concessionaria/resto città erano
+            // "quattro mura". Ora tutti i negozi walk-in hanno cassa e uova.
+            bool shop = iType == "shop" || iType == "bar" || iType == "dealer" ||
+                        iType == "clothes" || iType == "hairdresser" ||
+                        iType == "dogwash" || iType == "carwash" || iType == "ticket";
 
             // Lato porta = +Z locale (facciata), coerente con la PortaIngresso
             // interna di InteriorGenerator (a +d*0.5). Il trigger-porta sporge

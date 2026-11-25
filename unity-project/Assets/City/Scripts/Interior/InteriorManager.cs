@@ -449,6 +449,11 @@ namespace City.Interior
             }
 
             if (!IsInside) return;
+
+            // Negozi walk-in: avanza l'attività (clienti/incasso/livello) solo
+            // dentro il negozio corrente. Nessuna fisica o NavMesh aggiuntiva.
+            ShopInteriorBuilder.TickActive(ActiveInteriorRoot, Time.deltaTime);
+
             var g = Game.Instance;
             if (g == null) return;
             if (g.player == null || g.ui == null) return;

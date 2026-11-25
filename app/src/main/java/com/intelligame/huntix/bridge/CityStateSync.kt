@@ -27,6 +27,7 @@ object CityStateSync {
     private const val PREF_FILE = "city_sync_prefs"
     private const val KEY_SNAPSHOT = "city_snapshot_v1"
     private const val KEY_TS = "city_snapshot_ts"
+    private const val KEY_SHOP_ACTIVITY = "city_shop_activity_v1"
 
     // ── persistenza snapshot ────────────────────────────────────
 
@@ -61,6 +62,25 @@ object CityStateSync {
         return try {
             context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE).getLong(KEY_TS, 0L)
         } catch (e: Exception) { 0L }
+    }
+
+    /** Negozi walk-in (Unity → app): specchio dedicato dei contatori attività.
+     *  È un mirror non distruttivo: lo snapshot completo resta la fonte. */
+    fun onShopActivity(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .edit().putString(KEY_SHOP_ACTIVITY, json).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onShopActivity failed: ${e.message}")
+        }
+    }
+
+    fun getShopActivity(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_SHOP_ACTIVITY, "") ?: ""
+        } catch (e: Exception) { "" }
     }
 
     // ── profilo generale ────────────────────────────────────────
@@ -111,6 +131,12 @@ object CityStateSync {
             if (family.isNotBlank() && profile.cityFamily != family) {
                 profile.cityFamily = family
                 changed = true
+            }
+            // Attività negozi 3D: il mirror Android viene aggiornato anche
+            // quando lo snapshot arriva dal restore, non solo dall'evento.
+            val shopStates = j.optString("shopStates", "")
+            if (shopStates.isNotBlank() && shopStates != getShopActivity(context)) {
+                onShopActivity(context, shopStates)
             }
             // Casa MiCittà (nome|lat|lng|garage|garagemodel|stanze): il profilo
             // conserva il riepilogo completo per il sync bidirezionale.
@@ -206,6 +232,8 @@ object CityStateSync {
         report.put("peopleKnown", people)
         report.put("eggDex", eggDex)
         report.put("containerEggs", containerEggs)
+        report.put("shopStates", j.optString("shopStates", "").isNotBlank())
+        report.put("shopActivityMirror", getShopActivity(context).isNotBlank())
         report.put("money", money)
         report.put("profilePeople", PlayerProfileManager.myProfile?.cityPeopleKnown ?: 0)
         report.put("profileEggDex", PlayerProfileManager.myProfile?.cityEggDexCount ?: 0)

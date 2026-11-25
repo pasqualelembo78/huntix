@@ -275,6 +275,12 @@ object Bridge {
             "CityStateSync" -> StoreUnityBridge.onCityStateSync(jsonData)
             // ── City State Sync: verifica di allineamento (risposta via log) ──
             "CityStateCheck" -> StoreUnityBridge.checkCityStateSync()
+            // ── Negozi walk-in: attività (clienti/incasso/scorte) dei negozi
+            //    3D di MiCittà → mirror Android nello stesso pref del profilo. ──
+            "ShopActivity" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onShopActivity(ctx, jsonData)
+            }
             // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
             //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
             "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)

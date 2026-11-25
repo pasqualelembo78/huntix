@@ -137,6 +137,11 @@ namespace City.Sync
             // rinascono nello stesso contenitore dopo un rebuild del chunk).
             j.foundContainerEggs = City.Interior.ContainerEgg.ExportFound();
 
+            // Negozi walk-in: contatori tycoon (clienti/incasso/scorte/livello)
+            // viaggiano con lo stesso snapshot, quindi Android li conserva e li
+            // restituisce senza un secondo canale di salvataggio.
+            j.shopStates = City.Economy.ShopState.Export();
+
             // Uovo del budget: stato, posizione e timestamp viaggiano nello
             // snapshot cosi' Android lo conserva e il restore non lo rifa' nascere.
             j.budgetEggSpawned = BudgetEggWatcher.Spawned;
@@ -192,6 +197,7 @@ namespace City.Sync
             public int daysTired;
             public string eggDex = "";
             public string foundContainerEggs = "";
+            public string shopStates = "";
             public bool budgetEggSpawned;
             public bool budgetEggFound;
             public string budgetEggId = "";
@@ -351,6 +357,9 @@ namespace City.Sync
             // Uova nei contenitori: unione con quelle gia' raccolte in locale.
             // Android e' il mirror persistente; Unity non dimentica nulla.
             City.Interior.ContainerEgg.ImportFound(j.foundContainerEggs);
+
+            // Stato negozi: merge non distruttivo (il valore più avanzato vince)
+            City.Economy.ShopState.Import(j.shopStates);
 
             // Uovo del budget: trofeo una sola volta, con posizione/timestamp.
             BudgetEggWatcher.ImportState(j.budgetEggSpawned, j.budgetEggFound,

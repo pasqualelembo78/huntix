@@ -210,11 +210,29 @@ Kotlin Android e firma APK OK. Log: `/tmp/opencode/build_nan_guard.log`.
 
 APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
 
-- Dimensione: **199.463.926 byte** (191 MB)
+- Dimensione: 199.463.926 byte (191 MB)
 - SHA-256: `eed382149db28482173afbf59dd5bd80dfbce22d42a3f5a00689816a82977ded`
+  (superato dalla build finale qui sotto)
 
 `TileClient.CacheVersion` resta 5: il formato geo/graph non è cambiato e i
 guard non alterano interpolation, collider o fisica dei veicoli.
+
+### Build finale con i negozi walk-in (§23)
+
+`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
+FORCE_UNITY_AAR=1 ./build_release.sh --auto`
+
+**Esito: riuscita.** `BUILD SUCCESSFUL` per l'AAR Unity (4m 28s) e per l'APK
+(1m 47s); compilazione Kotlin, zipalign e verifica firma OK.
+Log: `/tmp/opencode/build_shops_final.log`.
+
+APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
+
+- Dimensione: **199.488.502 byte** (191 MB)
+- SHA-256: `717d1209d170bd4e179b01aec7551fa7b6930c60f0f7a19174b02c4e060fdd6b`
+
+`TileClient.CacheVersion` resta 5: negozi, contatori e uova non toccano il
+formato geo/graph; mappe, POI e grafi stradali non vanno rigenerati.
 
 Effetti collaterali noti della build Unity (`link.xml.meta`,
 `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati con
@@ -323,3 +341,106 @@ interpolazione/collider dei veicoli):
 
 `TileClient.CacheVersion` resta 5: formato geo/graph, bridge Android, collider
 e fisica dei veicoli non sono cambiati.
+
+## 23. Negozi walk-in 3D: analisi, scelta e implementazione
+
+### 23.1 Perché si vedevano "quattro mura"
+
+Il teleport e l'entrata funzionavano (`InteriorManager` + `BuildingEntrance`),
+ma il contenuto era volutamente minimale: `InteriorGenerator.BuildShop`
+(` InteriorGenerator.cs:907-1031`) creava bancone, tre scaffali di cubetti,
+vetrina, etichetta e un trigger cassa; niente cassiera, niente clienti, niente
+attività, niente differenze tra un negozio e l'altro. Esistevano due sistemi
+paralleli da **conservare** (Mandato §7): gli interni OSM in-place e il negozio
+Indoor/AR (`StoreBuilder.cs`). Quest'ultimo ha un difetto noto e lasciato
+intatto: carica `CuteStore/<nome>` mentre i prefab sono in
+`CuteStore/Prefabs/`, e i nomi `floor/wall/cash-register/character-employee`
+non esistono nel set Cute, quindi la cassiera cade su una capsula. Il prototipo
+tycoon `Assets/ThirdParty/SupermarketPrototype/` è isolato dal bridge.
+
+### 23.2 Gli asset già scaricati bastano
+
+Inventario verificato nei Resources del progetto (tutti CC0, sorgente in
+`assets/INVENTORY.md`):
+
+| Kit | File | Stato prima | Uso nuovo |
+|---|---:|---|---|
+| `Resources/Furniture` | 140 FBX | ~20 referenziati | ~120 già importati e non usati: appendini, specchi, poltrone, vasche, macchina caffè, scrivanie |
+| `Resources/KenneyMiniMarket` | 20 FBX | usato solo in Indoor | scaffali, freezer, cassa, display, carrello, colonne |
+| `Resources/Characters` | 4 FBX | non collegati | `characterMedium` + clip `idle` per cassiera e clienti |
+| `Resources/Vehicles` | 14 FBX | solo traffico | 3 auto in showroom con pedane e cartellini |
+| `Resources/Pets` | 24 FBX | solo casa/AR | `animal-dog` nel lavaggio cani |
+| `CuteStore/Prefabs` | 22 prefab | percorso sbagliato in `StoreBuilder` | prodotti sugli scaffali col percorso corretto |
+
+**Conclusione:** non servivano nuovi download per cominciare. Mancava il
+*sistema* che composesse gli asset e desse stato al negozio, non la geometria.
+
+### 23.3 Ricerca internet (fatta, non ancora importata)
+
+Fonti CC0 verificate il 2026-11-25: Kenney **Mini Shop** (30 file, animazioni),
+Quaternius **Sushi Restaurant Kit** (108 modelli animati/textured),
+**Ultimate Furniture Pack** (20), **Ultimate House Interior Pack** (123);
+Kenney **Furniture Kit** è la sorgente già importata. Escluso il "Coffee Shop"
+di poly.pizza perché è **CC BY 3.0**, non CC0. Decisione: non importare ora
+pack aggiuntivi: i kit già presenti coprono le 7 tipologie con fallback
+procedurale e evitano altro peso e nuova revisione licenze. I quattro pack CC0
+restano opzione documentata per un futuro passo di qualità (camerini e
+showroom più dettagliati).
+
+### 23.4 Cosa è stato aggiunto (tutto additivo)
+
+- `ShopInteriorBuilder.cs`: le sette attività richieste (`supermercato`, `bar`,
+  `abbigliamento`, `concessionaria`, `parruccheria`, `lavaggiocani`,
+  `biglietteria`) più l'`autolavaggio` dei tag OSM, ognuna con layout dedicato,
+  cassiera animata (clip `idle`), 2-3 clienti che passeggiano senza
+  NavMesh/Fisica, cartelli in italiano e incasso aggiornato in tempo reale. I
+  mobili non hanno collider: la fisica resta quella dei gusci e i trigger
+  separati già esistenti. La classificazione controlla i casi specifici prima
+  di `bar` (così un `barber` non diventa una caffetteria).
+- `InteriorGenerator.BuildInterior`: nuovi casi OSM (`clothes`,
+  `hairdresser`, `dogwash`, `carwash`, `ticket`) che riutilizzano `BuildShop`
+  e una sola chiamata a `ShopInteriorBuilder.Decorate` a fine costruzione
+  (idempotente). `BuildShop/BuildBar/BuildDealer/BuildWorkshop/BuildHouse`
+  intatti.
+- `BuildingPlacer`: mapping dei tag specifici prima del negozio generico e
+  bancone acquistabile per tutte le attività commerciali (prima solo `shop`).
+- `ShopState.cs`: contatori stile tycoon (clienti serviti, incasso, livello,
+  scorte) con chiave stabile per edificio/coordinate/tipologia. Non accredita
+  Wallet: è riepilogo di gestione, non stampella di valuta.
+- Ponte bidirezionale: `CityWorldSync` esporta/importa `shopStates` nello
+  **stesso snapshot** usato per uova, casa e wallet; evento `ShopActivity`
+  whitelistato in `UnityIpc` e ricevuto da `Bridge.kt` → `CityStateSync`
+  (mirror in SharedPreferences + campo nel report `checkSync`). Nessun nuovo
+  sistema di salvataggio parallelo.
+- `InteriorManager.Update` avanza l'attività solo quando `IsInside` è true.
+
+### 23.5 Riflesso della caccia alle uova (proposto e implementato)
+
+Il gioco è una caccia alle uova… **che dici se**, dentro questi negozi, nascondiamo
+uova nel cassetto sotto la cassa, nella dispensa e nella credenza, con indizio
+testuale tipo *"negozio → parruccheria → credenza asciugamani"*? La risposta è
+stata applicata in ottica uova: i nuovi arredi portano nomi riconosciuti da
+`ContainerEgg` (`CassettoCassa`, `Dispensa`, `Credenza`,
+`CassettoBiglietteria`, `DispensaCani`, `DispensaAutolavaggio`). La chiave è
+`negozio@lat,lng#tipologia#nome`, calcolata con `WorldOrigin.ToGeo` e cultura
+invariante esattamente come `ContainerEgg.BuildingSeed`: resta stabile anche
+dopo un rebase del mondo, non solo dopo il rebuild dei chunk. `ShopState.EggHint()`
+fornisce l'indizio in italiano. Le chiavi raccolte
+viaggiano già in `foundContainerEggs` verso Android e tornano col restore,
+quindi le uova non rinascono. La rarità resta l'unica COMMON→LEGENDARY.
+
+### 23.6 Verifiche
+
+- `cscheck` completo: **OK**.
+- `backend/test_unity_shop_interiors.py`: **20 test**, tutti passati (8
+  tipologie, layout, innesto additivo, mapping OSM, cassiera animata, niente
+  collider sui mobili, uova con chiave geografica stabile, snapshot/ponte
+  Android, asset CC0 presenti, rarità unica, fisica e `TileClient.CacheVersion
+  = 5` invariati).
+- Le 124 verifiche preesistenti (audit 99, cinematografici 9, sicurezza 8,
+  guard NaN 8) restano passate.
+- Build Android finale con AAR Unity ricompilato: **riuscita** (§19), APK
+  `717d1209d170bd4e179b01aec7551fa7b6930c60f0f7a19174b02c4e060fdd6b`,
+  log `/tmp/opencode/build_shops_final.log`.
+- Nessun tag/POI/geo/graph toccato: i nuovi tipi derivano dai tag OSM già
+  presenti nel tile stream; non serve rigenerare la mappa.

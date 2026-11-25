@@ -254,6 +254,16 @@ namespace City.Interior
                 case "dealer":
                     BuildDealer(parent, w, d, floorH, floors);
                     break;
+                // Nuove tipologie commerciali reali: riutilizzano il negozio
+                // esistente (guscio, cassa, uscita, uova) e aggiungono arredi
+                // specifici via ShopInteriorBuilder. Nessun builder rimosso.
+                case "clothes":
+                case "hairdresser":
+                case "dogwash":
+                case "carwash":
+                case "ticket":
+                    BuildShop(parent, w, d, floorH, floors, shop);
+                    break;
                 case "repair":
                 case "garage":
                 case "fuel":
@@ -272,6 +282,10 @@ namespace City.Interior
                     BuildHouse(parent, w, d, floorH, floors, shop);
                     break;
             }
+
+            // Arredo "vissuto" dei negozi (cassiera, clienti, bancone attivo):
+            // modulo aggiuntivo, opera solo sul Floor_0 già generato sopra.
+            ShopInteriorBuilder.Decorate(parent, type, shop, w, d, floorH, floors);
             Log("BuildInterior DONE");
         }
 

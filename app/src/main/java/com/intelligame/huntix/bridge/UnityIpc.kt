@@ -59,6 +59,8 @@ object UnityIpc {
         "RecipeRequest",
         "CityXpEarned", "CityPowerEarned",
         "CityGemsEarned", "CityEnergyUpdate", "PlayerReincarnated",
+        // Negozi walk-in: contatori attività/stato negozio (Unity -> app).
+        "ShopActivity",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
     )
 
