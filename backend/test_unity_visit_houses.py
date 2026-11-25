@@ -7,6 +7,7 @@ Nessun test dichiara un test visivo o su device non eseguito.
 """
 import glob
 import os
+import re
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,9 +36,13 @@ TILE_CLIENT = read("unity-project/Assets/City/Scripts/OSM/TileClient.cs")
 IPC = read("app/src/main/java/com/intelligame/huntix/bridge/UnityIpc.kt")
 BRIDGE = read("app/src/main/java/com/intelligame/huntix/bridge/Bridge.kt")
 ANDROID_SYNC = read("app/src/main/java/com/intelligame/huntix/bridge/CityStateSync.kt")
+SENDU_DECORATOR = read("unity-project/Assets/City/Scripts/Interior/Visit/SenduInteriorDecorator.cs")
 PREFAB_SETUP = read("unity-project/Assets/Editor/HousePrefabSetup.cs")
 HUNTIX_BUILD = read("unity-project/Assets/Editor/HuntixBuild.cs")
 IMPORT_SCRIPT = read("scripts/house_assets_import.py")
+SENDU_IMPORT_SCRIPT = read("scripts/sendu_assets_import.py")
+LICENSES = read("unity-project/Assets/ThirdPartyLicenses.md")
+NOTICES = read("THIRD_PARTY_NOTICES.md")
 
 
 class TestAssetCC0(unittest.TestCase):
@@ -163,6 +168,53 @@ class TestRiflessoUova(unittest.TestCase):
         self.assertIn("HouseInteriorState.MarkEgg(featureId)", MANAGER)
         self.assertIn("UnityBridge.SendMessageToAndroid(BridgeEvent", STATE)
         self.assertIn("r.visits++;", STATE)
+
+
+class TestKitSENDU(unittest.TestCase):
+    """Kit completo SENDU importato davvero (FBX + PNG), non solo CC0."""
+
+    def test_assets_reali_e_meta(self):
+        folder = os.path.join(ROOT, "unity-project/Assets/Resources/HouseInteriors/Sendu")
+        fbx = sorted(glob.glob(os.path.join(folder, "FBX", "*", "*.fbx")))
+        png = sorted(glob.glob(os.path.join(folder, "*", "*.png")))
+        self.assertEqual(len(fbx), 339)
+        self.assertEqual(len(png), 20)
+        for path in fbx + png:
+            self.assertTrue(os.path.isfile(path + ".meta"), path)
+        self.assertTrue(os.path.isfile(os.path.join(folder, "README_models.txt")))
+        self.assertIn("https://sendudev.itch.io/cozy-interiors", SENDU_IMPORT_SCRIPT)
+
+    def test_texture_palette_senza_mipmap(self):
+        meta = read("unity-project/Assets/Resources/HouseInteriors/Sendu/Palettes/CI_Theme_Honey.png.meta")
+        self.assertIn("enableMipMap: 0", meta)
+        self.assertIn("filterMode: 0", meta)  # Point: celle piatte, non sfumate
+        self.assertIn("alphaIsTransparency: 0", meta)  # alpha = smoothness
+
+    def test_decorator_additivo_e_quarto_uovo(self):
+        self.assertIn("SenduInteriorDecorator.Decorate(root.transform, W, D);", DECORATOR)
+        self.assertIn("EndsWith(\"_LOD1\", StringComparison.Ordinal)", SENDU_DECORATOR)
+        self.assertIn("CI_Kitchen_Base_Drawer_0p6m", SENDU_DECORATOR)
+        self.assertIn("casa-cucina-cassetto-sendu", SENDU_DECORATOR)
+        self.assertIn("casa→cucina→cassetto-sendu", SENDU_DECORATOR)
+        self.assertIn("UnityEngine.Object.Destroy(cols[i])", SENDU_DECORATOR)
+        self.assertIn("Universal Render Pipeline/Lit", SENDU_DECORATOR)
+        self.assertIn("CI_Theme_Honey", SENDU_DECORATOR)
+        self.assertIn("s.x * W", SENDU_DECORATOR)  # coordinate sull'impronta OSM
+        self.assertIn("s.z * D", SENDU_DECORATOR)
+        self.assertIn("rends[i].gameObject.layer = 8", SENDU_DECORATOR)
+        self.assertEqual(SENDU_DECORATOR.count("new Slot("), 32)
+        slots = re.findall(r'new Slot\("([^"]+)", "([^"]+)"', SENDU_DECORATOR)
+        for folder, model in slots:
+            fbx = os.path.join(ROOT, "unity-project/Assets/Resources/HouseInteriors/Sendu",
+                               "FBX", folder, model + ".fbx")
+            self.assertTrue(os.path.isfile(fbx), fbx)
+
+    def test_licenza_commerciale_documentata(self):
+        text = LICENSES + NOTICES
+        self.assertIn("sendudev.itch.io/cozy-interiors", text)
+        self.assertIn("non CC0", text)
+        self.assertIn("rivendita", text)
+        self.assertIn("Unity 6000.6", text)
 
 
 class TestBridgeBidirezionale(unittest.TestCase):
