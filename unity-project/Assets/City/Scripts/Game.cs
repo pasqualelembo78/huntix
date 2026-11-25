@@ -1000,6 +1000,81 @@ namespace City
                 ui.ShowToast("Sei arrivato!");
         }
 
+        /// <summary>
+        /// Teletrasporto verso una destinazione trovata dalla ricerca (o scelta
+        /// nella mappa espansa). A differenza del vecchio TeleportToPoi qui
+        /// reinizializziamo l'origine del mondo SUL POI prima di calcolare la
+        /// posizione: il World Streaming prefetcha il settore, mette il ponte
+        /// di sicurezza sotto il player e poi lo snapiamo con TryGroundColumn.
+        /// Nessun proxy altimetrico, nessun tetto degli edifici.
+        /// </summary>
+        public void TeleportToSearchedPoi(string name, string kind,
+            double lat, double lng)
+        {
+            if (player == null) return;
+            var cw = City.OSM.CityChunkedWorld.Instance;
+            if (cw != null) cw.Teleport(lat, lng);
+            Vector3 pos = City.OSM.WorldOrigin.ToWorld(lat, lng);
+            pos = SnapToGroundForTeleport(pos);
+            Quaternion rot = Quaternion.identity;
+            if (Camera.main != null)
+                rot = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
+            NavigationState.Clear();
+            TeleportPlayer(pos, rot);
+
+            string label = string.IsNullOrEmpty(name) ? kind : name;
+            // Snapshot della ricerca: nessun formato nuovo, solo una preferenza
+            // e un log sul ponte Android (Mandato: bridge bidirezionale).
+            try
+            {
+                PlayerPrefs.SetString("huntix_last_searched_destination",
+                    label + "|" + kind + "|" +
+                    lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture) +
+                    "|" + lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture));
+                PlayerPrefs.Save();
+                Huntix.Bridge.UnityBridge.LogToAndroid("Ricerca",
+                    "Destinazione raggiunta: " + label + " (" + kind + ")");
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[Game][Search] snapshot: " + e.Message);
+            }
+            if (ui != null) ui.ShowToast("Sei arrivato a " + label + "!");
+
+            // Riflesso della caccia alle uova: solo la PRIMA visita a questa
+            // destinazione da ricerca genera l'indizio, senza duplicati.
+            string eggKey = "huntix_search_egg_" +
+                System.Math.Abs((label + kind).GetHashCode()).ToString();
+            if (PlayerPrefs.GetInt(eggKey, 0) == 0)
+            {
+                PlayerPrefs.SetInt(eggKey, 1);
+                PlayerPrefs.Save();
+                // TeleportPlayer passa da un fade: l'uovo va piazzato DOPO lo
+                // spostamento, non vicino al punto di partenza.
+                StartCoroutine(SettleAfterSearchTeleport(label, kind));
+            }
+        }
+
+        /// <summary>Dopo il fade il settore-streaming ha caricato i chunk: ri-
+        /// aggancia il player alla superficie reale (TryGroundColumn esclude
+        /// gli edifici) e solo allora piazza l'uovo. </summary>
+        private System.Collections.IEnumerator SettleAfterSearchTeleport(
+            string label, string kind)
+        {
+            yield return new WaitForSeconds(1.2f);
+            if (player != null)
+            {
+                Vector3 settled = SnapToGroundForTeleport(player.transform.position);
+                var cc = player.GetComponent<CharacterController>();
+                if (cc != null) cc.enabled = false;
+                player.transform.position = settled;
+                if (cc != null) cc.enabled = true;
+                player.Stop();
+            }
+            GrantAuditEgg("ricerca->" + kind + "->" + label,
+                "Uovo della ricerca: " + label, label);
+        }
+
         public void EnterVehicle(VehicleController vc)
         {
             if (vc == null || IsDriving || transitionBusy) return;

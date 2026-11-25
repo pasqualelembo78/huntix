@@ -14,6 +14,11 @@ import com.intelligame.huntix.reallife.PoiJsonFactory
 import com.unity3d.player.UnityPlayer
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -209,6 +214,283 @@ object StoreUnityBridge {
         val graph = CityTilePreloader.cachedFile(ctx, key, "graph")
         val geo = CityTilePreloader.cachedFile(ctx, key, "geo")
         return graph.exists() && graph.length() > 0L && geo.exists() && geo.length() > 0L
+    }
+
+    // ── Gestione spazio selettiva (solo cache tile di MiCittà) ────────────
+
+    /**
+     * Pattern dei SOLI file che possiamo leggere/cancellare: tile v1..v9
+     * (grafo/geo) e i loro temporanei di download. Qualsiasi altro file della
+     * cartella (profilo, snapshot, log, preferenze) resta invisibile qui.
+     */
+    private val tileCacheFilePattern = Regex("""^.+\.v[1-9]\.(?:graph|geo)\.json(?:\.tmp)?$""")
+    private val tileCacheVersionPattern = Regex("""\.v([1-9])\.(?:graph|geo)\.json""")
+
+    private const val TILE_CACHE_CURRENT_VERSION = 5
+    private const val GEOCODE_MIN_INTERVAL_MS = 1_100L
+    private const val GEOCODE_CACHE_TTL_MS = 10 * 60 * 1000L
+    private const val GEOCODE_CACHE_MAX = 24
+
+    private data class GeocodeCacheEntry(val at: Long, val json: String)
+
+    /** Piccola cache in memoria: tap ripetuti sulla stessa destinazione non
+     *  generano richieste Nominatim (e il callback arriva comunque a Unity). */
+    private val geocodeCache = LinkedHashMap<String, GeocodeCacheEntry>()
+    private val geocodePaceLock = Any()
+    private var lastGeocodeRequestMs = 0L
+
+    private fun tileCacheContext() =
+        UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+
+    /** File regolari veri: esclude directory e link simbolici (che potrebbero
+     *  puntare fuori dalla cartella della cache). */
+    private fun isTileCacheRegularFile(f: File): Boolean = try {
+        java.nio.file.Files.isRegularFile(f.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)
+    } catch (_: Exception) {
+        f.isFile
+    }
+
+    private fun emptyTileCacheStats(): String = JSONObject()
+        .put("bytes", 0L).put("files", 0).put("current", 0)
+        .put("legacy", 0).put("temp", 0).put("dir", "").toString()
+
+    /** Scansiona ESCLUSIVAMENTE CityTilePreloader.cacheDir(ctx): mai la root
+     *  di persistentDataPath, mai profilo/uova/prefs/snapshot/log. */
+    private fun tileCacheStatsJson(ctx: android.content.Context): String {
+        val dir = try { CityTilePreloader.cacheDir(ctx) } catch (_: Exception) { null }
+            ?: return emptyTileCacheStats()
+        var bytes = 0L
+        var files = 0
+        var current = 0
+        var legacy = 0
+        var temp = 0
+        try {
+            val children = dir.listFiles() ?: emptyArray()
+            for (f in children) {
+                if (!isTileCacheRegularFile(f)) continue
+                val name = f.name
+                if (!tileCacheFilePattern.matches(name)) continue
+                files++
+                bytes += try { f.length() } catch (_: Exception) { 0L }
+                if (name.endsWith(".tmp")) {
+                    temp++
+                } else {
+                    val version = tileCacheVersionPattern.find(name)
+                        ?.groupValues?.get(1)?.toIntOrNull()
+                    if (version == TILE_CACHE_CURRENT_VERSION) current++
+                    else if (version != null && version in 1..4) legacy++
+                }
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "tileCacheStats: scansione fallita: ${e.message}")
+        }
+        return JSONObject()
+            .put("bytes", bytes)
+            .put("files", files)
+            .put("current", current)
+            .put("legacy", legacy)
+            .put("temp", temp)
+            .put("dir", dir.absolutePath)
+            .toString()
+    }
+
+    /** Statistiche della cache tile v5, lette da Unity o dalla schermata Android. */
+    @JvmStatic
+    fun tileCacheStats(): String {
+        if (UnityIpc.isUnity) return UnityIpc.callApp("tileCacheStats", JSONArray().toString())
+        val ctx = tileCacheContext() ?: return emptyTileCacheStats()
+        return tileCacheStatsJson(ctx)
+    }
+
+    /** Overload senza argomenti per il codice C# che invoca il metodo statico
+     *  diretto (Kotlin/default arg non genera un overload no-arg per JNI). */
+    @JvmStatic
+    fun clearTileCache(): String = clearTileCache(-1)
+
+    /**
+     * Cancella SOLO i file regolari delle tile nella cartella cache, opzionalmente
+     * più vecchi di [olderThanDays] giorni (-1 = tutti). Ritorna le stesse
+     * statistiche di [tileCacheStats] dopo la pulizia.
+     */
+    @JvmStatic
+    fun clearTileCache(olderThanDays: Int = -1): String {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("clearTileCache", JSONArray().put(olderThanDays).toString())
+        }
+        val ctx = tileCacheContext() ?: return emptyTileCacheStats()
+        val cutoff = if (olderThanDays >= 0)
+            System.currentTimeMillis() - olderThanDays.toLong() * 86_400_000L
+        else Long.MIN_VALUE
+        var deleted = 0
+        var failed = 0
+        var freed = 0L
+        val dir = try { CityTilePreloader.cacheDir(ctx) } catch (_: Exception) { null }
+        try {
+            if (dir != null) {
+                for (f in dir.listFiles() ?: emptyArray()) {
+                    if (!isTileCacheRegularFile(f)) continue
+                    if (!tileCacheFilePattern.matches(f.name)) continue
+                    if (f.lastModified() >= cutoff) continue
+                    val len = try { f.length() } catch (_: Exception) { 0L }
+                    if (f.delete()) {
+                        deleted++
+                        freed += len
+                    } else {
+                        failed++
+                    }
+                }
+            }
+            AppLog.i(TAG, "clearTileCache: cancellati $deleted file (${freed / 1_000_000} MB), " +
+                "falliti $failed, olderThanDays=$olderThanDays, dir=${dir?.absolutePath ?: "-"}")
+        } catch (e: Exception) {
+            AppLog.w(TAG, "clearTileCache failed: ${e.message}")
+        }
+        val stats = tileCacheStatsJson(ctx)
+        // Unity svuota il prefetch in memoria e assegna una sola volta l'uovo
+        // "Archivista del Goblin". Un invio fallito non è un errore per l'utente:
+        // la pulizia dei file è già completata e il JSON è lo stesso ritornato.
+        try {
+            UnityIpc.sendToUnity("GameManager", "TileCacheCleared", stats)
+        } catch (t: Throwable) {
+            AppLog.w(TAG, "TileCacheCleared: invio a Unity fallito: ${t.message}")
+        }
+        return stats
+    }
+
+    private fun geocodeError(query: String, error: String): String = JSONObject()
+        .put("ok", false)
+        .put("query", query)
+        .put("error", error)
+        .toString()
+
+    /** Attende almeno ~1s fra due richieste di rete reali (Nominatim chiede
+     *  pacing gentile) e rispetta l'interrupt del thread. */
+    private fun paceGeocodeRequest() {
+        while (true) {
+            val wait = synchronized(geocodePaceLock) {
+                val now = System.currentTimeMillis()
+                val remaining = GEOCODE_MIN_INTERVAL_MS - (now - lastGeocodeRequestMs)
+                if (remaining <= 0L) {
+                    lastGeocodeRequestMs = now
+                    0L
+                } else remaining
+            }
+            if (wait <= 0L) break
+            try {
+                Thread.sleep(wait)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                throw e
+            }
+        }
+        if (Thread.currentThread().isInterrupted) throw InterruptedException("richiesta interrotta")
+    }
+
+    /** Nominatim → envelopeUnity. BLOCCANTE: da chiamare solo dal thread di
+     *  background di [geocodeAddress]. */
+    private fun fetchGeocode(query: String): String {
+        val key = query.lowercase(Locale.ITALIAN)
+        val now = System.currentTimeMillis()
+        synchronized(geocodeCache) {
+            val hit = geocodeCache[key]
+            if (hit != null && now - hit.at < GEOCODE_CACHE_TTL_MS) return hit.json
+        }
+
+        paceGeocodeRequest()
+
+        val url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&q=" +
+            URLEncoder.encode(query, "UTF-8")
+        val conn = URL(url).openConnection() as HttpURLConnection
+        val body = try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.instanceFollowRedirects = true
+            conn.requestMethod = "GET"
+            // User-Agent esplicito: Nominatim rifiuta le richieste senza.
+            conn.setRequestProperty("User-Agent", "HuntixGame/1.0 (Android; MiCitta)")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Accept-Language", "it")
+            val code = conn.responseCode
+            if (code != HttpURLConnection.HTTP_OK) {
+                throw RuntimeException("HTTP $code da Nominatim")
+            }
+            conn.inputStream.use { stream ->
+                stream.bufferedReader(Charsets.UTF_8).readText()
+            }
+        } finally {
+            conn.disconnect()
+        }
+
+        val found = try { JSONArray(body) } catch (_: Exception) {
+            throw RuntimeException("Risposta Nominatim non valida")
+        }
+        val results = JSONArray()
+        for (i in 0 until minOf(found.length(), 3)) {
+            val item = found.optJSONObject(i) ?: continue
+            val lat = item.optDouble("lat", Double.NaN)
+            val lng = item.optDouble("lon", Double.NaN)
+            if (lat.isNaN() || lng.isNaN()) continue
+            val display = item.optString("display_name", "")
+            val row = JSONObject()
+            row.put("name", display.ifBlank { item.optString("name", "Luogo") })
+            row.put("lat", lat)
+            row.put("lng", lng)
+            row.put("kind", "indirizzo")
+            row.put("type", item.optString("type", item.optString("category", "")))
+            results.put(row)
+        }
+        val envelope = JSONObject()
+            .put("ok", true)
+            .put("query", query)
+            .put("results", results)
+            .toString()
+        synchronized(geocodeCache) {
+            geocodeCache[key] = GeocodeCacheEntry(System.currentTimeMillis(), envelope)
+            while (geocodeCache.size > GEOCODE_CACHE_MAX) {
+                geocodeCache.remove(geocodeCache.keys.first())
+            }
+        }
+        return envelope
+    }
+
+    /**
+     * Ricerca destinazione (via + città, POI, indirizzo) lato Android. Gira su
+     * un thread di background e invia SEMPRE un callback a Unity:
+     * OnGeocodeResult("GameManager") con {"ok":true,...} o {"ok":false,...}.
+     * Nessuna eccezione through il bridge: errori e query vuota diventano JSON.
+     */
+    @JvmStatic
+    fun geocodeAddress(query: String) {
+        val q = try { query.trim() } catch (_: Exception) { "" }
+        fun send(methodResult: String) {
+            try {
+                UnityIpc.sendToUnity("GameManager", "OnGeocodeResult", methodResult)
+            } catch (t: Throwable) {
+                AppLog.w(TAG, "OnGeocodeResult: invio fallito: ${t.message}")
+            }
+        }
+        try {
+            Thread {
+                val payload = try {
+                    if (q.isEmpty()) throw IllegalArgumentException("Inserisci un indirizzo o un luogo")
+                    fetchGeocode(q)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    AppLog.w(TAG, "geocodeAddress interrotta: ${e.message}")
+                    geocodeError(q, "Ricerca interrotta")
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "geocodeAddress '$q' failed: ${e.message}")
+                    geocodeError(q, e.message ?: "Errore nella ricerca")
+                }
+                send(payload)
+            }.apply {
+                name = "huntix-geocode"
+                isDaemon = true
+            }.start()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "geocodeAddress: thread non avviato: ${e.message}")
+            send(geocodeError(q, "Ricerca non disponibile"))
+        }
     }
 
     // ── World Streaming (Unity <-> Android) ───────────────────────────────

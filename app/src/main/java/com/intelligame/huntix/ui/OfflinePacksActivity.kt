@@ -13,6 +13,9 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.bridge.OfflinePackManager
+import com.intelligame.huntix.bridge.StoreUnityBridge
+import org.json.JSONObject
+import java.util.Locale
 
 /**
  * Sezione "Mondo offline": l'utente flaggla le citta' (o tutta Italia) che
@@ -22,10 +25,18 @@ import com.intelligame.huntix.bridge.OfflinePackManager
  */
 class OfflinePacksActivity : AppCompatActivity() {
 
+    companion object {
+        /** Unity ("💾 Gestisci spazio") apre questa schermata già focalizzata
+         *  sulla card di pulizia selettiva della cache tile. */
+        const val EXTRA_FOCUS_STORAGE = "EXTRA_FOCUS_STORAGE"
+    }
+
     private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var listBox: LinearLayout
     private lateinit var summary: TextView
+    private lateinit var tileStatsText: TextView
+    private var lastTileStats: JSONObject? = null
     private var progressDialog: AlertDialog? = null
     private var progressBar: ProgressBar? = null
     private var progressLabel: TextView? = null
@@ -34,6 +45,7 @@ class OfflinePacksActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val d = resources.displayMetrics.density
         fun Int.dp() = (this * d).toInt()
+        val focusStorage = intent.getBooleanExtra(EXTRA_FOCUS_STORAGE, false)
 
         val scroll = ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0D0620")) }
         val root = LinearLayout(this).apply {
@@ -57,6 +69,10 @@ class OfflinePacksActivity : AppCompatActivity() {
             setTextColor(Color.parseColor("#B9A9D6"))
             setPadding(0, 0, 0, 12.dp())
         })
+
+        // Card in cima (evidenziata quando arriva il comando da MiCittà):
+        // gestione spazio SELETTIVA, mai cancellazione di dati del giocatore.
+        root.addView(buildStorageCard(d, focusStorage), 2)
 
         summary = TextView(this).apply {
             textSize = 13f
@@ -95,7 +111,136 @@ class OfflinePacksActivity : AppCompatActivity() {
             setOnClickListener { onClick() }
         }
 
+    /** Card di gestione spazio: MOSTRA e cancella solo la cache tile di
+     *  MiCittà. Nessun altro dato del giocatore entra in questa schermata. */
+    private fun buildStorageCard(d: Float, focus: Boolean): LinearLayout {
+        fun Int.dp() = (this * d).toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(12.dp(), 10.dp(), 12.dp(), 10.dp())
+            background = GradientDrawable().apply {
+                cornerRadius = 12f * d
+                setColor(Color.parseColor(if (focus) "#263A2A" else "#1A0A33"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = 10.dp() }
+        }
+        card.addView(TextView(this).apply {
+            text = "💾 Gestisci spazio"
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, 6.dp())
+        })
+        card.addView(TextView(this).apply {
+            text = "Sono i file JSON non compressi delle tile v5 di MiCittà in " +
+                "files/huntix_tiles. Cancellarli NON tocca profilo, uova, ricette, " +
+                "preferenze o snapshot: il gioco li riscarica solo se serve."
+            textSize = 12f
+            setTextColor(Color.parseColor("#B9A9D6"))
+            setPadding(0, 0, 0, 8.dp())
+        })
+        tileStatsText = TextView(this).apply {
+            text = "Lettura statistiche cache…"
+            textSize = 12f
+            setTextColor(Color.parseColor("#00FF88"))
+            setPadding(0, 0, 0, 8.dp())
+        }
+        card.addView(tileStatsText)
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }
+        row.addView(button("Pulisci solo cache tile", "#B23A48") { confirmClearTileCache() })
+        row.addView(TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(8.dp(), 1)
+        })
+        row.addView(button("Aggiorna", "#555555") { loadTileStats() })
+        card.addView(row)
+        return card
+    }
+
+    private fun statsCounts(jo: JSONObject): String {
+        val bytes = jo.optLong("bytes", 0L)
+        val size = if (bytes >= 1_000_000_000L)
+            String.format(Locale.ITALIAN, "%.1f GB", bytes / 1_000_000_000.0)
+        else
+            String.format(Locale.ITALIAN, "%.1f MB", bytes / 1_000_000.0)
+        return "$size · ${jo.optInt("files", 0)} file " +
+            "(attuali v5: ${jo.optInt("current", 0)}, " +
+            "vecchi v1-v4: ${jo.optInt("legacy", 0)}, " +
+            "temporanei .tmp: ${jo.optInt("temp", 0)})"
+    }
+
+    private fun applyTileStats(json: String) {
+        val jo = try {
+            JSONObject(json)
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        lastTileStats = jo
+        tileStatsText.text = if (json.isBlank()) "Statistiche cache non disponibili"
+        else statsCounts(jo) + "\nCartella: " + jo.optString("dir", "-")
+    }
+
+    private fun loadTileStats() {
+        io.execute {
+            val json = try {
+                StoreUnityBridge.tileCacheStats()
+            } catch (e: Exception) {
+                AppLog.w("OfflinePacks", "tileCacheStats: ${e.message}")
+                ""
+            }
+            ui.post {
+                if (!isFinishing && !isDestroyed) applyTileStats(json)
+            }
+        }
+    }
+
+    private fun confirmClearTileCache() {
+        val jo = lastTileStats
+        val dir = jo?.optString("dir", "") ?: ""
+        val counts = if (jo != null) statsCounts(jo) else "conteggio non ancora disponibile"
+        AlertDialog.Builder(this)
+            .setTitle("Pulisci solo cache tile")
+            .setMessage(
+                "Verranno cancellati SOLO i file regolari delle tile di MiCittà in:\n" +
+                "$dir\n\n$counts\n\n" +
+                "Cancellazione: *.v[1-9].graph.json, *.v[1-9].geo.json e i loro .tmp.\n" +
+                "Resta intatto: profilo, uova, ricette, preferenze, snapshot e ogni altro " +
+                "file dell'app. Le tile verranno riscaricate solo se il gioco ne ha bisogno."
+            )
+            .setPositiveButton("Cancella solo le tile") { _, _ -> clearTileCache() }
+            .setNegativeButton("Annulla", null)
+            .show()
+    }
+
+    private fun clearTileCache() {
+        io.execute {
+            val json = try {
+                StoreUnityBridge.clearTileCache()
+            } catch (e: Exception) {
+                AppLog.w("OfflinePacks", "clearTileCache: ${e.message}")
+                ""
+            }
+            ui.post {
+                if (isFinishing || isDestroyed) return@post
+                if (json.isNotBlank()) {
+                    applyTileStats(json)
+                    Toast.makeText(this, "Cache tile pulita ✓", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Pulizia cache non riuscita", Toast.LENGTH_SHORT).show()
+                }
+                // Aggiorna anche lo stato "installato" dei pacchetti offline.
+                refresh()
+            }
+        }
+    }
+
     private fun refresh() {
+        loadTileStats()
         io.execute {
             val packs = OfflinePackManager.packs(this)
             val info = packs.map { p ->

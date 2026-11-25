@@ -13,8 +13,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.UiKit
 import com.intelligame.huntix.bridge.CityStateSync
+import com.intelligame.huntix.bridge.UnityIpc
 import com.intelligame.huntix.reallife.LocationType
 import com.intelligame.huntix.reallife.MapLocation
 import com.intelligame.huntix.reallife.MapLocations
@@ -26,6 +28,12 @@ import kotlin.math.sqrt
  */
 class CityMapActivity : AppCompatActivity() {
 
+    companion object {
+        /** MiCittà apre la mappa Android evidenziando la ricerca quando
+         *  l'utente arriva dal comando "DestinationSearchOpen". */
+        const val EXTRA_FOCUS_SEARCH = "EXTRA_FOCUS_SEARCH"
+    }
+
     private lateinit var mapSurface: MapSurfaceView
     private var playerX = 0f
     private var playerZ = 0f
@@ -35,6 +43,7 @@ class CityMapActivity : AppCompatActivity() {
 
         playerX = intent.getFloatExtra("PLAYER_X", 0f)
         playerZ = intent.getFloatExtra("PLAYER_Z", 0f)
+        val focusSearch = intent.getBooleanExtra(EXTRA_FOCUS_SEARCH, false)
 
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.parseColor("#0A0618"))
@@ -93,9 +102,10 @@ class CityMapActivity : AppCompatActivity() {
                 val ok = CityStateSync.goToHouse(this@CityMapActivity)
                 Toast.makeText(
                     this@CityMapActivity,
-                    if (ok) "Destinazione Casa di Roma impostata in MiCittà"
+                    if (ok) "Freccetta impostata: Casa di Roma (MiCittà). " +
+                        "Per arrivarci davvero premi TELEPORTA nella mappa di MiCittà."
                     else "Apri prima MiCittà per sincronizzare la casa",
-                    Toast.LENGTH_SHORT
+                    if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
                 ).show()
             }
         }
@@ -118,9 +128,10 @@ class CityMapActivity : AppCompatActivity() {
                     val label = CityStateSync.goToVenue(this@CityMapActivity, kind)
                     Toast.makeText(
                         this@CityMapActivity,
-                        if (label != null) "Destinazione $label impostata in MiCittà"
+                        if (label != null) "Freccetta impostata: $label (MiCittà). " +
+                            "Per arrivarci davvero premi TELEPORTA nella mappa di MiCittà."
                         else "Apri prima MiCittà per sincronizzare l'impianto",
-                        Toast.LENGTH_SHORT
+                        if (label != null) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
                     ).show()
                 }
             }
@@ -128,6 +139,38 @@ class CityMapActivity : AppCompatActivity() {
         }
         addVenueButton("STADIO 🏟️", "#2A7A4B", "stadio")
         addVenueButton("IPPODROMO 🏇", "#6B3F86", "ippodromo")
+
+        // Ricerca destinazione: NON crea una nuova Activity Android. Chiude la
+        // mappa e chiede a MiCittà di aprire il proprio pannello di ricerca.
+        val searchBtn = TextView(this).apply {
+            text = if (focusSearch) "🔍 CERCA DESTINAZIONE →" else "🔍 CERCA DESTINAZIONE"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            isClickable = true
+            isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityMapActivity, 12).toFloat()
+                setColor(Color.parseColor(if (focusSearch) "#1E88E5" else "#3949AB"))
+            }
+            setPadding(UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8),
+                UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8))
+            setOnClickListener {
+                val connected = UnityIpc.isUnity || UnityIpc.bridge != null
+                try {
+                    UnityIpc.sendToUnity("GameManager", "openDestinationSearch", "{}")
+                } catch (e: Exception) {
+                    AppLog.w("CityMap", "openDestinationSearch: ${e.message}")
+                }
+                val delivered = connected && (UnityIpc.isUnity || UnityIpc.bridge != null)
+                if (delivered) {
+                    finish()
+                } else {
+                    Toast.makeText(this@CityMapActivity,
+                        "Apri la ricerca in MiCittà", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        topBar.addView(searchBtn)
 
         root.addView(topBar, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT

@@ -1300,7 +1300,7 @@ class TestOpenSourceMasterToggle(unittest.TestCase):
 
     def test_voce_menu_e_refresh(self):
         self.assertIn('"Opzioni audit open source: Off"', self.menu)
-        self.assertIn("() => ToggleOpenSourceAll(),", self.menu)
+        self.assertIn("ToggleOpenSourceAll()", self.menu)
         self.assertIn("if (idx == 12) _openSourceLabel = lbl;", self.menu)
         self.assertIn("RefreshOpenSourceLabel();", self.menu)
         self.assertIn("OpenSourceFeatureBridge.AllEnabled ? \"On\" : \"Off\"", self.menu)

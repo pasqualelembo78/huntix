@@ -105,6 +105,15 @@ class UnityAppCallback : IUnityCallback.Stub() {
                     StoreUnityBridge.requestOfflinePack(a.optString(0, ""))
                     ""
                 }
+                // ── Spazio selettivo: statistiche/pulizia SOLO delle tile v5 ──
+                "tileCacheStats" -> StoreUnityBridge.tileCacheStats()
+                "clearTileCache" -> StoreUnityBridge.clearTileCache(a.optInt(0, -1))
+                // Ricerca destinazione: il risultato torna a Unity in modo
+                // asincrono via OnGeocodeResult, non come valore di ritorno.
+                "geocodeAddress" -> {
+                    StoreUnityBridge.geocodeAddress(a.optString(0, ""))
+                    ""
+                }
 
                 // ── World Streaming: stato settori, prefetch e memoria device ──
                 "getWorldStreamingStatus" -> StoreUnityBridge.getWorldStreamingStatus()

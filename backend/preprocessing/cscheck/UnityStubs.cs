@@ -819,12 +819,15 @@ namespace UnityEngine.UI
 
     public class InputField : Component
     {
+        public enum LineType { SingleLine, MultiLineNewline, MultiLineSubmit }
         public Text textComponent { get; set; }
         public Text placeholder { get; set; }
         public string text { get; set; }
+        public LineType lineType { get; set; }
         public UnityEngine.Events.UnityEvent<string> onValueChanged { get; } = new UnityEngine.Events.UnityEvent<string>();
         public UnityEngine.Events.UnityEvent<string> onEndEdit { get; } = new UnityEngine.Events.UnityEvent<string>();
         public void ActivateInputField() {}
+        public void Select() {}
     }
 
     public class ScrollRect : Component

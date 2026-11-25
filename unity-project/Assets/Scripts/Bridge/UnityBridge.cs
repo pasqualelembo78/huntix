@@ -234,6 +234,28 @@ namespace Huntix.Bridge
             #endif
         }
 
+        /// <summary>Geocoding libero "via + città": Android interroga Nominatim
+        /// e risponde con UnitySendMessage("GameManager","OnGeocodeResult",json).
+        /// Nessuna rete dal client Unity e nessun formato nuovo sul bridge:
+        /// riusa lo stesso canale degli altri eventi Android → Unity.</summary>
+        public static void GeocodeAddress(string query)
+        {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var jc = new AndroidJavaClass(
+                    "com.intelligame.huntix.bridge.StoreUnityBridge"))
+                {
+                    jc.CallStatic("geocodeAddress", query ?? "");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[UnityBridge] GeocodeAddress: " + e.Message);
+            }
+            #endif
+        }
+
         // ── Esplora: bisogni (LocalNeeds). Ritorna JSON {"hunger":..,"sleep":..,"hygiene":..,"fun":..,"thirst":..}.
         // In editor (nessun Android) ritorna "{}" e l'HUD usa il fallback PlayerPrefs.
         public static string GetNeedsJson()

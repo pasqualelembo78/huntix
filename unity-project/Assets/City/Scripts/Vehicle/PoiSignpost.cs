@@ -124,6 +124,10 @@ namespace City.Vehicle
                 case "bar": return "BAR";
                 case "bank": return "BANCA";
                 case "fuel": return "BENZINA";
+                // Destinazioni arrivate dal geocoding (via + città): non
+                // devono essere etichettate come GARAGE per errore.
+                case "indirizzo": return "INDIRIZZO";
+                case "luogo": return "LUOGO";
                 default: return "GARAGE";
             }
         }

@@ -320,6 +320,28 @@ object Bridge {
             // ── Regali P2P (uova e gemme): Unity ha riscattato (claim) il regalo
             //    sul ledger; Android accredita inventario/gemme e lo registra. ──
             "GiftClaimed" -> handleGiftClaimed(jsonData)
+            // ── Menu MiCittà → Gestisci spazio: apre la sezione Android che
+            //    mostra e pulisce SOLO la cache delle tile (mai profilo/uova). ──
+            "StorageSettingsRequest" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                val intent = Intent(ctx,
+                    com.intelligame.huntix.ui.OfflinePacksActivity::class.java).apply {
+                    putExtra(com.intelligame.huntix.ui.OfflinePacksActivity.EXTRA_FOCUS_STORAGE, true)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            }
+            // ── Mappa Android → ricerca destinazione di MiCittà:Unity riapre
+            //    il proprio pannello di ricerca senza creare una nuova Activity. ──
+            "DestinationSearchOpen" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                val intent = Intent(ctx,
+                    com.intelligame.huntix.ui.CityMapActivity::class.java).apply {
+                    putExtra(com.intelligame.huntix.ui.CityMapActivity.EXTRA_FOCUS_SEARCH, true)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+            }
         }
     }
 

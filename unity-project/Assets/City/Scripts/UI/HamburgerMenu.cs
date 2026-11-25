@@ -181,82 +181,163 @@ namespace City.UI
             prt.sizeDelta = new Vector2(360f, 1670f);
             panel.GetComponent<Image>().color = Bg;
 
-            string[] labels =
+            // Primo livello: solo cio' che serve DURANTE il gioco. Le
+            // impostazioni e le uova/ricette restano raggiungibili, ma in
+            // sotto-pannelli dedicati (approvazione del proprietario 25/11):
+            // nessuna funzione e' stata eliminata, cambia solo la collocazione.
+            // LegacyIndex conserva l'indice storico delle etichette dinamiche:
+            // i test e il refresh dei toggle restano validi senza duplicare
+            // codice ne' cambiare i formati delle preferenze.
+            var entries = new List<MenuEntry>
             {
-                "Lavoro (guadagna \u20ac)",
-                "Mappa espansa",
-                "Personalizza aspetto",
-                "Stile edifici: Veloce",
-                "Profilo (Sim)",
-                "Note legali",
-                "Qualità grafica: Media",
-                "Esci dal gioco",
-                "Input touch: Huntix",
-                "Mondo: Reale",
-                "Animazione menu: Huntix",
-                "Console QA: Off",
-                "Opzioni audit open source: Off",
-                "Compagno NPC: Off",
-                "Fondi le uova (crafting)",
-                "Le tue uova (collezione)",
-                "Ricette di fusione (guida)",
-                "Modalità cinematografica: Off",
-                "Dettagli grafica cinematografica",
-                "Negozio: Huntix",
-                "Eventi sportivi: Off",
-                "Chiudi menu",
-            };
-            System.Action[] actions =
-            {
-                () =>
+                new MenuEntry("Lavoro (guadagna \u20ac)", 0, () =>
                 {
                     SetVisible(false);
                     if (JobManager.Instance != null)
                         JobManager.Instance.OpenPanel();
                     else if (UIManager.Instance != null)
                         UIManager.Instance.ShowToast("Lavori non disponibili");
-                },
-                () =>
+                }),
+                new MenuEntry("Mappa espansa", 1, () =>
                 {
                     SetVisible(false);
                     MapSelectUI.Open();
-                },
-                () =>
+                }),
+                new MenuEntry("\uD83D\uDD0D Cerca destinazione", -1, () =>
                 {
                     SetVisible(false);
-                    OpenSkinPanel();
-                },
-                () => ToggleBuildingStyle(),
-                () =>
+                    MapSelectUI.OpenSearch();
+                }),
+                new MenuEntry("Profilo (Sim)", 4, () =>
                 {
                     SetVisible(false);
                     OpenProfilePanel();
-                },
-                () =>
-                {
-                    SetVisible(false);
-                    if (UIManager.Instance != null)
-                        UIManager.Instance.ShowLegal();
-                },
-                () => ToggleQuality(),
-                () =>
+                }),
+                new MenuEntry("Stile edifici: Veloce", 3, () => ToggleBuildingStyle()),
+                new MenuEntry("Negozio: Huntix", 19, () => ToggleShopStyle()),
+                new MenuEntry("Eventi sportivi: Off", 20, () => ToggleVenueEvents()),
+                new MenuEntry("Uova e ricette (3 in 1)", -1, () => OpenEggPanel()),
+                new MenuEntry("Impostazioni e strumenti", -1, () => OpenSettingsPanel()),
+                new MenuEntry("Esci dal gioco", 7, () =>
                 {
                     SetVisible(false);
                     if (UIManager.Instance != null)
                         UIManager.Instance.OnExitPressedPublic();
-                },
-                () => ToggleTouch(),
-                () => ToggleWorldMode(),
-                () => ToggleMenuAnimation(),
-                () => ToggleQaConsole(),
-                () => ToggleOpenSourceAll(),
-                () => ToggleNpcCompanion(),
-                () =>
+                }),
+                new MenuEntry("Chiudi menu", 21, () => CloseAll()),
+            };
+
+            for (int i = 0; i < entries.Count; i++)
+            {
+                AddMenuRow(panel.transform, entries[i], i, 74f, 6f);
+            }
+
+            AddPoiHelpBlock(panel.transform, 11);
+            panel.SetActive(false);
+        }
+
+        /// <summary>Riga cliccabile del menu (o di un sotto-pannello). Il nome
+        /// M_/S_ mantiene la convenzione usata dai test statici e dal debug.</summary>
+        private void AddMenuRow(Transform parent, MenuEntry entry, int i,
+            float itemH, float leftPad)
+        {
+            var row = new GameObject((parent == panel.transform ? "M_" : "S_") + i,
+                typeof(Image), typeof(Button));
+            row.transform.SetParent(parent, false);
+            var rrt = row.GetComponent<RectTransform>();
+            rrt.anchorMin = new Vector2(0f, 1f);
+            rrt.anchorMax = new Vector2(1f, 1f);
+            rrt.pivot = new Vector2(0f, 1f);
+            rrt.anchoredPosition = new Vector2(leftPad, -8f - i * itemH);
+            rrt.sizeDelta = new Vector2(-12f, itemH - 4f);
+            row.GetComponent<Image>().color = RowBg;
+            row.GetComponent<Button>().onClick.AddListener(() => entry.Action());
+
+            var lbl = NewLabel(row.transform);
+            lbl.text = entry.Label;
+            BindLegacyLabel(entry.LegacyIndex, lbl);
+            lbl.alignment = TextAnchor.MiddleLeft;
+            lbl.rectTransform.anchorMin = Vector2.zero;
+            lbl.rectTransform.anchorMax = Vector2.one;
+            lbl.rectTransform.sizeDelta = Vector2.zero;
+            lbl.rectTransform.offsetMin = new Vector2(16f, 0f);
+            lbl.rectTransform.offsetMax = new Vector2(-16f, 0f);
+        }
+
+        /// <summary>Collega l'etichetta dinamica al vecchio indice: le righe
+        /// ora vivono in sotto-pannelli diversi, ma i toggle e i test restano
+        /// agganciati alla stessa chiave stabile.</summary>
+        private void BindLegacyLabel(int idx, Text lbl)
+        {
+            if (idx == 3) _styleLabel = lbl;
+            if (idx == 6) _qualityLabel = lbl;
+            if (idx == 8) _touchLabel = lbl;
+            if (idx == 9) _worldLabel = lbl;
+            if (idx == 10) _menuAnimLabel = lbl;
+            if (idx == 11) _qaConsoleLabel = lbl;
+            if (idx == 12) _openSourceLabel = lbl;
+            if (idx == 13) _companionLabel = lbl;
+            if (idx == 17) _cinematicLabel = lbl;
+            if (idx == 19) _shopLabel = lbl;
+            if (idx == 20) _venueLabel = lbl;
+        }
+
+        /// <summary>Spiegazione permanente nel pannello: l'utente non deve più
+        /// chiedersi come si raggiungono stadi, ippodromi e case visitabili.
+        /// Testi espliciti, in italiano, con il percorso operativo completo.</summary>
+        private static void AddPoiHelpBlock(Transform parent, int firstRow)
+        {
+            float y = -8f - (firstRow + 0.5f) * 74f;
+            string[] lines =
+            {
+                "COME RAGGIUNGERE I LUOGHI",
+                "Mappa espansa → menu (☰) → scegli CASA, STADIO o IPPODROMO.",
+                "Tocca il nome → TELEPORTA QUI (arrivi davvero) o FRECCETTA.",
+                "Sottopassaggi = categoria SOTTERRANEO nella mappa espansa.",
+                "🔍 Cerca destinazione trova un POI o una via + città.",
+            };
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var t = NewLabel(parent);
+                t.text = lines[i];
+                t.fontSize = i == 0 ? 24 : 20;
+                t.color = i == 0
+                    ? new Color(1f, 0.85f, 0.30f)
+                    : new Color(0.82f, 0.85f, 0.90f);
+                t.alignment = TextAnchor.MiddleLeft;
+                t.rectTransform.anchorMin = new Vector2(0f, 1f);
+                t.rectTransform.anchorMax = new Vector2(1f, 1f);
+                t.rectTransform.pivot = new Vector2(0f, 1f);
+                t.rectTransform.anchoredPosition = new Vector2(16f, y - i * 34f);
+                t.rectTransform.sizeDelta = new Vector2(-28f, 32f);
+            }
+        }
+
+        // ── Uova e ricette: tre pannelli Android già esistenti, un'unica
+        //    voce di primo livello. Nessun evento o schermata viene rimossa. ──
+
+        private GameObject _eggPanel;
+
+        private void OpenEggPanel()
+        {
+            SetVisible(false);
+            if (_eggPanel == null) BuildEggPanel();
+            RefreshAllDynamicLabels();
+            _eggPanel.SetActive(true);
+        }
+
+        private void BuildEggPanel()
+        {
+            _eggPanel = MakeSubPanel("EggPanel", 620f, 410f);
+            AddHeader(_eggPanel, "UOVA E RICETTE");
+            var rows = new List<MenuEntry>
+            {
+                new MenuEntry("Fondi le uova (crafting)", 14, () =>
                 {
-                    // Fase 2 · voce 15: la fusione vive nell'app Android, dove
-                    // sono le uova schiuse reali. Unity apre la UI sua con un
-                    // evento dedicato; Android risponde con FusionCrafted.
-                    SetVisible(false);
+                    // Fase 2 · la fusione vive nell'app Android, dove sono le
+                    // uova schiuse reali. Unity apre la UI sua con un evento
+                    // dedicato; Android risponde con FusionCrafted.
+                    CloseAll();
                     try
                     {
                         Huntix.Bridge.UnityBridge.SendMessageToAndroid(
@@ -266,12 +347,12 @@ namespace City.UI
                     {
                         Debug.LogWarning("[HamburgerMenu] CraftRequest: " + e.Message);
                     }
-                },
-                () =>
+                }),
+                new MenuEntry("Le tue uova (collezione)", 15, () =>
                 {
-                    // Fase 2 · voce 11: la collezione e' nell'app Android,
-                    // dove vive l'inventario uova reale.
-                    SetVisible(false);
+                    // Fase 2 · la collezione e' nell'app Android, dove vive
+                    // l'inventario uova reale.
+                    CloseAll();
                     try
                     {
                         Huntix.Bridge.UnityBridge.SendMessageToAndroid(
@@ -281,12 +362,12 @@ namespace City.UI
                     {
                         Debug.LogWarning("[HamburgerMenu] InventoryViewRequest: " + e.Message);
                     }
-                },
-                () =>
+                }),
+                new MenuEntry("Ricette di fusione (guida)", 16, () =>
                 {
-                    // Fase 2 · voce 16: il ricettario e' una sezione in sola
-                    // lettura della UI crafting Android.
-                    SetVisible(false);
+                    // Fase 2 · il ricettario e' una sezione in sola lettura
+                    // della UI crafting Android.
+                    CloseAll();
                     try
                     {
                         Huntix.Bridge.UnityBridge.SendMessageToAndroid(
@@ -296,50 +377,101 @@ namespace City.UI
                     {
                         Debug.LogWarning("[HamburgerMenu] RecipeRequest: " + e.Message);
                     }
-                },
-                () => ToggleCinematicAll(),
-                () => OpenCinematicPanel(),
-                () => ToggleShopStyle(),
-                () => ToggleVenueEvents(),
-                () => CloseAll(),
+                }),
             };
+            for (int i = 0; i < rows.Count; i++)
+                AddMenuRow(_eggPanel.transform, rows[i], i, 74f, 20f);
+        }
 
-            for (int i = 0; i < labels.Length; i++)
+        // ── Impostazioni e strumenti: tutte le vecchie voci restano
+        //    funzionanti, raggruppate fuori dal primo livello del menu. ──
+
+        private GameObject _settingsPanel;
+
+        private void OpenSettingsPanel()
+        {
+            SetVisible(false);
+            if (_settingsPanel == null) BuildSettingsPanel();
+            RefreshAllDynamicLabels();
+            _settingsPanel.SetActive(true);
+        }
+
+        private void BuildSettingsPanel()
+        {
+            _settingsPanel = MakeSubPanel("SettingsPanel", 700f, 1030f);
+            AddHeader(_settingsPanel, "IMPOSTAZIONI E STRUMENTI");
+            var rows = new List<MenuEntry>
             {
-                int idx = i;
-                var row = new GameObject("M_" + i, typeof(Image), typeof(Button));
-                row.transform.SetParent(panel.transform, false);
-                var rrt = row.GetComponent<RectTransform>();
-                rrt.anchorMin = new Vector2(0f, 1f);
-                rrt.anchorMax = new Vector2(1f, 1f);
-                rrt.pivot = new Vector2(0f, 1f);
-                rrt.anchoredPosition = new Vector2(6f, -8f - i * 74f);
-                rrt.sizeDelta = new Vector2(-12f, 70f);
-                row.GetComponent<Image>().color = RowBg;
-                row.GetComponent<Button>().onClick.AddListener(() => actions[idx]());
+                new MenuEntry("Personalizza aspetto", 2, () =>
+                {
+                    CloseAll();
+                    OpenSkinPanel();
+                }),
+                new MenuEntry("Note legali", 5, () =>
+                {
+                    CloseAll();
+                    if (UIManager.Instance != null) UIManager.Instance.ShowLegal();
+                }),
+                new MenuEntry("Qualità grafica: Media", 6, () => ToggleQuality()),
+                new MenuEntry("Input touch: Huntix", 8, () => ToggleTouch()),
+                new MenuEntry("Mondo: Reale", 9, () => ToggleWorldMode()),
+                new MenuEntry("Animazione menu: Huntix", 10, () => ToggleMenuAnimation()),
+                new MenuEntry("Console QA: Off", 11, () => ToggleQaConsole()),
+                new MenuEntry("Opzioni audit open source: Off", 12, () => ToggleOpenSourceAll()),
+                new MenuEntry("Compagno NPC: Off", 13, () => ToggleNpcCompanion()),
+                new MenuEntry("Modalità cinematografica: Off", 17, () => ToggleCinematicAll()),
+                new MenuEntry("Dettagli grafica cinematografica", 18, () =>
+                {
+                    CloseAll();
+                    OpenCinematicPanel();
+                }),
+                new MenuEntry("💾 Gestisci spazio", -1, () => OpenStorageSettings()),
+            };
+            for (int i = 0; i < rows.Count; i++)
+                AddMenuRow(_settingsPanel.transform, rows[i], i, 74f, 20f);
 
-                var lbl = NewLabel(row.transform);
-                lbl.text = labels[idx];
-                if (idx == 3) _styleLabel = lbl;
-                if (idx == 6) _qualityLabel = lbl;
-                if (idx == 8) _touchLabel = lbl;
-                if (idx == 9) _worldLabel = lbl;
-                if (idx == 10) _menuAnimLabel = lbl;
-                if (idx == 11) _qaConsoleLabel = lbl;
-                if (idx == 12) _openSourceLabel = lbl;
-                if (idx == 13) _companionLabel = lbl;
-                if (idx == 17) _cinematicLabel = lbl;
-                if (idx == 19) _shopLabel = lbl;
-                if (idx == 20) _venueLabel = lbl;
-                lbl.alignment = TextAnchor.MiddleLeft;
-                lbl.rectTransform.anchorMin = Vector2.zero;
-                lbl.rectTransform.anchorMax = Vector2.one;
-                lbl.rectTransform.sizeDelta = Vector2.zero;
-                lbl.rectTransform.offsetMin = new Vector2(16f, 0f);
-                lbl.rectTransform.offsetMax = new Vector2(-16f, 0f);
+            var note = NewLabel(_settingsPanel.transform);
+            note.text = "La pulizia rimuove solo le tile di MiCittà: " +
+                "profilo, uova e preferenze restano intatte.";
+            note.fontSize = 19;
+            note.color = new Color(0.80f, 0.84f, 0.90f);
+            note.alignment = TextAnchor.MiddleLeft;
+            note.rectTransform.anchorMin = new Vector2(0f, 1f);
+            note.rectTransform.anchorMax = new Vector2(1f, 1f);
+            note.rectTransform.pivot = new Vector2(0f, 1f);
+            note.rectTransform.anchoredPosition = new Vector2(20f, -970f);
+            note.rectTransform.sizeDelta = new Vector2(-40f, 46f);
+        }
+
+        /// <summary>Apre la gestione spazio Android: la pulizia e' selettiva
+        /// e confermata dall'utente. Unity svuota anche il prefetch in memoria
+        /// quando Android segnala che i file sono stati rimossi.</summary>
+        private void OpenStorageSettings()
+        {
+            CloseAll();
+            try
+            {
+                Huntix.Bridge.UnityBridge.SendMessageToAndroid(
+                    "StorageSettingsRequest", "{}");
             }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[HamburgerMenu] StorageSettingsRequest: " + e.Message);
+            }
+        }
 
-            panel.SetActive(false);
+        private sealed class MenuEntry
+        {
+            public readonly string Label;
+            public readonly int LegacyIndex;
+            public readonly System.Action Action;
+
+            public MenuEntry(string label, int legacyIndex, System.Action action)
+            {
+                Label = label;
+                LegacyIndex = legacyIndex;
+                Action = action;
+            }
         }
 
         private static Text NewLabel(Transform parent)
@@ -372,21 +504,23 @@ namespace City.UI
         private void SetVisible(bool v)
         {
             if (panel == null) return;
-            if (v)
-            {
-                RefreshStyleLabel();
-                RefreshShopLabel();
-                RefreshVenueLabel();
-                RefreshQualityLabel();
-                RefreshTouchLabel();
-                RefreshWorldLabel();
-                RefreshMenuAnimLabel();
-                RefreshQaConsoleLabel();
-                RefreshOpenSourceLabel();
-                RefreshCinematicLabel();
-                RefreshNpcCompanionLabel();
-            }
+            if (v) RefreshAllDynamicLabels();
             panel.SetActive(v);
+        }
+
+        private void RefreshAllDynamicLabels()
+        {
+            RefreshStyleLabel();
+            RefreshShopLabel();
+            RefreshVenueLabel();
+            RefreshQualityLabel();
+            RefreshTouchLabel();
+            RefreshWorldLabel();
+            RefreshMenuAnimLabel();
+            RefreshQaConsoleLabel();
+            RefreshOpenSourceLabel();
+            RefreshCinematicLabel();
+            RefreshNpcCompanionLabel();
         }
 
         // ---- profilo grafico (Low / Medium / High) ----

@@ -175,6 +175,38 @@ namespace Huntix.Core
             WorldStreamingBridge.OnStatusFromAndroid(json);
         }
 
+        // ── Ricevitori UnitySendMessage "diretti" ────────────────────────
+        // Unity invoca il metodo col nome esatto passato da Android: questi
+        // eventi non passano dal messenger PoiUnityBridge (che usava "OnEvent").
+        // Senza questi metodi UnitySendMessage rispondeva "no receiver" e la
+        // freccetta CASA/STADIO restava solo un toast. Li facciamo confluire
+        // nello switch storico di OnEvent, senza duplicare la logica.
+
+        public void navigateToHouse(string json)
+        {
+            OnEvent("navigateToHouse|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
+        public void navigateToVenue(string json)
+        {
+            OnEvent("navigateToVenue|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
+        public void openDestinationSearch(string json)
+        {
+            OnEvent("openDestinationSearch|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
+        public void OnGeocodeResult(string json)
+        {
+            OnEvent("OnGeocodeResult|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
+        public void TileCacheCleared(string json)
+        {
+            OnEvent("TileCacheCleared|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
         // UnitySendMessage passa sempre un unico parametro stringa.
         // Supporta due formati:
         //   1) JSON: {"action":"setMode","mode":"..."} (inviato da BridgeActivity)
@@ -293,7 +325,51 @@ namespace Huntix.Core
                 case "ReturnToMenu":
                     ReturnToAndroid();
                     break;
+                // Android → Unity: chip "CERCA DESTINAZIONE" nella mappa
+                // Android. Apre la mappa espansa col campo già selezionato.
+                case "openDestinationSearch":
+                    City.OSM.MapSelectUI.OpenSearch();
+                    break;
+                // Android → Unity: risposta del geocoding via + città.
+                case "OnGeocodeResult":
+                    HandleGeocodeResult(jsonData);
+                    break;
+                // Android → Unity: pulizia selettiva della cache tile
+                // completata. Svuota il prefetch e registra l'uovo una volta.
+                case "TileCacheCleared":
+                    HandleTileCacheCleared(jsonData);
+                    break;
             }
+        }
+
+        /// <summary>Unisce gli indirizzi trovati da Nominatim ai POI già
+        /// presenti nella ricerca della mappa espansa.</summary>
+        private static void HandleGeocodeResult(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            var map = City.OSM.MapSelectUI.Instance;
+            if (map != null) map.MergeSearchResults(json);
+            Debug.Log("[GameManager] OnGeocodeResult: " +
+                (json.Length > 220 ? json.Substring(0, 220) : json));
+        }
+
+        /// <summary>La cache su disco e' stata pulita lato Android: qui si
+        /// libera la copia in memoria (Unity non deve riusare JSON vecchi) e
+        /// scatta il riflesso uova una sola volta.</summary>
+        private static void HandleTileCacheCleared(string json)
+        {
+            City.OSM.TileClient.TrimPrefetch(0);
+            if (PlayerPrefs.GetInt("huntix_space_cleanup_egg", 0) == 0)
+            {
+                PlayerPrefs.SetInt("huntix_space_cleanup_egg", 1);
+                PlayerPrefs.Save();
+                var game = City.Game.Instance;
+                if (game != null)
+                    game.GrantAuditEgg("archivista-del-goblin",
+                        "Archivista del Goblin", "Gestione spazio");
+            }
+            Debug.Log("[GameManager] TileCacheCleared: " +
+                (string.IsNullOrEmpty(json) ? "{}" : json));
         }
 
         /// <summary>

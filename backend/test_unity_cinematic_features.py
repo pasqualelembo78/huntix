@@ -89,8 +89,8 @@ class TestCinematicBridge(unittest.TestCase):
     def test_menu_master_e_sottopannello(self):
         self.assertIn('Modalità cinematografica: Off', self.menu)
         self.assertIn('Dettagli grafica cinematografica', self.menu)
-        self.assertIn('() => ToggleCinematicAll()', self.menu)
-        self.assertIn('() => OpenCinematicPanel()', self.menu)
+        self.assertIn('ToggleCinematicAll()', self.menu)
+        self.assertIn('OpenCinematicPanel()', self.menu)
         self.assertIn('if (idx == 17) _cinematicLabel = lbl;', self.menu)
         self.assertIn('CinematicFeatureBridge.AllEnabled', self.menu)
         self.assertIn('RefreshCinematicDetailLabels()', self.menu)
@@ -102,7 +102,7 @@ class TestCinematicBridge(unittest.TestCase):
         self.assertGreaterEqual(int(altezza.group(1)), 1540)
         # Chiusura esplicita: voce nel menu e chiusura generica dei sub-panel.
         self.assertIn('"Chiudi menu"', self.menu)
-        self.assertIn('() => CloseAll(),', self.menu)
+        self.assertIn('CloseAll()', self.menu)
         self.assertIn('private readonly List<GameObject> _subPanels', self.menu)
         self.assertIn('for (int i = 0; i < _subPanels.Count; i++)', self.menu)
 

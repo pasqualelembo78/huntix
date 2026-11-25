@@ -4,6 +4,8 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using City.Vehicle;
 using City.UI;
+using City.Events;
+using City.Interior.Visit;
 
 namespace City.OSM
 {
@@ -90,6 +92,13 @@ namespace City.OSM
         // ── menu hamburger della mappa ──
         private GameObject _menuPanel;
         private readonly List<GameObject> _resultItems = new List<GameObject>();
+
+        // ── ricerca destinazione (POI noti + geocoding via+città) ──
+        private InputField _searchField;
+        private Text _searchStatus;
+        private string _lastSearchQuery = "";
+        private readonly List<NavigationState.Destination> _searchHits =
+            new List<NavigationState.Destination>();
         private static readonly Color ColSearch = new Color(0.10f, 0.13f, 0.18f, 0.95f);
         private static readonly Color ColResult = new Color(0.14f, 0.18f, 0.24f, 0.92f);
         private static readonly Color ColResultHi = new Color(0.22f, 0.30f, 0.42f, 0.95f);
@@ -121,6 +130,15 @@ namespace City.OSM
                 return;
             }
             Instance.Show();
+        }
+
+        /// <summary>Apre la mappa espansa con il campo di ricerca già attivo:
+        /// usato dalla voce del menu e dal chip Android "CERCA DESTINAZIONE".
+        /// </summary>
+        public static void OpenSearch()
+        {
+            Open();
+            if (Instance != null) Instance.FocusSearch();
         }
 
         public static void Toggle()
@@ -212,6 +230,7 @@ namespace City.OSM
 
             MakeHamburgerButton(mapGo.transform, new Vector2(-200f, -64f));
             BuildMenuPanel(mapGo.transform);
+            BuildSearchBar(mapGo.transform, mapSize);
 
             infoText = NewText(mapGo.transform, "Info", 30,
                 new Color(0.95f, 0.96f, 0.98f));
@@ -407,6 +426,244 @@ namespace City.OSM
             _resultScroll.movementType = ScrollRect.MovementType.Clamped;
 
             _menuPanel.SetActive(false);
+        }
+
+        // ───────────────────── ricerca destinazione ─────────────────────
+
+        /// <summary>Campo siempre visibile sopra la mappa: scrivi il nome di un
+        /// POI noto oppure "via + città". La ricerca locale è immediata e
+        /// quella libera arriva dal bridge Android (Nominatim).</summary>
+        private void BuildSearchBar(Transform parent, int mapSize)
+        {
+            float y = mapSize * 0.5f + 62f;
+            var bar = new GameObject("SearchBar", typeof(Image));
+            bar.transform.SetParent(parent, false);
+            var brt = bar.GetComponent<RectTransform>();
+            brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.anchoredPosition = new Vector2(-60f, y);
+            brt.sizeDelta = new Vector2(mapSize - 230f, 84f);
+            bar.GetComponent<Image>().color = ColSearch;
+
+            _searchField = bar.AddComponent<InputField>();
+            _searchField.lineType = InputField.LineType.SingleLine;
+            var txt = NewText(bar.transform, "Text", 25, Color.white);
+            txt.alignment = TextAnchor.MiddleLeft;
+            Stretch(txt.rectTransform);
+            txt.rectTransform.offsetMin = new Vector2(18f, 6f);
+            txt.rectTransform.offsetMax = new Vector2(-14f, -6f);
+            _searchField.textComponent = txt;
+            var ph = NewText(bar.transform, "Placeholder", 22,
+                new Color(0.62f, 0.67f, 0.74f));
+            ph.text = "Cerca un POI o una via + città (es. Via Roma, Foggia)";
+            ph.alignment = TextAnchor.MiddleLeft;
+            Stretch(ph.rectTransform);
+            ph.rectTransform.offsetMin = new Vector2(18f, 6f);
+            ph.rectTransform.offsetMax = new Vector2(-14f, -6f);
+            _searchField.placeholder = ph;
+            _searchField.onEndEdit.AddListener(delegate { RunSearch(); });
+
+            var searchBtn = new GameObject("Btn_CERCA", typeof(Image), typeof(Button));
+            searchBtn.transform.SetParent(parent, false);
+            var srt = searchBtn.GetComponent<RectTransform>();
+            srt.anchorMin = srt.anchorMax = srt.pivot = new Vector2(0.5f, 0.5f);
+            srt.anchoredPosition = new Vector2(mapSize * 0.5f - 105f, y);
+            srt.sizeDelta = new Vector2(190f, 84f);
+            searchBtn.GetComponent<Image>().color = new Color(0.16f, 0.48f, 0.30f);
+            searchBtn.GetComponent<Button>().onClick.AddListener(RunSearch);
+            var sl = NewText(searchBtn.transform, "T", 28, Color.white);
+            sl.text = "CERCA";
+            Stretch(sl.rectTransform);
+
+            _searchStatus = NewText(parent, "SearchStatus", 21,
+                new Color(1f, 0.85f, 0.30f));
+            _searchStatus.raycastTarget = false;
+            var st = _searchStatus.rectTransform;
+            st.anchorMin = st.anchorMax = st.pivot = new Vector2(0.5f, 0.5f);
+            st.anchoredPosition = new Vector2(0f, y - 56f);
+            st.sizeDelta = new Vector2(mapSize - 30f, 40f);
+            _searchStatus.text = "Mappa → ☰ per CASA / STADIO / IPPODROMO / SOTTERRANEO";
+        }
+
+        /// <summary>Porta il focus al campo di ricerca (menu hamburger o chip
+        /// Android). Non apre in automatico la tastiera su editor.</summary>
+        public void FocusSearch()
+        {
+            if (_searchField == null) return;
+            if (EventSystem.current == null)
+            {
+                var es = new GameObject("MapSelectUI_EventSystem",
+                    typeof(EventSystem), typeof(StandaloneInputModule));
+                es.transform.SetParent(transform, false);
+            }
+            _searchField.Select();
+            _searchField.ActivateInputField();
+        }
+
+        private void RunSearch()
+        {
+            string q = _searchField != null ? _searchField.text.Trim() : "";
+            if (q.Length < 3)
+            {
+                _searchStatus.text = "Scrivi almeno 3 lettere (es. Zaccheria, Via Roma Foggia)";
+                return;
+            }
+            _lastSearchQuery = q;
+            SearchLocal(q);
+            string status = _searchHits.Count > 0
+                ? _searchHits.Count + " luoghi noti per \"" + q + "\""
+                : "Nessun POI noto per \"" + q + "\": provo l'indirizzo...";
+            try
+            {
+                Huntix.Bridge.UnityBridge.GeocodeAddress(q);
+                status += " · cerco anche via + città";
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[MapSelect][Search] geocode non disponibile: " + e.Message);
+            }
+            ShowSearchResults(status);
+        }
+
+        /// <summary>Ricerca immediata nei registri già in memoria: impianti
+        /// sportivi OSM, case visitabili e POI vehicle. Nessuna rete.</summary>
+        private void SearchLocal(string query)
+        {
+            string q = query.ToLowerInvariant();
+            _searchHits.Clear();
+            try
+            {
+                var venues = VenueRegistry.All;
+                for (int i = 0; i < venues.Length; i++)
+                {
+                    var v = venues[i];
+                    if (Matches(v.name, q) || Matches(v.city, q) ||
+                        Matches(v.address, q) || Matches(v.kind, q))
+                        AddHit(v.name + " · " + (v.city ?? ""), v.kind, v.lat, v.lng);
+                }
+            }
+            catch (System.Exception e) { OsmDiag.Log("[MapSelect][Search] venues: " + e.Message); }
+
+            try
+            {
+                var homes = VisitInteriorRegistry.All;
+                for (int i = 0; i < homes.Length; i++)
+                {
+                    var h = homes[i];
+                    if (Matches(h.label, q) || Matches(h.note, q) || Matches(h.kind, q))
+                        AddHit(h.label, h.kind, h.lat, h.lng);
+                }
+            }
+            catch (System.Exception e) { OsmDiag.Log("[MapSelect][Search] case: " + e.Message); }
+
+            try
+            {
+                foreach (var p in VehiclePoiRegistry.All())
+                {
+                    if (Matches(p.name, q) || Matches(p.kind, q))
+                        AddHit(string.IsNullOrEmpty(p.name)
+                            ? PoiSignpost.Caption(p.kind) : p.name,
+                            p.kind, p.lat, p.lng);
+                }
+            }
+            catch (System.Exception e) { OsmDiag.Log("[MapSelect][Search] POI: " + e.Message); }
+
+            _searchHits.Sort(delegate(NavigationState.Destination a,
+                                      NavigationState.Destination b)
+            {
+                return DistToPlayer(a.lat, a.lng).CompareTo(
+                    DistToPlayer(b.lat, b.lng));
+            });
+            while (_searchHits.Count > 14) _searchHits.RemoveAt(_searchHits.Count - 1);
+        }
+
+        private static bool Matches(string value, string needle)
+        {
+            return !string.IsNullOrEmpty(value) &&
+                value.ToLowerInvariant().Contains(needle);
+        }
+
+        private void AddHit(string name, string kind, double lat, double lng)
+        {
+            var d = new NavigationState.Destination
+            {
+                name = name, kind = kind, lat = lat, lng = lng
+            };
+            for (int i = 0; i < _searchHits.Count; i++)
+            {
+                var old = _searchHits[i];
+                if (old.name == d.name &&
+                    System.Math.Abs(old.lat - lat) < 0.0001 &&
+                    System.Math.Abs(old.lng - lng) < 0.0001) return;
+            }
+            _searchHits.Add(d);
+        }
+
+        private void ShowSearchResults(string status)
+        {
+            ClearResults();
+            if (_menuPanel != null) _menuPanel.SetActive(true);
+            if (_backBtn != null) _backBtn.SetActive(true);
+            if (_searchStatus != null) _searchStatus.text = status;
+            if (_searchHits.Count == 0)
+                AddMenuActionRow("Nessun risultato: prova unaltro nome o una via + città",
+                    new Color(0.90f, 0.70f, 0.60f), 0, 66f, () => { });
+            for (int i = 0; i < _searchHits.Count; i++)
+            {
+                var d = _searchHits[i];
+                AddMenuActionRow(d.name + "  (" + FormatDist(DistToPlayer(d.lat, d.lng)) + ")",
+                    CompassUI.KindColor(d.kind), i, 66f,
+                    () => SelectCategoryPoi(d.name, d.kind, d.lat, d.lng));
+            }
+            _resultContent.sizeDelta = new Vector2(0f,
+                8f + (_searchHits.Count + 1) * 66f);
+        }
+
+        /// <summary>Risposta Android → Unity del geocoding "via + città".
+        /// I risultati si uniscono a quelli locali senza sostituirli.</summary>
+        public void MergeSearchResults(string json)
+        {
+            if (string.IsNullOrEmpty(json) || _searchField == null) return;
+            bool ok = json.Contains("\"ok\":true") || json.Contains("\"ok\": true");
+            if (!ok)
+            {
+                _searchStatus.text = "Indirizzo non trovato. Controlla il testo " +
+                    "(es. 'Via Roma 1, Foggia').";
+                return;
+            }
+            string q = JsonField(json, "query");
+            if (!string.IsNullOrEmpty(q) && q != _lastSearchQuery) return;
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                json, "\\{[^{}]*\\}");
+            int added = 0;
+            for (int i = 0; i < matches.Count; i++)
+            {
+                string row = matches[i].Value;
+                double lat, lng;
+                if (!double.TryParse(JsonField(row, "lat"),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out lat) ||
+                    !double.TryParse(JsonField(row, "lng"),
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out lng)) continue;
+                if (lat < -90.0 || lat > 90.0 || lng < -180.0 || lng > 180.0) continue;
+                string name = JsonField(row, "name");
+                if (string.IsNullOrEmpty(name)) continue;
+                AddHit(name, "indirizzo", lat, lng);
+                added++;
+            }
+            _searchStatus.text = added > 0
+                ? _searchHits.Count + " risultati per \"" + _lastSearchQuery +
+                  "\" · scegli e premi TELEPORTA QUI"
+                : "Nessun indirizzo trovato per \"" + _lastSearchQuery + "\"";
+            ShowSearchResults(_searchStatus.text);
+        }
+
+        private static string JsonField(string json, string key)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(json,
+                "\"" + key + "\"\\s*:\\s*(?:\"([^\"]*)\"|([-+0-9.eE]+))");
+            if (!m.Success) return "";
+            return m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
         }
 
         // Le voci "legali"/"esci" vivono nella HUD (overlay 10), sotto la
@@ -742,15 +999,13 @@ namespace City.OSM
         {
             var game = Game.Instance;
             if (game == null) { NavigateTo(d); return; }
-            Vector3 pos = WorldOrigin.ToWorld(d.lat, d.lng);
-            float dem = TileElevation.HeightAtWorld(pos);
-            pos.y = dem > 0f ? dem + 1.2f : 1.2f;
-            Quaternion rot = Quaternion.identity;
-            if (Camera.main != null)
-                rot = Quaternion.Euler(0f, Camera.main.transform.eulerAngles.y, 0f);
-            NavigationState.Clear();
+            // Usa l'unico percorso robusto: initializza il mondo sulle
+            // coordinate di destinazione (prefetch del settore + ponte di
+            // sicurezza) e fa lo snap a terra con TryGroundColumn. Il vecchio
+            // codice who prendeva il DEM diretto poteva lasciare il player
+            // sotto l'asfalto o su un tetto quando il POI era distante.
             Hide();
-            game.TeleportPlayer(pos, rot);
+            game.TeleportToSearchedPoi(d.name, d.kind, d.lat, d.lng);
         }
 
         /// <summary>Navigazione: la freccetta rossa punta al POI.</summary>

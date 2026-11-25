@@ -123,6 +123,7 @@ namespace Huntix.Bridge
         public static string GetCurrentLocation() { return "{\"lat\":0.0,\"lng\":0.0}"; }
         public static void StartLocationTracking() {}
         public static void SendMessageToAndroid(string type, string json) {}
+        public static void GeocodeAddress(string query) {}
         public static void ExitCityToHome() {}
         public static double GetMvcBalance() => 0.0;
         public static bool SpendMvc(double amount) => false;

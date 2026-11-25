@@ -152,6 +152,24 @@ namespace City.OSM
             }
 
             BuildControls(imgGo);
+
+            // Indicazione permanente: i POI non devono essere una funzione
+            // nascosta. La mappa espansa ha CASA/STADIO/IPPODROMO/SOTTERRANEO
+            // nel suo menu e la ricerca trova anche via + citta'.
+            var hintGo = new GameObject("PoiHint", typeof(Text));
+            hintGo.transform.SetParent(canvasGo.transform, false);
+            var hint = hintGo.GetComponent<Text>();
+            hint.font = UiFont();
+            hint.text = "Mappa: CASA · STADIO · IPPODROMO · 🔍 Cerca destinazione";
+            hint.fontSize = 17;
+            hint.color = new Color(0.92f, 0.88f, 0.68f, 0.95f);
+            hint.alignment = TextAnchor.UpperRight;
+            hint.raycastTarget = false;
+            RectTransform hrt = hint.rectTransform;
+            hrt.anchorMin = hrt.anchorMax = hrt.pivot = new Vector2(1f, 1f);
+            hrt.anchoredPosition = new Vector2(-14f, -578f);
+            hrt.sizeDelta = new Vector2(620f, 44f);
+
             _rotYaw = PlayerYaw();
         }
 
