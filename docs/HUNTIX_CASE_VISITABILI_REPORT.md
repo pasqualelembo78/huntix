@@ -327,9 +327,11 @@ sistemi esistenti e `CacheVersion = 5`.
 ## 20. Stato del repository
 
 Tag `pre-visible-houses` preservato; modifiche divise in commit logici in
-italiano (asset/licenze, sistema casa, bridge Android, test/report). Nessun
-push. Le cancellazioni preesistenti dei log e i file untracked estranei non
-sono stati toccati. Vedi l'appendice per l'esito finale della build.
+italiano: `907b548d`, `bbfda017`, `8d0296d0`, `14c1dfdd`, `743cde3c`,
+`c0e26eb0`, `75dc889f` (asset/licenze, sistema casa, bridge Android, kit
+SENDU, arredi e uova, test/report). Nessun push. Le cancellazioni preesistenti
+dei log e i file untracked estranei non sono stati toccati. Vedi l'appendice
+per l'esito finale della build.
 
 ---
 
@@ -339,15 +341,27 @@ Build release completa eseguita con
 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
 FORCE_UNITY_AAR=1 ./build_release.sh --auto`:
 
-- **`BUILD SUCCESSFUL in 3m 58s`** (89 task: 30 eseguite, 1 da cache, 58 up-to-date).
+- **`BUILD SUCCESSFUL in 1m 42s`** (89 task: 24 eseguite, 1 da cache, 64 up-to-date).
 - AAR Unity: `unity-export.gradle/unityLibrary/build/outputs/aar/unityLibrary-release.aar`
-  (102.740.658 byte, 13:12).
+  (105.471.349 byte, 14:34) — **+2.730.691 byte** rispetto alla build delle 13:12.
 - APK firmato e verificato: `app/build/outputs/apk/release/app-release-signed.apk`
-  (201.801.022 byte, 13:16), allineato con zipalign e firmato con apksigner.
-- Debug symbols Sentry caricati (1 mapping nuovo).
+  (**204.570.990 byte**, 14:36), allineato con zipalign e firmato con apksigner.
+- **Crescita APK totale della casa visitabile**: da 201.473.302 byte (baseline
+  12:11, prima di qualsiasi asset) a **204.570.990 byte**, cioè **+3.097.688 byte
+  (~2,95 MiB)**: +327.720 byte per i 43 FBX CC0 e **+2.769.968 byte (~2,64 MiB)**
+  per il kit SENDU completo.
+- I sorgenti SENDU occupano 11.567.828 byte su disco (zippati 6.907.274 byte),
+  ma in APK entrano compressi nel blob Unity `assets/bin/Data`: mesh FBX
+  low-poly e una palette PNG 256x256, senza gli shader/texture PBR del kit
+  Unity escluso per incompatibilità. **Non è una crescita di 60-70 MB**: per
+  ottenerla sarebbero serviti i prefab completi e le texture del kit Unity,
+  che richiedono Unity 6000.6/URP 17.6 e non sono stati importati.
+- Debug symbols Sentry gestiti dalla build (upload task eseguito/da cache).
 - Prefab `unity-project/Assets/Resources/HouseInteriors/CasaVisitabileCC0.prefab`
   (7.750 byte) generato in fase di export Unity da `HousePrefabSetup.EnsurePrefab()`.
 - Backend riavviato su http://localhost:5100 (tile server OK).
+- Artefatti collaterali riscritti da Unity (`link.xml.meta`, `PlayerHero.prefab`,
+  `PlayerLocomotion.controller`) ripristinati a `HEAD` dopo la build.
 
 La build non ha introdotto errori di compilazione C# nuovi. La verifica su
 device resta non eseguita (punto 16).
