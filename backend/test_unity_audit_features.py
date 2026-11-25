@@ -972,7 +972,10 @@ class TestFase2Ricette(unittest.TestCase):
         self.assertIn("EggFusionRecipeManager.views(c).forEach", self.activity)
         self.assertIn("Non avvia fusioni", self.activity)
         self.assertIn("Ricette di fusione (guida)", self.menu_cs)
-        self.assertIn("prt.sizeDelta = new Vector2(360f, 1540f)", self.menu_cs)
+        # L'altezza del pannello cresce con le voci: 1540 -> 1620 con lo
+        # switch negozio; la UI resta una sola e in sola lettura lato Android.
+        self.assertTrue("prt.sizeDelta = new Vector2(360f, 1540f)" in self.menu_cs or
+                        "prt.sizeDelta = new Vector2(360f, 1620f)" in self.menu_cs)
         self.assertIn("Le ricette sono una guida", self.activity)
 
 
@@ -1303,7 +1306,9 @@ class TestOpenSourceMasterToggle(unittest.TestCase):
         self.assertIn("OpenSourceFeatureBridge.SetAll(on);", self.menu)
         self.assertIn("Opzioni audit open source attivate", self.menu)
         self.assertIn("Opzioni audit open source disattivate", self.menu)
-        self.assertIn("1540f", self.menu)  # riga aggiunta: voce "Chiudi menu"
+        # L'altezza del pannello segue il numero di voci: 1540 -> 1620 con la
+        # voce dello switch negozio. Non deve mai rimpicciolirsi.
+        self.assertTrue("1540f" in self.menu or "1620f" in self.menu)
 
     def test_comandi_fini_usano_la_stessa_sorgente(self):
         self.assertIn("OpenSourceFeatureBridge.LabelFor(args[1])", self.commands)

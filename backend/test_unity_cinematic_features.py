@@ -95,7 +95,11 @@ class TestCinematicBridge(unittest.TestCase):
         self.assertIn('CinematicFeatureBridge.AllEnabled', self.menu)
         self.assertIn('RefreshCinematicDetailLabels()', self.menu)
         self.assertIn('MakeSubPanel("CinematicPanel"', self.menu)
-        self.assertIn('1540f', self.menu)
+        # L'altezza del pannello cresce con le nuove voci (1540 -> 1620): la
+        # verifica guarda che non sia stata ristretta under-size.
+        altezza = re.search(r'new Vector2\(360f,\s*(\d+)f\)', self.menu)
+        self.assertIsNotNone(altezza)
+        self.assertGreaterEqual(int(altezza.group(1)), 1540)
         # Chiusura esplicita: voce nel menu e chiusura generica dei sub-panel.
         self.assertIn('"Chiudi menu"', self.menu)
         self.assertIn('() => CloseAll(),', self.menu)

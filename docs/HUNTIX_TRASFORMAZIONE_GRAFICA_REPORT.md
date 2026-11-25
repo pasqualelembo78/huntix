@@ -520,3 +520,236 @@ rigenerare mappe né aggiornare i cache dei device.
   negozi, NaN e nuovo fix).
 - Build Android finale: vedere §19. Riproduzione visiva e FPS restano sul device
   dell'utente: in assenza di emulatore locale non possiamo guidare la città.
+
+## 25. Interni 3D universali riutilizzabili (2026-11-25)
+
+### 25.1 Analisi e scelta architetturale
+
+Dopo i negozi walk-in (§23) restava un problema di *copertura*: solo 8
+tipologie commerciali avevano un layout dedicato, mentre case, appartamenti,
+uffici, farmacie, ristoranti, scuole, ospedali, banche e hotel ricadevano sul
+generico `BuildHouse`/`BuildShop`. La domanda non era "serve un altro kit di
+modelli?", ma "esiste un sistema che riutilizzi gli asset già CC0 per qualsiasi
+attività e colleghi gli interni senza duplicare salvataggi o economie?".
+
+Ho valutato il progetto **Gateways** (https://github.com/nmacadam/Gateways,
+MIT, con dipendenza https://github.com/nmacadam/Scene-Reference): usa GUID di
+porta stabili e un `ReturnGate` per il ritorno, ma collega **scene Unity**
+tramite `SceneManager` ed è una preview Unity 2019.4 con header misti Unity
+Companion License. Importarlo come sistema parallelo avrebbe rotto il mondo
+chunked: caricare una scena smonta i chunk e perde il rebase GPS di
+`WorldOrigin`. **Decisione:** adattare solo il *pattern* (id deterministici,
+porta di ritorno, registro con pulizia) dentro il codice Huntix esistente,
+senza scene, senza `DontDestroyOnLoad`, senza codice di Gateways copiato.
+
+Nessun nuovo download: i kit CC0 già importati (§23.2) bastano. I pack
+Dollhouse Free, Cozy Cartoon Pack/Cafe, CozyShops, i tre Konbini, gli asset
+Asset Store a pagamento e Mixamo restano esclusi per EULA/licenza non CC0
+verificabile; GTA/Mafia restano fuori per vincolo IP.
+
+### 25.2 Script aggiunti e punti di innesto
+
+| File | Ruolo |
+|---|---|
+| `Interior/UniversalInteriorRegistry.cs` | 19 tipologie, classificazione da tag OSM + nome attività, etichette e indizi in italiano, chiave geo-stabile `interno@lat,lng#tipo#nome`, `GateId()` deterministici |
+| `Interior/UniversalInteriorBuilder.cs` | pianta a due zone con divisori, arredi per tipologia, contenitori uova, due varchi collegati, cartello; idempotente su `InternoUniversale`; fallback a cubo se la risorsa manca |
+| `Interior/InteriorGate.cs` | `InteriorGate`, `InteriorGateRegistry` (register/unregister su `Awake`/`OnDestroy`, più register in `Configure` perché `AddComponent` esegue `Awake` prima dell'id) e `InteriorTeleport.Move` unico per porte, scale e varchi |
+| `Interior/UniversalInteriorState.cs` | locali visitati (conteggio + timestamp), `Export`/`Import` con merge non distruttivo, evento `UniversalInteriorVisited` |
+| `Interior/InteriorGenerator.cs` | una chiamata a `UniversalInteriorBuilder.Build(...)` a fine costruzione, dopo i builder storici e dopo `ShopInteriorBuilder.Decorate` |
+| `Interior/InteriorManager.cs` | registra la visita all'ingresso; teleporto unificato; `SetPlayerPos` rimosso |
+| `Interior/BuildingEntrance.cs` | teleporto unificato; `SetPlayerPos` rimosso |
+| `Interior/ContainerEgg.cs` | legge `UniversalContainerMarker.room` per l'indizio "città→edificio→stanza→oggetto" |
+| `Sync/CityWorldSync.cs` | campo `universalInteriors` nello snapshot esistente, export/import |
+| `bridge/UnityIpc.kt`, `Bridge.kt`, `CityStateSync.kt` | whitelist evento, router, mirror SharedPreferences e voci in `checkSync` |
+| `backend/test_unity_universal_interiors.py` | 24 verifiche statiche dedicate |
+
+Quattro nuovi file hanno `.meta` con GUID generati una volta e stabili. Nessuna
+scena `.unity` è stata modificata a mano: tutto è costruito a runtime sotto il
+`Floor_0` già generato. Nessun builder esistente è stato rimosso e nessun
+sistema economico duplicato (`Wallet` e `ShopState` restano gli unici).
+
+### 25.3 Interni disponibili e edifici collegati
+
+Tipologie universali: **casa, appartamento, negozio, supermercato, bar,
+ristorante, abbigliamento, concessionaria, farmacia, ufficio, parruccheria,
+lavaggiocani, autolavaggio, biglietteria, officina, banca, scuola, ospedale,
+hotel**. La classificazione privilegia il nome dell'attività (farmacia,
+ristorante/pizzeria, ufficio/studio) sui tag generici OSM; per i negozi
+riutilizza `ShopInteriorBuilder.Classify`, così caffetterie, concessionarie e
+parruccherie restano coerenti col sistema §23.
+
+Gli interni universali non creano nuovi edifici: si innestano sugli edifici
+**già enterabili** generati da `BuildingPlacer`, con il budget invariato di
+**8 edifici per chunk** e il caricamento lazy entro **30 m** dalla porta
+(`InteriorManager`). Funzionano sia nei gusci in-place sia nei prefab con
+fade, perché il builder lavora solo sul pavimento prodotto da
+`InteriorGenerator`. I piani superiori restano gestiti da `StairTrigger`; i
+due varchi universali collegano due zone dello stesso piano, non due scene.
+
+### 25.4 Asset usati, licenze e URL
+
+| Fonte | Licenza / URL | Uso in questa fase |
+|---|---|---|
+| Kenney Furniture Kit | CC0 1.0 — https://kenney.nl/assets/furniture-kit , testo in `assets/furniture/License.txt` | scrivanie, letti, armadi, frigo, lavagne, poltrone, lampade, cassetti |
+| Kenney Mini Market | CC0 — https://kenney.nl/assets (file già presenti in `Assets/Resources/KenneyMiniMarket`) | scaffali e cassa di farmacie, negozi, supermarket, biglietterie |
+| Kenney Car Kit | CC0 — https://kenney.nl/assets/car-kit , testo in `assets/car-kit/License.txt` | auto in showroom e officine/autolavaggi |
+| Kenney Cube Pets | CC0 — https://kenney.nl/assets/cube-pets , testo in `assets/cube-pets/License.txt` | cane nel lavaggio cani |
+| Kenney Characters | CC0 — https://kenney.nl/assets , testo in `assets/characters/License.txt` | già usati da `ShopInteriorBuilder`; non duplicati |
+| CuteStore prefab | già importati da pacchetto precedente, nessun file scaricato in questa fase | corretto solo il percorso `CuteStore/Prefabs/` in `StoreBuilder`; licenza preesistente non riesaminata |
+| Quaternius packs già presenti | CC0 per i pack verificati, QAL v1.0 come licenza sito — https://quaternius.com/license.html | nessun nuovo pack, nessuna modifica ai modelli |
+| Gateways / Scene-Reference | MIT — https://github.com/nmacadam/Gateways , https://github.com/nmacadam/Scene-Reference | solo pattern adattato; nessuna riga o asset copiato |
+| Poly Pizza | CC0 solo per asset selezionati — https://poly.pizza/ | valutati, **non importati**; il "Coffee Shop" è CC BY 3.0 quindi scartato |
+
+Se una risorsa `Resources.Load` non è presente nell'AAR, il builder genera un
+cubo con materiale condiviso: nessun modulo mancante può bloccare la build o
+la visita. Nessun collider sui mobili, nessun `Rigidbody`, `NavMeshAgent` o
+`CharacterController` aggiunto dagli arredi.
+
+### 25.5 Interazioni, uova e bridge
+
+- **Varchi**: trigger `BoxCollider` con tag `Player`, cooldown di 2 s anti-loop,
+  fade con `Game.fader`, arrivo davanti al varco opposto e opposizione automatica
+  (`target.targetGateId = gateId`) come `ReturnGate`. Se il chunk di arrivo è
+  stato scaricato il registro non trova la porta e il giocatore resta dove è.
+- **Cartelli** in italiano con tipologia e indizio; nessun nuovo pulsante UI.
+- **Riflesso della caccia alle uova**: ogni interno riceve contenitori con
+  nomi riconosciuti da `ContainerEgg` (`Cassetto`, `Armadio`, `Dispensa`,
+  `Scrivania`, con suffisso per tipologia). `UniversalContainerMarker.room`
+  rende l'indizio specifico (per esempio *banco farmacia* invece di *piano1*).
+  La chiave usa `WorldOrigin.ToGeo` con cultura invariante, quindi sopravvive
+  a rebase e rebuild; le uova raccolte restano in `foundContainerEggs` e la
+  rarità resta l'unica `EggController.Rarity`.
+- **Visite**: `UniversalInteriorState.MarkVisited` all'ingresso aggiorna
+  conteggio/timestamp, invia `UniversalInteriorVisited` e confluisce nello
+  snapshot `CityWorldSync`. Android unisce per massimo in
+  `city_universal_interiors_v1` e il report `checkSync` mostra mirror e
+  presenza nello snapshot (ponte bidirezionale, nessun secondo salvataggio).
+
+### 25.6 Verifiche eseguite
+
+- `cscheck` completo: **OK**, 0 errori e 196 warning preesistenti. Nota di
+  precisione: il comando corretto è `cd backend/preprocessing/cscheck &&
+  ./check.sh` senza argomenti; la dicitura `-define:HUNTIX_FULL` al §24.3 era
+  imprecisa (attiva la modalità mirata con stub).
+- `python3 -m unittest discover -s backend -p 'test_unity_*.py'`: **183 test,
+  OK** (24 nuovi per gli interni universali: catalogo, innesto additivo,
+  budget/lazy/`CacheVersion`, asset CC0 presenti, niente collider/Rigidbody nei
+  mobili, varchi senza cambi scena, teleporto unico con guard anti-NaN, uova,
+  snapshot e router Android; più i test dello switch del §26).
+- Corretti due difetti preesistenti emersi dai test: percorso
+  `Furniture/credenza` → `Furniture/cabinetBedDrawer` in `ShopInteriorBuilder`
+  e `CuteStore/` → `CuteStore/Prefabs/` in `StoreBuilder`.
+- `TileClient.CacheVersion` resta **5**: nessun tag, POI, geo o graph è
+  cambiato; non serve `aggiorna mappa` né svuotare cache tile.
+- Build Android finale con `SKIP_MAP_UPDATE=1`: risultato e hash al §25.8.
+
+### 25.7 Verifiche non eseguite, limitazioni e prossimi miglioramenti
+
+Non c'è device o emulatore locale: **non sono stati verificati** l'aspetto
+visivo dei 19 layout, l'attraversamento reale dei varchi in guidata, la cattura
+delle uova nei nuovi contenitori, gli FPS con 49 chunk e il restore Android su
+installazione reale. La causa scatenante del primo NaN del 2026-11-25 resta non
+dimostrata (§22); il teleporto unificato aggiunge la guard anti-NaN, non una
+diagnosi della sorgente.
+
+Prossimi passi consigliati: prova su device delle tipologie più frequenti
+(casa, bar, ristorante, farmacia, ufficio) e misurazione FPS prima di ampliare
+il budget 8/chunk; refactoring dei nomi dei prefab CuteStore non trovati
+(`floor`, `wall`, `cash-register`, `character-employee`) senza toccare il
+sistema Indoor/AR; valutazione dei pack CC0 Poly Pizza solo dopo nuova verifica
+di licenza per file; eventuali varchi fra piani collegati a `StairTrigger`
+mantenendo id geostabili. In sintesi: il sistema è additivo, reversibile e
+pronto per la verifica sul device; nulla è stato pushato.
+
+### 25.8 Build finale degli interni universali e dello switch negozio
+
+- Comando: `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1
+  SKIP_INSTALL=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto`.
+- Log: `/tmp/opencode/build_shop_switch_final.log`; export Unity:
+  `unitylic/unity-export.log`. **Build riuscita**, APK firmato
+  `app/build/outputs/apk/release/app-release-signed.apk` (199.521.364 byte).
+- **SHA-256**:
+  `f482d327a6ca3cca1c2b48d42068bc04c310daecd39d6f0a27f115c602cec456`.
+- Il prefabbricato CC0 `Assets/Resources/ShopPrefabs/NegozioProntoCC0.prefab`
+  è stato generato in editor da `ShopPrefabSetup` (hook in
+  `ExportAndroidGradleProject`, il metodo usato da `build_release.sh`) ed è
+  entrato nell'APK. Artefatti collaterali della build (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da Git.
+- Non è stato eseguito alcun aggiornamento mappe/POI/tile: `CacheVersion`
+  resta 5. Nessun push.
+
+## 26. Switch A/B del negozio: sistema Huntix vs prefabbricato CC0 (2026-11-25)
+
+### 26.1 Richiesta e scelta
+
+L'utente ha chiesto uno switch per scegliere il tipo di negozio «senza
+eliminare il nostro sistema, ma aggiungendo uno dei negozi già pronti,
+così vediamo chi è migliore», precisando di volere **un prefabbricato**.
+La soluzione è additiva e locale: un vero prefab Unity
+`Assets/Resources/ShopPrefabs/NegozioProntoCC0.prefab`, generato **una volta**
+in editor (`Assets/Editor/ShopPrefabSetup.cs`) con i kit **già importati e
+verificati CC0** del progetto (Kenney Mini Market / Furniture e CuteStore).
+
+Non è stato importato alcun negozio terzo: CuteStore ha licenza locale non
+chiaramente documentata come CC0 e `SupermarketPrototype` porta un proprio
+sistema economico/`Player` che duplicherebbe Wallet e uova. Nessun download,
+nessun Asset Store, nessun cambio di scena, nessun `CacheVersion` diverso da 5.
+
+### 26.2 Architettura (cosa cambia e cosa resta)
+
+- `ShopStyle.cs` (nuovo): stato `Huntix` (default) o `Prefabbricato` in
+  `PlayerPrefs`, con timestamp UTC e merge non regressivo. Non contiene
+  valute, rarità o salvataggi paralleli.
+- `ShopPrefabInstaller.cs` (nuovo): istanzia il prefab dentro il `Floor_0`
+  già generato, adatta l'impronta 6×6 m all'edificio, è idempotente, rimuove
+  i collider sull'**istanza** (mai sui prefab sorgente) e, se il prefab non
+  c'è (build vecchia), ricade sul builder universale invece di lasciare la
+  stanza vuota.
+- `ShopPrefabSetup.cs` (nuovo, Editor): crea il prefab con banco, pedana,
+  frigo, cassa, scaffali, carrello, prodotti e due contenitori uova. Chiamato
+  da `HuntixBuild.ConfigureAndExport()` prima dell'export AAR, così il prefab
+  entra nell'APK ed è versionato nel repository.
+- `InteriorGenerator.BuildInterior`: sceglie `ShopStyle.UsePrefab` fra
+  `ShopPrefabInstaller` e `UniversalInteriorBuilder`. **Resta intatto** il
+  livello attività (`ShopInteriorBuilder.Decorate`, cassiera, clienti,
+  `ShopState`): cambia solo lo strato arredi del piano 0.
+- `HamburgerMenu`: nuova voce «Negozio: Huntix/Prefabbricato», dopo i dettagli
+  cinematografici. Come lo stile edifici, rifiuta il cambio dentro un edificio
+  o in auto e ricarica il mondo con `ReloadWorld()` (ponte sotto il player).
+- Ponte bidirezionale: `ShopStyleChanged` in whitelist `UnityIpc` e router
+  `Bridge`; `shopStyle` nello snapshot `CityWorldSync`; mirror Android
+  `city_shop_style_v1` con merge per timestamp e campo `shopStyle` in
+  `checkSync`. Nessun evento o schermata nuova lato app.
+
+### 26.3 Riflesso della caccia alle uova
+
+Il prefab include `CassettoPronto` e `DispensaPronto` con
+`UniversalContainerMarker`: `ContainerEgg` li usa come contenitori con indizi
+«città → edificio → banco/dispensa prefabbricato → cassetto». Il marker
+d'interno riceve la chiave geostabile `WorldOrigin.ToGeo` e l'`eggHint` della
+tipologia. Le uova restano quelle del sistema esistente: nessuna seconda
+rarità, nessuna seconda economia.
+
+### 26.4 Verifiche eseguite
+
+- `python3 -m unittest discover -s backend -p 'test_unity_*.py'`:
+  **183 test, OK**. I 15 nuovi test verificano default Huntix, timestamp e
+  import non regressivo, prefab salvato in `Resources`, asset CC0 presenti,
+  editor che non distrugge i prefab sorgente, installer idempotente e senza
+  collider, marker uova, fallback, coesistenza dei due builder, voce menu,
+  invarianti `CacheVersion = 5`/`MaxEnterablePerChunk = 8` e ponte Android.
+  Aggiornati tre test preesistenti che fissavano l'altezza del pannello a
+  1540 px: ora accettano 1620 px (nuova voce) senza rimpicciolirlo.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **OK**, 0 errori e
+  196 warning preesistenti (dopo l'aggiunta di `using City.World;` al nuovo
+  installer).
+- Build Android finale con prefab generato in editor: vedi §25.8.
+
+### 26.5 Limiti e confronto A/B
+
+Serve un device per dire «chi è migliore»: il prefabbricato è un banco
+una-tantum con scaffali fissi, il sistema Huntix adatta 19 tipologie e due
+zone con varchi. Lo switch serve a confrontarli nello stesso edificio, non a
+sostituire gli interni universali. Senza device restano da verificare
+visivamente arredi, uova nei contenitori, FPS e restore dello switch. Nulla è
+stato pushato.
