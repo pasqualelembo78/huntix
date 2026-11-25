@@ -113,6 +113,7 @@ namespace City.Vehicle
         {
             switch (kindStr)
             {
+                case "casa": return "CASA";
                 case "dealer": return "CONCESSIONARIA";
                 case "repair": return "OFFICINA";
                 case "hospital": return "OSPEDALE";

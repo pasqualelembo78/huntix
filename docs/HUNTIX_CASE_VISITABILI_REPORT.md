@@ -257,9 +257,12 @@ e i 2 log untracked sono stati lasciati intatti e **non** inclusi nel commit.
 ## 15. Test eseguiti e superati
 
 - `python3 -m unittest discover -s backend -p 'test_unity_*.py'` →
-  **Ran 218 tests — OK** (4 nuovi test SENDU in `test_unity_visit_houses.py`).
+  **Ran 222 tests — OK** (4 nuovi test SENDU + 4 test di accesso deterministico
+  in `test_unity_visit_houses.py`).
 - `cd backend/preprocessing/cscheck && ./check.sh` → **CSCHECK OK**, solo
   warning preesistenti (196-198 a seconda della passata), nessun errore nuovo.
+- `./gradlew :app:compileReleaseKotlin --offline` → **exit 0** (pulsante
+  `CASA 🏡` e ponte `navigateToHouse` compilano).
 - Build release completa avviata con `SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
   FORCE_UNITY_AAR=1 ./build_release.sh --auto`; esito in appendice.
 
@@ -300,8 +303,9 @@ sistemi esistenti e `CacheVersion = 5`.
 ## 18. Istruzioni di test (in italiano)
 
 1. Avviare l'app e aspettare la generazione della città di Roma.
-2. Andare vicino all'edificio con id OSM `204023010` (circa 360 m dallo spawn);
-   comparirà il prompt **ENTRA IN CASA** invece di **APRI**.
+2. Aprire Menu → Mappa → **CASA (1)** → **Casa di Roma** → **TELEPORTA** (o
+   **FRECCETTA**), oppure raggiungere l'edificio OSM `204023010` a ~360 m dallo
+   spawn: comparirà il prompt **ENTRA IN CASA** invece di **APRI**. Vedi §21.
 3. Toccare **ENTRA IN CASA** e attendere il fade: si entra in soggiorno.
 4. Camminare nei due varchi: cucina, camera e bagno sono navigabili; i mobili
    non bloccano il passaggio.
@@ -332,6 +336,60 @@ italiano: `907b548d`, `bbfda017`, `8d0296d0`, `14c1dfdd`, `743cde3c`,
 SENDU, arredi e uova, test/report). Nessun push. Le cancellazioni preesistenti
 dei log e i file untracked estranei non sono stati toccati. Vedi l'appendice
 per l'esito finale della build.
+
+---
+
+## 21. Indicazioni precise di accesso (senza girare a vuoto)
+
+### 21.1 Casa visitabile — Roma, Via Flavia 3
+
+- **Indirizzo reale (reverse geocoding OSM/Nominatim dell'edificio):**
+  `50 Kalo di Ciro Salvo, 3, Via Flavia, Sallustiano, Municipio Roma I,
+  Roma Capitale, Lazio, 00817, Italy` (nodo OSM `10117169999`).
+- **Centro edificio OSM `204023010`:** `41.90601, 12.49579`.
+- **Porta (punto da raggiungere):** `41.906056, 12.495734` — lato **nord-ovest**
+  dell'impronta (rotazione `318°`, ~6,9 m dal centro). Dalla porta le strade più
+  vicine sono Via Flavia / Via Mario Pagano / Via Antonio Salandra (~39 m),
+  Via Aureliana (~41 m) e Via Venti Settembre / Via Pastrengo (~53 m);
+  Via Giosuè Carducci / Via Silvio Spaventa sono ~86 m a nord-ovest.
+- Dallo spawn predefinito di Roma (`41.9028, 12.4964`) la casa è a **~360 m**,
+ bearing ~**352°** (quasi a nord).
+
+**Procedura in gioco (deterministica):**
+
+1. Menu **hamburger** → **Mappa** (oppure tap sulla minimappa).
+2. In alto nella lista categorie scegli **CASA (1)** → **Casa di Roma**.
+3. Scegli **TELEPORTA** per arrivare direttamente sulla soglia, oppure
+   **FRECCETTA** per farsi guidare dalla bussola e dal marker rosso in minimappa.
+   Sulla minimappa la casa ha anche il toggle arancio **A**.
+4. Una volta sulla porta compare il prompt **`ENTRA IN CASA`**: toccalo per
+   entrare in soggiorno. Le uova sono in cucina (2), camera e bagno.
+5. **ESCI** riporta fuori dalla stessa porta.
+
+**Dal lato Android:** nella mappa cittadina (`CityMapActivity`) c'è il pulsante
+**CASA 🏡**: legge le coordinate della porta dallo snapshot
+`houseTargets` (`city_house_visits_v1`/snapshot city) e le invia a Unity con
+l'evento `navigateToHouse`, che imposta la stessa freccetta della bussola.
+
+### 21.2 Rampe del parcheggio sotterraneo — Roma
+
+Le rampe sono POI sintetici deterministici generati nella tile `IT_087_061`
+(`_synth_ramps` in `osm_italy_processor.py`), non ingressi reali verificati sul
+terreno: i nomi delle strade sotto riportati sono il **reverse geocoding del
+punto POI**, usato solo come riferimento stradale.
+
+| POI (nome in gioco) | Coordinate | Riferimento reale | Distanza dallo spawn |
+|---|---|---|---:|
+| `Entrata Parcheggio Ovest` | `41.900784, 12.487759` | Traforo Umberto Primo, Trevi — la più vicina | ~750 m, bearing ~253° |
+| `Entrata Parcheggio Est` | `41.886944, 12.440404` | Via Leone Tredicesimo 75, Municipio Roma XII | ~5,0 km, bearing ~249° |
+| `Entrata Parcheggio Nord` | `41.860054, 12.470354` | Ponte Guglielmo Marconi / Viale Guglielmo Marconi, San Paolo | ~5,2 km, bearing ~204° |
+| `Entrata Parcheggio Sud` | `41.834878, 12.456074` | Via del Mare, EUR | ~8,3 km, bearing ~204° |
+
+**Procedura in gioco:** Menu → **Mappa** → **SOTTERRANEO (4)** → scegli la rampa
+→ **TELEPORTA** o **FRECCETTA**. In minimappa il filtro è **R**; il cartello sul
+POI dice `SOTTERRANEO` e il prompt HUD `SOTTERRANEO - <nome rampa>`. Toccando
+si apre `PARCHEGGIO SOTTERRANEO` con **ENTRA** (3 livelli a 0 / −4 / −8 m).
+Questo sistema era già presente: non è stato modificato in questo filone.
 
 ---
 

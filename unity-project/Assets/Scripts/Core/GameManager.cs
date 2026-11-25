@@ -258,10 +258,64 @@ namespace Huntix.Core
                 case "setTargetCoord":
                     City.Multiplayer.MultiplayerManager.SetTargetCoords(jsonData);
                     break;
+                // Android → Unity: "vai alla casa visitabile". La porta e'
+                // nell'elenco configurato (o nel payload), mai inventata.
+                case "navigateToHouse":
+                    HandleNavigateToHouse(jsonData);
+                    break;
                 case "ReturnToMenu":
                     ReturnToAndroid();
                     break;
             }
+        }
+
+        /// <summary>
+        /// Android -> Unity: punta bussola e minimappa alla PORTA di una casa
+        /// visitabile. Se il payload non porta coordinate valide si usa
+        /// l'elenco configurato (id OSM): mai una destinazione inventata.
+        /// Solo navigazione: nessun teletrasporto e nessun premio uovo.
+        /// </summary>
+        private static void HandleNavigateToHouse(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            string label = "Casa visitabile";
+            var mLabel = System.Text.RegularExpressions.Regex.Match(
+                json, "\"label\"\\s*:\\s*\"([^\"]+)\"");
+            if (mLabel.Success) label = mLabel.Groups[1].Value;
+
+            var mLat = System.Text.RegularExpressions.Regex.Match(
+                json, "\"lat\"\\s*:\\s*(-?[0-9.]+)");
+            var mLng = System.Text.RegularExpressions.Regex.Match(
+                json, "\"lng\"\\s*:\\s*(-?[0-9.]+)");
+            double lat, lng;
+            bool ok = mLat.Success && mLng.Success &&
+                double.TryParse(mLat.Groups[1].Value,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out lat) &&
+                double.TryParse(mLng.Groups[1].Value,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out lng) &&
+                lat > -90.0 && lat < 90.0 && lng > -180.0 && lng < 180.0;
+
+            if (!ok)
+            {
+                var mOsm = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"osmId\"\\s*:\\s*(\\d+)");
+                long id = mOsm.Success
+                    ? long.Parse(mOsm.Groups[1].Value,
+                        System.Globalization.CultureInfo.InvariantCulture)
+                    : 204023010L;
+                City.Interior.Visit.VisitInteriorRegistry.Spec spec;
+                if (!City.Interior.Visit.VisitInteriorRegistry.TryGet(id, out spec)) return;
+                lat = spec.lat;
+                lng = spec.lng;
+                label = spec.label;
+            }
+
+            City.Vehicle.NavigationState.Set(label, "casa", lat, lng);
+            Debug.Log("[GameManager] navigazione casa da Android: " + label + " (" +
+                lat.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
+                lng.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")");
         }
 
         private void HandleSetMode(string json)

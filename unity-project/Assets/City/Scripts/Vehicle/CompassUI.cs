@@ -34,6 +34,8 @@ namespace City.Vehicle
         public static readonly Color ColSchool = new Color(0.62f, 0.50f, 0.94f);
         public static readonly Color ColBar = new Color(0.95f, 0.45f, 0.62f);
         public static readonly Color ColBank = new Color(1.00f, 0.84f, 0.30f);
+        // case visitabili OSM: arancio caldo, distinto da banca e benzena.
+        public static readonly Color ColCasa = new Color(1.00f, 0.50f, 0.16f);
         // freccia della destinazione scelta (rossa, "freccina rossa" della UX)
         public static readonly Color ColDest = new Color(0.95f, 0.13f, 0.10f);
         // freccia del lavoro attivo (ciano come il beacon dei lavori)
@@ -57,6 +59,7 @@ namespace City.Vehicle
                 case "school": return ColSchool;
                 case "bar": return ColBar;
                 case "bank": return ColBank;
+                case "casa": return ColCasa;
                 case "rampa": return new Color(0.18f, 0.22f, 0.28f);
                 case "fuel": return new Color(0.9f, 0.6f, 0.1f); // arancio benzina
                 default: return ColGarage;
@@ -78,6 +81,7 @@ namespace City.Vehicle
                 case "school": return ColSchool;
                 case "bar": return ColBar;
                 case "bank": return ColBank;
+                case "casa": return ColCasa;
                 case "rampa": return new Color(0.18f, 0.22f, 0.28f);
                 case "garage": return ColGarage;
                 default: return ColDest;

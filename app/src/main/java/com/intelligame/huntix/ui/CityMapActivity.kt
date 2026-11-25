@@ -11,8 +11,10 @@ import android.view.*
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.bridge.CityStateSync
 import com.intelligame.huntix.reallife.LocationType
 import com.intelligame.huntix.reallife.MapLocation
 import com.intelligame.huntix.reallife.MapLocations
@@ -74,6 +76,30 @@ class CityMapActivity : AppCompatActivity() {
             setOnClickListener { mapSurface.centerOnPlayer() }
         }
         topBar.addView(centerBtn)
+
+        // Accesso deterministico alla casa visitabile OSM: la destinazione
+        // (coordinate della porta) arriva dallo snapshot Unity e viene
+        // ritrasmessa a MiCittà con lo stesso canale della freccetta.
+        val houseBtn = TextView(this).apply {
+            text = "CASA 🏡"; textSize = 12f; setTextColor(Color.WHITE)
+            isClickable = true; isFocusable = true
+            background = GradientDrawable().apply {
+                cornerRadius = UiKit.dp(this@CityMapActivity, 12).toFloat()
+                setColor(Color.parseColor("#8B4A20"))
+            }
+            setPadding(UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8),
+                UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8))
+            setOnClickListener {
+                val ok = CityStateSync.goToHouse(this@CityMapActivity)
+                Toast.makeText(
+                    this@CityMapActivity,
+                    if (ok) "Destinazione Casa di Roma impostata in MiCittà"
+                    else "Apri prima MiCittà per sincronizzare la casa",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        topBar.addView(houseBtn)
         root.addView(topBar, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.TOP })

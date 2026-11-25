@@ -43,6 +43,13 @@ IMPORT_SCRIPT = read("scripts/house_assets_import.py")
 SENDU_IMPORT_SCRIPT = read("scripts/sendu_assets_import.py")
 LICENSES = read("unity-project/Assets/ThirdPartyLicenses.md")
 NOTICES = read("THIRD_PARTY_NOTICES.md")
+VEHICLE_POI = read("unity-project/Assets/City/Scripts/Vehicle/VehiclePoiRegistry.cs")
+COMPASS = read("unity-project/Assets/City/Scripts/Vehicle/CompassUI.cs")
+POI_SIGNPOST = read("unity-project/Assets/City/Scripts/Vehicle/PoiSignpost.cs")
+MAP_SELECT = read("unity-project/Assets/City/Scripts/OSM/MapSelectUI.cs")
+MINIMAP = read("unity-project/Assets/City/Scripts/OSM/MinimapHud.cs")
+GAME_MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
+CITY_MAP_ACTIVITY = read("app/src/main/java/com/intelligame/huntix/ui/CityMapActivity.kt")
 
 
 class TestAssetCC0(unittest.TestCase):
@@ -232,6 +239,50 @@ class TestBridgeBidirezionale(unittest.TestCase):
         self.assertIn("j.houseVisitState = City.Interior.Visit.HouseInteriorState.Export();", SYNC)
         self.assertIn("City.Interior.Visit.HouseInteriorState.Import(j.houseVisitState);", SYNC)
         self.assertIn("public string houseVisitState = \"\";", SYNC)
+
+
+class TestAccessoDeterministico(unittest.TestCase):
+    """La casa e le rampe devono essere raggiungibili senza girare a vuoto."""
+
+    def test_porta_registrata_come_destinazione(self):
+        self.assertIn("public double lat;", REGISTRY)
+        self.assertIn("public double lng;", REGISTRY)
+        self.assertIn("lat = 41.906056", REGISTRY)
+        self.assertIn("lng = 12.495734", REGISTRY)
+        self.assertIn("centerLat = 41.90601", REGISTRY)
+        self.assertIn("public static string TargetsJson()", REGISTRY)
+        self.assertIn("\\\"lat\\\":", REGISTRY)
+        self.assertIn("kind = spec.kind ?? \"casa\"", VEHICLE_POI)
+        self.assertIn("foreach (var spec in VisitInteriorRegistry.All)", VEHICLE_POI)
+        self.assertIn("AllOf(string kind)", VEHICLE_POI)
+        self.assertIn("foreach (var p in All())", VEHICLE_POI)
+
+    def test_mappa_espansa_e_minimappa(self):
+        self.assertIn('{ "casa", "hospital", "rampa"', MAP_SELECT)
+        self.assertIn('case "casa": return "CASA";', POI_SIGNPOST)
+        self.assertIn("ColCasa = new Color(1.00f, 0.50f, 0.16f)", COMPASS)
+        self.assertIn('case "casa": return ColCasa;', COMPASS)
+        self.assertIn('DrawPoiKind("casa", _showCasa, CompassUI.ColCasa', MINIMAP)
+        self.assertIn('MakeToggle(mapImg, "A", CompassUI.ColCasa', MINIMAP)
+
+    def test_ponte_android_destinazione_casa(self):
+        self.assertIn("j.houseTargets = City.Interior.Visit.VisitInteriorRegistry.TargetsJson();",
+                      SYNC)
+        self.assertIn('public string houseTargets = "";', SYNC)
+        self.assertIn('case "navigateToHouse":', GAME_MANAGER)
+        self.assertIn('HandleNavigateToHouse(jsonData);', GAME_MANAGER)
+        self.assertIn('NavigationState.Set(label, "casa", lat, lng);', GAME_MANAGER)
+        self.assertIn("fun getHouseTargets(context: Context): JSONArray", ANDROID_SYNC)
+        self.assertIn("fun goToHouse(context: Context, osmId: Long = 204023010L): Boolean",
+                      ANDROID_SYNC)
+        self.assertIn('"navigateToHouse", payload.toString()', ANDROID_SYNC)
+        self.assertIn('report.put("houseTargets"', ANDROID_SYNC)
+        self.assertIn("CityStateSync.goToHouse(this@CityMapActivity)", CITY_MAP_ACTIVITY)
+
+    def test_rampa_resta_poi_di_navigazione(self):
+        self.assertIn('case "rampa": return "SOTTERRANEO";', POI_SIGNPOST)
+        self.assertIn('"hospital", "rampa", "repair"', MAP_SELECT)
+        self.assertIn('DrawPoiKind("rampa", _showRamp', MINIMAP)
 
 
 if __name__ == "__main__":

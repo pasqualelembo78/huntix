@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using City.OSM;
+using City.Interior.Visit;
 
 namespace City.Vehicle
 {
@@ -73,7 +74,7 @@ namespace City.Vehicle
         {
             PoiInfo best = null;
             double bestD2 = double.MaxValue;
-            foreach (var p in pois.Values)
+            foreach (var p in All())
             {
                 if (kind != null && p.kind != kind) continue;
                 double dlat = p.lat - lat;
@@ -93,7 +94,7 @@ namespace City.Vehicle
         {
             PoiInfo best = null;
             double bestD2 = double.MaxValue;
-            foreach (var p in pois.Values)
+            foreach (var p in All())
             {
                 if (p.kind != kind || p.id == excludeId) continue;
                 double dlat = p.lat - lat;
@@ -113,7 +114,7 @@ namespace City.Vehicle
         {
             PoiInfo best = null;
             double bestD2 = double.MaxValue;
-            foreach (var p in pois.Values)
+            foreach (var p in All())
             {
                 double dlat = p.lat - lat;
                 double dlng = (p.lng - lng) * 0.75;
@@ -124,16 +125,33 @@ namespace City.Vehicle
             return best != null && bestD2 <= tolDeg * tolDeg ? best : null;
         }
 
-        /// <summary>Tutti i POI registrati (mappa espansa).</summary>
+        /// <summary>
+        /// Tutti i POI registrati (mappa espansa). Oltre ai POI veicoli creati
+        /// dai chunk include le case visitabili OSM come POI sintetici: la
+        /// porta della casa di Roma diventa quindi selezionabile con
+        /// TELEPORTA/FRECCETTA esattamente come le rampe sotterranee.
+        /// </summary>
         public static IEnumerable<PoiInfo> All()
         {
-            return pois.Values;
+            foreach (var p in pois.Values) yield return p;
+            foreach (var spec in VisitInteriorRegistry.All)
+            {
+                if (spec == null) continue;
+                yield return new PoiInfo
+                {
+                    id = VisitInteriorRegistry.StableKey(spec.osmId),
+                    kind = spec.kind ?? "casa",
+                    name = spec.label,
+                    lat = spec.lat,
+                    lng = spec.lng
+                };
+            }
         }
 
         /// <summary>Tutti i POI noti di un tipo (per fallback di spawn).</summary>
         public static IEnumerable<PoiInfo> AllOf(string kind)
         {
-            foreach (var p in pois.Values)
+            foreach (var p in All())
                 if (p.kind == kind) yield return p;
         }
     }

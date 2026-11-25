@@ -189,6 +189,34 @@ object CityStateSync {
         } catch (e: Exception) { "{}" }
     }
 
+    /** Punti di accesso delle case visitabili (Unity → app), dallo snapshot. */
+    fun getHouseTargets(context: Context): JSONArray {
+        return try {
+            JSONObject(getSnapshot(context)).optJSONArray("houseTargets") ?: JSONArray()
+        } catch (e: Exception) { JSONArray() }
+    }
+
+    /**
+     * Android → Unity: imposta come destinazione la porta della casa visitabile
+     * (evento "navigateToHouse" ricevuto da GameManager: imposta la freccetta
+     * della bussola e il marker sulla minimappa).
+     * Nessun teletrasporto forzato: Unity decide come raggiungerla.
+     */
+    fun goToHouse(context: Context, osmId: Long = 204023010L): Boolean {
+        val targets = getHouseTargets(context)
+        for (i in 0 until targets.length()) {
+            val row = targets.optJSONObject(i) ?: continue
+            if (osmId != 0L && row.optLong("osmId", 0L) != osmId) continue
+            val payload = JSONObject()
+            payload.put("lat", row.optDouble("lat", 0.0))
+            payload.put("lng", row.optDouble("lng", 0.0))
+            payload.put("label", row.optString("label", "Casa visitabile"))
+            UnityIpc.sendToUnity("GameManager", "navigateToHouse", payload.toString())
+            return true
+        }
+        return false
+    }
+
     /** Unisce lo snapshot delle case visitate nel mirror Android. Chiamato
      *  anche al restore: le uova raccolte non rinascono dopo un rebuild. */
     private fun mergeHouseSnapshot(context: Context, json: String) {
@@ -535,6 +563,11 @@ object CityStateSync {
             JSONObject(getHouseVisits(context)).optJSONArray("eggs")?.length() ?: 0
         } catch (e: Exception) { 0 })
         report.put("houseVisitSnapshot", j.optString("houseVisitState", "").isNotBlank())
+        report.put("houseTargets", try {
+            getHouseTargets(context).length()
+        } catch (e: Exception) { 0 })
+        report.put("houseTargetSnapshot",
+            JSONObject(getSnapshot(context)).optJSONArray("houseTargets") != null)
         report.put("shopStyle", try {
             JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
         } catch (e: Exception) { false })

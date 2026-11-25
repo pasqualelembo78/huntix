@@ -151,6 +151,11 @@ namespace City.Sync
             // restituisce al ripristino senza canali di salvataggio paralleli.
             j.houseVisitState = City.Interior.Visit.HouseInteriorState.Export();
 
+            // Punti di accesso alle case visitabili (coord. della porta):
+            // Android li conserva nello snapshot e puo' ritrasmetterli a
+            // Unity con "setTargetCoord" (freccetta/TELEPORTA).
+            j.houseTargets = City.Interior.Visit.VisitInteriorRegistry.TargetsJson();
+
             // Switch A/B del negozio: sistema Huntix o prefabbricato CC0.
             j.shopStyle = City.Interior.ShopStyle.Export();
 
@@ -216,6 +221,7 @@ namespace City.Sync
             public string shopStates = "";
             public string universalInteriors = "";
             public string houseVisitState = "";
+            public string houseTargets = "";
             public string shopStyle = "";
             public string venueEventState = "";
             public bool budgetEggSpawned;

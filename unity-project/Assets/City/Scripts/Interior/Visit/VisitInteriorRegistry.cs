@@ -29,6 +29,14 @@ namespace City.Interior.Visit
             public string kind = "casa";
             public string label = "Casa visitabile";
             public string note = "";
+            // Coordinate della PORTA (non del centro dell'edificio): sono
+            // quelle che la mappa espansa usa per TELEPORTA/FRECCETTA.
+            // La porta e' sul lato +Z locale (rotazione 318°), ~6,9 m
+            // a nord-ovest dal centro OSM.
+            public double lat;
+            public double lng;
+            public double centerLat;
+            public double centerLng;
         }
 
         /// <summary>
@@ -43,7 +51,12 @@ namespace City.Interior.Visit
                 osmId = 204023010L,
                 kind = "casa",
                 label = "Casa di Roma",
-                note = "Edificio OSM 204023010 — soggiorno, cucina, camera, bagno"
+                note = "Via Flavia 3, Sallustiano, Roma — edificio OSM 204023010; "
+                     + "porta lato nord-ovest; soggiorno, cucina, camera, bagno",
+                lat = 41.906056,
+                lng = 12.495734,
+                centerLat = 41.90601,
+                centerLng = 12.49579
             }
         };
 
@@ -79,6 +92,40 @@ namespace City.Interior.Visit
         public static bool IsSupportedKind(string kind)
         {
             return UniversalInteriorRegistry.IsKnown(kind);
+        }
+
+        /// <summary>
+        /// Punto di accesso serializzato per il ponte Android: posizione della
+        /// porta, etichetta e nascondigli. Viaggia nello snapshot CityStateSync
+        /// (houseTargets) e viene ritrasmesso a Unity con "setTargetCoord"
+        /// quando l'app chiede "vai alla casa".
+        /// </summary>
+        public static string TargetsJson()
+        {
+            var sb = new System.Text.StringBuilder("[");
+            for (int i = 0; i < Configured.Length; i++)
+            {
+                Spec s = Configured[i];
+                if (s == null) continue;
+                if (sb.Length > 1) sb.Append(',');
+                sb.Append("{\"key\":\"").Append(Escape(StableKey(s.osmId)))
+                  .Append("\",\"osmId\":").Append(s.osmId.ToString(CultureInfo.InvariantCulture))
+                  .Append(",\"kind\":\"").Append(Escape(s.kind ?? "casa"))
+                  .Append("\",\"label\":\"").Append(Escape(s.label ?? ""))
+                  .Append("\",\"lat\":").Append(s.lat.ToString("R", CultureInfo.InvariantCulture))
+                  .Append(",\"lng\":").Append(s.lng.ToString("R", CultureInfo.InvariantCulture))
+                  .Append(",\"centerLat\":").Append(s.centerLat.ToString("R", CultureInfo.InvariantCulture))
+                  .Append(",\"centerLng\":").Append(s.centerLng.ToString("R", CultureInfo.InvariantCulture))
+                  .Append(",\"note\":\"").Append(Escape(s.note ?? ""))
+                  .Append("\"}");
+            }
+            sb.Append(']');
+            return sb.ToString();
+        }
+
+        private static string Escape(string value)
+        {
+            return (value ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
     }
 }

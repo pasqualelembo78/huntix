@@ -50,6 +50,7 @@ namespace City.OSM
         private float _lastPinchTime;
 
         // visibilita categorie (toggle utente)
+        private bool _showCasa = true;
         private bool _showDealer = true;
         private bool _showRepair = true;
         private bool _showGarage = true;
@@ -58,7 +59,7 @@ namespace City.OSM
         private bool _showBar = true;
         private bool _showRamp = true;
         private bool _showFuel = true;
-        private Text _lblDealer, _lblRepair, _lblGarage, _lblHospital;
+        private Text _lblCasa, _lblDealer, _lblRepair, _lblGarage, _lblHospital;
         private Text _lblSchool, _lblBar, _lblRamp;
 
         private Text _lblDest;
@@ -158,6 +159,13 @@ namespace City.OSM
         private void BuildControls(GameObject mapImg)
         {
             // riga toggle in basso a sinistra della mappa
+            // "A" = abitazione (la "C" e' gia' della concessionaria).
+            _lblCasa = MakeToggle(mapImg, "A", CompassUI.ColCasa,
+                new Vector2(168f, 64f), () =>
+                {
+                    _showCasa = !_showCasa;
+                    return _showCasa;
+                });
             _lblDealer = MakeToggle(mapImg, "C", CompassUI.ColDealer,
                 new Vector2(12f, 12f), () =>
                 {
@@ -626,6 +634,8 @@ namespace City.OSM
         /// </summary>
         private void DrawPois(Vector3 pWorld, float half, float mPerPx)
         {
+            DrawPoiKind("casa", _showCasa, CompassUI.ColCasa,
+                pWorld, half, mPerPx);
             DrawPoiKind("dealer", _showDealer, CompassUI.ColDealer,
                 pWorld, half, mPerPx);
             bool repairOk = VehicleOwnershipApi.HasOwnedCached() &&
