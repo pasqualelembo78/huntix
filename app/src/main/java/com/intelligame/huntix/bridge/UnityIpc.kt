@@ -64,6 +64,9 @@ object UnityIpc {
         // Interni universali: visita a un locale 3D (Unity -> app), mirror
         // dei locali visitati nello stesso pref CityStateSync.
         "UniversalInteriorVisited",
+        // Case visitabili OSM (Unity -> app): visite con id stabile e uova
+        // raccolte nei nascondigli; mirror nello stesso pref CityStateSync.
+        "HouseVisitChanged",
         // Switch A/B dei negozi (Unity -> app): sistema Huntix o prefabbricato CC0.
         "ShopStyleChanged",
         // Eventi sportivi/ambientali: stato del ciclo e meteo applicato alla

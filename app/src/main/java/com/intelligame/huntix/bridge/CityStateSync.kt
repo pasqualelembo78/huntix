@@ -29,6 +29,7 @@ object CityStateSync {
     private const val KEY_TS = "city_snapshot_ts"
     private const val KEY_SHOP_ACTIVITY = "city_shop_activity_v1"
     private const val KEY_UNIVERSAL_INTERIORS = "city_universal_interiors_v1"
+    private const val KEY_HOUSE_VISITS = "city_house_visits_v1"
     private const val KEY_SHOP_STYLE = "city_shop_style_v1"
     private const val KEY_VENUE_EVENT = "city_venue_event_v1"
     private const val KEY_ENV_EVENT = "city_env_event_v1"
@@ -143,6 +144,99 @@ object CityStateSync {
             }
         } catch (e: Exception) {
             AppLog.w(TAG, "mergeUniversalSnapshot failed: ${e.message}")
+        }
+    }
+
+    /** Case visitabili OSM (Unity → app): visita a una casa reale di MiCittà.
+     *  Il mirror conserva {houses:{chiave:{osmId,...}}, eggs:[featureId,...]}
+     *  e fa vincere il conteggio/timestamp più recente (mai decrementato). */
+    fun onHouseVisit(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val j = JSONObject(json)
+            val key = j.optString("key", "")
+            if (key.isBlank()) return
+            val visits = j.optInt("visits", 1).coerceAtLeast(0)
+            val lastTs = j.optLong("lastTs", 0L)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val mirror = try {
+                JSONObject(prefs.getString(KEY_HOUSE_VISITS, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            val houses = mirror.optJSONObject("houses") ?: JSONObject()
+            val previous = houses.optJSONObject(key)
+            if (previous == null || visits > previous.optInt("visits", 0) ||
+                lastTs > previous.optLong("lastTs", 0L)) {
+                val row = JSONObject()
+                row.put("osmId", j.optLong("osmId", 0L))
+                row.put("kind", j.optString("kind", "casa"))
+                row.put("label", j.optString("label", "Casa visitabile"))
+                row.put("visits", visits)
+                row.put("lastTs", lastTs)
+                houses.put(key, row)
+                mirror.put("houses", houses)
+                if (!mirror.has("eggs")) mirror.put("eggs", JSONArray())
+                prefs.edit().putString(KEY_HOUSE_VISITS, mirror.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onHouseVisit failed: ${e.message}")
+        }
+    }
+
+    fun getHouseVisits(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_HOUSE_VISITS, "{}") ?: "{}"
+        } catch (e: Exception) { "{}" }
+    }
+
+    /** Unisce lo snapshot delle case visitate nel mirror Android. Chiamato
+     *  anche al restore: le uova raccolte non rinascono dopo un rebuild. */
+    private fun mergeHouseSnapshot(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val incoming = JSONObject(json)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val mirror = try {
+                JSONObject(prefs.getString(KEY_HOUSE_VISITS, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            val houses = mirror.optJSONObject("houses") ?: JSONObject()
+            var changed = false
+            val rows = incoming.optJSONArray("houses")
+            if (rows != null) {
+                for (i in 0 until rows.length()) {
+                    val row = rows.optJSONObject(i) ?: continue
+                    val key = row.optString("key", "")
+                    if (key.isBlank()) continue
+                    val visits = row.optInt("visits", 0).coerceAtLeast(0)
+                    val lastTs = row.optLong("lastTs", 0L)
+                    val previous = houses.optJSONObject(key)
+                    if (previous == null || visits > previous.optInt("visits", 0) ||
+                        lastTs > previous.optLong("lastTs", 0L)) {
+                        houses.put(key, row)
+                        changed = true
+                    }
+                }
+            }
+            val eggs = mirror.optJSONArray("eggs") ?: JSONArray()
+            val incomingEggs = incoming.optJSONArray("eggs")
+            if (incomingEggs != null) {
+                for (i in 0 until incomingEggs.length()) {
+                    val id = incomingEggs.optString(i, "")
+                    if (id.isBlank()) continue
+                    var found = false
+                    for (k in 0 until eggs.length()) {
+                        if (eggs.optString(k, "") == id) { found = true; break }
+                    }
+                    if (!found) { eggs.put(id); changed = true }
+                }
+            }
+            if (changed) {
+                mirror.put("houses", houses)
+                mirror.put("eggs", eggs)
+                prefs.edit().putString(KEY_HOUSE_VISITS, mirror.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "mergeHouseSnapshot failed: ${e.message}")
         }
     }
 
@@ -328,6 +422,8 @@ object CityStateSync {
             }
             // Interni universali: mirror dei locali visitati nello snapshot.
             mergeUniversalSnapshot(context, j.optString("universalInteriors", ""))
+            // Case visitabili OSM: visite e uova dei nascondigli nello snapshot.
+            mergeHouseSnapshot(context, j.optString("houseVisitState", ""))
             // Switch negozio A/B: lo specchio segue il timestamp dello snapshot.
             mergeShopStyleSnapshot(context, j.optString("shopStyle", ""))
             mergeVenueSnapshot(context, j.optString("venueEventState", ""))
@@ -432,6 +528,13 @@ object CityStateSync {
         } catch (e: Exception) { 0 })
         report.put("universalInteriorsSnapshot",
             j.optString("universalInteriors", "").isNotBlank())
+        report.put("houseVisits", try {
+            JSONObject(getHouseVisits(context)).optJSONObject("houses")?.length() ?: 0
+        } catch (e: Exception) { 0 })
+        report.put("houseEggs", try {
+            JSONObject(getHouseVisits(context)).optJSONArray("eggs")?.length() ?: 0
+        } catch (e: Exception) { 0 })
+        report.put("houseVisitSnapshot", j.optString("houseVisitState", "").isNotBlank())
         report.put("shopStyle", try {
             JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
         } catch (e: Exception) { false })

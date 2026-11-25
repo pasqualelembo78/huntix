@@ -287,6 +287,12 @@ object Bridge {
                 val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
                 CityStateSync.onUniversalInteriorVisit(ctx, jsonData)
             }
+            // ── Case visitabili OSM: visita a una casa reale di MiCittà →
+            //    mirror Android di visite, id edificio e uova dei nascondigli. ──
+            "HouseVisitChanged" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onHouseVisit(ctx, jsonData)
+            }
             // ── Switch negozio A/B: sistema procedurale Huntix o prefab CC0.
             //    Lo specchio Android viaggia nello stesso snapshot CityStateSync. ──
             "ShopStyleChanged" -> {
