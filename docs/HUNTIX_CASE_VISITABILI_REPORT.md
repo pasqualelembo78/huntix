@@ -399,15 +399,17 @@ Build release completa eseguita con
 `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
 FORCE_UNITY_AAR=1 ./build_release.sh --auto`:
 
-- **`BUILD SUCCESSFUL in 1m 42s`** (89 task: 24 eseguite, 1 da cache, 64 up-to-date).
+- **`BUILD SUCCESSFUL in 4m 46s`** (export Unity) e **`BUILD SUCCESSFUL in 5m 7s`**
+  (assembleRelease) — build finale dopo il waypoint casa/rampe. La prima
+  tentata era fallita per `CS0165` in `GameManager.cs`, corretto in `6b522012`.
 - AAR Unity: `unity-export.gradle/unityLibrary/build/outputs/aar/unityLibrary-release.aar`
-  (105.471.349 byte, 14:34) — **+2.730.691 byte** rispetto alla build delle 13:12.
+  (105.476.653 byte, 15:19) — **+5.304 byte** per il codice del waypoint.
 - APK firmato e verificato: `app/build/outputs/apk/release/app-release-signed.apk`
-  (**204.570.990 byte**, 14:36), allineato con zipalign e firmato con apksigner.
+  (**204.579.182 byte**, 15:24), allineato con zipalign e firmato con apksigner.
 - **Crescita APK totale della casa visitabile**: da 201.473.302 byte (baseline
-  12:11, prima di qualsiasi asset) a **204.570.990 byte**, cioè **+3.097.688 byte
-  (~2,95 MiB)**: +327.720 byte per i 43 FBX CC0 e **+2.769.968 byte (~2,64 MiB)**
-  per il kit SENDU completo.
+  12:11, prima di qualsiasi asset) a **204.579.182 byte**, cioè **+3.105.880 byte
+  (~2,96 MiB)**: +327.720 byte per i 43 FBX CC0, **+2.769.968 byte (~2,64 MiB)**
+  per il kit SENDU completo e +8.192 byte per il waypoint.
 - I sorgenti SENDU occupano 11.567.828 byte su disco (zippati 6.907.274 byte),
   ma in APK entrano compressi nel blob Unity `assets/bin/Data`: mesh FBX
   low-poly e una palette PNG 256x256, senza gli shader/texture PBR del kit
