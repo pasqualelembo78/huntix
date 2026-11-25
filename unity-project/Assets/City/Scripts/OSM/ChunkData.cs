@@ -126,6 +126,18 @@ namespace City.OSM
             _buildingColliders = null;
             if (root != null)
                 Object.Destroy(root);
+            // Object.Destroy e' DIFFERITO a fine frame: fino ad allora i
+            // riferimenti C# restano "validi" e la build in volo poteva
+            // continuare a scriverci dentro (NRE durante la guida). Azzerarli
+            // subito rende le guardie di ChunkBuilder deterministiche.
+            root = null;
+            terrainGo = null;
+            roadsGo = null;
+            sidewalksGo = null;
+            buildingsGo = null;
+            natureGo = null;
+            npcsGo = null;
+            airportsGo = null;
         }
     }
 }

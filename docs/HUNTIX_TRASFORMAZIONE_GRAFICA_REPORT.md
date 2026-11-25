@@ -228,11 +228,31 @@ Log: `/tmp/opencode/build_shops_final.log`.
 
 APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
 
-- Dimensione: **199.488.502 byte** (191 MB)
+- Dimensione: 199.488.502 byte (191 MB)
 - SHA-256: `717d1209d170bd4e179b01aec7551fa7b6930c60f0f7a19174b02c4e060fdd6b`
+  (superato dalla build finale qui sotto)
 
 `TileClient.CacheVersion` resta 5: negozi, contatori e uova non toccano il
 formato geo/graph; mappe, POI e grafi stradali non vanno rigenerati.
+
+### Build finale con il fix dei chunk scaricati durante la guida (§24)
+
+`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1
+FORCE_UNITY_AAR=1 ./build_release.sh --auto`
+
+**Esito: riuscita.** `BUILD SUCCESSFUL` per l'AAR Unity (4m 31s) e per l'APK
+(1m 40s); Kotlin, zipalign e verifica firma OK. Log:
+`/tmp/opencode/build_chunk_guards.log`.
+
+APK firmato: `app/build/outputs/apk/release/app-release-signed.apk`
+
+- Dimensione: **199.488.502 byte** (191 MB)
+- SHA-256: `dfe998f4f6ef0eab3f5663a37c72f98d99b859cf87a9fb5b95722b089d85b526`
+
+`TileClient.CacheVersion` resta 5: le guardie non cambiano il formato geo/graph,
+quindi mappe, POI e grafi stradali non vanno rigenerati. Artefatti generati
+dalla build (`link.xml.meta`, `PlayerLocomotion.controller`, `PlayerHero.prefab`)
+ripristinati con `git checkout --`.
 
 Effetti collaterali noti della build Unity (`link.xml.meta`,
 `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati con
@@ -444,3 +464,59 @@ quindi le uova non rinascono. La rarità resta l'unica COMMON→LEGENDARY.
   log `/tmp/opencode/build_shops_final.log`.
 - Nessun tag/POI/geo/graph toccato: i nuovi tipi derivano dai tag OSM già
   presenti nel tile stream; non serve rigenerare la mappa.
+
+## 24. Guida: NRE del `ChunkBuilder` su chunk scaricati durante la build
+
+### 24.1 Evidenza
+
+Errore segnalato durante la guida:
+
+```
+[ChunkBuilder] C-0827-0868 edificio salita id=405234122 Types:
+System.NullReferenceException: Object reference not set to an instance of an object.
+  at City.OSM.ChunkBuilder+<Build>d__8.MoveNext()
+  at City.OSM.ChunkManager+<BuildChunkCoroutine>d__64.MoveNext()
+```
+
+Lo stesso schema è nel log storico `docs/huntix_log_20261125_073357.txt:14203`:
+subito dopo `ERRORE sezione UOVA: System.NullReferenceException` il rigo 14210
+dice `chunk 825,871 build interrotta (chunk scaricato)`. Durante lo streaming ad
+alta velocità `UnloadFar()` (o il rebase GPS) rimuove il chunk **mentre la
+coroutine di build è sospesa su uno `yield`**. La build riprendeva con
+`chunk.root`/`buildingsGo` ormai distrutti; `Object.Destroy` è differito a fine
+frame, quindi il vecchio riferimento C# sembrava ancora valido abbastanza per
+produrre un NRE dentro `MoveNext()`, catturato dalla sezione sbagliata.
+
+### 24.2 Fix (nessun cambiamento di contenuto del mondo)
+
+- `ChunkBuilder.cs`: helper `ChunkAlive(chunk)` (chunk, `root`, `transform`),
+  chiamato dopo **ogni** `yield return null;` — strade, edifici, aeroporti,
+  natura, veicoli, pompa NPC, uova, POI veicoli, segnali e prima di chiudere la
+  build. Anche il ciclo degli NPC ricontrolla il chunk fra due `MoveNext()`.
+- Spawn uova: non più `Instance?.SpawnEggsInChunk(chunk.root.transform, ...)`
+  (il `?.` proteggeva il Manager, non la root); ora `eggMgr != null &&
+  ChunkAlive(chunk)`. Se il chunk muore, **nessun uovo orfano** viene creato
+  (Riflesso del Mandato §4: l'uovo resta il fulcro, ma non può esistere senza
+  il suo punto nel mondo).
+- Log degli edifici null-safe (`b == null`, `cand.rec.t ?? "null"`) e componenti
+  del terreno (`MeshFilter`/`MeshRenderer`) letti tramite variabile con guardia.
+  Il messaggio "edificio saltato id=…" non può più essere esso stesso la causa
+  di un NRE.
+- `ChunkData.Destroy()` azzera subito `root` e tutti i GameObject figli:
+  le guardie diventano deterministiche anche nello stesso frame della distruzione.
+- Un chunk scaricato non viene marcato `built=true` e non riceve LOD/fisica.
+
+Il bridge Android↔Unity, `TileClient.CacheVersion = 5`, le uova già raccolte,
+la fisica dei veicoli e i tile/POI/graph restano invariati: non serve
+rigenerare mappe né aggiornare i cache dei device.
+
+### 24.3 Verifiche
+
+- `cscheck` completo (`-define:HUNTIX_FULL`): **OK**.
+- `backend/test_unity_chunk_builder_guards.py`: 8 test statici che controllano
+  che ogni yield abbia una guardia prima del successivo, lo spawn uova protetto,
+  i log null-safe e l'azzeramento dei riferimenti in `Destroy()`.
+- Tutti i test statici del progetto: **144 test, OK** (audit, cinematografici,
+  negozi, NaN e nuovo fix).
+- Build Android finale: vedere §19. Riproduzione visiva e FPS restano sul device
+  dell'utente: in assenza di emulatore locale non possiamo guidare la città.

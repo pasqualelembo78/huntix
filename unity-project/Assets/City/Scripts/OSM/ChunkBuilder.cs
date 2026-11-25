@@ -71,6 +71,18 @@ namespace City.OSM
             _sectionClock.Start();
         }
 
+        /// <summary>Il chunk puo' essere scaricato/rebasato DA UN ALTRO COROUTINE
+        /// mentre questa build e' sospesa su uno yield (guida veloce, fix GPS).
+        /// `Object.Destroy` e' differito a fine frame, quindi non basta fidarsi
+        /// del vecchio riferimento: dopo OGNI sospensione riverifichiamo che la
+        /// root sia ancora viva prima di toccare i suoi Transform/GameObject.
+        /// </summary>
+        private static bool ChunkAlive(ChunkData chunk)
+        {
+            return chunk != null && chunk.root != null &&
+                chunk.root.transform != null;
+        }
+
         public static IEnumerator Build(ChunkManager mgr, ChunkData chunk,
             TileGeoDoc geo, Stopwatch clock, long budgetMs)
         {
@@ -179,10 +191,14 @@ namespace City.OSM
                     " ERRORE sezione TERRENO: " + e);
             }
 
-            Mesh terrMesh = chunk.terrainGo != null
-                ? chunk.terrainGo.GetComponent<MeshFilter>().sharedMesh : null;
-            Material terrMat = chunk.terrainGo != null
-                ? chunk.terrainGo.GetComponent<MeshRenderer>().sharedMaterial : null;
+            // Il terreno puo' non essere stato creato (catch qui sopra) o
+            // essere stato distrutto dal rebase: mai deref senza guardia.
+            var terrFilter = chunk.terrainGo != null
+                ? chunk.terrainGo.GetComponent<MeshFilter>() : null;
+            var terrRenderer = chunk.terrainGo != null
+                ? chunk.terrainGo.GetComponent<MeshRenderer>() : null;
+            Mesh terrMesh = terrFilter != null ? terrFilter.sharedMesh : null;
+            Material terrMat = terrRenderer != null ? terrRenderer.sharedMaterial : null;
             OsmDiag.Log("[Builder] " + chunk.key +
                 " terrenoVerts=" + (terrMesh != null ? terrMesh.vertexCount : -1) +
                 " matTerreno=" + (terrMat != null && terrMat.shader != null
@@ -279,6 +295,10 @@ namespace City.OSM
                 OsmDiag.Log("[Builder] " + chunk.key + " stradeIn=0");
             }
 
+            // Fra due yield il chunk puo' essere scaricato o rebasato (guida ad
+            // alta velocita'). Interrompere pulito invece di lanciare NRE.
+            if (!ChunkAlive(chunk)) yield break;
+
             // ── edifici (placement record -> prefab Kenney) ──
             Section("Edifici");
             chunk.buildingsGo = new GameObject("Edifici");
@@ -296,6 +316,7 @@ namespace City.OSM
                 " edifici OSM: " + (geo.buildings != null ? geo.buildings.Length : 0) +
                 " (merge disabilitato)");
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk) || chunk.buildingsGo == null) yield break;
 
             // i lotti delle concessionarie/officine/garage sono nostri:
             // gli edifici generici OSM che caderci sopra vengono saltati
@@ -310,6 +331,7 @@ namespace City.OSM
 
             // yield before heavy building placement
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk) || chunk.buildingsGo == null) yield break;
 
             if (mergedBuildings != null)
             {
@@ -345,7 +367,9 @@ namespace City.OSM
                         skipped++;
                         if (skipped <= 3)
                             UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
-                                " edificio saltato id=" + b.id + " t=" + b.t + ": " + e);
+                                " edificio saltato id=" +
+                                (b != null ? b.id.ToString() : "null") +
+                                " t=" + (b != null ? b.t : "null") + ": " + e);
                     }
                 }
 
@@ -356,6 +380,7 @@ namespace City.OSM
                 for (int i = 0; i < limit; i++)
                 {
                     var cand = candidates[i];
+                    if (cand.rec == null || !ChunkAlive(chunk)) yield break;
                     try
                     {
                         if (BuildingPlacer.Place(mgr.Registry, chunk.buildingsGo.transform,
@@ -368,12 +393,13 @@ namespace City.OSM
                         if (skipped <= 3)
                             UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                                 " edificio saltato id=" + cand.rec.id +
-                                " t=" + cand.rec.t + ": " + e);
+                                " t=" + (cand.rec.t ?? "null") + ": " + e);
                     }
 
                     if ((i + 1) % BuildingsPerStep == 0 &&
                         clock.ElapsedMilliseconds > budgetMs)
                     { clock.Reset(); clock.Start(); yield return null; }
+                    if (!ChunkAlive(chunk) || chunk.buildingsGo == null) yield break;
                 }
                 OsmDiag.Log("[Builder] " + chunk.key +
                     " edificiTotali=" + scanned +
@@ -402,6 +428,7 @@ namespace City.OSM
                     " ERRORE sezione AEROPORTI: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── natura e arredo ──
             Section("Alberi e verde");
@@ -417,9 +444,11 @@ namespace City.OSM
                     " ERRORE sezione NATURA: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // yield after heavy sections to keep frame budget
             yield return null;
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── veicoli: parcheggi deterministici + traffico AI ──
             Section("Veicoli");
@@ -433,6 +462,7 @@ namespace City.OSM
                     " ERRORE sezione VEICOLI: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── pedoni sui marciapiedi (deterministici, animati, parlanti) ──
             // Pompa manuale della coroutine: un MoveNext per frame. Se si
@@ -458,16 +488,24 @@ namespace City.OSM
                 // yield FUORI dal try: C# vieta `yield return` in un try
                 // che ha una clausola catch.
                 if (!npcDone) yield return null;
+                // La pompa NPC puo' durare piu' frame: il chunk puo' cadere
+                // fra due MoveNext, cosi' come fra due yield della build.
+                if (!npcDone && !ChunkAlive(chunk)) yield break;
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── uova raccoglibili (missioni CollectEggs) ──
             Section("Uova");
             try
             {
-                City.Economy.EggSpawnManager.Instance?.SpawnEggsInChunk(
-                    chunk.root.transform, geo, ToLocal, bounds,
-                    unchecked(chunk.index.x * 73856093 ^ chunk.index.y * 19349663));
+                // L'uovo e' il fulcro del gioco: se il chunk e' stato scaricato
+                // NON spawniamo uova orfane legate a una root distrutta, e non
+                // producevamo un NRE dentro MoveNext (log 25/11).
+                var eggMgr = City.Economy.EggSpawnManager.Instance;
+                if (eggMgr != null && ChunkAlive(chunk))
+                    eggMgr.SpawnEggsInChunk(chunk.root.transform, geo, ToLocal, bounds,
+                        unchecked(chunk.index.x * 73856093 ^ chunk.index.y * 19349663));
             }
             catch (System.Exception e)
             {
@@ -475,6 +513,7 @@ namespace City.OSM
                     " ERRORE sezione UOVA: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── POI veicoli: concessionarie / officine / garage da OSM ──
             Section("Concessionarie");
@@ -490,6 +529,7 @@ namespace City.OSM
                     " ERRORE sezione POI VEICOLI: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── segnali stradali con distanze POI ──
             Section("Segnali");
@@ -503,6 +543,7 @@ namespace City.OSM
                     " ERRORE segnali stradali: " + e);
             }
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
 
             // ── arredo urbano interattivo + POI dagli edifici OSM ──
             Section("Arredo urbano");
@@ -515,6 +556,10 @@ namespace City.OSM
                 UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
                     " ERRORE sezione PROPS: " + e);
             }
+
+            // Chiusura: un chunk scaricato non va mai marcato come costruito
+            // (altrimenti LOD/fisica verrebbero applicati a una root morta).
+            if (!ChunkAlive(chunk)) yield break;
 
             chunk.built = true;
             chunk.lod = -1;
