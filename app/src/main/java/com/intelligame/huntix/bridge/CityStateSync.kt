@@ -217,6 +217,38 @@ object CityStateSync {
         return false
     }
 
+    /** Punti degli impianti sportivi REALI (Unity → app), dallo snapshot. */
+    fun getVenueTargets(context: Context): JSONArray {
+        return try {
+            JSONObject(getSnapshot(context)).optJSONArray("venueTargets") ?: JSONArray()
+        } catch (e: Exception) { JSONArray() }
+    }
+
+    /**
+     * Android → Unity: imposta come destinazione uno stadio o un ippodromo
+     * georeferenziato da OSM. Unity esporta gli otto impianti piu' vicini al
+     * giocatore per categoria: a Foggia il primo e' lo Stadio Pino Zaccheria
+     * in Via Gioberti, a Castelluccio l'Ippodromo dei Sauri. Nessun
+     * teletrasporto forzato.
+     */
+    fun goToVenue(context: Context, kind: String): String? {
+        val targets = getVenueTargets(context)
+        for (i in 0 until targets.length()) {
+            val row = targets.optJSONObject(i) ?: continue
+            if (row.optString("kind", "") != kind) continue
+            val label = row.optString("name", "Impianto sportivo")
+            val payload = JSONObject()
+            payload.put("id", row.optString("id", ""))
+            payload.put("kind", kind)
+            payload.put("label", label)
+            payload.put("lat", row.optDouble("lat", 0.0))
+            payload.put("lng", row.optDouble("lng", 0.0))
+            UnityIpc.sendToUnity("GameManager", "navigateToVenue", payload.toString())
+            return label
+        }
+        return null
+    }
+
     /** Unisce lo snapshot delle case visitate nel mirror Android. Chiamato
      *  anche al restore: le uova raccolte non rinascono dopo un rebuild. */
     private fun mergeHouseSnapshot(context: Context, json: String) {
@@ -568,6 +600,11 @@ object CityStateSync {
         } catch (e: Exception) { 0 })
         report.put("houseTargetSnapshot",
             JSONObject(getSnapshot(context)).optJSONArray("houseTargets") != null)
+        report.put("venueTargets", try {
+            getVenueTargets(context).length()
+        } catch (e: Exception) { 0 })
+        report.put("venueTargetSnapshot",
+            JSONObject(getSnapshot(context)).optJSONArray("venueTargets") != null)
         report.put("shopStyle", try {
             JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
         } catch (e: Exception) { false })

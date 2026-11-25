@@ -6,6 +6,7 @@ controlla che gli asset siano davvero presenti e che sistemi esistenti,
 geo/graph, CacheVersion, priorità di interazione e ponte bidirezionale siano
 stati conservati. Non dichiara test visivi o di FPS.
 """
+import json
 import os
 import re
 import unittest
@@ -23,6 +24,7 @@ def path_exists(path):
 
 
 DIRECTOR = read("unity-project/Assets/City/Scripts/Events/VenueDirector.cs")
+REGISTRY = read("unity-project/Assets/City/Scripts/Events/VenueRegistry.cs")
 SIM = read("unity-project/Assets/City/Scripts/Events/VenueSimulation.cs")
 STATE = read("unity-project/Assets/City/Scripts/Events/VenueEventState.cs")
 AUDIO = read("unity-project/Assets/City/Scripts/Events/VenueAudio.cs")
@@ -35,6 +37,17 @@ TILE_CLIENT = read("unity-project/Assets/City/Scripts/OSM/TileClient.cs")
 IPC = read("app/src/main/java/com/intelligame/huntix/bridge/UnityIpc.kt")
 BRIDGE = read("app/src/main/java/com/intelligame/huntix/bridge/Bridge.kt")
 ANDROID_SYNC = read("app/src/main/java/com/intelligame/huntix/bridge/CityStateSync.kt")
+POI_REGISTRY = read("unity-project/Assets/City/Scripts/Vehicle/VehiclePoiRegistry.cs")
+MAP_SELECT = read("unity-project/Assets/City/Scripts/OSM/MapSelectUI.cs")
+MINIMAP = read("unity-project/Assets/City/Scripts/OSM/MinimapHud.cs")
+COMPASS = read("unity-project/Assets/City/Scripts/Vehicle/CompassUI.cs")
+SIGNPOST = read("unity-project/Assets/City/Scripts/Vehicle/PoiSignpost.cs")
+GAME_MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
+CITY_MAP_ACTIVITY = read(
+    "app/src/main/java/com/intelligame/huntix/ui/CityMapActivity.kt")
+VENUE_BUILDER = read("scripts/venue_registry_build.py")
+VENUES_JSON = json.loads(read(
+    "unity-project/Assets/Resources/Venues/italy_venues.json"))
 LICENSES = read("unity-project/Assets/ThirdPartyLicenses.md")
 NOTICES = read("THIRD_PARTY_NOTICES.md")
 VENUE_ROOT = "unity-project/Assets/Resources/EventVenues"
@@ -201,6 +214,123 @@ class TestRiflessoUova(unittest.TestCase):
         self.assertIn("VenueEventState.Import(j.venueEventState)", SYNC)
         self.assertIn("mergeVenueSnapshot", ANDROID_SYNC)
         self.assertIn("venueEventSnapshot", ANDROID_SYNC)
+
+
+class TestGeoreferenziazioneOSM(unittest.TestCase):
+    """Gli impianti non sono piu' piazzati per hash del chunk: vengono
+    dall'impronta OSM reale, con un solo impianto principale per citta'."""
+
+    def by_osm_id(self, oid):
+        for venue in VENUES_JSON["venues"]:
+            if venue["osmId"] == oid:
+                return venue
+        self.fail("OSM id mancante dal registro: " + str(oid))
+
+    def test_stadio_reale_di_foggia(self):
+        v = self.by_osm_id(69969260)
+        self.assertEqual(v["id"], "stadio-osm-69969260")
+        self.assertEqual(v["kind"], "stadio")
+        self.assertEqual(v["name"], "Stadio Pino Zaccheria")
+        self.assertEqual(v["city"], "Foggia")
+        self.assertIn("Via Vincenzo Gioberti", v["address"])
+        self.assertIn("71122", v["address"])
+        # Incrocio Via Gioberti / Viale Ofanto: il baricentro OSM e' qui.
+        self.assertAlmostEqual(v["lat"], 41.4549339, places=5)
+        self.assertAlmostEqual(v["lng"], 15.5420975, places=5)
+        self.assertGreater(v["spanLatM"], 150.0)
+        self.assertGreater(v["spanLonM"], 150.0)
+
+    def test_ippodromo_reale_di_castelluccio(self):
+        v = self.by_osm_id(1350956337)
+        self.assertEqual(v["id"], "ippodromo-osm-1350956337")
+        self.assertEqual(v["kind"], "ippodromo")
+        self.assertEqual(v["name"], "Ippodromo dei Sauri")
+        self.assertEqual(v["city"], "Castelluccio dei Sauri")
+        self.assertIn("Ortanova", v["address"])
+        self.assertAlmostEqual(v["lat"], 41.3084701, places=5)
+        self.assertAlmostEqual(v["lng"], 15.4539235, places=5)
+
+    def test_un_solo_impianto_per_citta(self):
+        groups = {}
+        for venue in VENUES_JSON["venues"]:
+            key = (venue["kind"], venue["city"].casefold())
+            groups.setdefault(key, []).append(venue["id"])
+        for key, ids in groups.items():
+            self.assertEqual(len(ids), 1, str(key))
+        self.assertGreater(len(groups), 100)
+
+    def test_fonte_ODbL_e_schema(self):
+        self.assertEqual(VENUES_JSON["schema"], 1)
+        self.assertIn("OpenStreetMap contributors", VENUES_JSON["source"])
+        self.assertIn("ODbL", VENUES_JSON["source"])
+        self.assertIn("un solo impianto", VENUES_JSON["rule"])
+
+    def test_posizionamento_senza_hash(self):
+        self.assertIn("VenueRegistry.InChunk(chunk.index)", DIRECTOR)
+        self.assertIn("WorldOrigin.ToWorld(spec.lat, spec.lng)", DIRECTOR)
+        self.assertIn("s.LocalOffset.x", DIRECTOR)
+        self.assertIn("world.y = TileElevation.HeightAtWorld(world)", DIRECTOR)
+        self.assertNotIn("pick = (int)(h % 19u)", DIRECTOR)
+        self.assertNotIn("chunk.key + (kind ==", DIRECTOR)
+
+    def test_parse_json_tipi_unity_sicuri(self):
+        self.assertIn("public int osmId;", REGISTRY)
+        self.assertIn("public float lat;", REGISTRY)
+        self.assertIn("public float lng;", REGISTRY)
+        self.assertIn("lat = r.lat,", REGISTRY)
+        self.assertIn("lng = r.lng,", REGISTRY)
+
+    def test_ponte_esporta_solo_impianti_vicini(self):
+        self.assertIn("public static string TargetsJson(double centerLat = 0",
+                      REGISTRY)
+        self.assertIn("string[] kinds = { KindStadio, KindIppodromo };", REGISTRY)
+        self.assertIn("City.OSM.WorldOrigin.ToGeo", SYNC)
+        self.assertIn("TargetsJson(lat, lng, 8)", SYNC)
+
+    def test_generatore_osm_offline(self):
+        self.assertIn("osmium", VENUE_BUILDER)
+        self.assertIn("tags-filter", VENUE_BUILDER)
+        self.assertIn("w/leisure=stadium", VENUE_BUILDER)
+        self.assertIn("sport=horse_racing", VENUE_BUILDER)
+        self.assertIn("69969260", VENUE_BUILDER)
+        self.assertIn("1350956337", VENUE_BUILDER)
+        self.assertNotIn("urllib", VENUE_BUILDER)
+        self.assertNotIn("requests", VENUE_BUILDER)
+
+
+class TestWaypointImpianti(unittest.TestCase):
+    def test_poi_registry_include_registro_osm(self):
+        self.assertIn("using City.Events;", POI_REGISTRY)
+        self.assertIn("foreach (var venue in VenueRegistry.All)", POI_REGISTRY)
+        self.assertIn("id = venue.id", POI_REGISTRY)
+        self.assertIn('kind = venue.kind', POI_REGISTRY)
+
+    def test_menu_e_colori(self):
+        self.assertIn('"casa", "stadio", "ippodromo"', MAP_SELECT)
+        self.assertIn("ColStadio", COMPASS)
+        self.assertIn("ColIppodromo", COMPASS)
+        self.assertIn('case "stadio": return ColStadio;', COMPASS)
+        self.assertIn('case "ippodromo": return ColIppodromo;', COMPASS)
+        self.assertIn('case "stadio": return "STADIO";', SIGNPOST)
+        self.assertIn('case "ippodromo": return "IPPODROMO";', SIGNPOST)
+
+    def test_minimappa_sempre_visibili(self):
+        self.assertIn('DrawPoiKind("stadio", true, CompassUI.ColStadio', MINIMAP)
+        self.assertIn('DrawPoiKind("ippodromo", true, CompassUI.ColIppodromo', MINIMAP)
+
+    def test_bridge_destinazioni_venue(self):
+        self.assertIn("j.venueTargets = BuildVenueTargets();", SYNC)
+        self.assertIn("VenueRegistry.TargetsJson(lat, lng, 8)", SYNC)
+        self.assertIn("public string venueTargets", SYNC)
+        self.assertIn('case "navigateToVenue":', GAME_MANAGER)
+        self.assertIn("HandleNavigateToVenue(jsonData)", GAME_MANAGER)
+        self.assertIn("City.Events.VenueRegistry.Find", GAME_MANAGER)
+        self.assertIn("fun getVenueTargets", ANDROID_SYNC)
+        self.assertIn("fun goToVenue", ANDROID_SYNC)
+        self.assertIn('"navigateToVenue"', ANDROID_SYNC)
+        self.assertIn("report.put(\"venueTargets\"", ANDROID_SYNC)
+        self.assertIn('addVenueButton("STADIO', CITY_MAP_ACTIVITY)
+        self.assertIn('addVenueButton("IPPODROMO', CITY_MAP_ACTIVITY)
 
 
 if __name__ == "__main__":

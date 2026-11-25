@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using City.OSM;
 using City.Interior.Visit;
+using City.Events;
 
 namespace City.Vehicle
 {
@@ -125,27 +126,60 @@ namespace City.Vehicle
             return best != null && bestD2 <= tolDeg * tolDeg ? best : null;
         }
 
+        // I POI sintetici (case + impianti OSM) derivano da asset statici e
+        // non cambiano durante la partita: li creiamo una volta sola. La
+        // mappa espansa e la minimappa iterano All() molto spesso, quindi
+        // riallocare centinaia di PoiInfo a ogni redraw sarebbe uno spreco.
+        private static PoiInfo[] _synthetic;
+
+        private static PoiInfo[] Synthetic
+        {
+            get
+            {
+                if (_synthetic != null) return _synthetic;
+                var list = new List<PoiInfo>();
+                foreach (var spec in VisitInteriorRegistry.All)
+                {
+                    if (spec == null) continue;
+                    list.Add(new PoiInfo
+                    {
+                        id = VisitInteriorRegistry.StableKey(spec.osmId),
+                        kind = spec.kind ?? "casa",
+                        name = spec.label,
+                        lat = spec.lat,
+                        lng = spec.lng
+                    });
+                }
+                foreach (var venue in VenueRegistry.All)
+                {
+                    if (venue == null) continue;
+                    list.Add(new PoiInfo
+                    {
+                        id = venue.id,
+                        kind = venue.kind,
+                        name = string.IsNullOrEmpty(venue.city)
+                            ? venue.name : venue.name + " — " + venue.city,
+                        lat = venue.lat,
+                        lng = venue.lng
+                    });
+                }
+                _synthetic = list.ToArray();
+                return _synthetic;
+            }
+        }
+
         /// <summary>
         /// Tutti i POI registrati (mappa espansa). Oltre ai POI veicoli creati
-        /// dai chunk include le case visitabili OSM come POI sintetici: la
-        /// porta della casa di Roma diventa quindi selezionabile con
-        /// TELEPORTA/FRECCETTA esattamente come le rampe sotterranee.
+        /// dai chunk include le case visitabili OSM e gli impianti sportivi
+        /// REALI del registro OSM come POI sintetici: porta di casa, stadio e
+        /// ippodromo diventano selezionabili con TELEPORTA/FRECCETTA esattamente
+        /// come le rampe sotterranee, senza girare a vuoto.
         /// </summary>
         public static IEnumerable<PoiInfo> All()
         {
             foreach (var p in pois.Values) yield return p;
-            foreach (var spec in VisitInteriorRegistry.All)
-            {
-                if (spec == null) continue;
-                yield return new PoiInfo
-                {
-                    id = VisitInteriorRegistry.StableKey(spec.osmId),
-                    kind = spec.kind ?? "casa",
-                    name = spec.label,
-                    lat = spec.lat,
-                    lng = spec.lng
-                };
-            }
+            PoiInfo[] extra = Synthetic;
+            for (int i = 0; i < extra.Length; i++) yield return extra[i];
         }
 
         /// <summary>Tutti i POI noti di un tipo (per fallback di spawn).</summary>

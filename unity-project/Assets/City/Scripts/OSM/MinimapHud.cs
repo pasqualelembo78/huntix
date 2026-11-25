@@ -636,6 +636,12 @@ namespace City.OSM
         {
             DrawPoiKind("casa", _showCasa, CompassUI.ColCasa,
                 pWorld, half, mPerPx);
+            // Impianti reali OSM: sempre visibili nello span corrente, come
+            // la casa. Sono pochi e sono il modo piu' rapido di trovarli.
+            DrawPoiKind("stadio", true, CompassUI.ColStadio,
+                pWorld, half, mPerPx);
+            DrawPoiKind("ippodromo", true, CompassUI.ColIppodromo,
+                pWorld, half, mPerPx);
             DrawPoiKind("dealer", _showDealer, CompassUI.ColDealer,
                 pWorld, half, mPerPx);
             bool repairOk = VehicleOwnershipApi.HasOwnedCached() &&

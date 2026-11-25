@@ -10,16 +10,24 @@ namespace City.Events
     /// Direttore degli impianti sportivi. Aggiunto ai chunk dal ChunkBuilder:
     /// registra solo un'ancora leggera per chunk; la geometria viene costruita
     /// in coroutine SOLO quando il player si avvicina, con un solo impianto
-    /// attivo alla volta. Nessun campo nuovo nel wire geo/graph, nessun cambio
-    /// di CacheVersion, nessun cambio di scena.
+    /// attivo alla volta. Le ancore vengono dal registro OSM reale
+    /// (VenueRegistry): niente piu' stadi a caso per hash di chunk. Nessun
+    /// campo nuovo nel wire geo/graph, nessun cambio di CacheVersion/scena.
     /// </summary>
     public class VenueDirector : MonoBehaviour
     {
         private class Site
         {
             public ChunkData Chunk;
+            public VenueRegistry.Spec Spec;
             public string Id;
             public VenueKind Kind;
+            public double Lat;
+            public double Lng;
+            // Offset geografico rispetto al centro del chunk: resta valido
+            // dopo il rebase perche' chunk root e coordinate world si
+            // spostano insieme.
+            public Vector3 LocalOffset;
             public Vector3 Center;
             public bool Built;
             public bool Building;
@@ -61,39 +69,59 @@ namespace City.Events
             Instance = this;
         }
 
-        /// <summary>Chiamato dal ChunkBuilder a chunk costruito. Seleziona in
-        /// modo deterministico al massimo un impianto ogni pochi chunk e solo
-        /// su tile di terra con contenuto OSM.</summary>
+        /// <summary>Chiamato dal ChunkBuilder a chunk costruito: registra gli
+        /// impianti il cui baricentro OSM cade DENTRO questo chunk. La citta'
+        /// ha un solo stadio/ippodromo principale perche' cosi' e' generato
+        /// il registro; qui non si inventa piu' nulla per hash del chunk.</summary>
         public void OnChunkBuilt(ChunkData chunk)
         {
             if (chunk == null || chunk.root == null || chunk.geo == null) return;
-            uint h = (uint)(unchecked(chunk.index.x * 73856093 ^ chunk.index.y * 19349663));
-            int pick = (int)(h % 19u);
-            VenueKind kind;
-            if (pick == 0) kind = VenueKind.Stadio;
-            else if (pick == 5) kind = VenueKind.Ippodromo;
-            else return;
+            List<VenueRegistry.Spec> specs = VenueRegistry.InChunk(chunk.index);
+            if (specs == null || specs.Count == 0) return;
 
-            bool hasLand = (chunk.geo.roads != null && chunk.geo.roads.Length > 0) ||
-                           (chunk.geo.buildings != null && chunk.geo.buildings.Length > 0) ||
-                           (chunk.geo.parks != null && chunk.geo.parks.Length > 0);
-            if (!hasLand) return;
-
-            string id = chunk.key + (kind == VenueKind.Stadio ? "-stadio" : "-ippodromo");
-            lock (_sites)
+            // Niente filtro "hasLand": l'impronta OSM e' gia' la prova che
+            // li' c'e' un impianto, anche se il wire filtrato non trasporta
+            // il tag leisure=stadium (che infatti non e' in FILTERS).
+            for (int i = 0; i < specs.Count; i++)
             {
-                for (int i = 0; i < _sites.Count; i++)
-                    if (_sites[i].Id == id) return;
+                VenueRegistry.Spec spec = specs[i];
+                VenueKind kind = KindOf(spec.kind);
+                if (kind == VenueKind.Stadio && spec.kind != VenueRegistry.KindStadio)
+                    continue;
+                if (kind == VenueKind.Ippodromo && spec.kind != VenueRegistry.KindIppodromo)
+                    continue;
+
+                lock (_sites)
+                {
+                    bool exists = false;
+                    for (int j = 0; j < _sites.Count; j++)
+                        if (_sites[j].Id == spec.id) { exists = true; break; }
+                    if (exists) continue;
+                }
+
+                Vector3 world = WorldOrigin.ToWorld(spec.lat, spec.lng);
+                Vector3 local = world - chunk.root.transform.position;
+                local.y = 0f;
+                if (!WorldOrigin.IsFinite(local)) continue;
+                world.y = TileElevation.HeightAtWorld(world);
+                _sites.Add(new Site
+                {
+                    Chunk = chunk,
+                    Spec = spec,
+                    Id = spec.id,
+                    Kind = kind,
+                    Lat = spec.lat,
+                    Lng = spec.lng,
+                    LocalOffset = local,
+                    Center = world
+                });
             }
-            Vector3 center = chunk.root.transform.position;
-            float y = TileElevation.HeightAtWorld(center);
-            _sites.Add(new Site
-            {
-                Chunk = chunk,
-                Id = id,
-                Kind = kind,
-                Center = new Vector3(center.x, y, center.z)
-            });
+        }
+
+        private static VenueKind KindOf(string kind)
+        {
+            return kind == VenueRegistry.KindIppodromo
+                ? VenueKind.Ippodromo : VenueKind.Stadio;
         }
 
         private void Update()
@@ -129,8 +157,17 @@ namespace City.Events
             for (int i = 0; i < _sites.Count; i++)
             {
                 Site s = _sites[i];
+                // Ricalcola dal georeferimento: dopo un rebase l'origine si
+                // sposta e il vecchio Center world non sarebbe piu' valido.
+                Vector3 world = WorldOrigin.ToWorld(s.Lat, s.Lng);
+                world.y = TileElevation.HeightAtWorld(world);
+                s.Center = world;
                 float d = Vector3.Distance(player, s.Center);
-                if (s.Built) active++;
+                // Conta solo gli impianti realmente in gioco vicino al
+                // player: contare tutti quelli mai costruiti in qualsiasi
+                // citta' bloccherebbe per sempre la costruzione del primo
+                // impianto visitato (MAX_ACTIVE = 1).
+                if (s.Built && d < SIM_RADIUS) active++;
                 if (s.Root != null) s.Root.SetActive(d < SIM_RADIUS);
                 if (d < best) { best = d; nearest = s; }
                 if (!s.Built && !s.Building && d < BUILD_RADIUS && active < MAX_ACTIVE)
@@ -192,7 +229,11 @@ namespace City.Events
             var root = new GameObject("Venue_" + s.Id);
             root.transform.SetParent(s.Chunk.root.transform, false);
             float baseY = s.Center.y - s.Chunk.root.transform.position.y;
-            root.transform.localPosition = new Vector3(0f, baseY, 0f);
+            // Il modello va sul baricentro OSM, non al centro del chunk:
+            // e' la differenza fra "uno stadio da qualche parte" e lo
+            // stadio reale all'incrocio Via Gioberti/Viale Ofanto.
+            root.transform.localPosition = new Vector3(
+                s.LocalOffset.x, baseY, s.LocalOffset.z);
             s.Root = root;
 
             var sim = root.AddComponent<VenueSimulation>();
@@ -213,6 +254,8 @@ namespace City.Events
             s.Building = false;
             sim.Begin();
             GrantEggs(s);
+            if (s.Spec != null && UIManager.Instance != null)
+                UIManager.Instance.ShowToast(s.Spec.name + " — " + s.Spec.city);
         }
 
         private static GameObject Place(GameObject root, string folder, string name,

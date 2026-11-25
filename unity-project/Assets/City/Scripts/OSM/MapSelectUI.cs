@@ -72,10 +72,12 @@ namespace City.OSM
             new Color(1f, 0.80f, 0.20f);
 
         // ── menu POI a categorie + ricerca testuale ──
-        // "casa" e' in cima: e' la destinazione che serve per entrare nella
-        // casa visitabile senza girare a vuoto ( TELEPORTA / FRECCETTA ).
+        // "casa", "stadio" e "ippodromo" sono in cima: sono le destinazioni
+        // georeferenziate (case visitabili e impianti OSM reali) che devono
+        // essere raggiungibili senza girare a vuoto ( TELEPORTA / FRECCETTA ).
         private readonly string[] _categories =
-            { "casa", "hospital", "rampa", "repair", "school", "bar", "dealer", "bank", "fuel" };
+            { "casa", "stadio", "ippodromo", "hospital", "rampa", "repair",
+              "school", "bar", "dealer", "bank", "fuel" };
         private GameObject _backBtn;
         private RectTransform _resultContent;
         private ScrollRect _resultScroll;

@@ -81,10 +81,14 @@ Nuova cartella `unity-project/Assets/City/Scripts/Events/`:
   su `EventBus`, invio `VenueEventChanged` al bridge, export/import nello
   snapshot con merge per timestamp.
 - `VenueDirector.cs`: singleton `Ensure()`, registro leggero per chunk
-  (`OnChunkBuilt`), selezione deterministica
-  (`h = x*73856093 ^ y*19349663`, `pick = h % 19`; 0 = stadio, 5 = ippodromo),
-  costruzione lazy in coroutine entro 115 m, disattivazione oltre 220 m,
-  un solo impianto attivo (`MAX_ACTIVE = 1`), prompt contestuale e uova.
+  (`OnChunkBuilt`) con impianti **georeferenziati da OSM**, costruzione lazy in
+  coroutine entro 115 m, disattivazione oltre 220 m, un solo impianto attivo
+  (`MAX_ACTIVE = 1`, contato solo se vicino al player), prompt contestuale e
+  uova. Il modello è posizionato sul baricentro dell'impronta OSM, non sul
+  centro del chunk.
+- `VenueRegistry.cs` + `Assets/Resources/Venues/italy_venues.json`: catalogo
+  offline degli impianti reali (uno per città per tipo), con coordinate,
+  indirizzo, id OSM, ingombro e priorità.
 - `VenueSimulation.cs`: ciclo partita/corsa, classifica, meteo, audio e
   movimento deterministico degli attori; aggiornamento entro 210 m, animazione
   entro 70 m.
@@ -110,6 +114,59 @@ Innesti (nessun sistema esistente rimosso):
 
 Nessuna scena modificata, nessun nuovo `DontDestroyOnLoad`, nessun nuovo campo
 nel wire, nessun cambio di `CacheVersion`.
+
+### Posizionamento georeferenziato (correzione del 25/11/2026)
+
+La prima versione piazzava stadio/ippodromo per hash del chunk: era
+"facilmente individuabile" ma **sbagliato**, perché l'impianto finiva in un
+punto qualunque della città. Ora il posizionamento viene dai dati OSM reali.
+
+| Impianto | OSM | Coordinate (baricentro impronta) | Indirizzo reale | Tile / chunk |
+|---|---|---|---|---|
+| Stadio Pino Zaccheria | way `69969260` | **41.4549339, 15.5420975** | Via Vincenzo Gioberti, 71122 Foggia (spiazzale all'incrocio con Viale Ofanto) | `IT_082_087` / `(828, 871)` |
+| Ippodromo dei Sauri | way `1350956337` | **41.3084701, 15.4539235** | Strada Provinciale 110 di Ortanova, 71025 Castelluccio dei Sauri (FG) | `IT_081_086` / `(812, 863)` |
+
+L'ingombro letto dall'impronta è di circa **203 × 196 m** per lo stadio e
+**775 × 1006 m** per l'ippodromo. Le coordinate dei due casi guida sono state
+verificate anche con Nominatim; la fonte resta OpenStreetMap (ODbL).
+
+Il catalogo è generato offline da `scripts/venue_registry_build.py`, che legge
+il dump locale `backend/preprocessing/data/italy-latest.osm.pbf` con `osmium`
+(nessuna rete a runtime, nessun account, nessun modulo Python aggiuntivo):
+
+```bash
+python3 scripts/venue_registry_build.py --country italy
+```
+
+Regole applicate: `leisure=stadium` con sport calcio/soccer e
+`sport=horse_racing` con pista/centro ippico; **un solo impianto principale
+per città** (il più grande/documentato, con i due casi guida forzati in testa
+alla priorità); coordinate prese dal baricentro dell'impronta, non dal centro
+del chunk. Risultato: 470 stadi e 199 ippodromi, 669 voci totali.
+
+A runtime `VenueRegistry.InChunk(chunk.index)` restituisce solo gli impianti
+del chunk in costruzione; `WorldOrigin.ToWorld(spec.lat, spec.lng)` dà la
+posizione world (ristabilita a ogni rebase) e `TileElevation.HeightAtWorld`
+la quota DEM. L'offset locale rispetto al root del chunk resta valido dopo il
+rebase, quindi lo stadio non "scappa" dal punto reale.
+
+### Waypoint e navigazione
+
+- Mappa espansa (menu hamburger): nuove categorie in cima, `STADIO` e
+  `IPPODROMO`; ogni voce mostra nome, città e distanza, con `TELEPORTA` /
+  `FRECCETTA`. Le voci arrivano da `VehiclePoiRegistry.All()`, che include il
+  registro OSM completo.
+- Minimappa: marker sempre visibili per stadio (verde) e ippodromo (viola),
+  senza bisogno di attivare filtri.
+- Bussola: colori dedicati (`ColStadio`, `ColIppodromo`) e cartelli
+  `STADIO` / `IPPODROMO`.
+- App Android: pulsanti `STADIO 🏟️` e `IPPODROMO 🏇` nella mappa; inviano
+  `navigateToVenue` con coordinate e indirizzo reali. Unity riceve l'evento
+  in `GameManager` e imposta la destinazione senza teletrasporto forzato;
+  se il payload non ha coordinate, risolve l'id dal registro locale.
+- Lo snapshot esporta solo gli **8 impianti più vicini al giocatore per
+  categoria** (~15 KB invece di ~118 KB): a Foggia il primo stadio è lo
+  Zaccheria, a Castelluccio il primo ippodromo è quello dei Sauri.
 
 ### Animazione reale
 
@@ -158,6 +215,10 @@ Nessun premio economico: sono uova-indizio come le altre feature del Mandato.
 - `CityStateSync.kt`: chiavi `city_venue_event_v1` / `city_env_event_v1`,
   `onVenueEvent`, `onEnvironmentalEvent`, `mergeVenueSnapshot` nello snapshot,
   campi `venueEvent` e `venueEventSnapshot` in `checkSync`.
+- Destinazioni: `CityWorldSync` esporta `venueTargets` (8 impianti reali più
+  vicini per categoria); Android li conserva nello snapshot e li ritrasmette
+  con `goToVenue(kind)` → evento Unity `navigateToVenue`; `checkSync` riporta
+  `venueTargets` e `venueTargetSnapshot`.
 - Il merge applica solo uno stato con `tsMt` più recente: restore e sync non
   possono riportare indietro la simulazione.
 
@@ -165,7 +226,12 @@ Nessun premio economico: sono uova-indizio come le altre feature del Mandato.
 
 - Feature **OFF di default**: costo zero finché non viene attivata dal menu.
 - Un solo impianto costruito alla volta; costruzione in coroutine con yield;
-  ancoraggi dei chunk scaricati rimossi.
+  ancoraggi dei chunk scaricati rimossi. Il contatore considera solo gli
+  impianti entro 220 m dal player: visitarne uno non blocca per sempre gli
+  altri.
+- I POI sintetici (case + 669 impianti) sono creati una volta sola in
+  `VehiclePoiRegistry`: niente centinaia di allocazioni a ogni redraw della
+  mappa.
 - Culling: costruzione <115 m, root attiva <220 m, simulazione <210 m,
   movimento/animazione <130/70 m; tick del direttore ogni 0,5 s.
 - Nessun `CharacterController`, `Rigidbody` o collider nuovo; attori mossi con
@@ -180,18 +246,20 @@ Nessun premio economico: sono uova-indizio come le altre feature del Mandato.
 
 | Verifica | Comando | Esito |
 |---|---|---|
-| Test statici della nuova integrazione | `python3 -m unittest discover -s backend -p 'test_unity_sport_events.py' -v` | 19 test OK |
-| Tutti i test Unity statici | `python3 -m unittest discover -s backend -p 'test_unity_*.py'` | **202 test OK** |
-| Compilazione C# con stub | `cd backend/preprocessing/cscheck && ./check.sh` | `CSCHECK OK` (196 warning preesistenti, 0 errori) |
-| Build Android release | `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto` | `BUILD SUCCESSFUL`, export Unity + Il2Cpp + APK firmato |
+| Test statici sportivi + georeferenziazione | `python3 -m unittest backend.test_unity_sport_events -v` | 31 test OK |
+| Test statici case e waypoint | `python3 -m unittest backend.test_unity_visit_houses -v` | 20 test OK |
+| Tutti i test backend | `python3 -m unittest discover -s backend -p 'test_*.py'` | **245 test OK** |
+| Compilazione C# con stub | `cd backend/preprocessing/cscheck && ./check.sh` | `CSCHECK OK` (0 errori; warning preesistenti) |
+| Build Android release | `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 SKIP_INSTALL=1 FORCE_UNITY_AAR=1 ./build_release.sh --auto` | `BUILD SUCCESSFUL`: Unity/Il2Cpp in 4m37s, APK in 5m10s |
 | Firma APK | integrata nello script (`apksigner verify`) | OK |
-| `.meta` | conteggio su `Events/` e `EventVenues/` | 5 script + 111 FBX con `.meta` |
+| `.meta` | conteggio su `Events/`, `Resources/Venues/` e `EventVenues/` | 6 script + 111 FBX + 1 JSON con `.meta` |
 
-Artefatto finale:
+Artefatto finale (build del 25/11/2026, log `/tmp/opencode/build_venues_geo.log`):
 
 - `app/build/outputs/apk/release/app-release-signed.apk`
-- dimensione **201.473.302 byte**
-- SHA-256 `0c269c0afb19a9fa29806fba8a727a54e0e4b7d132b419937bd180dfd6890dc6`
+- dimensione **204.632.524 byte** (baseline precedente 204.579.182, **+53.342 byte**)
+- SHA-256 `1ef9e3e30f0e92191a0a261ff6eb7313122a1f4755b205b503ddde2de4660abe`
+- `app/libs/unityLibrary-release.aar`: **105.529.546 byte** (baseline 105.476.653, **+52.893 byte**)
 
 Gli artefatti collaterali noti della build (`link.xml.meta`,
 `PlayerLocomotion.controller`, `PlayerHero.prefab`) sono stati ripristinati da
@@ -228,11 +296,25 @@ obbligatorio prima di considerare chiusa la QA visiva.
    `SHOW_405220197_1_Furgone`. Il nuovo sistema non introduce fisica e non
    tocca lo snap a terra, quindi non aggrava quel problema; resta da indagare
    separatamente con telemetria su device.
+6. **Stadio/ippodromo piazzati per hash del chunk**: era “trovabile” ma non
+   corrispondeva al luogo reale. Sostituito con il registro OSM generato
+   offline, un solo impianto principale per città e posizionamento sul
+   baricentro dell'impronta (casi guida Foggia e Castelluccio dei Sauri).
+7. **`MAX_ACTIVE = 1` contava tutti gli impianti mai costruiti**: dopo il
+   primo impianto visitato nessun altro poteva più essere costruito. Ora
+   conta solo quelli entro 220 m dal player.
+8. **Snapshot con 669 destinazioni (~118 KB) a ogni push**: ridotto agli 8
+   impianti reali più vicini per categoria (~15 KB); la mappa in game usa il
+   registro completo. I POI sintetici sono inoltre creati una volta sola per
+   evitare centinaia di allocazioni a ogni redraw.
 
 ## 8. Prossimi sviluppi
 
-1. QA su device reale: ingresso agli impianti, visibilità delle uova, audio,
-   FPS/RAM prima/dopo con confronto `prof=...` di `SessionTelemetry`.
+1. QA su device reale: verificare che lo Zaccheria a Foggia e l'Ippodromo dei
+   Sauri a Castelluccio nascano sulle coordinate reali (non al centro del
+   chunk), che i waypoint portino all'ingresso corretto, che le uova siano
+   visibili, che l'audio sia percepito e che FPS/RAM restino entro il budget
+   (confronto `prof=...` di `SessionTelemetry`).
 2. Verificare in game che `Resources.LoadAll<AnimationClip>` restituisca le sei
    clip su Android Il2Cpp; se necessario, generare in editor un
    `RuntimeAnimatorController` dedicato e sostituire il playback legacy.

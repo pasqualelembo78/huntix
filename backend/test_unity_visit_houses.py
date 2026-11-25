@@ -258,7 +258,7 @@ class TestAccessoDeterministico(unittest.TestCase):
         self.assertIn("foreach (var p in All())", VEHICLE_POI)
 
     def test_mappa_espansa_e_minimappa(self):
-        self.assertIn('{ "casa", "hospital", "rampa"', MAP_SELECT)
+        self.assertIn('{ "casa", "stadio", "ippodromo"', MAP_SELECT)
         self.assertIn('case "casa": return "CASA";', POI_SIGNPOST)
         self.assertIn("ColCasa = new Color(1.00f, 0.50f, 0.16f)", COMPASS)
         self.assertIn('case "casa": return ColCasa;', COMPASS)

@@ -263,6 +263,11 @@ namespace Huntix.Core
                 case "navigateToHouse":
                     HandleNavigateToHouse(jsonData);
                     break;
+                // Android → Unity: "vai allo stadio/ippodromo reale". Le
+                // coordinate arrivano dal registro OSM nello snapshot.
+                case "navigateToVenue":
+                    HandleNavigateToVenue(jsonData);
+                    break;
                 case "ReturnToMenu":
                     ReturnToAndroid();
                     break;
@@ -316,6 +321,61 @@ namespace Huntix.Core
             Debug.Log("[GameManager] navigazione casa da Android: " + label + " (" +
                 lat.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
                 lng.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")");
+        }
+
+        /// <summary>
+        /// Android -> Unity: punta bussola e minimappa a uno stadio/ippodromo
+        /// REALE del registro OSM. Se il payload non ha coordinate valide si
+        /// risolve l'id (o la categoria) dal registro locale: mai una
+        /// destinazione inventata. Solo navigazione, nessun teletrasporto.
+        /// </summary>
+        private static void HandleNavigateToVenue(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return;
+            string label = "Impianto sportivo";
+            string kind = "";
+            var mLabel = System.Text.RegularExpressions.Regex.Match(
+                json, "\"label\"\\s*:\\s*\"([^\"]+)\"");
+            if (mLabel.Success) label = mLabel.Groups[1].Value;
+            var mKind = System.Text.RegularExpressions.Regex.Match(
+                json, "\"kind\"\\s*:\\s*\"([^\"]+)\"");
+            if (mKind.Success) kind = mKind.Groups[1].Value;
+            var mId = System.Text.RegularExpressions.Regex.Match(
+                json, "\"id\"\\s*:\\s*\"([^\"]+)\"");
+
+            double lat = 0, lng = 0;
+            bool ok = TryCoord(json, "lat", out lat) &&
+                      TryCoord(json, "lng", out lng) &&
+                      lat > -90.0 && lat < 90.0 &&
+                      lng > -180.0 && lng < 180.0;
+            if (!ok)
+            {
+                City.Events.VenueRegistry.Spec spec = mId.Success
+                    ? City.Events.VenueRegistry.Find(mId.Groups[1].Value) : null;
+                if (spec == null && !string.IsNullOrEmpty(kind))
+                    spec = City.Events.VenueRegistry.First(kind);
+                if (spec == null) return;
+                lat = spec.lat;
+                lng = spec.lng;
+                label = spec.name;
+                kind = spec.kind;
+            }
+            if (string.IsNullOrEmpty(kind)) kind = City.Events.VenueRegistry.KindStadio;
+            City.Vehicle.NavigationState.Set(label, kind, lat, lng);
+            Debug.Log("[GameManager] navigazione impianto da Android: " + label +
+                " (" + lat.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                "," + lng.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")");
+        }
+
+        private static bool TryCoord(string json, string field, out double value)
+        {
+            value = 0;
+            var m = System.Text.RegularExpressions.Regex.Match(
+                json, "\"" + field + "\"\\s*:\\s*(-?[0-9.]+)");
+            return m.Success &&
+                double.TryParse(m.Groups[1].Value,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out value);
         }
 
         private void HandleSetMode(string json)

@@ -156,6 +156,13 @@ namespace City.Sync
             // Unity con "setTargetCoord" (freccetta/TELEPORTA).
             j.houseTargets = City.Interior.Visit.VisitInteriorRegistry.TargetsJson();
 
+            // Impianti sportivi OSM reali (stadio/ippodromo): coordinate,
+            // indirizzo e id del registro. Android li ritrasmette con
+            // "navigateToVenue" per la bussola/minimappa. Esportiamo solo gli
+            // otto impianti piu' vicini al player per categoria: la mappa in
+            // game usa il registro completo, lo snapshot resta piccolo.
+            j.venueTargets = BuildVenueTargets();
+
             // Switch A/B del negozio: sistema Huntix o prefabbricato CC0.
             j.shopStyle = City.Interior.ShopStyle.Export();
 
@@ -199,6 +206,20 @@ namespace City.Sync
             return JsonUtility.ToJson(j);
         }
 
+        private static string BuildVenueTargets()
+        {
+            double lat = 0.0, lng = 0.0;
+            var game = City.Game.Instance;
+            if (game != null && game.player != null)
+            {
+                var g = City.OSM.WorldOrigin.ToGeo(
+                    game.player.transform.position);
+                lat = g.lat;
+                lng = g.lng;
+            }
+            return City.Events.VenueRegistry.TargetsJson(lat, lng, 8);
+        }
+
         [Serializable]
         private class Snapshot
         {
@@ -222,6 +243,7 @@ namespace City.Sync
             public string universalInteriors = "";
             public string houseVisitState = "";
             public string houseTargets = "";
+            public string venueTargets = "";
             public string shopStyle = "";
             public string venueEventState = "";
             public bool budgetEggSpawned;

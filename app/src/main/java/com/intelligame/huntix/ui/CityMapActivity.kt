@@ -100,6 +100,35 @@ class CityMapActivity : AppCompatActivity() {
             }
         }
         topBar.addView(houseBtn)
+
+        // Scorciatoie agli impianti sportivi REALI: il registro OSM arriva
+        // dallo snapshot Unity e la destinazione torna indietro con lo stesso
+        // canale della casa (bussola + minimappa in MiCittà).
+        fun addVenueButton(caption: String, color: String, kind: String) {
+            val btn = TextView(this@CityMapActivity).apply {
+                text = caption; textSize = 12f; setTextColor(Color.WHITE)
+                isClickable = true; isFocusable = true
+                background = GradientDrawable().apply {
+                    cornerRadius = UiKit.dp(this@CityMapActivity, 12).toFloat()
+                    setColor(Color.parseColor(color))
+                }
+                setPadding(UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8),
+                    UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8))
+                setOnClickListener {
+                    val label = CityStateSync.goToVenue(this@CityMapActivity, kind)
+                    Toast.makeText(
+                        this@CityMapActivity,
+                        if (label != null) "Destinazione $label impostata in MiCittà"
+                        else "Apri prima MiCittà per sincronizzare l'impianto",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            topBar.addView(btn)
+        }
+        addVenueButton("STADIO 🏟️", "#2A7A4B", "stadio")
+        addVenueButton("IPPODROMO 🏇", "#6B3F86", "ippodromo")
+
         root.addView(topBar, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.TOP })
