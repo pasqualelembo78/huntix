@@ -245,3 +245,30 @@ valori predefiniti di sistemi esistenti: la REGOLA OBBLIGATORIA DI
 CONSERVAZIONE del §7 e il Riflesso della caccia alle uova restano pieni e
 prevalenti. In caso di dubbio su un'azione distruttiva si conserva; in caso di
 dubbio su come procedere con un'aggiunta si procede.
+
+## 12 · ASSET E LICENZE — NON SOLO CC0 (25/11/2026)
+
+Huntix **non limita la ricerca agli asset CC0**. Possono essere cercati,
+acquisiti, importati e distribuiti asset gratuiti con **qualsiasi licenza che
+autorizzi esplicitamente l'uso nel gioco e la distribuzione del prodotto
+finale**: CC0, CC BY (con attribuzione), MIT, licenze commerciali gratuite,
+licenze Unity Asset Store utilizzabili nel prodotto e licenze equivalenti.
+Una licenza non viene scartata solo perché non è CC0.
+
+Regole obbligatorie:
+
+1. Verificare sempre fonte autorevole, testo della licenza, autore, versione e
+   data di acquisizione **prima** dell'importazione; conservare URL e prova
+   della verifica nel report.
+2. Se la licenza richiede attribuzione, l'attribuzione va scritta integralmente
+   in `unity-project/Assets/ThirdPartyLicenses.md` e nel documentativo
+   `THIRD_PARTY_NOTICES.md` (nome, autore, URL, licenza, data, modifiche,
+   limitazioni, uso in Huntix).
+3. Rispettare ogni restrizione (uso non commerciale, divieto di redistribuzione
+   dei sorgenti, obbligo di conservare la nota, ecc.); in caso di dubbio
+   **non importare** l'asset e documentare il motivo.
+4. Non usare asset piratati, rubati, estratti da giochi commerciali, con licenza
+   che vieta l'uso previsto o che richiede pagamenti/abbonamenti non autorizzati.
+5. Ogni asset importato conserva il riflesso della caccia alle uova e il ponte
+   bidirezionale Obbligatorio del §3: se è un luogo o un oggetto visitabile,
+   deve poter ospitare un uovo con posizione registrata e visibile ad Android.
