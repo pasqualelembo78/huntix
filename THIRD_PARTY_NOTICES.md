@@ -505,3 +505,25 @@ modifiche e motivi degli scarti in `unity-project/Assets/ThirdPartyLicenses.md`.
   crediti dell'app e nel report `docs/HUNTIX_EVENTI_SPORTIVI_REPORT.md`.
 - Non importato lo stadio Animatics: download solo tramite carrello/account e
   licenza non verificabile in forma autorevole.
+
+---
+
+## Case visitabili OSM — 25/11/2026
+
+Per la casa visitabile associata all'edificio OSM `204023010` sono stati importati
+solo 43 modelli FBX del pack **Cozy Home Interiors** di 3dassets.dev, licenza
+**CC0 1.0** (https://3dassets.dev/packs/cozy-home-interiors,
+https://creativecommons.org/publicdomain/zero/1.0/). Nessuna attribuzione è
+richiesta. I GLB sorgente sono stati dequantizzati e convertiti in FBX dallo
+script ripetibile `scripts/house_assets_import.py`; i materiali sono stati
+ricreati con URP/Lit. Dettagli completi, URL, scarti e modifiche:
+`unity-project/Assets/ThirdPartyLicenses.md` e
+`docs/HUNTIX_CASE_VISITABILI_REPORT.md`.
+
+**Non importati**: A DOLLHOUSE e B House Interior (download bloccato da account
+Unity Asset Store, nessun bypass), C Cozy Interiors+SENDU (scaricato ma richiede
+Unity 6000.6+/URP 17.6+, incompatibile con Unity 2022.3; licenza gratuita
+personalizzata, non CC0), Quaternius Ultimate House Interior (quota Google Drive
+esaurita), KayKit Furniture Bits (checkout con dati personali obbligatori),
+Poly Pizza/OpenGameArt (licenze non verificabili). Nessun asset piratato, nessun
+pagamento, nessun account usato per aggirare un download.
