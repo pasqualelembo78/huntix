@@ -293,6 +293,17 @@ object Bridge {
                 val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
                 CityStateSync.onShopStyleChanged(ctx, jsonData)
             }
+            // ── Eventi sportivi: partita/corsa con fasi, posizione e classifica.
+            //    Stesso mirror CityStateSync, merge per timestamp. ──
+            "VenueEventChanged" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onVenueEvent(ctx, jsonData)
+            }
+            // ── Evento ambientale applicato alla simulazione (meteo). ──
+            "EnvironmentalEventApplied" -> {
+                val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+                CityStateSync.onEnvironmentalEvent(ctx, jsonData)
+            }
             // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
             //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
             "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)

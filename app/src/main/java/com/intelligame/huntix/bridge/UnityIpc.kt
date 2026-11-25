@@ -66,6 +66,9 @@ object UnityIpc {
         "UniversalInteriorVisited",
         // Switch A/B dei negozi (Unity -> app): sistema Huntix o prefabbricato CC0.
         "ShopStyleChanged",
+        // Eventi sportivi/ambientali: stato del ciclo e meteo applicato alla
+        // simulazione (mirror nello stesso pref CityStateSync).
+        "VenueEventChanged", "EnvironmentalEventApplied",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
     )
 

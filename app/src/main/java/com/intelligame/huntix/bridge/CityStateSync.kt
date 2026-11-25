@@ -30,6 +30,8 @@ object CityStateSync {
     private const val KEY_SHOP_ACTIVITY = "city_shop_activity_v1"
     private const val KEY_UNIVERSAL_INTERIORS = "city_universal_interiors_v1"
     private const val KEY_SHOP_STYLE = "city_shop_style_v1"
+    private const val KEY_VENUE_EVENT = "city_venue_event_v1"
+    private const val KEY_ENV_EVENT = "city_env_event_v1"
 
     // ── persistenza snapshot ────────────────────────────────────
 
@@ -194,6 +196,81 @@ object CityStateSync {
         }
     }
 
+    // ── eventi sportivi / ambientali ────────────────────────────
+
+    /** Evento sportivo (Unity → app): conserva solo lo stato più recente.
+     *  Nessun premio, nessuna valuta: è un mirror di stato e posizione. */
+    fun onVenueEvent(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val incoming = JSONObject(json)
+            val ts = incoming.optLong("tsMt", 0L)
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val local = try {
+                JSONObject(prefs.getString(KEY_VENUE_EVENT, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            if (ts <= local.optLong("tsMt", 0L)) return
+            val value = JSONObject()
+            value.put("kind", incoming.opt("kind")?.toString() ?: "Stadio")
+            value.put("phase", incoming.opt("phase")?.toString() ?: "Inattivo")
+            value.put("detail", incoming.optString("detail", ""))
+            value.put("lat", incoming.optString("lat", "0"))
+            value.put("lng", incoming.optString("lng", "0"))
+            value.put("tsMt", ts)
+            prefs.edit().putString(KEY_VENUE_EVENT, value.toString()).apply()
+            AppLog.i(TAG, "evento sportivo: ${value.opt("kind")}/${value.opt("phase")}")
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onVenueEvent failed: ${e.message}")
+        }
+    }
+
+    fun getVenueEvent(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_VENUE_EVENT, "{}") ?: "{}"
+        } catch (e: Exception) { "{}" }
+    }
+
+    /** Lo snapshot usa interi per kind/phase: il merge non li converte e non
+     *  distrugge uno stato locale più recente. */
+    private fun mergeVenueSnapshot(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val incoming = JSONObject(json)
+            val ts = incoming.optLong("tsMt", 0L)
+            if (ts <= 0L) return
+            val prefs = context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+            val local = try {
+                JSONObject(prefs.getString(KEY_VENUE_EVENT, "{}") ?: "{}")
+            } catch (e: Exception) { JSONObject() }
+            if (ts > local.optLong("tsMt", 0L)) {
+                prefs.edit().putString(KEY_VENUE_EVENT, incoming.toString()).apply()
+            }
+        } catch (e: Exception) {
+            AppLog.w(TAG, "mergeVenueSnapshot failed: ${e.message}")
+        }
+    }
+
+    /** Meteo applicato alla simulazione: ultimo evento noto, con timestamp. */
+    fun onEnvironmentalEvent(context: Context, json: String) {
+        if (json.isBlank()) return
+        try {
+            val value = JSONObject(json)
+            value.put("ts", System.currentTimeMillis())
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .edit().putString(KEY_ENV_EVENT, value.toString()).apply()
+        } catch (e: Exception) {
+            AppLog.w(TAG, "onEnvironmentalEvent failed: ${e.message}")
+        }
+    }
+
+    fun getEnvironmentalEvent(context: Context): String {
+        return try {
+            context.getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                .getString(KEY_ENV_EVENT, "{}") ?: "{}"
+        } catch (e: Exception) { "{}" }
+    }
+
     // ── profilo generale ────────────────────────────────────────
 
     /** Copia i riepiloghi citta nello PPlayerProfile unificato (così la Home e
@@ -253,6 +330,7 @@ object CityStateSync {
             mergeUniversalSnapshot(context, j.optString("universalInteriors", ""))
             // Switch negozio A/B: lo specchio segue il timestamp dello snapshot.
             mergeShopStyleSnapshot(context, j.optString("shopStyle", ""))
+            mergeVenueSnapshot(context, j.optString("venueEventState", ""))
             // Casa MiCittà (nome|lat|lng|garage|garagemodel|stanze): il profilo
             // conserva il riepilogo completo per il sync bidirezionale.
             val home = j.optString("home", "")
@@ -358,6 +436,10 @@ object CityStateSync {
             JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
         } catch (e: Exception) { false })
         report.put("shopStyleSnapshot", j.optString("shopStyle", "").isNotBlank())
+        report.put("venueEvent", try {
+            JSONObject(getVenueEvent(context)).optString("phase", "")
+        } catch (e: Exception) { "" })
+        report.put("venueEventSnapshot", j.optString("venueEventState", "").isNotBlank())
         report.put("money", money)
         report.put("profilePeople", PlayerProfileManager.myProfile?.cityPeopleKnown ?: 0)
         report.put("profileEggDex", PlayerProfileManager.myProfile?.cityEggDexCount ?: 0)
