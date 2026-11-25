@@ -329,6 +329,7 @@ namespace UnityEngine
         public void SetInt(string n, int v) {} public int GetInt(string n) => 0;
         public void EnableKeyword(string k) {} public void DisableKeyword(string k) {}
         public void SetTexture(string n, Texture t) {}
+        public Texture mainTexture { get; set; }
         public void SetTextureScale(string n, Vector2 v) {}
         public void SetTextureOffset(string n, Vector2 v) {}
         public Texture GetTexture(string n) => null;
@@ -657,6 +658,8 @@ namespace UnityEngine
         public static void Save() {}
     }
 
+    public enum AudioRolloffMode { Logarithmic, Linear, Custom }
+
     public class AudioSource : Behaviour
     {
         public AudioClip clip { get; set; }
@@ -664,9 +667,13 @@ namespace UnityEngine
         public bool loop { get; set; }
         public float volume { get; set; }
         public float spatialBlend { get; set; }
+        public float minDistance { get; set; }
         public float maxDistance { get; set; }
+        public AudioRolloffMode rolloffMode { get; set; }
+        public bool isPlaying { get; set; }
         public void Play() {}
         public void Stop() {}
+        public void PlayOneShot(AudioClip clip) {}
         public void PlayOneShot(AudioClip clip, float volumeScale) {}
     }
 
