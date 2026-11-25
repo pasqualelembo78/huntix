@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,6 +23,19 @@ namespace City.OSM
         /// <summary>Byte di tile effettivamente letti (cache o rete) in questa
         /// sessione di citta': alimenta l'indicatore KB/MB dello splash.</summary>
         public static long TotalBytes;
+
+        // ── Prefetch in memoria SOLO da cache disco ───────────────────────
+        // Il World Streaming legge le tile vicine/prima di un teleport su un
+        // thread di background: nessuna richiesta di rete, nessun JSON tenuto
+        // per sempre. Le voci sono poche (8 file = 4 tile graph+geo) e vengono
+        // espulse in order LRU o quando Android segnala poca memoria.
+        private const int MaxPrefetchedFiles = 8;
+        private static readonly Dictionary<string, string> _prefetched =
+            new Dictionary<string, string>();
+        private static readonly LinkedList<string> _prefetchOrder =
+            new LinkedList<string>();
+
+        public static int PrefetchCount { get { return _prefetched.Count; } }
 
         // Registra il persistentDataPath verso Android UNA volta: il preloader
         // di avvio dell'app (CityTilePreloader) scrive le tile ESATTAMENTE
@@ -92,8 +106,83 @@ namespace City.OSM
         public static string TileGeoCachePath(string key) =>
             CachePath(key, ".v" + CacheVersion + ".geo.json");
 
+        /// <summary>True se la geo della tile e' gia' su disco (nessuna rete).</summary>
+        public static bool HasCachedGeo(string tileKey)
+        {
+            try { return File.Exists(TileGeoCachePath(tileKey)); }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>JSON gia' prefetchato in memoria, per skyline/pronto teleport.</summary>
+        public static bool TryGetGeoJson(string tileKey, out string json)
+        {
+            return _prefetched.TryGetValue(TileGeoCachePath(tileKey), out json);
+        }
+
+        /// <summary>
+        /// Legge graph+geo di UNA tile dalla cache su thread di background.
+        /// Se il file non c'e' non succede nulla: MAI rete da questo percorso.
+        /// </summary>
+        public static IEnumerator PrefetchSector(string tileKey)
+        {
+            if (string.IsNullOrEmpty(tileKey)) yield break;
+            string[] paths = { TileGraphCachePath(tileKey), TileGeoCachePath(tileKey) };
+            for (int i = 0; i < paths.Length; i++)
+            {
+                string path = paths[i];
+                if (_prefetched.ContainsKey(path)) continue;
+                bool exists;
+                try { exists = File.Exists(path); }
+                catch (Exception) { exists = false; }
+                if (!exists) continue;
+                var read = Task.Run(() => ReadSafe(path));
+                yield return new WaitUntil(() => read.IsCompleted);
+                string json = read.Result;
+                if (json != null) Remember(path, json);
+            }
+        }
+
+        private static void Remember(string path, string json)
+        {
+            if (_prefetched.ContainsKey(path))
+            {
+                _prefetchOrder.Remove(path);
+                _prefetched.Remove(path);
+            }
+            _prefetched[path] = json;
+            _prefetchOrder.AddLast(path);
+            while (_prefetched.Count > MaxPrefetchedFiles && _prefetchOrder.Count > 0)
+            {
+                string oldest = _prefetchOrder.First.Value;
+                _prefetchOrder.RemoveFirst();
+                _prefetched.Remove(oldest);
+            }
+        }
+
+        /// <summary>Riduce la memoria tenuta dal prefetch (device low-memory).</summary>
+        public static void TrimPrefetch(int keep)
+        {
+            if (keep < 0) keep = 0;
+            while (_prefetched.Count > keep && _prefetchOrder.Count > 0)
+            {
+                string oldest = _prefetchOrder.First.Value;
+                _prefetchOrder.RemoveFirst();
+                _prefetched.Remove(oldest);
+            }
+        }
+
         private static IEnumerator Fetch(string cacheFile, string url, Action<string> parse)
         {
+            // Prefetch del World Streaming: evita una lettura disco sincrona
+            // quando la tile e' gia' in memoria (teleport/prefetch direzionale).
+            string prefetched;
+            if (_prefetched.TryGetValue(cacheFile, out prefetched))
+            {
+                CountBytes(prefetched);
+                parse(prefetched);
+                yield break;
+            }
+
             // Cache-first ma con I/O ASYNC su thread di background: le tile
             // geo di zone dense arrivano a molti MB; leggerle/scriverle sul
             // main thread causava frame hitch nel bel mezzo dello streaming.

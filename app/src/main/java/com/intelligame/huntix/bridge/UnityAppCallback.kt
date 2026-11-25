@@ -106,6 +106,14 @@ class UnityAppCallback : IUnityCallback.Stub() {
                     ""
                 }
 
+                // ── World Streaming: stato settori, prefetch e memoria device ──
+                "getWorldStreamingStatus" -> StoreUnityBridge.getWorldStreamingStatus()
+                "requestWorldSector" -> {
+                    StoreUnityBridge.requestWorldSector(a.optString(0, ""))
+                    ""
+                }
+                "getDeviceMemoryInfo" -> StoreUnityBridge.getDeviceMemoryInfo()
+
                 // ── Snapshot città (uova della crescita incluse) ──
                 "getCityStateSync" -> StoreUnityBridge.getCityStateSync()
                 "checkCityStateSync" -> StoreUnityBridge.checkCityStateSync()

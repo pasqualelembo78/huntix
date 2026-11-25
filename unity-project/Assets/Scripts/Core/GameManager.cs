@@ -168,6 +168,13 @@ namespace Huntix.Core
             OfflinePackBridge.OnStatusFromAndroid(json);
         }
 
+        /// <summary>Android -> Unity: stato dei settori visitati e richiesta di
+        /// prefetch del World Streaming (nessun dato di profilo viene toccato).</summary>
+        public void OnWorldStreamingStatus(string json)
+        {
+            WorldStreamingBridge.OnStatusFromAndroid(json);
+        }
+
         // UnitySendMessage passa sempre un unico parametro stringa.
         // Supporta due formati:
         //   1) JSON: {"action":"setMode","mode":"..."} (inviato da BridgeActivity)

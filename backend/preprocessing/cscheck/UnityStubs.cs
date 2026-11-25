@@ -66,6 +66,7 @@ namespace UnityEngine
         public string ToString(string format) => ""; }
 
         [Serializable] public struct Vector2Int { public int x, y;
+        public static Vector2Int zero => new Vector2Int(0, 0);
         public Vector2Int(int x, int y) { this.x = x; this.y = y; }
         public override bool Equals(object o) => o is Vector2Int v && v.x == x && v.y == y;
         public override int GetHashCode() => x * 397 ^ y;
@@ -637,10 +638,13 @@ namespace UnityEngine
     public class TooltipAttribute : Attribute { public TooltipAttribute(string t) {} }
     public class HideInInspector : Attribute { }
     public static class Time { public static float time => 0f; public static float deltaTime => 0f; public static float timeScale { get; set; } public static float unscaledDeltaTime => 0f; public static float unscaledTime => 0f; public static float realtimeSinceStartup => 0f; public static float fixedDeltaTime => 0.02f; public static int frameCount => 0; }
+    public class AsyncOperation { public bool isDone => true; public float progress => 1f;
+        public bool allowSceneActivation { get; set; } }
     public static class Resources { public static T Load<T>(string p) where T : Object => default(T);
         public static T[] LoadAll<T>(string p) where T : Object => new T[0];
         public static Object[] LoadAll(string p, Type t) => new Object[0];
-        public static T GetBuiltinResource<T>(string p) where T : Object => default(T); }
+        public static T GetBuiltinResource<T>(string p) where T : Object => default(T);
+        public static AsyncOperation UnloadUnusedAssets() => new AsyncOperation(); }
     public static class JsonUtility { public static T FromJson<T>(string json) => default(T);
         public static string ToJson(object obj) => null; }
     public class TextAsset : Object { public string text { get; set; } }
@@ -728,20 +732,17 @@ namespace UnityEngine.SceneManagement
     using System;
     public struct Scene { public string name => null; public bool isLoaded => false; public bool IsValid() => false; }
     public enum LoadSceneMode { Single, Additive }
-    public class AsyncOperation
-    {
-        public bool isDone { get; set; }
-        public float progress { get; set; }
-        public bool allowSceneActivation { get; set; }
-    }
+    // In Unity l'operazione asincrona e' UnityEngine.AsyncOperation: non
+    // dichiararne una seconda qui o diventa ambigua nei file che usano
+    // `using UnityEngine; using UnityEngine.SceneManagement;`.
     public class SceneManager
     {
         public static event Action<Scene, LoadSceneMode> sceneLoaded;
         public static Scene GetActiveScene() => new Scene();
         public static void LoadScene(string name) {}
         public static void LoadScene(int index) {}
-        public static AsyncOperation LoadSceneAsync(string sceneName) => new AsyncOperation();
-        public static AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode) => new AsyncOperation();
+        public static UnityEngine.AsyncOperation LoadSceneAsync(string sceneName) => new UnityEngine.AsyncOperation();
+        public static UnityEngine.AsyncOperation LoadSceneAsync(string sceneName, LoadSceneMode mode) => new UnityEngine.AsyncOperation();
     }
 }
 

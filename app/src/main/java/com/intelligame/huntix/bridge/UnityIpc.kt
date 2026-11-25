@@ -72,6 +72,10 @@ object UnityIpc {
         // Eventi sportivi/ambientali: stato del ciclo e meteo applicato alla
         // simulazione (mirror nello stesso pref CityStateSync).
         "VenueEventChanged", "EnvironmentalEventApplied",
+        // World Streaming: catalogo pronto e ingresso in un settore. Devono
+        // girare nel processo app perche' li' vivono i pref dedicati del mirror
+        // (nessun tocco a profilo/inventario/veicoli/proprieta').
+        "WorldStreamingReady", "WorldSectorChanged",
         "CityStateSync", "CityStateCheck", "GrowthStateSync", "GiftClaimed"
     )
 

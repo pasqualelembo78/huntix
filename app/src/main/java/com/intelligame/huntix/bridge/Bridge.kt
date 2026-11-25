@@ -310,6 +310,10 @@ object Bridge {
                 val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
                 CityStateSync.onEnvironmentalEvent(ctx, jsonData)
             }
+            // ── World Streaming: catalogo pronto e ingresso in un settore.
+            //    Mirror in pref DEDICATI: nessun tocco a inventario/progressi. ──
+            "WorldStreamingReady" -> StoreUnityBridge.onWorldStreamingReady(jsonData)
+            "WorldSectorChanged" -> StoreUnityBridge.onWorldSectorChanged(jsonData)
             // ── Growth (crescita fisiologica) Unity→Android: Unity ha applicato
             //    l'aspetto dal livello XP; lo notifica al profilo (log/mirror). ──
             "GrowthStateSync" -> StoreUnityBridge.onGrowthStateSync(jsonData)

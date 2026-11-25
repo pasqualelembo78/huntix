@@ -825,6 +825,9 @@ private const float TerrainPhysxTimeoutS = 15f;
             CoordinateConverter.Init(lat, lng);
             if (Manager != null)
             {
+                // World Streaming: prepara il settore di destinazione PRIMA di
+                // buttare i chunk correnti (prefetch solo da cache disco).
+                WorldStreamingManager.NotifyTeleport(lat, lng);
                 // UnloadAll distrugge i collider dei chunk: senza ponte il
                 // player ricadrebbe nel vuoto durante il rebuild
                 EnsureSpawnBridge();

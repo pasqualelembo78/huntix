@@ -72,6 +72,11 @@ namespace City.OSM
         private readonly HashSet<Vector2Int> _inFlight = new HashSet<Vector2Int>();
         private readonly List<Vector2Int> _pending = new List<Vector2Int>();
 
+        /// <summary>Direzione di marcia (chunk) comunicata dal World Streaming:
+        /// il prefetch carica prima i chunk davanti al player. Se nessun hint e'
+        /// presente il comportamento resta EXATTAMENTE "piu' vicino prima".</summary>
+        private Vector2Int _streamHint;
+
         private class TileBundle { public TileGraphDoc graph; public TileGeoDoc geo; public int refs; }
         private readonly Dictionary<string, TileBundle> _tiles =
             new Dictionary<string, TileBundle>();
@@ -191,6 +196,11 @@ namespace City.OSM
             // UnloadAll() (teletrasporto) puo' fermare le build in volo senza
             // uccidere definitivamente il loop (il blu-screen dopo CENTRA GPS).
             EnsureStreamingLoop();
+
+            // World Streaming additivo: il manager dei settori si aggancia a
+            // QUESTO GameObject, senza modificare la scena ne' la logica di
+            // caricamento dei chunk qui sotto (LoadRadius/UnloadRadius intatti).
+            WorldStreamingManager.Ensure(this);
         }
 
         /// <summary>Avvia il tick loop se non gia' attivo. Chiamato da Start e
@@ -422,13 +432,37 @@ namespace City.OSM
                 }
             }
             if (_pending.Count > 1)
-                _pending.Sort((a, b) => Dist2(a, cur).CompareTo(Dist2(b, cur)));
+                SortPending(cur);
         }
 
         private static int Dist2(Vector2Int a, Vector2Int b)
         {
             int dx = a.x - b.x, dz = a.y - b.y;
             return dx * dx + dz * dz;
+        }
+
+        /// <summary>Priorita' di build: distanza dal player con un piccolo
+        /// bonus per i chunk nella direzione di marcia. L'hint e' limitato a
+        /// [-1,1] e il bonus e' 3 celle: non puo' far caricare un chunk piu'
+        /// lontano di 2 celle davanti a uno piu' vicino, quindi il mondo
+        /// resta compatto anche durante uno spostamento rapido.</summary>
+        private int ChunkPriority(Vector2Int c, Vector2Int cur)
+        {
+            int dx = c.x - cur.x, dz = c.y - cur.y;
+            int ahead = dx * _streamHint.x + dz * _streamHint.y;
+            return dx * dx + dz * dz - 3 * ahead;
+        }
+
+        private void SortPending(Vector2Int cur)
+        {
+            _pending.Sort((a, b) => ChunkPriority(a, cur).CompareTo(ChunkPriority(b, cur)));
+        }
+
+        /// <summary>Aggiornato dal World Streaming (posizione + direzione).</summary>
+        public void SetDirectionalHint(Vector2Int dir)
+        {
+            _streamHint = new Vector2Int(Mathf.Clamp(dir.x, -1, 1),
+                                         Mathf.Clamp(dir.y, -1, 1));
         }
 
         /// <summary>Pompa di costruzione con budget per frame (chiamata da Update).</summary>
@@ -453,7 +487,7 @@ namespace City.OSM
                 }
                 GeoCoord g = WorldOrigin.ToGeo(target.position);
                 Vector2Int cur = CityGrid.ChunkIndexOf(g.lat, g.lng);
-                _pending.Sort((a, b) => Dist2(a, cur).CompareTo(Dist2(b, cur)));
+                SortPending(cur);
             }
 
             int building = _pending.Count;

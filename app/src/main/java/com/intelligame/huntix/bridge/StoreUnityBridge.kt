@@ -211,6 +211,55 @@ object StoreUnityBridge {
         return graph.exists() && graph.length() > 0L && geo.exists() && geo.length() > 0L
     }
 
+    // ── World Streaming (Unity <-> Android) ───────────────────────────────
+
+    private fun appContext() =
+        UnityPlayer.currentActivity?.applicationContext ?: UnityAppContext.context
+
+    /** Stato dei settori visitati e delle richieste di prefetch. */
+    @JvmStatic
+    fun getWorldStreamingStatus(): String {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("getWorldStreamingStatus", JSONArray().toString())
+        }
+        val ctx = appContext() ?: return "{}"
+        return WorldStreamingMirror.statusJson(ctx)
+    }
+
+    /** Unity chiede all'app di ricordare la tile che sta per caricare. */
+    @JvmStatic
+    fun requestWorldSector(key: String) {
+        if (UnityIpc.isUnity) {
+            UnityIpc.callApp("requestWorldSector", JSONArray().put(key).toString())
+            return
+        }
+        val ctx = appContext() ?: return
+        WorldStreamingMirror.requestSector(ctx, key)
+    }
+
+    /** Soglia di memoria per ridurre il dettaglio dello skyline lontano. */
+    @JvmStatic
+    fun getDeviceMemoryInfo(): String {
+        if (UnityIpc.isUnity) {
+            return UnityIpc.callApp("getDeviceMemoryInfo", JSONArray().toString())
+        }
+        val ctx = appContext() ?: return "{\"low\":false}"
+        return WorldStreamingMirror.memoryInfo(ctx)
+    }
+
+    /** Eventi Unity -> app instradati da Bridge (APP_EVENTS): pref dedicati. */
+    @JvmStatic
+    fun onWorldStreamingReady(json: String) {
+        val ctx = appContext() ?: return
+        WorldStreamingMirror.onReady(ctx, json)
+    }
+
+    @JvmStatic
+    fun onWorldSectorChanged(json: String) {
+        val ctx = appContext() ?: return
+        WorldStreamingMirror.onSectorChanged(ctx, json)
+    }
+
     /** Prefs lette da Unity (UnityBridge.GetSharedPreference): in :unity non
      *  esistono, quindi la lettura viene delegata al processo app. */
     @JvmStatic
