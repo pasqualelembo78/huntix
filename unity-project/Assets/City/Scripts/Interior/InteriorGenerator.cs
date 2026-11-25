@@ -286,6 +286,21 @@ namespace City.Interior
             // Arredo "vissuto" dei negozi (cassiera, clienti, bancone attivo):
             // modulo aggiuntivo, opera solo sul Floor_0 già generato sopra.
             ShopInteriorBuilder.Decorate(parent, type, shop, w, d, floorH, floors);
+
+            // Strato arredi A/B (switch nel menu hamburger):
+            //  - Huntix (default): interno UNIVERSALE procedurale, pianta con due
+            //    zone, varchi collegati, contenitori uovo e arredi CC0;
+            //  - Prefabbricato: vero prefab CC0 pronto, istanziato nello stesso
+            //    Floor_0. Nessuno dei due sistemi viene eliminato e il livello
+            //    attività (cassiera/clienti/ShopState) resta identico in entrambi.
+            // Nessun tocco a geo/graph: CacheVersion resta 5.
+            string buildingName = Entrance != null ? Entrance.buildingName : "";
+            if (ShopStyle.UsePrefab)
+                ShopPrefabInstaller.Install(parent, type, shop, w, d, floorH,
+                    floors, buildingName);
+            else
+                UniversalInteriorBuilder.Build(parent, type, shop, w, d, floorH,
+                    floors, buildingName);
             Log("BuildInterior DONE");
         }
 

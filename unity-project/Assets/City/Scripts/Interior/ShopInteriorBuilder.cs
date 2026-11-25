@@ -324,7 +324,9 @@ namespace City.Interior
             Prop(root, "Furniture/bathroomSink", "Lavatesta",
                 new Vector3(w * 0.34f, 0.55f, -d * 0.30f), new Vector3(0.9f, 1.1f, 0.6f), 90f,
                 new Color(0.88f, 0.90f, 0.92f));
-            Prop(root, "Furniture/credenza", "CredenzaNegozio",
+            // Il vecchio percorso della credenza non esiste nel kit:
+            // usa il modello CC0 reale, con fallback a cubo se manca.
+            Prop(root, "Furniture/cabinetBedDrawer", "CredenzaNegozio",
                 new Vector3(w * 0.36f, 0.45f, d * 0.25f), new Vector3(1.4f, 0.9f, 0.6f), 0f,
                 new Color(0.58f, 0.40f, 0.26f));
         }

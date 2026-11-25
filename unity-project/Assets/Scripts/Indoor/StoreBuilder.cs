@@ -517,7 +517,7 @@ namespace Huntix.Indoor
         // ── Asset-set non-Kenney (CuteStore) ──────────────────────────────
 
         /// <summary>
-        /// Se useCuteStore carica il prefab da Resources/CuteStore/{name} se disponibile,
+        /// Se useCuteStore carica il prefab da Resources/CuteStore/Prefabs/{name} se disponibile,
         /// altrimenti genera a runtime una primitiva low-poly colorata (palette non-Kenney).
         /// Se !useCuteStore carica da Resources/KenneyMiniMarket/{name}.
         /// </summary>
@@ -530,7 +530,10 @@ namespace Huntix.Indoor
                 return RuntimePrimitive(name, color, scale);
             }
 
-            var cached = Resources.Load<GameObject>("CuteStore/" + name);
+            // I prefab CuteStore importati stanno in Resources/CuteStore/Prefabs/:
+            // il vecchio percorso "CuteStore/" non li trovava mai e piombava
+            // sempre sulla primitiva runtime (report §23.1).
+            var cached = Resources.Load<GameObject>("CuteStore/Prefabs/" + name);
             if (cached != null) return cached;
 
             return RuntimePrimitive(name, color, scale);

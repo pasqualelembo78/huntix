@@ -215,6 +215,18 @@ namespace City.Interior
 
             Log("Entrato (in-place, 3a persona): " + e.buildingName);
             ContainerEgg.Ensure();
+
+            // Interni universali: registra la visita con la chiave geo-stabile
+            // del locale (snapshot Android + evento UniversalInteriorVisited).
+            Transform interiorRoot = ActiveInteriorRoot;
+            if (interiorRoot == null && currentEntrance != null)
+            {
+                var genHere = currentEntrance.GetComponentInParent<InteriorGenerator>();
+                if (genHere != null) interiorRoot = genHere.transform;
+            }
+            var marker = UniversalInteriorBuilder.FindMarker(interiorRoot);
+            if (marker != null) UniversalInteriorState.MarkVisited(marker.key, marker.kind);
+
             City.OSM.ColliderProbe.ProbeAt(g.player.transform.position, "inside");
         }
 
@@ -272,7 +284,7 @@ namespace City.Interior
             if (g != null && g.player != null && gen != null)
             {
                 Vector3 pos = gen.transform.TransformPoint(gen.PrefabExitLocal);
-                SetPlayerPos(pos, gen.transform.rotation, g);
+                InteriorTeleport.Move(pos, gen.transform.rotation, g);
                 gen.SetPrefabExteriorVisible(true); // esterno di nuovo visibile
             }
 
@@ -289,18 +301,6 @@ namespace City.Interior
                 yield return new WaitForSeconds(fader.duration);
                 fader.gameObject.SetActive(false);
             }
-        }
-
-        private static void SetPlayerPos(Vector3 pos, Quaternion rot, Game g)
-        {
-            var player = g.player;
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            player.transform.position = pos;
-            player.transform.rotation = rot;
-            if (cc != null) cc.enabled = true;
-            player.Stop();
-            if (g.rig != null) g.rig.SetYaw(rot);
         }
 
         /// <summary>Uscita esplicita (pulsante ESCI): riattraversa la soglia
@@ -413,11 +413,9 @@ namespace City.Interior
             Transform root = ActiveInteriorRoot ?? gen.transform;
             Vector3 pos = gen.GetStairPosition(root, next);
 
-            var cc = g.player.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            g.player.transform.position = pos;
-            if (cc != null) cc.enabled = true;
-            g.player.Stop();
+            // Stesso helper di teleporto di porte e varchi: CC spento durante
+            // lo spostamento e guard anti-NaN, senza tre copie divergenti.
+            InteriorTeleport.Move(pos, g.player.transform.rotation, g);
 
             currentFloor = next;
             Log("Cambio piano: " + currentFloor + " (" + totalFloors + " piani)");

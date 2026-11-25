@@ -214,7 +214,7 @@ namespace City.Interior
                 // dentro l'impronta, poco oltre la soglia, rivolto verso la stanza
                 Vector3 pos = gen.transform.TransformPoint(gen.PrefabEnterLocal);
                 Quaternion rot = gen.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
-                SetPlayerPos(pos, rot, g);
+                InteriorTeleport.Move(pos, rot, g);
 
                 if (mgr != null) mgr.MarkInside(this);
                 if (fader != null)
@@ -229,18 +229,6 @@ namespace City.Interior
             {
                 _enteringPrefab = false;
             }
-        }
-
-        private static void SetPlayerPos(Vector3 pos, Quaternion rot, Game g)
-        {
-            var player = g.player;
-            var cc = player.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            player.transform.position = pos;
-            player.transform.rotation = rot;
-            if (cc != null) cc.enabled = true;
-            player.Stop();
-            if (g.rig != null) g.rig.SetYaw(rot);
         }
 
         private void ApplyCameraOverride(bool active)
