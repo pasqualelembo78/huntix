@@ -320,6 +320,13 @@ namespace City.Interior
             if (Entrance != null && Entrance.osmId != 0L) visitId = Entrance.osmId;
             City.Interior.Visit.VisitInteriorDecorator.Decorate(parent, visitId,
                 type, shop, w, d, floorH, floors, buildingName);
+
+            // Livello ADDITIVO "casa vittoriana/TARDIS": una tasca enorme sotto
+            // il guscio, costruita solo per casa/appartamento. Il vecchio
+            // interno in-place resta identico; la porta ora apre anche la
+            // tasca con salone, lampadari, biblioteca e città interna.
+            City.Interior.Victorian.VictorianGrandInterior.Decorate(parent, type,
+                w, d, floorH, floors, buildingName);
             Log("BuildInterior DONE");
         }
 

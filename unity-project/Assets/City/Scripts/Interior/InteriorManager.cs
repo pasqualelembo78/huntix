@@ -74,6 +74,11 @@ namespace City.Interior
         {
             get
             {
+                // La tasca vittoriana è l'interno attivo finché il player è
+                // dentro: ContainerEgg deve cercare le uova nei suoi cassetti,
+                // non nel vecchio interno del guscio.
+                if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket)
+                    return City.Interior.Victorian.VictorianGrandInterior.ActiveRoot;
                 if (currentEntrance == null) return null;
                 var gen = currentEntrance.GetComponentInParent<InteriorGenerator>();
                 return gen != null ? gen.InteriorRoot : null;
@@ -232,14 +237,28 @@ namespace City.Interior
             City.Interior.Visit.VisitInteriorManager.OnEntered(e);
 
             City.OSM.ColliderProbe.ProbeAt(g.player.transform.position, "inside");
+
+            // Tasca vittoriana: se questa porta ha la casa enorme dentro,
+            // il player varca subito la soglia con lo stesso teleporto helper.
+            City.Interior.Victorian.VictorianGrandInterior.TryEnter(this, e);
         }
 
         public void MarkOutside(BuildingEntrance e)
         {
             if (!IsInside) return;
 
+            // Qualsiasi uscita (pulsante ESCI, trigger o fade prefab) mentre
+            // siamo nella tasca vittoriana deve riportare davanti alla porta
+            // reale: il normale flusso in-place/prefab non sa dove sia la tasca.
+            if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket)
+            {
+                City.Interior.Victorian.VictorianGrandInterior.Exit();
+                return;
+            }
+
             Game g = Game.Instance;
             City.Interior.Visit.VisitInteriorManager.OnExited(e);
+            City.Interior.Victorian.VictorianGrandInterior.ClearCamera();
 
             // Edificio PREFAB (Quaternius): uscita scenografata con fade nero
             // per ripristinare l'esterno e riportare il player fuori dalla soglia.
@@ -276,6 +295,7 @@ namespace City.Interior
         private IEnumerator ExitPrefabRoutine(BuildingEntrance e, Game g)
         {
             City.Interior.Visit.VisitInteriorManager.OnExited(e);
+            City.Interior.Victorian.VictorianGrandInterior.ClearCamera();
             IsInside = false;
             ActiveShop = null;
             ActiveVehicleZone = null;
@@ -345,6 +365,11 @@ namespace City.Interior
         {
             var g = Game.Instance;
             if (g == null || g.player == null) return;
+            // Dentro la tasca vittoriana il player è 1000 m sotto il guscio:
+            // il controllo geometrico normale lo crederebbe "fuori" e
+            // richiamerebbe MarkOutside dopo 0,35 s. La tasca ha il suo
+            // trigger di uscita, quindi qui si sospende solo finché è attiva.
+            if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket) return;
             Vector3 pos = g.player.transform.position;
 
             bool inside = false;
@@ -451,6 +476,10 @@ namespace City.Interior
                 Log("ingresso distrutto mentre dentro: reset stato");
                 MarkOutside(null);
             }
+
+            // Zone vittoriane: prima visita registrata nel diario Android
+            // con luogo testuale e coordinate della porta di casa.
+            City.Interior.Victorian.VictorianGrandInterior.Tick();
 
             if (!IsInside) return;
 

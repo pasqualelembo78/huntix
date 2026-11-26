@@ -175,3 +175,26 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
 - **Uso in Huntix e riflesso uova**: i mobili non hanno collider; la casa ha
   ora **4 nascondigli**, il quarto è `casa→cucina→cassetto-sendu` nel cassetto
   SENDU, con posizione registrata e bridge Android come gli altri tre.
+
+### Villa vittoriana «TARDIS» — riutilizzo degli stessi modelli SENDU (27/11/2026)
+
+- **Prefab**: `Assets/Resources/Villas/VillaVittorianaCompleta.prefab`, generato
+  dal baker editoriale `Assets/City/Editor/VillaPrefabBaker.cs` (solo editor,
+  non compilato nel player). Caricato a runtime con
+  `Resources.Load<GameObject>("Villas/VillaVittorianaCompleta")`.
+- **Modelli usati**: 57 reference a FBX SENDU già importati e licenziati sopra
+  (moduli `Shell`, arredi `Living`/`Office`/`Kitchen`, decorazioni `Decor`),
+  nessun nuovo download e nessun nuovo file sorgente del kit.
+- **Materiali**: ricreati in `Assets/Resources/Villas/Materials/` con shader
+  URP/Lit (crema, legno, rosso, verde, oro, pietra, vetro emissivo), coerentemente
+  con la licenza: i materiali/sorgenti del kit restano esclusi.
+- **Modifiche dichiarate**: i moduli architettonici 2 m sono scalati sugli assi
+  per comporre pareti e pavimenti della tasca 164 × 114 m; i mobili mantengono
+  scala uniforme e materiali SENDU; i figli `_LOD1`/`_LOD2` vengono disattivati
+  per evitare doppio disegno. Cinque `HouseEggSpot` sono stati aggiunti dal
+  baker sui contenitori della villa con gli stessi id storici
+  (`cassetto-lampadario`, `cassetto-biblioteca`, `credenza-pranzo`,
+  `vetrina-citta`, `fontana-piazzetta`).
+- **Attribuzione**: non richiesta dalla licenza SENDU («Credit is not required
+  but appreciated»); il credito è comunque riportato qui e nel testo integrale
+  `Assets/Resources/HouseInteriors/Sendu/README_models.txt`.

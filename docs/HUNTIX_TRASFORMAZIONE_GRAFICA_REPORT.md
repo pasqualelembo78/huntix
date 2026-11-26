@@ -1379,3 +1379,104 @@ identici; cambia solo il primo acquisto e il suo rimborso.
 Il flusso è coperto da guardie statiche e dalla compilazione: il QA su device
 deve confermare il primo acquisto a 0 €, il secondo a 900 € e la voce
 `prima casa gratis: usata` nelle aree globali dopo la vendita.
+
+## 35. Casa vittoriana «TARDIS»: piccola fuori, enorme dentro (27/11/2026)
+
+### 35.1 Richiesta e scelta di prodotto
+
+Entrando in casa il giocatore vedeva ancora l'arredo in-place ordinario. La
+richiesta era di una casa vittoriana con lampadari, salone e una dimensione
+interna molto maggiore di quella esterna: «da fuori minuscola, da dentro
+enorme, una specie di città».
+
+La soluzione è **additiva**: il guscio OSM, l'interno universale, i prefab
+Quaternius/SENDU e le case visitabili restano identici. Solo per gli edifici
+`house`/`apartment` viene costruita, in coda a `BuildInterior`, una tasca figlia
+del generatore 1000 m sotto il mondo: fuori la porta è sempre la stessa, dentro
+si apre un salone di 164 × 114 m con soffitti alti, colonnato, tre lampadari,
+biblioteca, sala da pranzo, vetrine, lampioni e una piazzetta con fontana che
+sembra una città vittoriana in miniatura. La tasca è disattivata finché non si
+entra, quindi non aggiunge costi di rendering alle città già popolose.
+
+Dopo la prima versione in primitive, su richiesta dell'utente («importante è
+che si tratta di una bella villa… un bel prefab completo») l'interno è stato
+sostituito da una **villa prefabbricata completa** composta con 57 modelli SENDU
+già importati e licenziati (`Shell`, `Living`, `Office`, `Kitchen`, `Decor`):
+pavimenti diversi per ambiente, pareti a due ordini con finestre e cornicioni,
+setti ad archi, colonnato, soffitto a cassettoni, camino monumentale, pianoforte,
+divani, librerie, scrivania con globo, tavoli da pranzo, facciate di negozi,
+lampioni, panchine, olivi e fontana in piazzetta. Il baker editoriale
+`Assets/City/Editor/VillaPrefabBaker.cs` crea il prefab in
+`Assets/Resources/Villas/VillaVittorianaCompleta.prefab` (1,2 MB, 5 uova,
+6 collider, 5 luci point, materiali URP dedicati); non fa parte del player.
+A runtime il prefab viene caricato una sola volta per tasca; se non è presente
+resta attivo il fallback primitivo, senza case vuote né uova duplicate.
+
+### 35.2 Riflesso della caccia alle uova e ponte bidirezionale
+
+Come da Mandato §4, ogni superficie nuova è anche un nascondiglio: cinque
+`HouseEggSpot` stabili nei cassetti del salone e della biblioteca, nella
+credenza della sala da pranzo, in una vetrina della città interna e nella vasca
+della fontana. Le uova usano il normale `EggController` (tipo `Edificio`), la
+rarità calcolata da seed stabile e il riempimento per prossimità di
+`ContainerEgg`: non esiste una seconda economia né un secondo inventario.
+
+| Direzione | Canale | Contenuto |
+|---|---|---|
+| Unity → Android | `CityGlobalActivity` (già in whitelist) | `area=scoperte`, azione e luogo testuale `città→casa→<chiave>→<zona>`, lat/lng della porta di casa, timestamp |
+| Unity → Android | `FeatureEggHidden` (già in whitelist) | uovo-indizio una tantum per ogni zona, emesso dal percorso canonico `GrantAuditEgg` |
+| Unity → Android | `HouseVisitChanged` / `foundContainerEggs` | chiavi di zone e uova già viste, nello snapshot `CityWorldSync` |
+| Android → Unity | `houseVisitState` e flag globali | dedup non distruttiva: dopo rebuild dei chunk o restore le uova non rinascono |
+
+Nessun nuovo evento bridge è stato aggiunto: la tasca riutilizza solo eventi già
+presenti in `UnityIpc.APP_EVENTS`.
+
+### 35.3 Modifiche ai file
+
+| File | Modifica |
+|---|---|
+| `Interior/Victorian/VictorianGrandInterior.cs` | Nuovo builder additivo: `VictorianPocket`, `VictorianZone`, `VictorianExit`, ingresso/uscita con `InteriorTeleport`, camera indoor dedicata, ticker zone, cinque uova e sei zone con chiavi stabili |
+| `Interior/Victorian.meta`, `VictorianGrandInterior.cs.meta` | GUID Unity delle nuove asset |
+| `Interior/InteriorGenerator.cs` | Chiamata in coda a `VisitInteriorDecorator.Decorate`, limitata a casa/appartamento e idempotente |
+| `Interior/InteriorManager.cs` | Ingresso all'attraversamento della porta, uscita dal trigger e dal pulsante `ESCI`, sospensione del controllo geometrico dentro la tasca, `ActiveInteriorRoot` puntato alla tasca per le uova |
+| `City/Editor/VillaPrefabBaker.cs` | Baker solo editor: compone la villa con 57 modelli SENDU, materiali URP, 6 collider, 5 luci, 5 contenitori uova e salva il prefab in `Resources` |
+| `Resources/Villas/VillaVittorianaCompleta.prefab` (+ `.meta`, materiali) | Villa completa spedita nell'APK: guscio, quattro ambienti, arredi, illuminazione, porta e nascondigli; 1.238.494 byte |
+| `VictorianGrandInterior.cs` (secondo passo) | `BuildVilla` carica il prefab e mantiene `BuildFallbackArchitecture`; `FinalizePocket` aggiunge a runtime il `UniversalContainerMarker` che Unity non serializza nei prefab, le 6 zone, le etichette e il trigger d'uscita (senza duplicare la porta del prefab) |
+| `backend/test_unity_victorian_interior.py` | 11 guardie statiche su dimensioni, arredi, innesto additivo, ingresso/uscita, uova con luogo, specchio Android, prefab SENDU e marker runtime |
+| `Assets/ThirdPartyLicenses.md` | Attribuzione/credito SENDU per la villa prefabbricata (licenza gratuita non CC0, credito non obbligatorio ma riportato) |
+
+Nessun builder, collider o sistema esistente è stato rimosso o disattivato.
+L'unico comportamento nuovo è che varcare la porta di una casa/apartamento
+apre anche la tasca; l'uscita riporta sempre davanti alla porta OSM reale.
+
+### 35.4 Verifiche
+
+- `python3 backend/test_unity_victorian_interior.py`: **11 test OK** (le 7
+  guardie della tasca più 4 sul prefab: presenza/caricamento, collider+luci+5
+  uova, marker runtime, mutual esclusività prefab/fallback).
+- `python3 -m unittest discover -s backend -p 'test_*.py'`: **364 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori, 214 warning preesistenti.
+- Baker eseguito con Unity 2022.3.52f1 in batchmode: `EXIT=0`, log
+  `[VillaPrefabBaker] prefab completo creato`, nessun modello mancante.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`: OK.
+- Build firmata finale: `SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 AUTH_MODE=api
+  SKIP_INSTALL=1 ./build_release.sh` → **BUILD SUCCESSFUL**, AAR Unity ricreato
+  con il prefab, APK `app/build/outputs/apk/release/app-release-signed.apk`;
+  SHA-256 `3ea97a1889e14660be2bd9e261e21d3e45ea4088b1b9ecb2ed2b274a3f61e6f9`.
+  Firma verificata con `apksigner` (schema v3, 1 firmatario, certificato Huntix).
+  Il nome del prefab è presente nei dati e nei metadati IL2CPP dell'AAR spedito.
+- `git diff --check`: pulito su sorgenti, test e documentazione; i file YAML
+  generati da Unity (prefab, `.mat`, `.meta`) contengono i consueti spazi finali
+  serializzati dall'editor. Il churn noto di `link.xml.meta`,
+  `PlayerLocomotion.controller` e `PlayerHero.prefab` è stato ripristinato e non
+  viene committato.
+
+### 35.5 Limiti di verifica
+
+Le guardie statiche e la compilazione coprono struttura, ponte e dedup, ma non
+sostituiscono il QA su device: resta da confermare che l'ingresso non faccia
+sbucare la camera dal salone (ora arredato con la villa SENDU), che il trigger
+di uscita riporti davanti alla porta e che le cinque uova del prefab compaiano
+nel diario «DOVE HO TROVATO» con le coordinate della casa. La resa estetica
+della villa (arredi, luci, fontana, città interna) va giudicata su device: le
+guardie statiche ne verificano la presenza, non la bellezza percepita.
