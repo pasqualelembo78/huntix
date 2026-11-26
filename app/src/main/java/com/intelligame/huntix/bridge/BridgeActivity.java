@@ -183,6 +183,20 @@ public class BridgeActivity extends UnityPlayerActivity {
                         }
                     }
                     j.put("cinematicFeatures", gfxFlags.toString());
+                    // Dettagli naturali: terzo gruppo di preferenze visive,
+                    // rimandato a Unity con chiave dedicata (huntix_veg_*).
+                    // Chi non ha ancora scelto non ha pref: Unity mantiene i
+                    // dettagli attivi di default.
+                    StringBuilder vegFlags = new StringBuilder();
+                    for (java.util.Map.Entry<String, ?> e : osPrefs.getAll().entrySet()) {
+                        String k = e.getKey();
+                        if (k.startsWith("huntix_veg_") && e.getValue() instanceof Boolean) {
+                            if (vegFlags.length() > 0) vegFlags.append(',');
+                            vegFlags.append(k.substring("huntix_veg_".length()))
+                                    .append(((Boolean) e.getValue()) ? "=1" : "=0");
+                        }
+                    }
+                    j.put("vegetationFeatures", vegFlags.toString());
                     // Fase 2 · consumabili: solo lo specchio dell'esca attiva e
                     // il numero di aromi disponibili. Nessun premio, nessun
                     // uovo generato su un ripristino passivo.

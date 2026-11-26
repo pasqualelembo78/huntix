@@ -720,6 +720,31 @@ class OsmCityBuilder(
                     position = Position(fx, 0.18f, fz)
                 })
             }
+
+            // Dettagli naturali additivi: ciuffi d'erba e sassi fra i fiori.
+            // Budget gia' esistente (MAX_NODES) e nessun collider: la AR non
+            // deve mai bloccare il passaggio davanti alle porte.
+            val grassCount = (fp.width * fp.depth / 400f).toInt().coerceIn(2, 8)
+            for (g in 0 until grassCount) {
+                if (currentNodeCount >= MAX_NODES - 2) break
+                val seed = (park.id.toInt() * 19 + g * 43) and 0x7FFFFFFF
+                val gx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.85f
+                val gz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.85f
+                val tuft = 0.16f + (seed % 6).toFloat() * 0.03f
+                addNode(CubeNode(engine, Size(0.03f, tuft, 0.03f), materialInstance = grassDetailMatInst).apply {
+                    position = Position(gx, tuft / 2f, gz)
+                    rotation = Position(0f, (seed % 180).toFloat(), 0f)
+                })
+            }
+            if (parkIdx % 2 == 0 && currentNodeCount < MAX_NODES - 2) {
+                val seed = (park.id.toInt() * 23) and 0x7FFFFFFF
+                val rx = fp.centerX + ((seed % 100).toFloat() / 100f - 0.5f) * fp.width * 0.6f
+                val rz = fp.centerZ + (((seed / 10) % 100).toFloat() / 100f - 0.5f) * fp.depth * 0.6f
+                val radius = 0.12f + (seed % 4).toFloat() * 0.04f
+                addNode(SphereNode(engine, radius, materialInstance = bushMatInst).apply {
+                    position = Position(rx, radius * 0.6f, rz)
+                })
+            }
         }
     }
 

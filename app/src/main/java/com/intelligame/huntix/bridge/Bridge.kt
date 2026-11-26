@@ -252,6 +252,9 @@ object Bridge {
             // ── Grafica cinematografica: preferenze visive opt-in
             //    (asfalto, facciate, lampioni, atmosfera, veicoli). ──
             "CinematicFeatureChanged" -> handleCinematicFeatureChanged(jsonData)
+            // ── Vegetazione e dettagli naturali di tutto il mondo: preferenze
+            //    (erba/fiori, cespugli/rocce, alberi, luci) con ritorno in setMode. ──
+            "VegetationFeatureChanged" -> handleVegetationFeatureChanged(jsonData)
             // ── Fase 2 · consumabili: oggetto usato indoor in Miacittà.
             //    Android consuma la quantità solo se corrisponde a un aroma
             //    noto, e registra luogo/coordinate nello stesso diario. ──
@@ -466,6 +469,27 @@ object Bridge {
         com.intelligame.huntix.AppLog.i(
             "HuntixSync",
             "Grafica cinematografica: $id on=${j.optBoolean("on", false)} " +
+                "detail=${j.optString("detail", "")}"
+        )
+        if (j.optBoolean("egg", false)) handleFeatureEggHidden(jsonData)
+    }
+
+    /**
+     * Dettagli naturali (prati, cespugli, alberi di parco, luci). Prefisso
+     * dedicato huntix_veg_: non interferisce con huntix_gfx_ ne' huntix_os_.
+     * Lo stato torna a Unity nel JSON di setMode come vegetationFeatures.
+     * Nessun premio: l'evento puo' portare solo l'indizio uovo posizionale.
+     */
+    private fun handleVegetationFeatureChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val id = j.optString("feature", "")
+        if (id.isBlank()) return
+        val ctx = UnityAppContext.context ?: return
+        val prefs = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("huntix_veg_$id", j.optBoolean("on", true)).apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Vegetazione: $id on=${j.optBoolean("on", true)} " +
                 "detail=${j.optString("detail", "")}"
         )
         if (j.optBoolean("egg", false)) handleFeatureEggHidden(jsonData)

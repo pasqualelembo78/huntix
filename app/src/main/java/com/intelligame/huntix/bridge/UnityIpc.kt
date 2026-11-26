@@ -46,6 +46,9 @@ object UnityIpc {
         // Grafica cinematografica: secondo gruppo di preferenze visive, con
         // ritorno nel JSON di setMode come cinematicFeatures (huntix_gfx_*).
         "CinematicFeatureChanged",
+        // Vegetazione e dettagli naturali: terzo gruppo di preferenze visive,
+        // ritorno nel JSON di setMode come vegetationFeatures (huntix_veg_*).
+        "VegetationFeatureChanged",
         // Fase 2 · consumabili: Unity segnala l'oggetto usato indoor; Android
         // consuma la quantita' e registra luogo/coordinate nel diario.
         "ConsumableUsed",
