@@ -918,3 +918,105 @@ software (SwiftShader, senza GPU reale), non una regressione del fix; durante
 la build l'emulatore era andato in segfault per pressione RAM/CPU della
 macchina, quindi è stato riavviato a build terminata e non è un guasto del
 gioco. Le preferenze di prova dell'emulatore sono state ripristinate dal backup.
+
+---
+
+## 29. Ricerca senza risultati visibili e casa illuminata senza porta (26/11/2026)
+
+### 29.1 Sintomi riportati dal QA
+
+1. Dal chip Android **CERCA DESTINAZIONE** il pannello Unity si apriva, ma
+   lo stato diceva «trovati N luoghi» senza mostrare righe tappabili; il campo
+   restava vuoto e la tastiera non si apriva in modo affidabile.
+2. La casa di Foggia era illuminata e riconoscibile, ma non si trovava la
+   porta girandoci attorno: non compariva il prompt **ENTRA IN CASA** e
+   l'ingresso restava irraggiungibile.
+
+### 29.2 Cause
+
+- La lista usava `Mask` su un'immagine trasparente: la maschera dipendeva
+  dall'alpha della Graphic e poteva ritagliare tutte le righe. Le righe
+  venivano scritte solo nel contenitore della vista attiva, quindi un
+  geocoding arrivato durante un cambio vista le faceva sparire. Su Android
+  mancava inoltre `EventSystem.current.SetSelectedGameObject`: il campo
+  veniva selezionato ma non era il GameObject attivo dell'EventSystem.
+- Il chip Android inviava sempre `{}`: nessuna query precompilata.
+- Il segnaposto porta veniva creato dal lazy dell'interno (fino a 30 m dal
+  player), quindi non era visibile appena il chunk caricava. La posizione era
+  sempre il `+Z` locale del prefab, mentre la porta vera della casa di Foggia
+  è vicino all'angolo ovest di Via Silvio Pellico: lato e punto lungo il muro
+  erano entrambi sbagliati. Anche soglie di ingresso/uscita usavano il `+Z`
+  del prefab, coerentemente con una porta che non esisteva.
+
+### 29.3 Fix additivi
+
+| File | Modifica |
+|---|---|
+| `OSM/MapSelectUI.cs` | `RectMask2D` invece di `Mask`; righe dedicated (`AddSearchResultRow`/`AddSearchRowTo`) scritte su **entrambe** le viste, testo bianco su `ColResultHi`, log `[MapSelect][Search] righe=`; focus esplicito dell'EventSystem; `OpenSearch(string query)` precompila e lancia subito la ricerca |
+| `Scripts/Core/GameManager.cs` | `openDestinationSearch` legge `{"query":"..."}` con regex e chiama `OpenSearch(query)`; senza query resta il percorso storico |
+| `ui/CityMapActivity.kt` | nuovo `EXTRA_SEARCH_QUERY`, escape della stringa e payload JSON verso Unity; il percorso `{}` resta invariato |
+| `Interior/Visit/VisitInteriorRegistry.cs` | `TryDoorLocalOffset` converte la coppia porta/centro del registro nelle coordinate locali del prefab (yaw OSM), senza inventare il lato |
+| `OSM/BuildingPlacer.cs` | lato scelto per distanza normalizzata sui semilati e punto lungo il muro con `Mathf.Clamp`; materiale porta oro emissivo a doppia faccia solo per le due case; `forceDoorMarker` crea il portale subito, con tre stipiti luminosi |
+| `Interior/BuildingEntrance.cs` | portale grande/emissivo immediato per le case configurate, soglie di ingresso/uscita dal trigger reale; gli altri edifici conservano il segnaposto lazy |
+| `Interior/InteriorGenerator.cs`, `Interior/InteriorManager.cs` | `DoorAnchorWorld` legge il trigger reale; nuove soglie `PrefabEnterWorld/ExitWorld` con rotazione dell'ingresso; fallback identico al vecchio comportamento quando non c'è `Entrance` |
+| `backend/test_unity_visit_houses.py`, `backend/test_unity_menu_search_storage.py`, `cscheck/UnityStubs.cs` | guardie statiche su lato/porta (Foggia `+Z` con `along < -6`, Roma `+Z` centrale), visibilità righe e query del ponte; stub solo nel checker |
+
+Nessuna funzione esistente è stata rimossa o disattivata: le porte degli altri
+edifici, il lazy dell'interno e la ricerca da tastiera restano identici.
+
+### 29.4 Ponte bidirezionale e riflesso uova
+
+Il chip Android → `openDestinationSearch` con payload JSON → `MapSelectUI` →
+geocoding → `OnGeocodeResult` → righe visibili. La scelta di un risultato e
+**TELEPORTA** generano l'uovo canonico con luogo testuale e coordinate
+(`FeatureEggHidden` → `EggCapturedInCity`), senza nuova economia. Le case
+visitabili usano le chiavi stabili `casa-osm-<id>` / `casa→stanza→oggetto` e
+lo snapshot `HouseInteriorState` per la dedup: l'ingresso crea le quattro uova
+nascoste nei contenitori già presenti, la cattura passa dallo stesso
+`EggController` di sempre. Nessun nuovo evento di ponte è stato introdotto.
+
+### 29.5 Verifiche e build
+
+- `python3 -m unittest discover -p 'test_*.py'` in `backend/`: **319 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori,
+  214 warning preesistenti. `git diff --check` pulito.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
+  **BUILD SUCCESSFUL**.
+- `SKIP_INSTALL=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh`:
+  **BUILD SUCCESSFUL in 7m 29s** e **BUILD SUCCESSFUL in 7m 1s**. APK firmato
+  v3 (1 signer), SHA-256
+  `5bbe4b06b3029535b10258d4951ac78d82934c38228dcb22f93b2a2ff25bfdb7`.
+  I token `rectMask2D`, `TryDoorLocalOffset`, `forceDoorMarker`, `StipiteSx`
+  e `PrefabEnterWorld` sono presenti nel `global-metadata.dat` dell'APK e
+  `EXTRA_SEARCH_QUERY` nei DEX: i due fix sono entrati davvero nell'artefatto.
+  Il churn della build (`link.xml.meta`, `PlayerLocomotion.controller`,
+  `PlayerHero.prefab`) è stato ripristinato.
+
+### 29.6 Collaudo su emulatore
+
+Sessione pulita su `emulator-5556`, server tile `localhost:5100` attivo.
+
+**Ricerca:** tap sul chip `[892,460][1080,549]` con `EXTRA_SEARCH_QUERY=bar`;
+log `[GameManager] Event received: openDestinationSearch - {"query":"bar"}`,
+`[MapSelect][Search] righe=14` e poi `righe=17` dopo il geocoding. Lo
+screenshot mostra 17 risultati leggibili; toccando la prima riga e
+**TELEPORTA QUI** il diario registra
+`ricerca->stadio->Sannicandro di Bari · Sannicandro di Bari` con
+`lat=41.002419 lng=16.792016`. Nessun errore Huntix.
+
+**Casa:** modalità Reale/OSM e spawn forzato sulla porta (tile `IT_082_087`,
+OSM `405228771`). Il log conferma il caricamento del tile, l'interno lazy
+costruito sull'ancora porta (`porta=(12.0, 1.0, 1.3)`), il trigger
+`[BuildingEntrance] OnTriggerEnter: Casa di Foggia (house)` e il prompt
+**ENTRA IN CASA**. Il tap deve cadere nel bordo alto del pulsante
+(y≈1998): più in basso il pulsante `PASSA A AR` sovrappone la stessa area,
+questione di HUD già esistente e non legata a questo fix. Con il tap corretto
+il log registra `Entrato (in-place, 3a persona): Casa di Foggia`,
+`visita casa: Casa di Foggia (OSM 405228771)` e
+`uova casa nascoste: 4 contenitori (cucina, camera, bagno)`; la telemetria
+passa a `ground=ColliderShort/Pavimento`, confermando che il player è dentro.
+Nessun `FATAL EXCEPTION`, `NullReferenceException`, `ArgumentException` o ANR
+dell'app. La cattura delle uova resta il mini-gioco preesistente già coperto
+dalle sezioni 27-28; in questa prova non è stato forzato.
+
+Le preferenze modificate per il collaudo sono state ripristinate dai backup.
