@@ -36,7 +36,11 @@ namespace City.Vehicle
             {
                 id = zone.poiId,
                 kind = KindString(zone.kind),
-                name = zone.DefaultName(),
+                // Le rampe METROPOLITANA portano il nome dichiarato: cosi'
+                // l'entry del chunk (che poi sovrascrive quella sintetica)
+                // non torna a "Parcheggio Coperto" in mappa/ricerca.
+                name = MetroRampRegistry.IsMetroName(zone.poiName)
+                    ? zone.poiName : zone.DefaultName(),
                 lat = geoPos.lat,
                 lng = geoPos.lng,
             };
@@ -161,6 +165,25 @@ namespace City.Vehicle
                             ? venue.name : venue.name + " — " + venue.city,
                         lat = venue.lat,
                         lng = venue.lng
+                    });
+                }
+                // Rampe METROPOLITANA vicine alla casa di Foggia: sono POI di
+                // gioco, ma per map/search/nav sono rampe a tutti gli effetti.
+                var metros = MetroRampRegistry.All;
+                for (int i = 0; i < metros.Length; i++)
+                {
+                    var m = metros[i];
+                    if (m == null) continue;
+                    list.Add(new PoiInfo
+                    {
+                        // Stesso id del VehiclePoiZone creato dal placer:
+                        // una sola entry per rampa, non due duplicate.
+                        id = MetroRampRegistry.NumericId(i).ToString(
+                            System.Globalization.CultureInfo.InvariantCulture),
+                        kind = "rampa",
+                        name = m.name,
+                        lat = m.lat,
+                        lng = m.lng
                     });
                 }
                 _synthetic = list.ToArray();

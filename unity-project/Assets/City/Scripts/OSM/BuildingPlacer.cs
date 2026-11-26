@@ -706,7 +706,8 @@ namespace City.OSM
                 }
             }
 
-            var entranceComp = MaybeAddEntrance(inst, b, baseB, w, d, h, sx, sy, sz);
+            var entranceComp = MaybeAddEntrance(parent, inst, b, baseB,
+                w, d, h, sx, sy, sz);
 
             // Interno reale in modalita' PREFAB: ogni edificio è esplorabile.
             // L'interno si genera lazy dentro l'impronta (stesso macchinario
@@ -747,7 +748,8 @@ namespace City.OSM
         // locale), largo quanto una porta. L'ingresso scatta SOLO da interazione
         // (tap sulla porta -> BuildingEntrance.Interact -> fade), mai in modo
         // accidentale camminando accanto al muro.
-        private static BuildingEntrance MaybeAddEntrance(GameObject inst, TileBuildingRec b,
+        private static BuildingEntrance MaybeAddEntrance(Transform parent,
+            GameObject inst, TileBuildingRec b,
             Bounds baseB, float w, float d, float h,
             float sx, float sy, float sz)
         {
@@ -803,9 +805,18 @@ namespace City.OSM
             entrance.buildingName = FriendlyBuildingName(iType, b.id);
             entrance.osmId = b.id;
             City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
-            if (visitConfigured && City.Interior.Visit.VisitInteriorRegistry.TryGet(
-                    b.id, out visitSpec))
+            bool haveSpec = City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                b.id, out visitSpec);
+            if (visitConfigured && haveSpec)
+            {
                 entrance.buildingName = visitSpec.label;
+                // La casa deve essere riconoscibile da lontano: faro pulsante
+                // come le uova, agganciato al chunk NON scalato (il transform
+                // dell'edificio ha scala non uniforme e deformerebbe l'alone).
+                City.Interior.Visit.HouseBeacon.Attach(parent,
+                    parent.InverseTransformPoint(trig.transform.position),
+                    visitSpec.label);
+            }
             entrance.buildingWidth = w;
             entrance.buildingDepth = d;
             entrance.buildingHeight = h;

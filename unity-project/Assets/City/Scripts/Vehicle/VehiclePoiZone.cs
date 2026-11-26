@@ -38,7 +38,9 @@ namespace City.Vehicle
                     case PoiKind.Dealer: return "CONCESSIONARIA - " + nm;
                     case PoiKind.Repair: return "OFFICINA - " + nm;
                     case PoiKind.Hospital: return "OSPEDALE - " + nm;
-                    case PoiKind.Ramp: return "SOTTERRANEO - " + nm;
+                    case PoiKind.Ramp:
+                        return (MetroRampRegistry.IsMetroName(nm)
+                            ? "METROPOLITANA - " : "SOTTERRANEO - ") + nm;
                     case PoiKind.School: return "SCUOLA - " + nm;
                     case PoiKind.Bar: return "BAR - " + nm;
                     case PoiKind.Bank: return "BANCA - " + nm;

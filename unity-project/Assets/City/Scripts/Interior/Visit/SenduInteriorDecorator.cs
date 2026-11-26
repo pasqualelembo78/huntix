@@ -115,7 +115,7 @@ namespace City.Interior.Visit
 
         /// <summary>Chiamato a fine VisitInteriorDecorator.Decorate. Ritorna
         /// il numero di arredi aggiunti (0 se il root non è una casa visitable).</summary>
-        public static int Decorate(Transform root, float w, float d)
+        public static int Decorate(Transform root, float w, float d, long osmId)
         {
             if (root == null) return 0;
             if (FindChild(root, "ArrediSENDU") != null) return 0; // idempotente
@@ -129,9 +129,10 @@ namespace City.Interior.Visit
             holder.transform.localScale = Vector3.one;
 
             int placed = 0;
-            string key = VisitInteriorRegistry.All.Length > 0
-                ? VisitInteriorRegistry.StableKey(VisitInteriorRegistry.All[0].osmId)
-                : string.Empty;
+            // Ogni casa configurata ha il PROPRIO set di uova: la chiave viene
+            // dall'id OSM passato dal decorator, non più da All[0] (così Roma
+            // conserva le sue uova anche con Foggia prima nel registro).
+            string key = VisitInteriorRegistry.StableKey(osmId);
             for (int i = 0; i < Layout.Length; i++)
             {
                 Slot s = Layout[i];
@@ -163,7 +164,7 @@ namespace City.Interior.Visit
                 marker.room = s.room;
                 marker.interiorKey = key;
                 var spot = slotRoot.AddComponent<HouseEggSpot>();
-                spot.featureId = s.featureId;
+                spot.featureId = VisitInteriorRegistry.EggId(osmId, s.featureId);
                 spot.label = s.eggLabel;
                 spot.place = s.place;
                 spot.room = s.room;

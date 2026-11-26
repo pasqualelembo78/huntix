@@ -91,7 +91,11 @@ namespace City.Interior.Visit
                     cm.room = slot.room;
                     cm.interiorKey = key;
                     var spot = holder.AddComponent<HouseEggSpot>();
-                    spot.featureId = slot.featureId;
+                    // Prefisso OSM per le case nuove: Foggia e Roma hanno uova
+                    // distinte, nessun premio duplicato. Roma conserva gli id
+                    // storici grazie a legacyEggIds.
+                    spot.featureId = VisitInteriorRegistry.EggId(osmId,
+                        slot.featureId);
                     spot.label = slot.eggLabel;
                     spot.place = slot.place;
                     spot.room = slot.room;
@@ -110,7 +114,7 @@ namespace City.Interior.Visit
             // Kit SENDU (licenza commerciale gratuita): si AGGIUNGE al livello
             // CC0, non lo sostituisce. 32 arredi con palette texturizzate e
             // un quarto nascondiglio nel cassetto della cucina.
-            SenduInteriorDecorator.Decorate(root.transform, W, D);
+            SenduInteriorDecorator.Decorate(root.transform, W, D, osmId);
 
             try
             {

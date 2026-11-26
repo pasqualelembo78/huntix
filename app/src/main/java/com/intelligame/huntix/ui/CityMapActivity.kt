@@ -102,8 +102,8 @@ class CityMapActivity : AppCompatActivity() {
                 val ok = CityStateSync.goToHouse(this@CityMapActivity)
                 Toast.makeText(
                     this@CityMapActivity,
-                    if (ok) "Freccetta impostata: Casa di Roma (MiCittà). " +
-                        "Per arrivarci davvero premi TELEPORTA nella mappa di MiCittà."
+                    if (ok) "Freccetta impostata: Casa di Foggia (Via Silvio Pellico 53). " +
+                        "Roma resta selezionabile dalla mappa; per arrivarci premi TELEPORTA."
                     else "Apri prima MiCittà per sincronizzare la casa",
                     if (ok) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
                 ).show()

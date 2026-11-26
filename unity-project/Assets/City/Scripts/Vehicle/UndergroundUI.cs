@@ -69,8 +69,12 @@ namespace City.Vehicle
         private void ShowEntry()
         {
             if (panel == null) BuildPanel();
-            titleText.text = "PARCHEGGIO SOTTERRANEO";
-            statusText.text = "Vuoi entrare nel parcheggio?\n" + cityKey;
+            bool metro = rampZone != null &&
+                MetroRampRegistry.IsMetroName(rampZone.poiName);
+            titleText.text = metro ? "METROPOLITANA" : "PARCHEGGIO SOTTERRANEO";
+            statusText.text = (metro
+                    ? "Vuoi entrare in metropolitana?\n"
+                    : "Vuoi entrare nel parcheggio?\n") + cityKey;
             ClearActions();
             MakeAction("ENTRA", new Color(0.20f, 0.55f, 0.25f), EnterUnderground);
             MakeAction("Chiudi", new Color(0.40f, 0.20f, 0.18f), Close);
@@ -82,6 +86,7 @@ namespace City.Vehicle
             if (rampZone == null) return;
             Close();
             surfacePosition = rampZone.transform.position;
+            GrantMetroEgg();
             var api = VehicleOwnershipApi.Ensure();
             api.EnterUnderground(cityKey, rampZone.transform.position, ok =>
             {
@@ -97,6 +102,28 @@ namespace City.Vehicle
                     FadeIn();
                 });
             });
+        }
+
+        /// <summary>Riflesso della caccia alle uova (Mandato): la prima entrata
+        /// in ogni rampa METROPOLITANA lascia un uovo-indizio. Una sola volta
+        /// per rampa e per profilo (PlayerPrefs). Luogo testuale + coordinate
+        /// viaggiano nel solito canale FeatureEggHidden di GrantAuditEgg.</summary>
+        private void GrantMetroEgg()
+        {
+            if (rampZone == null ||
+                !MetroRampRegistry.IsMetroName(rampZone.poiName)) return;
+            var ramp = MetroRampRegistry.FindByName(rampZone.poiName);
+            if (ramp == null || City.Game.Instance == null) return;
+
+            string prefKey = "huntix_metro_egg_" + ramp.id;
+            if (PlayerPrefs.GetInt(prefKey, 0) != 0) return;
+            PlayerPrefs.SetInt(prefKey, 1);
+            PlayerPrefs.Save();
+
+            string place = "Foggia→metropolitana→" + ramp.name +
+                " (" + MetroRampRegistry.CoordinateLabel(ramp) + ")";
+            City.Game.Instance.GrantAuditEgg("metro-foggia-" + ramp.id,
+                "Uovo della metropolitana", place);
         }
 
         private void BuildWorld()

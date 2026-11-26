@@ -50,6 +50,11 @@ MAP_SELECT = read("unity-project/Assets/City/Scripts/OSM/MapSelectUI.cs")
 MINIMAP = read("unity-project/Assets/City/Scripts/OSM/MinimapHud.cs")
 GAME_MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
 CITY_MAP_ACTIVITY = read("app/src/main/java/com/intelligame/huntix/ui/CityMapActivity.kt")
+METRO = read("unity-project/Assets/City/Scripts/Vehicle/MetroRampRegistry.cs")
+BEACON = read("unity-project/Assets/City/Scripts/Interior/Visit/HouseBeacon.cs")
+POI_PLACER = read("unity-project/Assets/City/Scripts/Vehicle/VehiclePoiPlacer.cs")
+POI_ZONE = read("unity-project/Assets/City/Scripts/Vehicle/VehiclePoiZone.cs")
+UNDERGROUND = read("unity-project/Assets/City/Scripts/Vehicle/UndergroundUI.cs")
 
 
 class TestAssetCC0(unittest.TestCase):
@@ -198,7 +203,8 @@ class TestKitSENDU(unittest.TestCase):
         self.assertIn("alphaIsTransparency: 0", meta)  # alpha = smoothness
 
     def test_decorator_additivo_e_quarto_uovo(self):
-        self.assertIn("SenduInteriorDecorator.Decorate(root.transform, W, D);", DECORATOR)
+        self.assertIn("SenduInteriorDecorator.Decorate(root.transform, W, D, osmId);",
+                      DECORATOR)
         self.assertIn("EndsWith(\"_LOD1\", StringComparison.Ordinal)", SENDU_DECORATOR)
         self.assertIn("CI_Kitchen_Base_Drawer_0p6m", SENDU_DECORATOR)
         self.assertIn("casa-cucina-cassetto-sendu", SENDU_DECORATOR)
@@ -273,7 +279,7 @@ class TestAccessoDeterministico(unittest.TestCase):
         self.assertIn('HandleNavigateToHouse(jsonData);', GAME_MANAGER)
         self.assertIn('NavigationState.Set(label, "casa", lat, lng);', GAME_MANAGER)
         self.assertIn("fun getHouseTargets(context: Context): JSONArray", ANDROID_SYNC)
-        self.assertIn("fun goToHouse(context: Context, osmId: Long = 204023010L): Boolean",
+        self.assertIn("fun goToHouse(context: Context, osmId: Long = 405228771L): Boolean",
                       ANDROID_SYNC)
         self.assertIn('"navigateToHouse", payload.toString()', ANDROID_SYNC)
         self.assertIn('report.put("houseTargets"', ANDROID_SYNC)
@@ -283,6 +289,69 @@ class TestAccessoDeterministico(unittest.TestCase):
         self.assertIn('case "rampa": return "SOTTERRANEO";', POI_SIGNPOST)
         self.assertIn('"hospital", "rampa", "repair"', MAP_SELECT)
         self.assertIn('DrawPoiKind("rampa", _showRamp', MINIMAP)
+
+
+class TestCasaFoggiaELuovoMetro(unittest.TestCase):
+    """Copia della casa a Foggia + rampe metro vicine, senza toccare Roma.
+    Nessun test dichiara comportamento visivo su device non verificato."""
+
+    def test_casa_foggia_copia_non_spostamento(self):
+        self.assertIn("405228771L", REGISTRY)
+        self.assertIn("Casa di Foggia", REGISTRY)
+        self.assertIn("Via Silvio Pellico 53", REGISTRY)
+        self.assertIn("lat = 41.4530015", REGISTRY)
+        self.assertIn("lng = 15.5344424", REGISTRY)
+        self.assertIn("204023010L", REGISTRY)  # Roma intatta
+        self.assertIn("legacyEggIds = true", REGISTRY)
+        self.assertIn("public const long DefaultOsmId = 405228771L;", REGISTRY)
+
+    def test_uova_per_casa_senza_duplicati(self):
+        self.assertIn("EggId(long osmId, string baseId)", REGISTRY)
+        self.assertIn("spot.featureId = VisitInteriorRegistry.EggId(osmId,",
+                      DECORATOR)
+        self.assertIn("spot.featureId = VisitInteriorRegistry.EggId(osmId, s.featureId);",
+                      SENDU_DECORATOR)
+        self.assertIn("string key = VisitInteriorRegistry.StableKey(osmId);",
+                      SENDU_DECORATOR)
+
+    def test_faro_come_uovo(self):
+        self.assertIn("HouseBeacon.Attach(parent,", PLACER)
+        self.assertIn("class HouseBeacon : MonoBehaviour", BEACON)
+        self.assertIn('private const string RootName = "CasaBeacon";', BEACON)
+        self.assertIn('new GameObject(RootName + "_"', BEACON)
+        self.assertIn("LightType.Point", BEACON)
+        self.assertIn("Mathf.Sin(Time.unscaledTime", BEACON)
+        self.assertIn('m.EnableKeyword("_EMISSION")', BEACON)
+        self.assertIn("Destroy(", BEACON)
+
+    def test_rampe_metro_foggia(self):
+        self.assertIn("foggia-metro-pellico", METRO)
+        self.assertIn("foggia-metro-biondi", METRO)
+        self.assertIn("foggia-metro-turati", METRO)
+        self.assertIn("lat = 41.4530955", METRO)
+        self.assertIn("lng = 15.5341185", METRO)
+        self.assertIn("FindByName(string name)", METRO)
+        self.assertIn("MetroRampRegistry.All", POI_PLACER)
+        self.assertIn("MetroRampRegistry.NumericId(i)", POI_PLACER)
+        self.assertIn("MetroRampRegistry.NumericId(i).ToString(", VEHICLE_POI)
+        self.assertIn("MetroRampRegistry.IsMetroName(zone.poiName)", VEHICLE_POI)
+        self.assertIn("METROPOLITANA - ", POI_ZONE)
+        self.assertIn('"METROPOLITANA"', UNDERGROUND)
+        self.assertNotIn("poi_overrides.json", METRO)
+
+    def test_uovo_metro_una_volta_sola(self):
+        self.assertIn('"huntix_metro_egg_" + ramp.id', UNDERGROUND)
+        self.assertIn("PlayerPrefs.GetInt(prefKey, 0) != 0", UNDERGROUND)
+        self.assertIn("PlayerPrefs.SetInt(prefKey, 1)", UNDERGROUND)
+        self.assertIn("GrantAuditEgg(\"metro-foggia-\" + ramp.id", UNDERGROUND)
+        self.assertIn("Foggia→metropolitana→", UNDERGROUND)
+        self.assertIn("MetroRampRegistry.CoordinateLabel(ramp)", UNDERGROUND)
+
+    def test_default_casa_foggia_roma_selezionabile(self):
+        self.assertIn("DefaultOsmId", GAME_MANAGER)
+        self.assertIn("osmId: Long = 405228771L", ANDROID_SYNC)
+        self.assertIn("204023010L", ANDROID_SYNC)
+        self.assertIn("Casa di Foggia", CITY_MAP_ACTIVITY)
 
 
 if __name__ == "__main__":

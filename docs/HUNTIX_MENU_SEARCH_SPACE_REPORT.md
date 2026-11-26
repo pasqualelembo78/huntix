@@ -92,6 +92,10 @@ Nuova schermata **💾 Gestisci spazio** (in `OfflinePacksActivity`):
   `huntix_space_cleanup_egg` una sola volta.
 - Nessun premio duplicato: l'uovo proposto "Cacciatore di Indirizzi" non è
   stato aggiunto perché la stessa arrivo-da-ricerca è già coperta.
+- **Uovo della metropolitana** (filone Foggia successivo): prima entrata in
+  una rampa Metro, chiave `huntix_metro_egg_*`, luogo testuale + coordinate nel
+  solito canale `FeatureEggHidden`. Dettagli in
+  `docs/HUNTIX_CASE_VISITABILI_REPORT.md` §21.3.
 
 ## 6. Bridge e verifiche
 

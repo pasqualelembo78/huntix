@@ -22,6 +22,11 @@ namespace City.Interior.Visit
         public const string Tag = "VisitInterior";
         public const string PrefabResource = "HouseInteriors/CasaVisitabileCC0";
 
+        /// <summary>Casa consigliata dal pulsante CASA: la copia di Foggia,
+        /// vicina allo spawn. Roma resta nel registro ed e' selezionabile
+        /// dall'elenco destinazioni (osmId esplicito).</summary>
+        public const long DefaultOsmId = 405228771L;
+
         [Serializable]
         public sealed class Spec
         {
@@ -37,15 +42,32 @@ namespace City.Interior.Visit
             public double lng;
             public double centerLat;
             public double centerLng;
+            /// <summary>Roma conserva gli id uovo storici: i salvataggi già
+            /// esistenti non vedono le uova rimontare. Le case nuove usano id
+            /// con prefisso OSM, così ogni casa ha le PROPRIE uova.</summary>
+            public bool legacyEggIds;
         }
 
         /// <summary>
-        /// Case attivate. La prima è un edificio reale di Roma (id OSM
-        /// 204023010, centro 41.90601 / 12.49579, impronta 21,3 x 13,5 m,
-        /// chunk IT_087_061 / (878,619), ~360 m dallo spawn predefinito).
+        /// Case attivate. La prima è la copia di Foggia (Via Silvio Pellico 53)
+        /// voluta per avere la casa navigabile vicina al giocatore; Roma resta
+        /// la seconda Spec, intatta e selezionabile dalla stessa mappa.
         /// </summary>
         private static readonly Spec[] Configured =
         {
+            new Spec
+            {
+                osmId = 405228771L,
+                kind = "casa",
+                label = "Casa di Foggia",
+                note = "Via Silvio Pellico 53, Foggia — edificio OSM 405228771; "
+                     + "porta sul lato ovest verso Via Silvio Pellico; "
+                     + "soggiorno, cucina, camera, bagno",
+                lat = 41.4530015,
+                lng = 15.5344424,
+                centerLat = 41.4530382,
+                centerLng = 15.5346125
+            },
             new Spec
             {
                 osmId = 204023010L,
@@ -56,7 +78,8 @@ namespace City.Interior.Visit
                 lat = 41.906056,
                 lng = 12.495734,
                 centerLat = 41.90601,
-                centerLng = 12.49579
+                centerLng = 12.49579,
+                legacyEggIds = true
             }
         };
 
@@ -85,6 +108,19 @@ namespace City.Interior.Visit
         public static string StableKey(long osmId)
         {
             return "casa-osm-" + osmId.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Id dell'uovo nel nascondiglio: stabile per edificio e
+        /// NASCONDIGLIO, così due case non condividono lo stesso premio. Roma
+        /// mantiene gli id storici (save già esistenti intatti); Foggia e le
+        /// case future usano il prefisso OSM. Nessun premio duplicato.</summary>
+        public static string EggId(long osmId, string baseId)
+        {
+            if (string.IsNullOrEmpty(baseId)) return baseId;
+            Spec spec;
+            if (TryGet(osmId, out spec) && spec != null && spec.legacyEggIds)
+                return baseId;
+            return StableKey(osmId) + ":" + baseId;
         }
 
         /// <summary>Le categorie supportate sono quelle già note al catalogo

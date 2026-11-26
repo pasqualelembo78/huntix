@@ -407,7 +407,7 @@ namespace Huntix.Core
                 long id = mOsm.Success
                     ? long.Parse(mOsm.Groups[1].Value,
                         System.Globalization.CultureInfo.InvariantCulture)
-                    : 204023010L;
+                    : City.Interior.Visit.VisitInteriorRegistry.DefaultOsmId;
                 City.Interior.Visit.VisitInteriorRegistry.Spec spec;
                 if (!City.Interior.Visit.VisitInteriorRegistry.TryGet(id, out spec)) return;
                 lat = spec.lat;

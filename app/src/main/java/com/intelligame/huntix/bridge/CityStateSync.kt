@@ -201,8 +201,10 @@ object CityStateSync {
      * (evento "navigateToHouse" ricevuto da GameManager: imposta la freccetta
      * della bussola e il marker sulla minimappa).
      * Nessun teletrasporto forzato: Unity decide come raggiungerla.
+     * Il default e' la copia comoda di Foggia (Via Silvio Pellico 53); Roma
+     * resta selezionabile passando l'osmId 204023010L dall'elenco casaTargets.
      */
-    fun goToHouse(context: Context, osmId: Long = 204023010L): Boolean {
+    fun goToHouse(context: Context, osmId: Long = 405228771L): Boolean {
         val targets = getHouseTargets(context)
         for (i in 0 until targets.length()) {
             val row = targets.optJSONObject(i) ?: continue

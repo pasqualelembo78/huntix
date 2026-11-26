@@ -391,6 +391,70 @@ POI dice `SOTTERRANEO` e il prompt HUD `SOTTERRANEO - <nome rampa>`. Toccando
 si apre `PARCHEGGIO SOTTERRANEO` con **ENTRA** (3 livelli a 0 / −4 / −8 m).
 Questo sistema era già presente: non è stato modificato in questo filone.
 
+### 21.3 Copia della casa a Foggia + metro vicina (richiesta "più facile per me")
+
+Scelta: **copia, non spostamento**. Roma resta la seconda `Spec` del registro,
+byte per byte intatta; Foggia è la prima e diventa la destinazione predefinita.
+
+| Dato | Valore |
+|---|---|
+| Indirizzo | **53, Via Silvio Pellico, Foggia, Puglia, 71122, Italia** |
+| Edificio OSM | `405228771` (`building=yes`, 6 livelli) |
+| Centro edificio | `41.4530382, 15.5346125` |
+| Porta usata come destinazione | `41.4530015, 15.5344424` (lato ovest, verso Via Silvio Pellico) |
+| Tile | `IT_082_087` (già presente sul server, **nessuna rigenerazione**) |
+
+Il pulsante Android **CASA 🏡** e il fallback Unity `navigateToHouse` puntano
+ora a Foggia (`DefaultOsmId = 405228771L`). **Roma resta selezionabile**
+dall'elenco `houseTargets` passando `osmId = 204023010L` a `goToHouse(...)`:
+nessuna funzione o destinazione è stata rimossa.
+
+**Riconoscibilità della casa — faro tipo uovo.** `HouseBeacon` aggiunge alle
+sole case configurate (Foggia e Roma) un alone sferico + un fascio + una luce
+puntuale che **pulsa come le uova** (`Mathf.Sin(Time.unscaledTime…)`), senza
+collider e senza toccare i materiali condivisi. È agganciato al **chunk root non
+scalato**: il transform dell'edificio ha scala non uniforme e avrebbe deformato
+l'alone. Nessun cambio di prefab o di asset.
+
+**Rampe "metropolitana" vicino a casa** (POI di gioco deterministici in
+`MetroRampRegistry.cs`, non ingressi metro reali verificati). Stanno nel codice,
+non nelle geo: **nessun `poi_overrides.json`, nessun bump di
+`TileClient.CacheVersion`, nessun ri-download della cache tile**. Le tre rampe
+già presenti a km di distanza nella tile restano intatte.
+
+| POI (nome in gioco) | Coordinate | Distanza dalla porta casa |
+|---|---|---:|
+| `Metro Foggia · Via Silvio Pellico` | `41.4530955, 15.5341185` | ~30 m |
+| `Metro Foggia · Via Fratelli Biondi` | `41.4533700, 15.5346000` | ~40 m |
+| `Metro Foggia · Piazza Filippo Turati` | `41.4526000, 15.5357000` | ~114 m |
+
+In gioco: cartello e prompt dicono `METROPOLITANA - <nome>`, l'UI dice
+`METROPOLITANA` / "Vuoi entrare in metropolitana?"; il vecchio parcheggio
+sotterraneo resta `SOTTERRANEO` e invariato.
+
+**Riflesso della caccia alle uova (Mandato).**
+
+- Ogni casa ha le **proprie** uova: `VisitInteriorRegistry.EggId(osmId, baseId)`
+  prefissa l'id con l'OSM per Foggia e le case future. Roma conserva gli id
+  storici (`legacyEggIds = true`), quindi i salvataggi esistenti non vedono le
+  uova rimontare. Nessun premio duplicato tra le due case.
+- **Uovo della metropolitana**: alla prima entrata in ogni rampa Metro viene
+  piazzato un uovo-indizio (`GrantAuditEgg("metro-foggia-<id>", …)`); guardia
+  `PlayerPrefs` per rampa e profilo, quindi **una sola volta**. Il luogo
+  testuale è `Foggia→metropolitana→<nome> (<lat>,<lng>)` e le coordinate GPS
+  viaggiano nel solito canale `FeatureEggHidden` + `EggJournal`, senza nuovi
+  formati.
+
+Verifiche di questo filone: `cscheck` (**HUNTIX_FULL**) OK e
+`python3 -m unittest discover -s backend -p 'test_*.py'` **295 test OK**.
+Build release finale (`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 BUILD_UNITY_AAR=1 ./build_release.sh --auto`):
+**riuscita** (export Unity 4m44s, assembleRelease 1m49s), APK firmato e verificato
+in `app/build/outputs/apk/release/app-release-signed.apk`
+(**204.800.625 byte**, SHA-256
+`9dd443a29b295333474481360aea8291b3c9254bbb1bdb48fda88561b306d25f`).
+Il comportamento visivo su device non è verificabile in questo ambiente.
+
 ---
 
 ## Appendice — esito build

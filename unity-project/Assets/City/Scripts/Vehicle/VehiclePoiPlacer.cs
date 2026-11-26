@@ -80,29 +80,54 @@ namespace City.Vehicle
         public static int Populate(ChunkData chunk,
             System.Func<GeoLL, Vector3> toLocal, Rect bounds)
         {
-            if (chunk.geo?.pois == null || chunk.root == null) return 0;
+            if (chunk.root == null) return 0;
 
             var root = new GameObject("PoiVeicoli");
             root.transform.SetParent(chunk.root.transform, false);
             root.transform.position = chunk.root.transform.position;
 
             int placed = 0;
-            foreach (var poi in chunk.geo.pois)
+            var geoPois = chunk.geo?.pois;
+            if (geoPois != null)
             {
-                if (poi?.p == null || poi.p.Length < 2) continue;
-                try
+                foreach (var poi in geoPois)
                 {
-                    Vector3 local = toLocal(new GeoLL { a = poi.p[0], o = poi.p[1] });
-                    if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
-                    local.y = TileElevation.HeightAt(poi.p[0], poi.p[1]);
-                    Build(root.transform, poi, local);
-                    placed++;
+                    if (poi?.p == null || poi.p.Length < 2) continue;
+                    try
+                    {
+                        Vector3 local = toLocal(new GeoLL { a = poi.p[0], o = poi.p[1] });
+                        if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                        local.y = TileElevation.HeightAt(poi.p[0], poi.p[1]);
+                        Build(root.transform, poi, local);
+                        placed++;
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning("[PoiPlacer] " + chunk.key + " poi saltato id=" +
+                            poi.id + ": " + e.Message);
+                    }
                 }
-                catch (System.Exception e)
+            }
+
+            // Rampe metro di Foggia: stessa tile/chunk delle geo, ma definite
+            // in MetroRampRegistry (nessun cambio formato e nessun ri-download
+            // della cache). Il bounds decide il chunk esatto, senza duplicati.
+            var metros = MetroRampRegistry.All;
+            for (int i = 0; i < metros.Length; i++)
+            {
+                var m = metros[i];
+                if (m == null) continue;
+                Vector3 local = toLocal(new GeoLL { a = m.lat, o = m.lng });
+                if (!bounds.Contains(new Vector2(local.x, local.z))) continue;
+                local.y = TileElevation.HeightAt(m.lat, m.lng);
+                Build(root.transform, new TilePoiRec
                 {
-                    Debug.LogWarning("[PoiPlacer] " + chunk.key + " poi saltato id=" +
-                        poi.id + ": " + e.Message);
-                }
+                    id = MetroRampRegistry.NumericId(i),
+                    t = "rampa",
+                    p = new[] { m.lat, m.lng },
+                    nm = m.name
+                }, local);
+                placed++;
             }
             return placed;
         }
