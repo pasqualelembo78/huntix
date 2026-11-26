@@ -17,6 +17,8 @@ namespace City.Environment
         public const string KeyLng = "city_home_lng";
         private const string KeyGarage = "city_home_garage";
         private const string KeyGarageModel = "city_home_garage_model";
+        /// <summary>1 = la casa attuale è la prima, ottenuta gratis.</summary>
+        private const string KeyFree = "city_home_free";
 
         public const int HomeCost = 900;
         public const float SellRefund = 0.6f;
@@ -43,6 +45,22 @@ namespace City.Environment
             get { return OwnsHome && PlayerPrefs.GetString(KeyGarage, "") != ""; }
         }
 
+        /// <summary>La casa posseduta è stata la prima, gratuita. Una casa
+        /// gratuita non genera rimborso quando viene venduta: nessuna valuta
+        /// nuova entra nel portafoglio.</summary>
+        public static bool CurrentHomeIsFree
+        {
+            get { return OwnsHome && PlayerPrefs.GetInt(KeyFree, 0) == 1; }
+        }
+
+        /// <summary>Etichetta dell'azione sulla porta: finché il beneficio non
+        /// è stato consumato la prima casa si prende senza pagare.</summary>
+        public static string BuyLabel
+        {
+            get { return City.Diagnostics.CityGlobalAreasBridge.FirstHomeFreeAvailable
+                ? "PRIMA CASA GRATUITA" : "COMPRA CASA"; }
+        }
+
         /// <summary>Distanza tra due punti in gradi (su questa scala la
         /// conversione in metri e approssimabile con 111111 m/grado).</summary>
         private static float GeoDistLngLat(float lat1, float lng1, float lat2, float lng2)
@@ -60,7 +78,9 @@ namespace City.Environment
                 PlayerPrefs.GetFloat(KeyLat, 0f), PlayerPrefs.GetFloat(KeyLng, 0f)) < 60f;
         }
 
-        /// <summary>Compra la casa alla porta indicata (900 euro).</summary>
+        /// <summary>Compra la casa alla porta indicata. La PRIMA casa di ogni
+        /// profilo è gratuita (beneficio una tantum condiviso con Android); le
+        /// successive costano 900 euro come sempre.</summary>
         public static bool Buy(string name, Vector3 doorPos)
         {
             if (OwnsHome)
@@ -68,7 +88,8 @@ namespace City.Environment
                 Toast("Possiedi gia una casa. Vendi prima di comprarne un altra.");
                 return false;
             }
-            if (!World.Wallet.TrySpend(HomeCost))
+            bool free = City.Diagnostics.CityGlobalAreasBridge.FirstHomeFreeAvailable;
+            if (!free && !World.Wallet.TrySpend(HomeCost))
             {
                 Toast("Non hai abbastanza soldi per la casa (" + HomeCost + " euro).");
                 return false;
@@ -78,12 +99,28 @@ namespace City.Environment
             PlayerPrefs.SetString(KeyName, nm);
             PlayerPrefs.SetFloat(KeyLat, (float)g.lat);
             PlayerPrefs.SetFloat(KeyLng, (float)g.lng);
+            PlayerPrefs.SetInt(KeyFree, free ? 1 : 0);
             PlayerPrefs.Save();
-            Toast("Comprata la casa: " + nm + ". Da qui ora puoi parcheggiare l auto.");
+
+            // Mandato §13: l'acquisto entra nel riepilogo globale e nel diario
+            // posizionale con le coordinate reali della porta.
+            if (free)
+            {
+                City.Diagnostics.CityGlobalAreasBridge.RecordFirstHomeFree(nm, doorPos);
+                Toast("Prima casa gratuita: " + nm +
+                      ". Da qui ora puoi parcheggiare l auto.");
+            }
+            else
+            {
+                City.Diagnostics.CityGlobalAreasBridge.Record(
+                    "acquisti", "casa", nm, "città→casa→acquisto→" + nm, doorPos);
+                Toast("Comprata la casa: " + nm + ". Da qui ora puoi parcheggiare l auto.");
+            }
             return true;
         }
 
-        /// <summary>Vende la casa restituendo 540 euro (60% del prezzo).</summary>
+        /// <summary>Vende la casa. Rimborso 540 euro (60%) solo se la casa era
+        /// stata pagata: la prima casa gratuita non crea denaro dal nulla.</summary>
         public static bool Sell(Vector3 doorPos)
         {
             if (!OwnsHome) return false;
@@ -92,15 +129,27 @@ namespace City.Environment
                 Toast("Ritira prima l auto dal garage per poter vendere la casa.");
                 return false;
             }
-            int refund = Mathf.RoundToInt(HomeCost * SellRefund);
-            World.Wallet.Earn(refund);
+            bool wasFree = CurrentHomeIsFree;
+            // Migrazione: una casa pagata era comunque la "prima casa" del
+            // profilo. Il beneficio non si rigenera dopo la vendita.
+            if (!wasFree)
+                City.Diagnostics.CityGlobalAreasBridge.MarkFirstHomeFreeUsed();
+            int refund = wasFree ? 0 : Mathf.RoundToInt(HomeCost * SellRefund);
+            if (refund > 0) World.Wallet.Earn(refund);
             PlayerPrefs.DeleteKey(KeyName);
             PlayerPrefs.DeleteKey(KeyLat);
             PlayerPrefs.DeleteKey(KeyLng);
             PlayerPrefs.DeleteKey(KeyGarage);
             PlayerPrefs.DeleteKey(KeyGarageModel);
+            PlayerPrefs.DeleteKey(KeyFree);
             PlayerPrefs.Save();
-            Toast("Casa venduta: +" + refund + " euro.");
+
+            City.Diagnostics.CityGlobalAreasBridge.Record(
+                "vendita", "casa", wasFree ? "prima casa gratuita" : refund + " euro",
+                "città→casa→vendita", doorPos);
+            Toast(wasFree
+                ? "Casa gratuita venduta: nessun rimborso previsto."
+                : "Casa venduta: +" + refund + " euro.");
             return true;
         }
 

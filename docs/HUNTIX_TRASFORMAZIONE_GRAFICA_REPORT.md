@@ -1311,3 +1311,71 @@ tastiera è quindi basato sul comportamento noto di uGUI/Android, non su una
 riga di errore. La correzione delle gambe è invece ricavata direttamente dai tre
 picchi `bestY≈0,98` nel log. Il QA su device resta il passo finale per confermare
 che la tastiera accetti i caratteri e che all'avvio non compaiano più le piegate.
+
+## 34. Prima casa gratuita per tutti, successive a pagamento (26/11/2026)
+
+### 34.1 Regola di prodotto
+
+Avvicinandosi a una porta residenziale prima dell'aggiornamento compariva
+`COMPRA CASA` e, senza 900 €, il giocatore restava senza casa. Ora la **prima
+casa di ogni profilo è gratuita**: l'azione diventa `PRIMA CASA GRATUITA` e non
+toca il portafoglio. Dopo quella casa - anche se venduta - le successive tornano
+a costare 900 € come prima. La casa gratuita venduta **non rimborsa 540 €**,
+perché non è mai stata pagata: nessuna valuta viene creata dal nulla.
+
+Per i profili già esistenti che avevano comprato una casa a pagamento prima di
+questa feature, la vendita segna il beneficio come usato: non ricevono una
+seconda casa gratis. Chi invece non ha mai preso casa lo riceve comunque.
+
+### 34.2 Stato una tantum nel ponte esistente
+
+Il flag `freehome` non è una nuova economia né un nuovo salvataggio: è un nuovo
+valore nei flag globali già usati da `GlobalAreas` (`inv/skill/disc/buy/sell`).
+
+| Direzione | Canale | Contenuto |
+|---|---|---|
+| Unity → Android | `CityGlobalActivity` (già in whitelist) | `area=acquisti`, `action=prima casa gratis`, luogo `città→casa→prima casa gratis→<nome>`, lat/lng della porta, timestamp |
+| Android → Unity | `globalAreas` in `setMode` e nello snapshot `CityStateSync` | `freehome=1` dopo il primo utilizzo, ripristino passivo con presa del massimo |
+| Unity → Android | `FeatureEggHidden` | uovo-indizio una tantum `casa->prima-gratis`, piazzato sulla porta reale |
+| Android → diario | `EggWhereLog.recordActivity` | voce evento con luogo, coordinate e timestamp |
+
+Lo specchio Android è visibile nel riepilogo `GlobalAreas.summary`, quindi
+nell'Area Inventario, nell'Area Abilità, nel profilo e nel menu in-game:
+`prima casa gratis: disponibile/usata`. Nessun evento nuovo è stato aggiunto alla
+whitelist `UnityIpc.APP_EVENTS`: il beneficio riutilizza `CityGlobalActivity`.
+
+### 34.3 Modifiche ai file
+
+| File | Modifica |
+|---|---|
+| `Environment/HomeSystem.cs` | `KeyFree`, `CurrentHomeIsFree`, `BuyLabel`; `Buy` salta `TrySpend` solo se il beneficio è disponibile e lo consuma; `Sell` azzera il rimborso per la casa gratuita, cancella `city_home_free` e segna il flag come usato per le case pagate pre-esistenti |
+| `Diagnostics/CityGlobalAreasBridge.cs` | `KeyFirstHomeFree`, `FirstHomeFreeAvailable`, `RecordFirstHomeFree`, `MarkFirstHomeFreeUsed`; `Record` con coordinate reali; `MarkEggAt` piazza l'uovo nel punto dell'azione; `ExportFlags` include `freehome` |
+| `Scripts/Game.cs` | `GrantAuditEggAt`: stesso canale `FeatureEggHidden`, ma con posizione esplicita invece del punto accanto al player |
+| `UI/ContextActionController.cs` | Etichetta e voce menu lette da `HomeSystem.BuyLabel` |
+| `Sync/CityWorldSync.cs` | `home` acquista un settimo campo `0/1` per il rimborso; il restore lo riapplica |
+| `managers/GlobalAreas.kt` | `KEY_FREEHOME`, import/export flag, voce `primaCasaGratis` in `snapshot` e `summary` |
+| `backend/test_unity_first_home_free.py` | 8 guardie statiche su prezzi, benefit una tantum, migrazione, bridge, uovo e specchio Android |
+
+Nessun sistema preesistente è stato rimosso o disattivato: il costo 900 €,
+il rimborso 60%, il garage, il rientro a casa e tutte le altre azioni restano
+identici; cambia solo il primo acquisto e il suo rimborso.
+
+### 34.4 Verifiche
+
+- `python3 backend/test_unity_first_home_free.py`: **8 test OK**.
+- `python3 backend/test_unity_global_areas.py`: **11 test OK**.
+- `python3 -m unittest discover -s backend -p 'test_*.py'`: **353 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
+  **BUILD SUCCESSFUL** (solo note di API deprecate preesistenti).
+- `git diff --check`: pulito.
+- APK ricompilato con nuovo AAR Unity e firmato:
+  `app/build/outputs/apk/release/app-release-signed.apk` (196 MB), SHA-256
+  `8abd454f7abe909c16d121d63fb957af3fa849e10e8b3e5c53d1519ee7db0e65`.
+  Firma verificata con `apksigner` (schema v3, 1 firmatario).
+
+### 34.5 Limiti di verifica
+
+Il flusso è coperto da guardie statiche e dalla compilazione: il QA su device
+deve confermare il primo acquisto a 0 €, il secondo a 900 € e la voce
+`prima casa gratis: usata` nelle aree globali dopo la vendita.

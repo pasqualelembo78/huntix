@@ -156,7 +156,7 @@ namespace City.UI
                         return "RITIRA AUTO";
                     return "VENDI CASA";
                 }
-                return "COMPRA CASA";
+                return City.Environment.HomeSystem.BuyLabel;
             }
             return "AZIONI";
         }
@@ -269,7 +269,7 @@ namespace City.UI
                 }
                 else
                 {
-                    outList.Add(Make("COMPRA CASA",
+                    outList.Add(Make(City.Environment.HomeSystem.BuyLabel,
                         () => City.Environment.HomeSystem.Buy(doorName, doorPos)));
                 }
             }

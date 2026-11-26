@@ -37,6 +37,8 @@ object GlobalAreas {
     private const val KEY_DISC = "disc"
     private const val KEY_BUY = "buy"
     private const val KEY_SELL = "sell"
+    /** 1 = la prima casa gratuita è già stata usata dal profilo. */
+    private const val KEY_FREEHOME = "freehome"
     private const val KEY_LAST_AREA = "last_area"
     private const val KEY_LAST_ACTION = "last_action"
     private const val KEY_LAST_PLACE = "last_place"
@@ -109,6 +111,7 @@ object GlobalAreas {
                 "disc", "scoperte" -> KEY_DISC
                 "buy", "acquisti" -> KEY_BUY
                 "sell", "vendita", "vendite" -> KEY_SELL
+                "freehome", "prima casa", "prima casa gratis" -> KEY_FREEHOME
                 else -> null
             } ?: return@forEach
             val value = kv[1].trim().toIntOrNull() ?: return@forEach
@@ -123,7 +126,7 @@ object GlobalAreas {
     /** Flag compatti rimandati a Unity in `setMode` e nel snapshot. */
     fun exportFlags(context: Context): String {
         val prefs = prefs(context)
-        return listOf(KEY_INV, KEY_SKILL, KEY_DISC, KEY_BUY, KEY_SELL)
+        return listOf(KEY_INV, KEY_SKILL, KEY_DISC, KEY_BUY, KEY_SELL, KEY_FREEHOME)
             .joinToString(";") { "$it=${prefs.getInt(it, 0)}" }
     }
 
@@ -135,6 +138,8 @@ object GlobalAreas {
             put("scoperte", prefs.getInt(KEY_DISC, 0))
             put("acquisti", prefs.getInt(KEY_BUY, 0))
             put("vendite", prefs.getInt(KEY_SELL, 0))
+            put("primaCasaGratis",
+                if (prefs.getInt(KEY_FREEHOME, 0) == 1) "usata" else "disponibile")
             put("lastArea", prefs.getString(KEY_LAST_AREA, "") ?: "")
             put("lastAction", prefs.getString(KEY_LAST_ACTION, "") ?: "")
             put("lastPlace", prefs.getString(KEY_LAST_PLACE, "") ?: "")
@@ -150,7 +155,8 @@ object GlobalAreas {
         val coda = if (last.isNotBlank()) "\nUltima azione: $last · $place" else ""
         return "MiCittà nel mondo: inventario ${s.optInt("inventario")} · " +
                "abilità ${s.optInt("abilita")} · scoperte ${s.optInt("scoperte")} · " +
-               "acquisti ${s.optInt("acquisti")} · vendite ${s.optInt("vendite")}" + coda
+               "acquisti ${s.optInt("acquisti")} · vendite ${s.optInt("vendite")} · " +
+               "prima casa gratis: ${s.optString("primaCasaGratis")}" + coda
     }
 
     private fun normalize(area: String): String = when (area.lowercase(Locale.ITALIAN)) {

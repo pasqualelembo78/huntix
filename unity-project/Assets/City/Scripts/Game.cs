@@ -385,6 +385,14 @@ namespace City
             GrantFeatureEgg(featureId, label, EggController.Rarity.Uncommon, place);
         }
 
+        /// <summary>Stesso uovo-indizio dell'audit, ma piazzato nel punto
+        /// dell'azione (per la prima casa: la porta reale) invece che accanto
+        /// al player. FeatureEggHidden resta il canale unico con coordinate.</summary>
+        public void GrantAuditEggAt(string featureId, string label, string place, Vector3 at)
+        {
+            SpawnFeatureEggAt(featureId, label, EggController.Rarity.Uncommon, place, at);
+        }
+
         private void SpawnFeatureEggAt(string featureId, string label,
             City.Economy.EggController.Rarity rarity, string place, Vector3 at)
         {

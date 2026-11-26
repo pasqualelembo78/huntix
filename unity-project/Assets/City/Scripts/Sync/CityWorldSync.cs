@@ -285,6 +285,9 @@ namespace City.Sync
             // (es. "cucina:cassetto=televisore;salotto:divano"). Unity fornisce
             // lo slot, Android lo conserva nel profilo e lo ritorna per sync.
             parts.Add(PlayerPrefs.GetString("city_home_rooms", ""));
+            // Ultimo slot: 1 se questa casa era la prima gratuita. Armonizza
+            // il rimborso e impedisce che la vendita la trasformi in denaro.
+            parts.Add(HomeSystem.CurrentHomeIsFree ? "1" : "0");
             return string.Join("|", parts);
         }
 
@@ -483,6 +486,9 @@ namespace City.Sync
                     // Stanze/mobili: forward-compat (potrebbe essere vuoto oggi).
                     if (parts.Length >= 6)
                         PlayerPrefs.SetString("city_home_rooms", parts[5]);
+                    // Casa gratuita: ripristina il flag del rimborso.
+                    if (parts.Length >= 7)
+                        PlayerPrefs.SetInt("city_home_free", parts[6] == "1" ? 1 : 0);
                     PlayerPrefs.Save();
                 }
             }
