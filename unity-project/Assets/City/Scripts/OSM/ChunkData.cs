@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace City.OSM
 {
@@ -30,6 +31,12 @@ namespace City.OSM
         // Cache dei collider edificio: evita il GetComponentsInChildren(true)
         // su migliaia di GameObject a OGNI cambio LOD (Roma: ~6.000 edifici).
         private BoxCollider[] _buildingColliders;
+        // LOD dinamico delle ombre: su RAM bassa i palazzi lontani (LOD>=1)
+        // smettono di proiettare ombre; la modalita' originale viene memorizzata
+        // una volta e ripristinata quando il profilo torna High o il chunk
+        // ridiventa LOD0. Nessun changes ai materiali condivisi.
+        private Renderer[] _buildingRenderers;
+        private ShadowCastingMode[] _buildingShadowModes;
 
         public static string KeyOf(Vector2Int c) => $"C_{c.x:0000}_{c.y:0000}";
 
@@ -77,6 +84,11 @@ namespace City.OSM
                     SetBuildingColliders(buildingsGo, false);
                 else
                     SetBuildingColliders(buildingsGo, true);
+
+                bool keepShadows = level <= 0 ||
+                    Diagnostics.AdaptivePerformanceProfile.Instance == null ||
+                    Diagnostics.AdaptivePerformanceProfile.Instance.DistantBuildingShadows;
+                SetBuildingShadows(buildingsGo, keepShadows);
             }
             if (airportsGo != null) airportsGo.SetActive(level <= 1);
         }
@@ -121,9 +133,44 @@ namespace City.OSM
             }
         }
 
+        private void SetBuildingShadows(GameObject buildingsGo, bool keepShadows)
+        {
+            if (_buildingRenderers == null)
+            {
+                _buildingRenderers = buildingsGo.GetComponentsInChildren<Renderer>(true);
+                _buildingShadowModes = new ShadowCastingMode[_buildingRenderers.Length];
+                for (int i = 0; i < _buildingRenderers.Length; i++)
+                {
+                    var r = _buildingRenderers[i];
+                    _buildingShadowModes[i] = r != null ? r.shadowCastingMode : ShadowCastingMode.On;
+                }
+            }
+            for (int i = 0; i < _buildingRenderers.Length; i++)
+            {
+                var r = _buildingRenderers[i];
+                if (r == null) continue;
+                ShadowCastingMode desired = keepShadows
+                    ? _buildingShadowModes[i] : ShadowCastingMode.Off;
+                if (r.shadowCastingMode != desired) r.shadowCastingMode = desired;
+            }
+        }
+
+        /// <summary>Riapplica solo le ombre dopo un cambio di tier: nessuna
+        /// ricostruzione, nessun tocco ai collider o al terreno.</summary>
+        public void RefreshAdaptiveDetails()
+        {
+            if (!built || buildingsGo == null || lod < 0) return;
+            bool keepShadows = lod <= 0 ||
+                Diagnostics.AdaptivePerformanceProfile.Instance == null ||
+                Diagnostics.AdaptivePerformanceProfile.Instance.DistantBuildingShadows;
+            SetBuildingShadows(buildingsGo, keepShadows);
+        }
+
         public void Destroy()
         {
             _buildingColliders = null;
+            _buildingRenderers = null;
+            _buildingShadowModes = null;
             if (root != null)
                 Object.Destroy(root);
             // Object.Destroy e' DIFFERITO a fine frame: fino ad allora i

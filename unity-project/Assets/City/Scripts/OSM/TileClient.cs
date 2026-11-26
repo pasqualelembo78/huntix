@@ -151,7 +151,10 @@ namespace City.OSM
             }
             _prefetched[path] = json;
             _prefetchOrder.AddLast(path);
-            while (_prefetched.Count > MaxPrefetchedFiles && _prefetchOrder.Count > 0)
+            int keep = Diagnostics.AdaptivePerformanceProfile.Instance != null
+                ? Diagnostics.AdaptivePerformanceProfile.Instance.PrefetchKeep
+                : MaxPrefetchedFiles;
+            while (_prefetched.Count > keep && _prefetchOrder.Count > 0)
             {
                 string oldest = _prefetchOrder.First.Value;
                 _prefetchOrder.RemoveFirst();

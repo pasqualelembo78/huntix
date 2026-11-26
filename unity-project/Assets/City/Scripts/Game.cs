@@ -223,6 +223,7 @@ namespace City
 
         private bool handbrakeEggGranted;
         private bool qualityEggGranted;
+        private bool adaptivePerfEggGranted;
         private bool touchEggGranted;
         private bool fictionalCityEggGranted;
         private bool mountInsideEggGranted;
@@ -256,6 +257,19 @@ namespace City
                 "Uovo del profilo " + profileName,
                 City.Economy.EggController.Rarity.Rare,
                 "città→impostazioni→qualità");
+        }
+
+        /// <summary>Riflesso uova delle prestazioni adattive: quando il gioco
+        /// torna a regime dopo un calo di frame, lascia UNO uovo indicatore con
+        /// luogo e coordinate nel normale canale FeatureEggHidden. Chiave
+        /// dedicata, nessun premio duplicato rispetto al profilo qualita'.</summary>
+        public void OnAdaptivePerformanceImproved()
+        {
+            if (adaptivePerfEggGranted) return;
+            adaptivePerfEggGranted = true;
+            GrantAuditEgg("performance->adattivo->recupero",
+                "Uovo della fluidita'",
+                "città→impostazioni→prestazioni");
         }
 
         /// <summary>Riflesso uova del joystick alternativo derivato da Zone Zero:

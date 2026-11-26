@@ -193,6 +193,17 @@ public class BridgeActivity extends UnityPlayerActivity {
                         j.put("activeBaitBonus", bait.optDouble("bonus", 1.0));
                         j.put("baitCount", bait.optInt("count", 0));
                     }
+                    // Prestazioni adattive: Android e' il proprietario del toggle
+                    // e del livello qualita'. Rimandati a Unity in setMode come
+                    // ripristino passivo (nessun uovo, nessun evento di ritorno).
+                    android.content.SharedPreferences perfPrefs =
+                            getSharedPreferences("huntix_prefs", MODE_PRIVATE);
+                    String perfQuality = perfPrefs.getString("city_quality", "medium");
+                    if (perfQuality == null || perfQuality.isEmpty()) perfQuality = "medium";
+                    org.json.JSONObject adaptive = new org.json.JSONObject();
+                    adaptive.put("enabled", perfPrefs.getBoolean("adaptive_performance", true));
+                    adaptive.put("quality", perfQuality);
+                    j.put("adaptivePerformance", adaptive);
                     // Fase 2 · raccolta risorse: solo lo specchio dei contatori.
                     // Nessun uovo generato e nessun premio su un ripristino.
                     org.json.JSONObject harvest =

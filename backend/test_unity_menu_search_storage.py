@@ -42,8 +42,9 @@ class TestMenuSnellito(unittest.TestCase):
         self.assertIn("Chiudi menu", MENU)
         self.assertIn('new MenuEntry("Uova e ricette (3 in 1)"', MENU)
         self.assertIn('new MenuEntry("Impostazioni e strumenti"', MENU)
-        # 11 di primo livello + 3 uova/ricette + 12 impostazioni.
-        self.assertEqual(MENU.count("new MenuEntry("), 26)
+        # 11 di primo livello + 3 uova/ricette + 13 impostazioni
+        # (la nuova riga "Prestazioni adattive" e' additiva).
+        self.assertEqual(MENU.count("new MenuEntry("), 27)
 
     def test_nessuna_funzione_vecchia_eliminata(self):
         for label in (

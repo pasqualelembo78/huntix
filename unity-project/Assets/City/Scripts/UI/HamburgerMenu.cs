@@ -31,6 +31,7 @@ namespace City.UI
         private Text _shopLabel;
         private Text _venueLabel;
         private Text _qualityLabel;
+        private Text _perfLabel;
         private Text _touchLabel;
         private Text _worldLabel;
         private Text _menuAnimLabel;
@@ -280,6 +281,7 @@ namespace City.UI
             if (idx == 17) _cinematicLabel = lbl;
             if (idx == 19) _shopLabel = lbl;
             if (idx == 20) _venueLabel = lbl;
+            if (idx == 21) _perfLabel = lbl;
         }
 
         /// <summary>Spiegazione permanente nel pannello: l'utente non deve più
@@ -398,7 +400,7 @@ namespace City.UI
 
         private void BuildSettingsPanel()
         {
-            _settingsPanel = MakeSubPanel("SettingsPanel", 700f, 1030f);
+            _settingsPanel = MakeSubPanel("SettingsPanel", 700f, 1110f);
             AddHeader(_settingsPanel, "IMPOSTAZIONI E STRUMENTI");
             var rows = new List<MenuEntry>
             {
@@ -413,6 +415,7 @@ namespace City.UI
                     if (UIManager.Instance != null) UIManager.Instance.ShowLegal();
                 }),
                 new MenuEntry("Qualità grafica: Media", 6, () => ToggleQuality()),
+                new MenuEntry("Prestazioni adattive: Attive", 21, () => ToggleAdaptivePerformance()),
                 new MenuEntry("Input touch: Huntix", 8, () => ToggleTouch()),
                 new MenuEntry("Mondo: Reale", 9, () => ToggleWorldMode()),
                 new MenuEntry("Animazione menu: Huntix", 10, () => ToggleMenuAnimation()),
@@ -439,7 +442,7 @@ namespace City.UI
             note.rectTransform.anchorMin = new Vector2(0f, 1f);
             note.rectTransform.anchorMax = new Vector2(1f, 1f);
             note.rectTransform.pivot = new Vector2(0f, 1f);
-            note.rectTransform.anchoredPosition = new Vector2(20f, -970f);
+            note.rectTransform.anchoredPosition = new Vector2(20f, -1040f);
             note.rectTransform.sizeDelta = new Vector2(-40f, 46f);
         }
 
@@ -514,6 +517,7 @@ namespace City.UI
             RefreshShopLabel();
             RefreshVenueLabel();
             RefreshQualityLabel();
+            RefreshAdaptiveLabel();
             RefreshTouchLabel();
             RefreshWorldLabel();
             RefreshMenuAnimLabel();
@@ -547,6 +551,28 @@ namespace City.UI
             RefreshQualityLabel();
             if (UIManager.Instance != null)
                 UIManager.Instance.ShowToast("Qualità: " + sel.Current);
+        }
+
+        /// <summary>Riga unica del profilo adattivo: nessun sistema vecchio
+        /// viene disattivato, cambia solo il budget/LOD in base a RAM e FPS.</summary>
+        private void RefreshAdaptiveLabel()
+        {
+            if (_perfLabel == null) return;
+            var p = City.Diagnostics.AdaptivePerformanceProfile.Instance;
+            string state = p == null || !p.AutoEnabled ? "Disattive" : "Attive";
+            string tier = p == null ? "Alte" : p.Current.ToString();
+            _perfLabel.text = "Prestazioni adattive: " + state + " (" + tier + ")";
+        }
+
+        private void ToggleAdaptivePerformance()
+        {
+            var p = City.Diagnostics.AdaptivePerformanceProfile.Ensure();
+            p.ApplyUserSetting(!p.AutoEnabled);
+            RefreshAdaptiveLabel();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(p.AutoEnabled
+                    ? "Prestazioni adattive attivate"
+                    : "Prestazioni adattive disattivate");
         }
 
         // ---- input touch alternativo (Zone Zero, MIT) ----

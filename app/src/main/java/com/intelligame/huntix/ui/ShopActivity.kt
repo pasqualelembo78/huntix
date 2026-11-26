@@ -9,6 +9,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.R
 import com.intelligame.huntix.reallife.LocalNeeds
 import com.intelligame.huntix.reallife.MoneyManager
 import com.intelligame.huntix.reallife.ShopCategory
@@ -30,18 +31,18 @@ class ShopActivity : AppCompatActivity() {
 
         val root = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor(UiKit.BG))
+            setBackgroundColor(UiKit.themed(c, R.color.huntix_bg))
         }
 
         // Top bar
         val topBar = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#0A0618"))
+            setBackgroundColor(UiKit.themed(c, R.color.huntix_nav_bg))
             setPadding(UiKit.dp(c, 14), UiKit.dp(c, 12), UiKit.dp(c, 14), UiKit.dp(c, 12))
         }
         topBar.addView(TextView(c).apply {
-            text = "← "; textSize = 20f; setTextColor(Color.parseColor(UiKit.ACCENT))
+            text = "← "; textSize = 20f; setTextColor(UiKit.themed(c, R.color.huntix_accent))
             isClickable = true; setOnClickListener { finish() }
         })
         topBar.addView(TextView(c).apply {

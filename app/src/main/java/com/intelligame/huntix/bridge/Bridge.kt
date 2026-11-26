@@ -219,6 +219,10 @@ object Bridge {
             // ── Profilo grafico scelto in MiAcitta → preferenza persistente,
             //    rispedita a Unity all'apertura successiva (bridge bidirezionale). ──
             "CityQualityChanged" -> handleCityQualityChanged(jsonData)
+            // ── Profilo prestazioni adattive: specchio del tier calcolato in
+            //    Unity. Nessun premio qui: l'uovo della fluidita' arriva sul
+            //    canale FeatureEggHidden con posizione e coordinate. ──
+            "CityPerfTierChanged" -> handleCityPerfTierChanged(jsonData)
             // ── Sorgente input touch scelta in MiCittà: preferenza persistente,
             //    rispedita a Unity all'apertura successiva. ──
             "AltTouchChanged" -> handleAltTouchChanged(jsonData)
@@ -478,6 +482,24 @@ object Bridge {
         ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
             .edit().putString("city_quality", profile).apply()
         com.intelligame.huntix.AppLog.i("HuntixSync", "Qualità MiCittà: $profile")
+    }
+
+    /** Profilo prestazioni adattive: Android conserva solo il tier e lo specchio
+     *  del toggle (l'unica preferenza e' `adaptive_performance`). Il ripristino
+     *  avviene in BridgeActivity.setMode, senza uova ne' eventi di ritorno. */
+    private fun handleCityPerfTierChanged(jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val tier = j.optString("tier", "").lowercase()
+        if (tier !in setOf("low", "medium", "high")) return
+        val ctx = UnityAppContext.context ?: return
+        val prefs = ctx.getSharedPreferences("huntix_prefs", Context.MODE_PRIVATE)
+        val editor = prefs.edit().putString("city_perf_tier", tier)
+        if (j.has("auto")) editor.putBoolean("adaptive_performance", j.optBoolean("auto", true))
+        editor.apply()
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync",
+            "Prestazioni adattive: $tier (${j.optInt("memMb", 0)} MB, auto=${j.optBoolean("auto", true)})"
+        )
     }
 
     /** Joystick touch alternativo (pattern Zone Zero, MIT) scelto in MiCittà:

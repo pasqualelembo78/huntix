@@ -70,6 +70,8 @@ namespace City.UI
         private TMP_Text shopTitle;
         private TMP_Text shopMoney;
         private RectTransform shopListContent;
+        private ScrollRect shopScroll;
+        private Coroutine shopScrollRoutine;
 
         // pulsante GUARDA VIDEO +€25: teniamo riferimenti a Button + Image
         // per disabilitarlo/anelocare quando l'ad non e' pronta e mostrare
@@ -356,6 +358,11 @@ namespace City.UI
             currentShop = shop;
             shopTitle.text = shop.shopName;
             RebuildShopList();
+            // Additivo: l'elenco parte sempre dall'alto con un movimento
+            // morbido (EasingCore MIT). Lo ScrollRect e i dati restano invariati.
+            if (shopScrollRoutine != null) StopCoroutine(shopScrollRoutine);
+            shopScrollRoutine = StartCoroutine(
+                UiScrollTween.ScrollTo(shopScroll, new Vector2(0f, 1f), 0.22f));
             shopPanel.SetActive(true);
             UpdateMoney(Wallet.Money);
             Time.timeScale = 0f;
@@ -1241,6 +1248,7 @@ namespace City.UI
             scroll.horizontal = false;
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.viewport = listScroll;
+            shopScroll = scroll;
 
             shopMoney = MakeText(shopPanel.GetComponent<RectTransform>(), "Soldi: € 0", 28f, Accent, TextAlignmentOptions.Left, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 14f), new Vector2(-100f, 48f));
             shopPanel.SetActive(false);

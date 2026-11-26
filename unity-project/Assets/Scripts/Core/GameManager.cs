@@ -40,6 +40,9 @@ namespace Huntix.Core
             // l'avvio della scena City, il flag e' gia' noto e non parte uno
             // streaming OSM inutile prima del ripristino del bridge.
             City.Fictional.FictionalCityWorld.Initialize();
+            // Profilo prestazioni comune a TUTTE le modalita' (Menu, Esplora,
+            // Citta', Interni): non dipende dalla scena City ne' dal chunking.
+            City.Diagnostics.AdaptivePerformanceProfile.Ensure();
         }
 
         private void Start()
@@ -207,6 +210,13 @@ namespace Huntix.Core
             OnEvent("TileCacheCleared|" + (string.IsNullOrEmpty(json) ? "{}" : json));
         }
 
+        /// <summary>Android → Unity: attiva/disattiva il profilo adattivo e
+        /// passa il livello qualita' scelto nell'app, senza nuove preferenze.</summary>
+        public void setAdaptivePerformance(string json)
+        {
+            OnEvent("setAdaptivePerformance|" + (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
         // UnitySendMessage passa sempre un unico parametro stringa.
         // Supporta due formati:
         //   1) JSON: {"action":"setMode","mode":"..."} (inviato da BridgeActivity)
@@ -339,6 +349,9 @@ namespace Huntix.Core
                 case "TileCacheCleared":
                     HandleTileCacheCleared(jsonData);
                     break;
+                case "setAdaptivePerformance":
+                    HandleSetAdaptivePerformance(jsonData);
+                    break;
             }
         }
 
@@ -370,6 +383,30 @@ namespace Huntix.Core
             }
             Debug.Log("[GameManager] TileCacheCleared: " +
                 (string.IsNullOrEmpty(json) ? "{}" : json));
+        }
+
+        private static void HandleSetAdaptivePerformance(string json)
+        {
+            bool enabled = true;
+            if (!string.IsNullOrEmpty(json))
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"enabled\"\\s*:\\s*(true|false|1|0)",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m.Success)
+                    enabled = m.Groups[1].Value.Equals("true", System.StringComparison.OrdinalIgnoreCase)
+                              || m.Groups[1].Value == "1";
+                var q = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"quality\"\\s*:\\s*\"(low|medium|high)\"",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (q.Success)
+                {
+                    PlayerPrefs.SetString("city_quality", q.Groups[1].Value.ToLowerInvariant());
+                    PlayerPrefs.Save();
+                }
+            }
+            City.Diagnostics.AdaptivePerformanceProfile.Ensure().ApplyUserSetting(enabled);
+            Debug.Log("[GameManager] setAdaptivePerformance enabled=" + enabled);
         }
 
         /// <summary>
@@ -542,6 +579,30 @@ namespace Huntix.Core
                     }
                     City.Diagnostics.QualityProfileSelector.Ensure().Apply(p, false);
                     Debug.Log("[GameManager] qualita' ripristinata da Android: " + p);
+                }
+
+                // Profilo prestazioni adattivo salvato da Android: ripristino
+                // passivo (nessun uovo, nessun eco). Include il livello qualita'
+                // perche' e' uno degli ingressi del tier.
+                var adaptive = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"adaptivePerformance\"\\s*:\\s*\\{([^}]*)\\}");
+                if (adaptive.Success)
+                {
+                    var enabled = System.Text.RegularExpressions.Regex.Match(
+                        adaptive.Groups[1].Value, "\"enabled\"\\s*:\\s*true");
+                    var apQuality = System.Text.RegularExpressions.Regex.Match(
+                        adaptive.Groups[1].Value, "\"quality\"\\s*:\\s*\"(low|medium|high)\"",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (apQuality.Success)
+                    {
+                        PlayerPrefs.SetString("city_quality",
+                            apQuality.Groups[1].Value.ToLowerInvariant());
+                        PlayerPrefs.Save();
+                    }
+                    City.Diagnostics.AdaptivePerformanceProfile.Ensure()
+                        .ApplyRestored(enabled.Success);
+                    Debug.Log("[GameManager] prestazioni adattive ripristinate da Android: " +
+                        enabled.Success);
                 }
 
                 // Sorgente input touch scelta in Miacitta e salvata da Android.

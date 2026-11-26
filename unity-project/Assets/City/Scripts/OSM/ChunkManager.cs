@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Text;
 using UnityEngine;
 using City.Vehicle.Traffic;
+using City.Diagnostics;
 
 namespace City.OSM
 {
@@ -201,7 +202,15 @@ namespace City.OSM
             // QUESTO GameObject, senza modificare la scena ne' la logica di
             // caricamento dei chunk qui sotto (LoadRadius/UnloadRadius intatti).
             WorldStreamingManager.Ensure(this);
+            // Profilo adattivo: modifica SOLO il budget per frame (8-12 ms),
+            // mai LoadRadius/UnloadRadius o la concorrenza di build.
+            AdaptivePerformanceProfile.Ensure();
         }
+
+        private long CurrentBuildBudgetMs =>
+            AdaptivePerformanceProfile.Instance != null
+                ? AdaptivePerformanceProfile.Instance.ChunkBuildBudgetMs
+                : BuildBudgetMs;
 
         /// <summary>Avvia il tick loop se non gia' attivo. Chiamato da Start e
         /// riavviato da UnloadAll() dopo che StopAllCoroutines lo ha spento.</summary>
@@ -331,8 +340,23 @@ namespace City.OSM
             RetryMissingTiles();
             RebuildRoadsForNewDem();
             UpdateLods(cur);
+            RefreshAdaptiveDetails();
             WorldOrigin.TryRebase(target.position);
             MaybeReportCityProgress();
+        }
+
+        private int _lastAdaptiveTier = -1;
+
+        /// <summary>Il cambio tier e' raro (isteresi 3/6 secondi), quindi il
+        /// giro dei 49 chunk costa meno di un frame e non tocca la fisica.</summary>
+        private void RefreshAdaptiveDetails()
+        {
+            var profile = AdaptivePerformanceProfile.Instance;
+            int tier = profile != null ? (int)profile.Current : -1;
+            if (tier == _lastAdaptiveTier) return;
+            _lastAdaptiveTier = tier;
+            foreach (var kv in _chunks)
+                if (kv.Value != null) kv.Value.RefreshAdaptiveDetails();
         }
 
         /// <summary>Riporta in coda di build i chunk con tile fallita, dopo il
@@ -493,7 +517,7 @@ namespace City.OSM
             int building = _pending.Count;
             var clock = Stopwatch.StartNew();
             while (_activeBuilds < MaxConcurrentBuilds && _pending.Count > 0 &&
-                clock.ElapsedMilliseconds < BuildBudgetMs)
+                clock.ElapsedMilliseconds < CurrentBuildBudgetMs)
             {
                 var c = _pending[0];
                 _pending.RemoveAt(0);
@@ -600,7 +624,7 @@ namespace City.OSM
                 var clock = Stopwatch.StartNew();
                 // C# vieta yield dentro try/catch: pompiamo la coroutine
                 // esterna a mano per intercettare le eccezioni di build
-                IEnumerator build = ChunkBuilder.Build(this, chunk, bundle.geo, clock, BuildBudgetMs);
+                IEnumerator build = ChunkBuilder.Build(this, chunk, bundle.geo, clock, CurrentBuildBudgetMs);
                 bool completed = false;
                 while (true)
                 {

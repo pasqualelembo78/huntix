@@ -537,3 +537,18 @@ Quaternius Ultimate House Interior (quota Google Drive esaurita), KayKit Furnitu
 Bits (checkout con dati personali obbligatori), Poly Pizza/OpenGameArt (licenze
 non verificabili). Nessun asset piratato, nessun pagamento, nessun account usato
 per aggirare un download.
+
+## FancyScrollView / EasingCore — 26/11/2026
+
+Importato il runtime **FancyScrollView** di setchi
+(https://github.com/setchi/FancyScrollView), licenza **MIT**, testo integrale in
+`unity-project/Assets/ThirdParty/FancyScrollView/LICENSE`. La libreria e' usata
+in modo additivo: `EasingCore` (MIT, incluso nel repo upstream) guida
+l'interpolazione dello scorrimento della lista acquisti in `UiScrollTween.cs`.
+Nessuno ScrollRect, pannello o flusso esistente e' stato sostituito; la lista
+resta di proprieta' di `UIManager`. Nessuna preferenza, uovo o snapshot toccato.
+
+I cinque kit UI gratuiti dell'Unity Asset Store identificati nella ricerca
+richiedono un account Unity autenticato per il download: non sono stati
+scaricati ne' aggirati. FancyScrollView e' l'alternativa MIT verificata e
+effettivamente integrata.

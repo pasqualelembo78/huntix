@@ -131,3 +131,69 @@ Verifiche dopo il fix: **296 test Python OK**; `./check.sh` (`HUNTIX_FULL`)
 **CSCHECK OK (215 warning)**. Il comportamento visivo è stato riprodotto e
 verificato su emulator Android (`CASA`, `STADIO`, `IPPODROMO` e ricerca). Dati
 build finali e SHA-256 in calce al processo di pubblicazione.
+
+---
+
+## Estensione 2026-11-26 — Restyling condiviso e prestazioni adattive
+
+Dopo il fix della ricerca e' stato esteso a tutta l'app un tema coerente e un
+livello di ottimizzazione **additivo**, senza rimuovere nessuna funzione ne'
+voce di menu.
+
+- **Tema Android**: token semantici in `res/values/colors.xml` (`huntix_*`,
+  valori visivi identici ai vecchi hardcoded) e helper centralizzati in
+  `UiKit.kt` (`themed`, `topBar`, `backButton`, `chip`). Applicati a
+  `PlayerProfileActivity`, `OfflinePacksActivity`, `ShopActivity` e alla status
+  bar. Il resto delle schermate continua a usare i propri colori storici:
+  nessun comportamento o navigazione e' stato cambiato.
+- **Profilo prestazioni** (`AdaptivePerformanceProfile.cs`): tier Low/Medium/
+  High derivato da RAM, qualita' salvata e `PerformanceGovernor`. Regola solo
+  budget build per frame, prefetch tile, densita' veicoli e ombre dei palazzi
+  LOD. **Intatti** `LoadRadius=3`, `UnloadRadius=4`, `TerrainColliderLod=0`,
+  passo mesh/DEM, kit edifici, `CarsPerTile=22`, `MaxCars=180`,
+  `TileClient.CacheVersion=5`. Nuova voce menu "Prestazioni adattive", senza
+  sostituire la qualita' grafica storica.
+- **Riflesso uova**: un solo uovo dedicato
+  (`performance->adattivo->recupero`) con posizione testuale e coordinate,
+  concesso solo al primo miglioramento; nessun duplicato rispetto al profilo
+  qualita' gia' esistente.
+- **Bridge bidirezionale**: Unity invia `CityPerfTierChanged` (Android specchia
+  tier e toggle in `huntix_prefs`); Android rimanda `adaptivePerformance`
+  dentro `setMode` e Unity lo applica come ripristino passivo (`ApplyRestored`),
+  senza uova ne' eventi di ritorno.
+- **Micro-ottimizzazioni Android**: `UnityBridgeService` riutilizza un solo
+  `mainHandler`; `OutdoorManager.stop()` annulla i callback della camera.
+- **UI open source**: FancyScrollView (MIT) importato con licenza e usato via
+  `EasingCore` per lo scorrimento morbido dello shop; attribuzione in
+  `THIRD_PARTY_NOTICES.md` e nel README della libreria.
+
+Verifiche statiche dopo queste modifiche: **307 test Python OK** (11 nuovi in
+`backend/test_unity_adaptive_performance.py`), `./check.sh` **CSCHECK OK** e
+`:app:compileReleaseKotlin`/`:app:compileReleaseJavaWithJavac` **BUILD
+SUCCESSFUL**. La build release e il collaudo su device sono documentati nel
+processo di pubblicazione in calce.
+
+### Pubblicazione e collaudo 26/11/2026
+
+- Build: `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 SKIP_MAP_UPDATE=1 ./build_release.sh --auto`,
+  AAR Unity ricreato, **BUILD SUCCESSFUL** (6m 38s export + 6m 55s app).
+- APK: `app/build/outputs/apk/release/app-release-signed.apk`, **204853873 byte**,
+  SHA-256 `b6e90748b95d7b726e445f874801c1e1b7940d542ebca8e849df1d8e33203ec6`,
+  firma valida (`CN=Huntix`, certificato SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`).
+- Primo tentativo di build interrotto da un errore reale Unity non coperto dagli
+  stub (`OsmDiag` non qualificato in `AdaptivePerformanceProfile`): corretto con
+  `City.OSM.OsmDiag`, poi build verde. Churn della build (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinato.
+- Collaudo su `emulator-5556`: APK reinstallato; home e profilo raggiungibili,
+  MiCittà caricata con menu ☰. La nuova voce **“Prestazioni adattive: Attive
+  (Low)”** è presente e mostra il tier derivato dalla RAM emulata. Dal menu,
+  **“Cerca destinazione”** apre il pannello a schermo intero (`CERCA
+  DESTINAZIONE`, campo e risultati), con dialogo `TELEPORTA QUI` e `CHIUDI`
+  sopra l'elenco: il bug della mappa sovrapposta non si riproduce.
+- Nota emulator: durante la digitazione da soft keyboard Unity InputSystem ha
+  loggato una `NullReferenceException` interna (`FireStateChangeNotifications`,
+  stack interamente in `UnityEngine.InputSystem`), con overlay di log a schermo.
+  Non riguarda i file modificati in questa sessione (nessun innesto InputSystem
+  nuovo); da verificare su device fisico con tastiera reale. La ricerca ha
+  comunque prodotto risultati e dialogo di conferma.

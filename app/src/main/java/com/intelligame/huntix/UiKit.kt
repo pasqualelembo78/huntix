@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.*
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.NestedScrollView
@@ -29,6 +30,11 @@ object UiKit {
     const val PURPLE    = "#6A1B9A"
     const val INDIGO    = "#4F46E5"
 
+    /** Colore semantico dal tema: i valori sono identici alle costanti qui
+     *  sopra, ma vivono in res/values/colors.xml e possono essere cambiati in
+     *  un solo punto senza toccare le 100+ Activity programmatiche. */
+    fun themed(c: Context, res: Int) = ContextCompat.getColor(c, res)
+
     fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
 
     fun applyWindowInsets(view: View) {
@@ -46,7 +52,7 @@ object UiKit {
         }
         children.forEach { root.addView(it) }
         return NestedScrollView(c).apply {
-            setBackgroundColor(Color.parseColor(BG))
+            setBackgroundColor(themed(c, R.color.huntix_bg))
             addView(root)
             ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
                 val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -74,7 +80,7 @@ object UiKit {
         TextView(c).apply {
             this.text = text
             textSize = 12f
-            setTextColor(Color.parseColor(TEXT_DIM))
+            setTextColor(themed(c, R.color.huntix_text_dim))
             setPadding(0, 0, 0, dp(c, 12))
         }
 
@@ -83,7 +89,7 @@ object UiKit {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
                 cornerRadius = dp(c, 14).toFloat()
-                setColor(Color.parseColor(BG_CARD))
+                setColor(themed(c, R.color.huntix_surface))
             }
             setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14))
         }
@@ -97,7 +103,7 @@ object UiKit {
         TextView(c).apply {
             this.text = text
             textSize = 13f
-            setTextColor(Color.parseColor(ACCENT))
+            setTextColor(themed(c, R.color.huntix_accent))
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(c, 6), 0, dp(c, 6))
         }
@@ -117,7 +123,7 @@ object UiKit {
         })
         if (value.isNotBlank()) {
             ll.addView(TextView(c).apply {
-                text = value; textSize = 13f; setTextColor(Color.parseColor(ACCENT))
+                text = value; textSize = 13f; setTextColor(themed(c, R.color.huntix_accent))
                 typeface = Typeface.DEFAULT_BOLD
             })
         }
@@ -155,7 +161,7 @@ object UiKit {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             setPadding(dp(c, 20), dp(c, 28), dp(c, 20), dp(c, 28))
             background = GradientDrawable().apply {
-                cornerRadius = dp(c, 14).toFloat(); setColor(Color.parseColor(BG_CARD))
+                cornerRadius = dp(c, 14).toFloat(); setColor(themed(c, R.color.huntix_surface))
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -168,13 +174,69 @@ object UiKit {
             typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(c, 8), 0, 0)
         })
         ll.addView(TextView(c).apply {
-            text = desc; textSize = 12f; setTextColor(Color.parseColor(TEXT_DIM))
+            text = desc; textSize = 12f; setTextColor(themed(c, R.color.huntix_text_dim))
             gravity = Gravity.CENTER; setPadding(dp(c, 8), dp(c, 6), dp(c, 8), 0)
         })
         ll.addView(TextView(c).apply {
-            text = "⚙️ In sviluppo"; textSize = 11f; setTextColor(Color.parseColor(ACCENT))
+            text = "⚙️ In sviluppo"; textSize = 11f; setTextColor(themed(c, R.color.huntix_accent))
             gravity = Gravity.CENTER; setPadding(0, dp(c, 10), 0, 0)
         })
         return ll
+    }
+
+    /** Top bar condivisa: sostituisce le barre costruite a mano nelle schermate
+     *  Profilo, Mappa, Shop, Impostazioni e minigiochi. Non tocca la navigazione
+     *  (onBack rimane la scelta di chi chiama: finish(), Home o dialogo). */
+    fun topBar(c: Context, title: String, onBack: (() -> Unit)? = null,
+               vararg actions: View): LinearLayout = LinearLayout(c).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setBackgroundColor(themed(c, R.color.huntix_surface))
+        setPadding(dp(c, 10), dp(c, 8), dp(c, 10), dp(c, 8))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        if (onBack != null) addView(backButton(c, "←", onBack).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+        addView(TextView(c).apply {
+            text = "🥚  $title"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setPadding(dp(c, 8), 0, dp(c, 8), 0)
+        })
+        actions.forEach { addView(it) }
+    }
+
+    fun backButton(c: Context, label: String = "← Indietro",
+                   onBack: () -> Unit): TextView = TextView(c).apply {
+        text = label
+        textSize = 13f
+        setTextColor(themed(c, R.color.huntix_accent))
+        setPadding(dp(c, 12), dp(c, 10), dp(c, 12), dp(c, 10))
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onBack() }
+    }
+
+    /** Chip compatto per filtri e azioni rapide (usato da mappa e menu). */
+    fun chip(c: Context, label: String, onClick: () -> Unit): TextView = TextView(c).apply {
+        text = label
+        textSize = 12f
+        setTextColor(Color.WHITE)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(c, 10).toFloat()
+            setColor(themed(c, R.color.huntix_accent))
+        }
+        setPadding(dp(c, 10), dp(c, 6), dp(c, 10), dp(c, 6))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(c, 6) }
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { onClick() }
     }
 }

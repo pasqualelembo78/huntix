@@ -14,6 +14,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.AppLog
 import com.intelligame.huntix.bridge.OfflinePackManager
 import com.intelligame.huntix.bridge.StoreUnityBridge
+import com.intelligame.huntix.UiKit
+import com.intelligame.huntix.R
 import org.json.JSONObject
 import java.util.Locale
 
@@ -47,7 +49,9 @@ class OfflinePacksActivity : AppCompatActivity() {
         fun Int.dp() = (this * d).toInt()
         val focusStorage = intent.getBooleanExtra(EXTRA_FOCUS_STORAGE, false)
 
-        val scroll = ScrollView(this).apply { setBackgroundColor(Color.parseColor("#0D0620")) }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(UiKit.themed(this@OfflinePacksActivity, R.color.huntix_bg))
+        }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(16.dp(), 12.dp(), 16.dp(), 24.dp())
@@ -76,7 +80,7 @@ class OfflinePacksActivity : AppCompatActivity() {
 
         summary = TextView(this).apply {
             textSize = 13f
-            setTextColor(Color.parseColor("#00FF88"))
+            setTextColor(UiKit.themed(this@OfflinePacksActivity, R.color.huntix_success))
             setPadding(0, 0, 0, 10.dp())
         }
         root.addView(summary)
@@ -144,7 +148,7 @@ class OfflinePacksActivity : AppCompatActivity() {
         tileStatsText = TextView(this).apply {
             text = "Lettura statistiche cache…"
             textSize = 12f
-            setTextColor(Color.parseColor("#00FF88"))
+            setTextColor(UiKit.themed(this@OfflinePacksActivity, R.color.huntix_success))
             setPadding(0, 0, 0, 8.dp())
         }
         card.addView(tileStatsText)

@@ -33,6 +33,9 @@ object UnityIpc {
     val APP_EVENTS: Set<String> = setOf(
         "CatchRequest", "PoiSelected", "PlayerPosition",
         "EggCapturedInCity", "BudgetEggSpawned", "FeatureEggHidden", "CityQualityChanged",
+        // Prestazioni adattive: tier calcolato in Unity, specchiato in Android
+        // (preferenza + telemetria) e ripristinato in setMode.
+        "CityPerfTierChanged",
         "AltTouchChanged", "WorldModeChanged", "VehicleMountChanged",
         "MenuAnimationChanged", "QaConsoleChanged",
         "NpcCompanionChanged", "CompanionRecruited", "CompanionEggSpotted",

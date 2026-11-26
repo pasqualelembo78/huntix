@@ -301,6 +301,11 @@ class OutdoorManager private constructor() : SensorEventListener {
     fun stop() {
         activeClients = (activeClients - 1).coerceAtLeast(0)
         if (activeClients > 0) return
+        // Il Runnable di camminata rimette in coda se' stesso: senza questa
+        // rimozione sopravviveva a stop() e tratteneva l'Manager (e la sua
+        // Activity) in memoria, continuando a muovere le uova in background.
+        walkHandler?.removeCallbacksAndMessages(null)
+        walkHandler = null
         if (listening) {
             try { locationManager?.removeUpdates(listener) } catch (_: Exception) {}
             listening = false

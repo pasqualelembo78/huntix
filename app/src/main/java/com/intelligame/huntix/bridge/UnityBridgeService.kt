@@ -19,7 +19,10 @@ class UnityBridgeService : Service() {
     private val binder = object : IUnityBridge.Stub() {
         override fun sendToUnity(gameObject: String?, method: String?, arg: String?) {
             if (gameObject.isNullOrEmpty() || method.isNullOrEmpty()) return
-            Handler(Looper.getMainLooper()).post {
+            // Un solo Handler condiviso: prima ogni chiamata Binder ne creava
+            // uno nuovo (centinaia di Handler/s con posizioni/POI/telemetria),
+            // con allocazioni e code duplicate sul main looper di :unity.
+            mainHandler.post {
                 try {
                     StoreUnityBridge.sendLocalToUnity(gameObject, method, arg ?: "")
                 } catch (t: Throwable) {
@@ -43,5 +46,6 @@ class UnityBridgeService : Service() {
 
     companion object {
         private const val TAG = "UnityBridgeService"
+        private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     }
 }

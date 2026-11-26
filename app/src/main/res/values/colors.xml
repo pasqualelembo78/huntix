@@ -5,4 +5,18 @@
     <color name="red_status">#FFFF4444</color>
     <color name="black">#FF000000</color>
     <color name="transparent">#00000000</color>
+
+    <!-- Token semantici HUNTIX: stesso valore della palette storica di UiKit,
+         ma centralizzati per tema coerente su tutte le schermate (menu, mappa,
+         personaggio, inventario, missioni, minigiochi). I vecchi colori restano
+         invariati per compatibilità con le Activity che li usano ancora. -->
+    <color name="huntix_bg">#FF0D0620</color>
+    <color name="huntix_surface">#FF1A1030</color>
+    <color name="huntix_accent">#FFA78BFA</color>
+    <color name="huntix_gold">#FFFFD700</color>
+    <color name="huntix_success">#FF00FF88</color>
+    <color name="huntix_text_dim">#FF6B5B95</color>
+    <color name="huntix_nav_bg">#FF0A0618</color>
+    <color name="huntix_nav_active">#FFA78BFA</color>
+    <color name="huntix_nav_inactive">#FF4A3870</color>
 </resources>

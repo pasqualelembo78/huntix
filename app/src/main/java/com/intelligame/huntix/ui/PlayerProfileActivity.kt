@@ -7,6 +7,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.BaseNavActivity
+import com.intelligame.huntix.UiKit
 
 class PlayerProfileActivity : BaseNavActivity() {
 
@@ -94,26 +95,12 @@ class PlayerProfileActivity : BaseNavActivity() {
     }
 
     private fun buildTopBar(): LinearLayout {
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setBackgroundColor(Color.parseColor("#12103A"))
-            setPadding(dp(12), dp(40), dp(16), dp(10))
-
-            addView(Button(this@PlayerProfileActivity).apply {
-                text = "←"; textSize = 18f; setTextColor(Color.WHITE)
-                setBackgroundColor(Color.TRANSPARENT)
-                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
-                setOnClickListener { finish() }
-            })
-            addView(TextView(this@PlayerProfileActivity).apply {
-                text = "Il mio Profilo"
-                textSize = 18f; setTextColor(Color.WHITE)
-                typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).also {
-                    it.marginStart = dp(8)
-                }
-            })
+        return UiKit.topBar(this, "Il mio Profilo", { finish() }).apply {
+            // Inset di stato: la barra condivisa non cambia la navigazione.
+            setPadding(UiKit.dp(this@PlayerProfileActivity, 12),
+                UiKit.dp(this@PlayerProfileActivity, 40),
+                UiKit.dp(this@PlayerProfileActivity, 16),
+                UiKit.dp(this@PlayerProfileActivity, 10))
         }
     }
 

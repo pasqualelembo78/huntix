@@ -468,7 +468,9 @@ namespace UnityEngine
         public bool enabled { get; set; }
         public Material material { get; set; }
         public Material sharedMaterial { get; set; }
-        public Material[] sharedMaterials { get; set; } }
+        public Material[] sharedMaterials { get; set; }
+        // LOD dinamico ombre (ChunkData.RefreshAdaptiveDetails).
+        public UnityEngine.Rendering.ShadowCastingMode shadowCastingMode { get; set; } }
     public class MeshRenderer : Renderer { }
     public class ParticleSystemRenderer : Renderer {}
     public class Collider : Component { public bool enabled { get; set; }
@@ -530,6 +532,8 @@ namespace UnityEngine
     {
         public static string deviceModel => "stub-device";
         public static bool supportsGyroscope => false;
+        // RAM in MB, usata dal profilo prestazioni adattivo.
+        public static int systemMemorySize => 4096;
     }
 
     public static class QualitySettings
@@ -838,6 +842,7 @@ namespace UnityEngine.UI
         public bool vertical { get; set; }
         public bool horizontal { get; set; }
         public MovementType movementType { get; set; }
+        public Vector2 normalizedPosition { get; set; }
     }
 
     public class LayoutGroup : Component
@@ -865,6 +870,8 @@ namespace UnityEngine.Rendering
 {
     public enum CullMode { Off }
     public enum AmbientMode { Skybox, Trilight, Flat, Custom }
+    // Usato dal LOD dinamico delle ombre dei palazzi (ChunkData).
+    public enum ShadowCastingMode { Off, On, TwoSided, ShadowsOnly }
 }
 
 namespace UnityEngine.Events
@@ -1004,6 +1011,18 @@ namespace UnityEngine.EventSystems
 namespace UnityEngine.Rendering
 {
     public enum BlendMode { SrcAlpha, OneMinusSrcAlpha, One, Zero }
+}
+
+// Stub MINIMALE per la verifica离线: il runtime MIT reale sta in
+// unity-project/Assets/ThirdParty/FancyScrollView e NON viene compilato qui.
+namespace EasingCore
+{
+    public enum Ease { OutCubic }
+    public delegate float EasingFunction(float t);
+    public static class Easing
+    {
+        public static EasingFunction Get(Ease type) => t => t;
+    }
 }
 
 namespace TMPro

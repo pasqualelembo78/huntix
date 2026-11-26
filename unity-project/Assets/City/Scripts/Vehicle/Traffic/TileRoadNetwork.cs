@@ -375,7 +375,7 @@ namespace City.Vehicle.Traffic
                 if (_cars[i] != null) Destroy(_cars[i].gameObject);
             _cars.Clear();
 
-            int target = Mathf.Clamp(_raw.Count * CarsPerTile, 0, MaxCars);
+            int target = TargetCarCount();
             for (int i = 0; i < target && SpawnOne(); i++) { }
             if (target > 0)
                 OsmDiag.Log("[TileRoadNetwork] traffico su rete: " + _cars.Count +
@@ -413,9 +413,21 @@ namespace City.Vehicle.Traffic
             }
         }
 
+        /// <summary>Il moltiplicatore adattivo riduce Solo quante auto vengono
+        /// attivate a runtime: CarsPerTile=22 e MaxCars=180 restano invariati
+        /// e il contenuto delle tile non cambia (determinismo Preservato).</summary>
+        private int TargetCarCount()
+        {
+            float factor = Diagnostics.AdaptivePerformanceProfile.Instance != null
+                ? Diagnostics.AdaptivePerformanceProfile.Instance.VehicleDensity
+                : 1f;
+            return Mathf.Clamp(Mathf.RoundToInt(_raw.Count * CarsPerTile * factor),
+                0, MaxCars);
+        }
+
         private void FillToTarget()
         {
-            int target = Mathf.Clamp(_raw.Count * CarsPerTile, 0, MaxCars);
+            int target = TargetCarCount();
             int guard = 0;
             while (_cars.Count < target && guard++ < 250)
             {
