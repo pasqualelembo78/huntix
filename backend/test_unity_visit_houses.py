@@ -279,6 +279,17 @@ class TestAccessoDeterministico(unittest.TestCase):
         self.assertIn('HandleNavigateToHouse(jsonData);', GAME_MANAGER)
         self.assertIn('NavigationState.Set(label, "casa", lat, lng);', GAME_MANAGER)
         self.assertIn("fun getHouseTargets(context: Context): JSONArray", ANDROID_SYNC)
+        # Unity esporta houseTargets come stringa JsonUtility: il ponte Android
+        # deve accettare sia l'array sia il testo che contiene l'array.
+        self.assertIn("private fun snapshotArray(context: Context, key: String): JSONArray",
+                      ANDROID_SYNC)
+        self.assertIn('snap.optJSONArray(key)?.let { return it }', ANDROID_SYNC)
+        self.assertIn('val cleaned = strayNumberQuote.replace(raw, "$1")', ANDROID_SYNC)
+        self.assertIn('return try { JSONArray(cleaned) }', ANDROID_SYNC)
+        self.assertIn('getHouseTargets(context: Context): JSONArray = snapshotArray(context, "houseTargets")',
+                      ANDROID_SYNC)
+        self.assertNotIn('optJSONArray("houseTargets")', ANDROID_SYNC)
+        self.assertIn('snapshotArray(context, "houseTargets").length() > 0', ANDROID_SYNC)
         self.assertIn("fun goToHouse(context: Context, osmId: Long = 405228771L): Boolean",
                       ANDROID_SYNC)
         self.assertIn('"navigateToHouse", payload.toString()', ANDROID_SYNC)

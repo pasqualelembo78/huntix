@@ -371,6 +371,28 @@ per l'esito finale della build.
 `houseTargets` (`city_house_visits_v1`/snapshot city) e le invia a Unity con
 l'evento `navigateToHouse`, che imposta la stessa freccetta della bussola.
 
+**Correzione del ponte (dopo controllo su emulatore).** `CityWorldSync.cs`
+serializza `houseTargets` e `venueTargets` come campi `string` (JsonUtility non
+supporta array annidati): nello snapshot salvato il valore è quindi una stringa
+che contiene un `JSONArray`, non un array. Il vecchio lettore Android usava
+`soptJSONArray` e otteneva un array vuoto, perciò il pulsante `CASA 🏡` (e anche
+`STADIO 🏟️` / `IPPODROMO 🏇`) rispondeva «Apri prima MiCittà per sincronizzare la
+casa» anche con snapshot già presente. `CityStateSync.snapshotArray(context,
+key)` ora accetta **entrambe** le forme (array nativo e stringa JSON) per
+`houseTargets` e `venueTargets`, e usa lo stesso helper per i flag del report.
+Nessuna modifica a Unity, alle geo, agli snapshot esistenti o alla cache tile.
+
+**Seconda correzione dello stesso ponte (coordinate venue a 0).** Con lo
+snapshot reale, `JSONArray(venueTargets)` continuava a fallire: Unity
+(`VenueRegistry.TargetsJson`, riga 237) chiude la riga con `"\"}"` anche quando
+l'ultimo campo è il numero `lng`, quindi il testo è `..."lng":16.84"}` invece
+di `..."lng":16.84}`. L'array veniva rifiutato tutto e `STADIO 🏟️` /
+`IPPODROMO 🏇` cadevano sul fallback di categoria con **`lng:0`** (navigazione
+verso Greenwich). Lo stesso `snapshotArray` ora rimuove la virgolette in eccesso
+solo dopo i numeri dei campi noti (`lat`, `lng`, `centerLat`, `centerLng`) prima
+di parsare; le stringhe con virgolette legittime (es. il campo `name`) restano
+intatte. Anche questa correzione è solo lato Android.
+
 ### 21.2 Rampe del parcheggio sotterraneo — Roma
 
 Le rampe sono POI sintetici deterministici generati nella tile `IT_087_061`
@@ -447,13 +469,29 @@ sotterraneo resta `SOTTERRANEO` e invariato.
 
 Verifiche di questo filone: `cscheck` (**HUNTIX_FULL**) OK e
 `python3 -m unittest discover -s backend -p 'test_*.py'` **295 test OK**.
-Build release finale (`LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-SKIP_MAP_UPDATE=1 FORCE_UNITY_AAR=1 BUILD_UNITY_AAR=1 ./build_release.sh --auto`):
-**riuscita** (export Unity 4m44s, assembleRelease 1m49s), APK firmato e verificato
-in `app/build/outputs/apk/release/app-release-signed.apk`
-(**204.800.625 byte**, SHA-256
-`9dd443a29b295333474481360aea8291b3c9254bbb1bdb48fda88561b306d25f`).
-Il comportamento visivo su device non è verificabile in questo ambiente.
+Build release finale con le correzioni del ponte
+(`SKIP_MAP_UPDATE=1 SKIP_UNITY_AAR=1 ./build_release.sh --auto`, AAR Unity
+preesistente riutilizzato perché le fonti Unity non sono cambiate): **riuscita**
+(`BUILD SUCCESSFUL in 6m 24s`, firma verificata). APK firmato in
+`app/build/outputs/apk/release/app-release-signed.apk`
+(**204.796.529 byte**, SHA-256
+`a344a90108a99cac049e954f07251062fcf4de0c72ac35e839e37748a2fe73af`).
+
+**Controllo su emulatore (Android 15 headless, `emulator-5556`).** APK installato
+con `install -r`, snapshot di prova `city_sync_prefs.xml` ripristinato, MiCittà
+avviata online fino a `CityReady`, poi mappa Android e pulsanti:
+
+- **CASA 🏡** → `navigateToHouse` con
+  `{"lat":41.4530015,"lng":15.5344424,"label":"Casa di Foggia"}`, log Unity
+  `[GameManager] navigazione casa da Android: Casa di Foggia (41.4530015,15.5344424)`.
+- **STADIO 🏟️** → `navigateToVenue` con
+  `{"id":"stadio-osm-28693751","kind":"stadio","label":"Stadio San Nicola","lat":41.08473205566406,"lng":16.840084075927734}`
+  (prima della correzione il payload aveva `lng:0`).
+- **IPPODROMO 🏇** → `navigateToVenue` con
+  `{"id":"ippodromo-osm-1238289735","kind":"ippodromo","label":"Triggiano","lat":41.077823638916016,"lng":16.895492553710938}`.
+
+Nessuna cache tile toccata, nessuna geo rigenerata, nessun bump di
+`TileClient.CacheVersion`, Roma intatta.
 
 ---
 

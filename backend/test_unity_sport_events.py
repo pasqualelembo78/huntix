@@ -326,6 +326,17 @@ class TestWaypointImpianti(unittest.TestCase):
         self.assertIn("HandleNavigateToVenue(jsonData)", GAME_MANAGER)
         self.assertIn("City.Events.VenueRegistry.Find", GAME_MANAGER)
         self.assertIn("fun getVenueTargets", ANDROID_SYNC)
+        # Stesso formato di houseTargets: JsonUtility scrive una stringa con
+        # dentro un JSONArray, non un array annidato.
+        self.assertIn('getVenueTargets(context: Context): JSONArray = snapshotArray(context, "venueTargets")',
+                      ANDROID_SYNC)
+        self.assertNotIn('optJSONArray("venueTargets")', ANDROID_SYNC)
+        # VenueRegistry.TargetsJson scrive `..."lng":16.84"}` (virgolette in
+        # eccesso dopo il numero): il ponte deve sanitarla prima di parsare.
+        self.assertIn('private val strayNumberQuote = Regex(', ANDROID_SYNC)
+        self.assertIn('val cleaned = strayNumberQuote.replace(raw, "$1")', ANDROID_SYNC)
+        self.assertIn('return try { JSONArray(cleaned) }', ANDROID_SYNC)
+        self.assertIn('snapshotArray(context, "venueTargets").length() > 0', ANDROID_SYNC)
         self.assertIn("fun goToVenue", ANDROID_SYNC)
         self.assertIn('"navigateToVenue"', ANDROID_SYNC)
         self.assertIn("report.put(\"venueTargets\"", ANDROID_SYNC)

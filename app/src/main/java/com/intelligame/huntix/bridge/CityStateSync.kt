@@ -189,12 +189,36 @@ object CityStateSync {
         } catch (e: Exception) { "{}" }
     }
 
-    /** Punti di accesso delle case visitabili (Unity → app), dallo snapshot. */
-    fun getHouseTargets(context: Context): JSONArray {
-        return try {
-            JSONObject(getSnapshot(context)).optJSONArray("houseTargets") ?: JSONArray()
-        } catch (e: Exception) { JSONArray() }
+    /**
+     * Unity serializza houseTargets/venueTargets come campi `string` nello
+     * snapshot (JsonUtility non supporta array annidati): il valore e' quindi
+     * testo che contiene un JSONArray. Accettiamo entrambe le forme — array
+     * nativo e stringa JSON — cosi' CASA/STADIO funzionano con lo snapshot
+     * esportato davvero da CityWorldSync, non solo con uno handmade.
+     *
+     * VenueRegistry.TargetsJson (Unity) chiude ogni riga con `"\"}"` anche
+     * quando l'ultimo campo e' numerico (`lng`): il testo risultante ha quindi
+     * `..."lng":16.84"}` invece di `..."lng":16.84}`. org.json (e Python)
+     * rifiutano l'intero array, perciò STADIO/IPPODROMO finivano sul fallback
+     * con lng=0. Rimuoviamo solo la virgolette in eccesso subito dopo un
+     * numero nei campi noti, senza toccare le stringhe (che possono finire
+     * con `"` e virgolette escape legittime).
+     */
+    private val strayNumberQuote = Regex(
+        """(,"(?:lat|lng|centerLat|centerLng)":-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)"(?=[,}\]])"""
+    )
+
+    private fun snapshotArray(context: Context, key: String): JSONArray {
+        val snap = try { JSONObject(getSnapshot(context)) } catch (_: Exception) { return JSONArray() }
+        snap.optJSONArray(key)?.let { return it }
+        val raw = snap.optString(key, "")
+        if (raw.isBlank()) return JSONArray()
+        val cleaned = strayNumberQuote.replace(raw, "$1")
+        return try { JSONArray(cleaned) } catch (_: Exception) { JSONArray() }
     }
+
+    /** Punti di accesso delle case visitabili (Unity → app), dallo snapshot. */
+    fun getHouseTargets(context: Context): JSONArray = snapshotArray(context, "houseTargets")
 
     /**
      * Android → Unity: imposta come destinazione la porta della casa visitabile
@@ -220,11 +244,7 @@ object CityStateSync {
     }
 
     /** Punti degli impianti sportivi REALI (Unity → app), dallo snapshot. */
-    fun getVenueTargets(context: Context): JSONArray {
-        return try {
-            JSONObject(getSnapshot(context)).optJSONArray("venueTargets") ?: JSONArray()
-        } catch (e: Exception) { JSONArray() }
-    }
+    fun getVenueTargets(context: Context): JSONArray = snapshotArray(context, "venueTargets")
 
     /**
      * Android → Unity: imposta come destinazione uno stadio o un ippodromo
@@ -601,12 +621,12 @@ object CityStateSync {
             getHouseTargets(context).length()
         } catch (e: Exception) { 0 })
         report.put("houseTargetSnapshot",
-            JSONObject(getSnapshot(context)).optJSONArray("houseTargets") != null)
+            snapshotArray(context, "houseTargets").length() > 0)
         report.put("venueTargets", try {
             getVenueTargets(context).length()
         } catch (e: Exception) { 0 })
         report.put("venueTargetSnapshot",
-            JSONObject(getSnapshot(context)).optJSONArray("venueTargets") != null)
+            snapshotArray(context, "venueTargets").length() > 0)
         report.put("shopStyle", try {
             JSONObject(getShopStyle(context)).optBoolean("usePrefab", false)
         } catch (e: Exception) { false })
