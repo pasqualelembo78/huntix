@@ -1020,3 +1020,77 @@ dell'app. La cattura delle uova resta il mini-gioco preesistente già coperto
 dalle sezioni 27-28; in questa prova non è stato forzato.
 
 Le preferenze modificate per il collaudo sono state ripristinate dai backup.
+
+## 30. Carriera, abilità dei mestieri e furto auto (26/11/2026)
+
+### 30.1 Richiesta e diagnosi
+
+L'utente ha segnalato che, completando un lavoro in MiCittà, il livello visibile
+restava `1`, e ha chiesto che salire di livello faccia anche guadagnare più
+soldi. Ha inoltre chiesto un furto auto **permanente** (niente officina e
+concessionaria obbligatorie) sbloccato da un'abilità "master nei furti", con
+tipologie diverse per livello (bici/auto piccole → auto grandi → appartamenti),
+nuovi utenti da abilità zero e altre abilità "carine".
+
+La diagnosi ha confermato tre livelli distinti e non collegati: `JobManager.Level`
+(locale del lavoro, cap 10, +15% di paga), `PlayerProfile.level` (quello che
+vede l'utente, soglia `lv*150`) e i livelli separati di `MiniGameManager`.
+Un lavoro dava 16-22 XP contro soglie da 150, quindi il livello del profilo non
+si muoveva. Il server `vehicle_services.py` ha già un motore furti/riscatti/
+abbandoni: è stato lasciato intatto e il furto è un **gate lato client**.
+
+### 30.2 Scelta delle abilità
+
+Oltre a **Mastro Ladro** (che apre i furti) sono state proposte e introdotte:
+**Pilota**, **Meccanico**, **Attore**, **Assassino** e **Contabile**. La scala è
+coerente con i mestieri già presenti (Tassista/Corriere/Ronda/Cineasta) e con
+quelli citati come futuri (attore, cassiere, banchiere, parcheggiatore
+abusivo), senza implementarli ora. Le vecchie sei abilità caccia-uova di
+`AbilityManager` restano invariate: il nuovo sistema è separato.
+
+### 30.3 Implementazione additiva
+
+- **Lavoro → +1 livello e più paga.** `JobManager` invia `CityJobCompleted` con
+  luogo testuale e coordinate; Android accredita esattamente
+  `xpForNextLevel - xp` sul profilo, regala 1 punto abilità e mostra il toast
+  `livello N → N+1`. La paga usa `PayMult` storico (+15%) moltiplicato per il
+  nuovo `CareerPayMult` (+10% per livello di carriera, fino al livello 50).
+- **Abilità.** Nuovo `CitySkillManager.kt` (fonte di verità Android,
+  SharedPreferences, livelli 0..10, punti e usi) e specchio Unity
+  `CitySkills.cs`. Nuovi utenti partono da 0; ogni salto di livello regala un
+  punto; l'utente lo spende dalla sezione "Mestieri di MiCittà" in `Abilità`.
+- **Furto.** Nuovo pannello `TheftUI.cs` raggiungibile da concessionaria e
+  officina con il pulsante "🚗 RUB AUTO (Mastro Ladro Lv.N)". Il gate segue il
+  prezzo: Lv1 bici/scooter/moto, Lv2 utilitarie, Lv4 SUV/furgoni, Lv6 sportive,
+  Lv8 auto di lusso, Lv10 appartamenti (futuro). L'auto presa entra nel registro
+  con codice `T...`, diventa inventario/possesso permanente e viene consegnata
+  e montata subito: nessun `Wallet.Spend`, nessun timer e nessun riscatto.
+- **Ponte bidirezionale.** Unity→Android: `CityJobCompleted`,
+  `CityVehicleStolen` aggiunti alla whitelist `UnityIpc.APP_EVENTS`; Android→
+  Unity: `citySkills`/`citySkillPoints` in `setMode` ed evento caldo
+  `CitySkillsUpdated`.
+
+### 30.4 Riflesso uova
+
+Ogni lavoro registrato e ogni auto rubata scrivono su `EggWhereLog` con
+**luogo testuale + lat/lng**: `MiCittà→lavori→<mestiere>` e
+`MiCittà→garage→furto→<modello>`. Se il lavoro lascia davvero un uovo nel mondo
+viene registrata anche la rarità; il furto lascia "uovo nel bagagliaio". Le uova
+già presenti alle stazioni LAVORI e alla consegna non sono state modificate.
+
+### 30.5 Verifiche
+
+- `python3 backend/test_unity_city_skills.py`: **12 test OK**; tutti i 14
+  `backend/test_unity*.py` passano.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori.
+- `SKIP_MAP_UPDATE=1 ./gradlew :app:compileDebugKotlin
+  :app:compileDebugJavaWithJavac --no-daemon`: **BUILD SUCCESSFUL**.
+- `GameManager.cs` (fuori dalla copertura mcs dello stub) non è compilabile con
+  `check.sh` a causa di sintassi C# moderna preesistente: le aggiunte sono
+  state verificate per confronto con il parser dell'evento pipe e dal build
+  Gradle lato Android.
+- QA su device/emulatore: **non eseguito**, il tentativo di avvio di
+  `huntix_field` è terminato con `Segmentation fault (core dumped)` prima del
+  boot. Restano da verificare su dispositivo: lavoro → livello 2 e paga più
+  alta, spesa di 1 punto abilità, furto bici al Lv1 e rifiuto di un'auto di
+  lusso senza livello.
