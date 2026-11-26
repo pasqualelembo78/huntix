@@ -334,7 +334,9 @@ namespace City.UI
 
         private void BuildEggPanel()
         {
-            _eggPanel = MakeSubPanel("EggPanel", 620f, 410f);
+            // Mandato §13: due righe additive per le aree globali. L'altezza
+            // cresce insieme alle righe, senza toccare le voci storiche.
+            _eggPanel = MakeSubPanel("EggPanel", 620f, 590f);
             AddHeader(_eggPanel, "UOVA E RICETTE");
             var rows = new List<MenuEntry>
             {
@@ -383,6 +385,19 @@ namespace City.UI
                     {
                         Debug.LogWarning("[HamburgerMenu] RecipeRequest: " + e.Message);
                     }
+                }),
+                // Mandato §13: le aree globali non sono un universo a sé: qui
+                // si entra nelle stesse schermate Android usate dal resto
+                // dell'app. LegacyIndex -1 = nessun toggle storico da aggiornare.
+                new MenuEntry("📦 Area Inventario (globale)", -1, () =>
+                {
+                    CloseAll();
+                    City.Diagnostics.CityGlobalAreasBridge.OpenInventory();
+                }),
+                new MenuEntry("⚡ Area Abilità (globale)", -1, () =>
+                {
+                    CloseAll();
+                    City.Diagnostics.CityGlobalAreasBridge.OpenSkills();
                 }),
             };
             for (int i = 0; i < rows.Count; i++)

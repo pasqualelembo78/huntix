@@ -704,6 +704,14 @@ namespace Huntix.Core
                     City.Diagnostics.OpenSourceFeatureBridge.RestoreFromAndroid(
                         osFlags.Groups[1].Value);
 
+                // Mandato §13: aree globali e attività di MiCittà tornano da
+                // Android come ripristino passivo (nessun uovo, nessun premio).
+                var globalAreas = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"globalAreas\"\\s*:\\s*\"([^\"]*)\"");
+                if (globalAreas.Success)
+                    City.Diagnostics.CityGlobalAreasBridge.RestoreFromAndroid(
+                        globalAreas.Groups[1].Value);
+
                 // Grafica cinematografica: secondo gruppo di preferenze,
                 // ripristino passivo senza uova ne' notifiche.
                 var gfxFlags = System.Text.RegularExpressions.Regex.Match(

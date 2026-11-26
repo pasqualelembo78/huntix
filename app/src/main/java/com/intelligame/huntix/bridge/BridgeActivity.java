@@ -204,6 +204,10 @@ public class BridgeActivity extends UnityPlayerActivity {
                         }
                     }
                     j.put("vegetationFeatures", vegFlags.toString());
+                    // Mandato §13: aree globali e attività di MiCittà tornano a
+                    // Unity come ripristino passivo (contatori, nessun premio).
+                    j.put("globalAreas",
+                            com.intelligame.huntix.managers.GlobalAreas.INSTANCE.exportFlags(this));
                     // Fase 2 · consumabili: solo lo specchio dell'esca attiva e
                     // il numero di aromi disponibili. Nessun premio, nessun
                     // uovo generato su un ripristino passivo.

@@ -1174,3 +1174,68 @@ solita dedup per chiave; Android riceve anche `VegetationFeatureChanged` con
   terminato con `Segmentation fault` prima del boot. Restano da verificare su
   dispositivo la persistenza visiva dei ciuffi dopo uno spostamento GPS e
   l'accensione di alberi/luci in Città Gioco e nel mondo legacy.
+
+## 32. Aree globali e MiCittà parte del tutto (26/11/2026)
+
+### 32.1 Richiesta e diagnosi
+
+L'utente ha chiesto **Area Inventario**, **menu Inventario**, **Area Abilità** e
+menu relativo raggiungibili da tutta l'app, «non solo da MiCittà ma anche e
+soprattutto dalla home». Inoltre tutta l'attività di MiCittà — abilità,
+inventario, scoperte, acquisti, vendite — deve essere visibile e conosciuta nel
+resto del gioco: MiCittà non è un universo a sé, ma una parte del tutto.
+
+Il problema non era la mancanza delle schermate (`EggCollectionActivity` e
+`AbilityActivity` esistevano già), ma la **visibilità e la connessione**: le due
+aree si aprivano solo da percorsi interni e gli eventi di MiCittà restavano nel
+processo Unity, senza confluire nel profilo Android e nel diario posizionale
+usato dal resto dell'app.
+
+### 32.2 Principio aggiunto al Mandato
+
+`HUNTIX_MANDATO.md` ora contiene il §13 **MiCittà è una parte del tutto**, con
+cinque regole obbligatorie: aree globali raggiungibili da Home, menu `Altro`,
+partita AR e menu Unity; stato condiviso non duplicato; memoria del «dove» in
+un solo diario; riflesso uova delle aperture e delle azioni; conservazione
+integrale dei sistemi esistenti (§7 e §11). Criterio di verifica: se un evento
+di MiCittà non è visibile dalla Home o dal profilo Android, il lavoro non è
+finito.
+
+### 32.3 Fix additivi
+
+| File | Modifica |
+|---|---|
+| `managers/GlobalAreas.kt` | Nuovo unico punto di ingresso: apre le due Activity esistenti, contatori `inv/skill/disc/buy/sell`, ultimo luogo/azione, `snapshot`/`summary`, import/export flag, scrittura in `EggWhereLog` |
+| `HomeActivity.kt` | Due card evidenti «AREA INVENTARIO» e «AREA ABILITÀ» con riepilogo condiviso |
+| `BaseNavActivity.kt` | Voci appendute 8 e 9 nel menu `Altro`: indici storici 0..7 invariati |
+| `bridge/Bridge.kt`, `UnityIpc.kt` | Nuovi eventi `AreaInventarioOpen`, `AreaAbilitaOpen`, `CityGlobalActivity`, router e whitelist APP |
+| `bridge/BridgeActivity.java` | `setMode` rimanda `globalAreas` come ripristino passivo |
+| `bridge/CityStateSync.kt` | Lo snapshot importa i flag globali prendendo il massimo mai visto |
+| `EggCollectionActivity.kt`, `ui/AbilityActivity.kt`, `ui/PlayerProfileTabs.kt`, `MainActivityUi.kt` | Riepiloghi e pulsanti nelle due aree, nel profilo e nel menu in-game AR |
+| `Diagnostics/CityGlobalAreasBridge.cs` | Nuovo ponte Unity→Android con coordinate, luogo, timestamp, contatori, restore e uovo-indizio una tantum |
+| `UI/HamburgerMenu.cs` | Due righe additive in `EggPanel` (`LegacyIndex -1`); altezza 410→590 px, menu 29→31 voci |
+| `Scripts/Core/GameManager.cs`, `Sync/CityWorldSync.cs` | Restore da `setMode` e snapshot `globalAreas` |
+| `UI/UIManager.cs`, `Vehicle/VehicleInteract.cs`, `Economy/EggDex.cs` | Acquisti, vendite e scoperte segnalati al mondo Huntix |
+| `backend/test_unity_global_areas.py` | 11 guardie statiche per Mandato, ingressi Android/Unity, bridge bidirezionale e riflesso uova |
+
+Nessun menu, evento, indice, preferenza o sistema preesistente è stato rimosso:
+il vecchio `InventoryViewRequest` e la collezione Android restano intatti e
+vengono riutilizzati dalle nuove voci.
+
+### 32.4 Riflesso della caccia alle uova
+
+L'apertura delle aree e ogni azione di MiCittà passano dallo stesso canale delle
+uova posizionali: `CityGlobalAreasBridge` invia `area/action/detail/place/lat/
+lng/tsMt`, Android aggiorna i contatori globali e scrive la voce in
+`EggWhereLog` con `kind=evento`. Unity lascia **un solo uovo-indizio per coppia
+area→azione** via `FeatureEggHidden → GrantAuditEgg`; non c'è seconda economia,
+non c'è premio in valuta e un ripristino passivo da `setMode` non genera uova.
+
+### 32.5 Verifiche
+
+- `python3 backend/test_unity_global_areas.py`: **11 test OK**.
+- `python3 -m unittest discover -p 'test_*.py'` in `backend/`: **344 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
+  **BUILD SUCCESSFUL** (solo note di API deprecate preesistenti).
+- `git diff --check`: pulito.

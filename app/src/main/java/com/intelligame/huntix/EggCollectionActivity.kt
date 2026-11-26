@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.intelligame.huntix.managers.EggInventoryViewManager
+import com.intelligame.huntix.managers.GlobalAreas
 
 /**
  * Fase 2 · voce 11: vista dell'inventario uova già esistente.
@@ -42,7 +43,17 @@ class EggCollectionActivity : BaseNavActivity() {
                        "cambiarla non tocca le battaglie."
                 textSize = 12f
                 setTextColor(Color.parseColor("#C8E6C9"))
-            })
+            }),
+            // Mandato §13: l'inventario è globale e mostra ciò che MiCittà
+            // ha fatto nel mondo, non solo le uova della collezione.
+            UiKit.card(c, TextView(c).apply {
+                text = GlobalAreas.summary(c)
+                textSize = 12f
+                setTextColor(Color.parseColor("#FFCC80"))
+            }),
+            UiKit.button(c, "⚡ Vai all'Area Abilità", UiKit.ACCENT) {
+                GlobalAreas.openSkills(c)
+            }
         )
 
         children.add(UiKit.section(c, "Ordina per (solo vista)"))

@@ -279,6 +279,12 @@ object Bridge {
             "CityJobCompleted" -> handleCityJobCompleted(jsonData)
             // ── MiCittà: furto auto (gate Mastro Ladro) → diario posizionale. ──
             "CityVehicleStolen" -> handleCityVehicleStolen(jsonData)
+            // ── Mandato §13: aree globali e attività di MiCittà. Le aperture
+            //    delle aree e ogni acquisto/vendita/scoperta confluiscono nello
+            //    stesso riepilogo Android e nello stesso diario posizionale. ──
+            "AreaInventarioOpen" -> handleGlobalAreaOpen("inventario", jsonData)
+            "AreaAbilitaOpen" -> handleGlobalAreaOpen("abilita", jsonData)
+            "CityGlobalActivity" -> handleCityGlobalActivity(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
             "CityGemsEarned" -> handleCityGemsEarned(jsonData)
             "CityEnergyUpdate" -> handleCityEnergyUpdate(jsonData)
@@ -815,6 +821,34 @@ object Bridge {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         ctx.startActivity(intent)
+    }
+
+    /**
+     * Mandato §13 · Miacittà chiede di aprire un'area globale Android.
+     * Non esiste un secondo inventario/archivio: si aprono le schermate reali
+     * già usate dal resto dell'app e si registra l'apertura nel diario unico.
+     */
+    private fun handleGlobalAreaOpen(area: String, jsonData: String) {
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { JSONObject() }
+        val payload = j.apply {
+            put("area", area)
+            if (!has("action")) put("action", "apertura")
+        }.toString()
+        val ctx = UnityAppContext.context ?: UnityPlayer.currentActivity ?: return
+        com.intelligame.huntix.managers.GlobalAreas.record(ctx, payload)
+        if (j.optBoolean("snapshot", false)) {
+            com.intelligame.huntix.managers.GlobalAreas.exportFlags(ctx)
+            return
+        }
+        if (area == "inventario") com.intelligame.huntix.managers.GlobalAreas.openInventory(ctx)
+        else com.intelligame.huntix.managers.GlobalAreas.openSkills(ctx)
+    }
+
+    /** Mandato §13 · acquisti, vendite, scoperte e ogni altra azione di
+     *  Miacittà diventano una voce globale con luogo/coordinate/timestamp. */
+    private fun handleCityGlobalActivity(jsonData: String) {
+        val ctx = UnityAppContext.context ?: UnityPlayer.currentActivity ?: return
+        com.intelligame.huntix.managers.GlobalAreas.record(ctx, jsonData)
     }
 
     /**

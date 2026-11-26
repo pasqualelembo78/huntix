@@ -11,6 +11,7 @@ import com.intelligame.huntix.gamification.AbilityManager
 import com.intelligame.huntix.gamification.AbilityManager.Ability
 import com.intelligame.huntix.gamification.CitySkillManager
 import com.intelligame.huntix.BaseNavActivity
+import com.intelligame.huntix.managers.GlobalAreas
 
 class AbilityActivity : BaseNavActivity() {
 
@@ -35,6 +36,17 @@ class AbilityActivity : BaseNavActivity() {
         // Mestieri di MiCittà: sistema separato dalle 6 abilità caccia-uova,
         // con punti guadagnati a ogni lavoro e livelli a partire da ZERO.
         root.addView(buildCitySkillsSection())
+        // Mandato §13: abilità caccia-uova e mestieri di MiCittà vivono qui,
+        // ma il loro effetto è visibile in tutto il gioco.
+        root.addView(tv(GlobalAreas.summary(this), 12f, "#FFCC80").also {
+            it.gravity = Gravity.CENTER; it.setPadding(0, dp(8), 0, dp(8))
+        })
+        root.addView(Button(this).apply {
+            text = "📦 Apri l'Area Inventario globale"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#6A1B9A"))
+            setOnClickListener { GlobalAreas.openInventory(this@AbilityActivity) }
+        })
         root.addView(tv("Caricamento...", 13f, "#888888").also { it.gravity = Gravity.CENTER })
 
         setContentView(scroll)

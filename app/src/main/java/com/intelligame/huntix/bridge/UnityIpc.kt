@@ -36,6 +36,9 @@ object UnityIpc {
         // MiCittà: lavoro completato (livello + punto abilità + uovo posizionale)
         // e furto auto gated dalle abilità.
         "CityJobCompleted", "CityVehicleStolen",
+        // Mandato §13: aperture delle aree globali e attività di MiCittà
+        // (acquisti, vendite, scoperte) da specchiare nel profilo Android.
+        "AreaInventarioOpen", "AreaAbilitaOpen", "CityGlobalActivity",
         // Prestazioni adattive: tier calcolato in Unity, specchiato in Android
         // (preferenza + telemetria) e ripristinato in setMode.
         "CityPerfTierChanged",

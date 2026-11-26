@@ -502,6 +502,10 @@ object CityStateSync {
             if (shopStates.isNotBlank() && shopStates != getShopActivity(context)) {
                 onShopActivity(context, shopStates)
             }
+            // Mandato §13: aree globali e attività di MiCittà nello snapshot.
+            // Prende il massimo mai visto, senza duplicare inventari né uova.
+            com.intelligame.huntix.managers.GlobalAreas.importFlags(
+                context, j.optString("globalAreas", ""))
             // Interni universali: mirror dei locali visitati nello snapshot.
             mergeUniversalSnapshot(context, j.optString("universalInteriors", ""))
             // Case visitabili OSM: visite e uova dei nascondigli nello snapshot.

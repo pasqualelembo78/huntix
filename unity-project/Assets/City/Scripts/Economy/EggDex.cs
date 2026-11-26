@@ -57,6 +57,10 @@ namespace City.Economy
             if (_found.Contains(key)) return false;
             _found.Add(key);
             Save();
+            // Mandato §13: una scoperta di MiCittà è una scoperta dell'intero
+            // Huntix, quindi finisce nel riepilogo/diario globale Android.
+            City.Diagnostics.CityGlobalAreasBridge.Record(
+                "scoperte", "uovo", key, "città→eggdex→" + key);
             return true;
         }
 
@@ -67,6 +71,8 @@ namespace City.Economy
             if (_found.Contains(key)) return;
             _found.Add(key);
             Save();
+            City.Diagnostics.CityGlobalAreasBridge.Record(
+                "scoperte", "uovo", key, "città→eggdex→" + key);
         }
 
         /// <summary>True se la combinazione tipo/rarita' e' gia' stata scoperta.</summary>

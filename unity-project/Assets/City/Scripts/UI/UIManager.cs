@@ -960,6 +960,9 @@ namespace City.UI
             }
             Wallet.Spend(item.price);
             Inventory.Add(item.name);
+            // Mandato §13: l'acquisto di MiCittà è visibile in tutta l'app.
+            City.Diagnostics.CityGlobalAreasBridge.Record(
+                "acquisti", "negozio", item.name, "città→negozio→" + item.name);
             ShowToast("Acquistato: " + item.name);
             RebuildShopList();
             UpdateMoney(Wallet.Money);

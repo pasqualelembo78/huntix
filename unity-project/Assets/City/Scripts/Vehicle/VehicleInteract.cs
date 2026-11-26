@@ -163,6 +163,12 @@ namespace City.Vehicle
                 Inventory.Remove("vehicle_" + vehicleCode);
                 Wallet.Earn(data.price * 6 / 10);
                 api.MarkSold(vehicleCode);
+                // Mandato §13: la vendita lascia traccia nel diario globale.
+                var geo = WorldOrigin.ToGeo(transform.position);
+                City.Diagnostics.CityGlobalAreasBridge.Record(
+                    "vendita", "veicolo", vehicleCode,
+                    "città→vendita→" + vehicleCode + " @" +
+                    geo.lat.ToString("F5") + "," + geo.lng.ToString("F5"));
                 RefreshLabel();
                 done?.Invoke(true);
             });

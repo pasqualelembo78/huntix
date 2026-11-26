@@ -79,7 +79,7 @@ class TestBridgeVegetazione(unittest.TestCase):
         self.assertIn('RefreshVegetationDetailLabels()', self.menu)
         self.assertIn('new MenuEntry("Prestazioni adattive: Attive", 21', self.menu)
         # 11 primo livello + 3 uova + 15 impostazioni (due voci nuove).
-        self.assertEqual(self.menu.count('new MenuEntry('), 29)
+        self.assertEqual(self.menu.count('new MenuEntry('), 31)
         altezza = re.search(r'MakeSubPanel\("SettingsPanel",\s*700f,\s*(\d+)f\)', self.menu)
         self.assertIsNotNone(altezza)
         self.assertGreaterEqual(int(altezza.group(1)), 1240)

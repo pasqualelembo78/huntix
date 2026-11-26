@@ -145,7 +145,13 @@ open class BaseNavActivity : AppCompatActivity() {
     }
 
     private fun showAltroMenu() {
-        val items = arrayOf("Profilo", "Locali & POI", "Impostazioni", "Abilità", "Eventi", "Le Tue Creature", "Invita Amico", "Info e Legale")
+        val items = arrayOf(
+            "Profilo", "Locali & POI", "Impostazioni", "Abilità", "Eventi",
+            "Le Tue Creature", "Invita Amico", "Info e Legale",
+            // Mandato §13: aree globali raggiungibili da ogni Activity con
+            // bottom nav. Le voci storiche conservano gli indici 0..7.
+            "\uD83D\uDCE6 Area Inventario", "⚡ Area Abilità"
+        )
         AlertDialog.Builder(this).setTitle("Altro").setItems(items) { _, i -> when (i) {
             0 -> startActivity(Intent(this, PlayerProfileActivity::class.java))
             1 -> startActivity(Intent(this, PoiListActivity::class.java))
@@ -155,6 +161,8 @@ open class BaseNavActivity : AppCompatActivity() {
             5 -> startActivity(Intent(this, SurpriseInventoryActivity::class.java))
             6 -> showInviteDialog()
             7 -> startActivity(Intent(this, InfoLegalActivity::class.java))
+            8 -> com.intelligame.huntix.managers.GlobalAreas.openInventory(this)
+            9 -> com.intelligame.huntix.managers.GlobalAreas.openSkills(this)
         }}.show()
     }
 

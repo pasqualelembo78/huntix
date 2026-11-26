@@ -115,6 +115,9 @@ namespace City.Sync
             j.ts = (long)(ticksUtc / TimeSpan.TicksPerMillisecond);
 
             j.money = Wallet.Money;
+            // Mandato §13: aree globali/attività di MiCittà nello snapshot,
+            // così Android le vede anche senza evento in tempo reale.
+            j.globalAreas = City.Diagnostics.CityGlobalAreasBridge.ExportFlags();
             j.bank = PlayerPrefs.GetInt("city_bank", 0);
             j.energy = EnergySystem.Value;
             j.sleep = SleepSystem.Value;
@@ -226,6 +229,7 @@ namespace City.Sync
             public int ver = SnapshotVer;
             public long ts;
             public int money;
+            public string globalAreas = "";
             public int bank;
             public int energy;
             public int sleep;

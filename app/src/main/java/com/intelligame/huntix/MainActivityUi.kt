@@ -133,6 +133,32 @@ internal fun MainActivity.openInGameMenu() {
     binding.menuTvRiddleCount.text = "${state.riddleCount} indovinelli"
     binding.menuTvSaveInfo.text = "Salvataggi: ..."
 
+    // Mandato §13: dalla partita AR si entra nelle aree globali senza uscire
+    // dal gioco. La riga è creata una volta sola e conserva i pulsanti storici.
+    if (binding.inGameMenuSheet.findViewWithTag<View>("globalAreasRow") == null) {
+        val row = android.widget.LinearLayout(this@openInGameMenu).apply {
+            tag = "globalAreasRow"
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val inv = android.widget.Button(this@openInGameMenu).apply {
+            text = "📦 Inventario"
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setOnClickListener { com.intelligame.huntix.managers.GlobalAreas.openInventory(this@openInGameMenu) }
+        }
+        val skills = android.widget.Button(this@openInGameMenu).apply {
+            text = "⚡ Abilità"
+            layoutParams = android.widget.LinearLayout.LayoutParams(0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setOnClickListener { com.intelligame.huntix.managers.GlobalAreas.openSkills(this@openInGameMenu) }
+        }
+        row.addView(inv); row.addView(skills)
+        binding.inGameMenuSheet.addView(row)
+    }
+
     lifecycleScope.launch(Dispatchers.IO) {
         val count = try { dm.getSaveSlots().size } catch (_: Exception) { 0 }
         withContext(Dispatchers.Main) { binding.menuTvSaveInfo.text = "Salvataggi: $count" }

@@ -9,6 +9,7 @@ import com.intelligame.huntix.LocationBadge
 import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.managers.MiniGameManager
 import com.intelligame.huntix.managers.SavedManager
+import com.intelligame.huntix.managers.GlobalAreas
 
 // ── TAB 0: PROFILO ────────────────────────────────────────────
 internal fun PlayerProfileActivity.buildProfileTab(root: LinearLayout) {
@@ -532,6 +533,28 @@ internal fun PlayerProfileActivity.buildStatsTab(root: LinearLayout) {
         if (homeTxt != null) {
             addView(rowText("🏠 Casa città", homeTxt, "#66FFB2", "#A5D6A7"))
         }
+    })
+
+    // Mandato §13: MiCittà nel mondo, con accesso diretto alle due aree.
+    root.addView(sectionCard("#1A0A24", "#E040FB") {
+        addView(tv("🌍 Aree globali e MiCittà", 15f, Color.parseColor("#F0ABFC"), Gravity.START, true)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        addView(tv(GlobalAreas.summary(this@buildStatsTab), 11f, Color.WHITE, Gravity.START)
+            .also { it.setPadding(0, 0, 0, dp(8)) })
+        addView(Button(this@buildStatsTab).apply {
+            text = "📦 Area Inventario"
+            setOnClickListener {
+                startActivity(Intent(this@buildStatsTab,
+                    com.intelligame.huntix.EggCollectionActivity::class.java))
+            }
+        })
+        addView(Button(this@buildStatsTab).apply {
+            text = "⚡ Area Abilità"
+            setOnClickListener {
+                startActivity(Intent(this@buildStatsTab,
+                    com.intelligame.huntix.ui.AbilityActivity::class.java))
+            }
+        })
     })
 
     // Mini giochi

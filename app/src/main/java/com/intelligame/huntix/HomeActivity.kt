@@ -19,11 +19,13 @@ import com.intelligame.huntix.gamification.LiveEventManager
 import com.intelligame.huntix.gamification.SpecialEventManager
 import com.intelligame.huntix.gamification.DailyEventManager
 import com.intelligame.huntix.gamification.DailyEventRegistry
+import com.intelligame.huntix.gamification.CitySkillManager
 import com.intelligame.huntix.ui.*
 import com.intelligame.huntix.billing.VipManager
 import com.intelligame.huntix.managers.SavedManager
 import com.intelligame.huntix.managers.DistanceTracker
 import com.intelligame.huntix.managers.PoiSearchManager
+import com.intelligame.huntix.managers.GlobalAreas
 import android.widget.Toast
 import android.Manifest
 import android.content.pm.PackageManager
@@ -464,6 +466,28 @@ try {
         quickRow2.addView(spacerH(dp(6)))
         quickRow2.addView(quickChip("\u2699\uFE0F", "Impost.", "#666666") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(quickRow2)
+
+        // ═══ AREE GLOBALI: il mondo intero, non solo MiCittà ═══
+        // Inventario e abilità restano raggiungibili da Home, dal menu Altro,
+        // dalla partita AR e dal menu di MiCittà. Le card mostrano i riepiloghi
+        // condivisi: MiCittà è una parte del tutto (Mandato §13).
+        val globalRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LP_MW, LP_WW).also { it.bottomMargin = dp(8) }
+        }
+        val globalSummary = GlobalAreas.snapshot(this)
+        globalRow.addView(gameTile("\uD83D\uDCE6", "AREA INVENTARIO",
+            "${globalSummary.optInt("inventario")} azioni · uova ovunque",
+            "#6A1B9A", "#4A148C") {
+            GlobalAreas.openInventory(this@HomeActivity)
+        })
+        globalRow.addView(spacerH(dp(8)))
+        globalRow.addView(gameTile("⚡", "AREA ABILITÀ",
+            "${CitySkillManager.points(this)} punti · mestieri Lv.0",
+            "#FF6F00", "#E65100") {
+            GlobalAreas.openSkills(this@HomeActivity)
+        })
+        root.addView(globalRow)
 
         // ═══ RICERCA LOCALI VICINI AL GPS (Overpass) ═══
         // Trova i locali intorno alla posizione corrente (negozi, bar, ristoranti,
