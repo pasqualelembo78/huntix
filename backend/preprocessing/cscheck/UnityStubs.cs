@@ -242,6 +242,8 @@ namespace UnityEngine
         public Matrix4x4 inverse => new Matrix4x4();
         public static Matrix4x4 TRS(Vector3 pos, Quaternion rot, Vector3 scale) => new Matrix4x4();
         public static Matrix4x4 operator *(Matrix4x4 a, Matrix4x4 b) => new Matrix4x4();
+        // Usato dal confronto della radice dei lotti naturali: solo nel checker.
+        public float this[int row, int col] => 0f;
     }
     // Mesh combinata una volta per prefab dei dettagli naturali (Kenney CC0).
     public struct CombineInstance { public Mesh mesh; public Matrix4x4 transform; }

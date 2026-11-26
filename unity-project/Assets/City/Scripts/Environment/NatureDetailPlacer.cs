@@ -199,12 +199,20 @@ namespace City.Environment
                     if (lightOn)
                         ScatterLight(lights, chunk, heights, center, parkSeed);
 
-                    if (nearOn)
+                    // Il riflesso uova vive nel verde anche se l'utente ha
+                    // spento solo i prati: cespugli e alberi bastano a nasconderlo.
+                    // I giardini OSM hanno un luogo testuale dedicato.
+                    if (nearOn || farOn || treeOn)
+                    {
+                        bool garden = string.Equals(park.kd, "garden",
+                            StringComparison.OrdinalIgnoreCase);
                         VegetationFeatureBridge.GrantParkEgg(
                             park.id.ToString(),
                             chunk.root.transform.position + new Vector3(center.x,
                                 SampleHeight(chunk, heights, center) + 0.65f, center.z),
-                            VegetationFeatureBridge.AllPlace);
+                            garden ? VegetationFeatureBridge.GardenPlace
+                                   : VegetationFeatureBridge.AllPlace);
+                    }
                 }
             }
 
@@ -301,7 +309,8 @@ namespace City.Environment
 
         /// <summary>Variante per world piatti (Citta' Gioco e CityOSMWorld):
         /// riceve punti in coordinate locali del mondo, quota costante, e
-        /// crea gli stessi lotti GPU. Nessuna dipendenza da tile/DEM/GeoLL.</summary>
+        /// crea gli stessi quattro gruppi (erba/fiori, cespugli/rocce, alberi
+        /// di parco e luci). Nessuna dipendenza da tile/DEM/GeoLL.</summary>
         public static GameObject BuildFlat(Transform parent, IList<Vector2> points,
             float groundY, int seed, float maxInstances = 360f)
         {
@@ -312,13 +321,20 @@ namespace City.Environment
             if (!FlatRoots.Contains(root)) FlatRoots.Add(root);
             var near = NewGroup(root.transform, NearGroup);
             var far = NewGroup(root.transform, FarGroup);
+            var treeGroup = NewGroup(root.transform, TreeGroup);
+            var lights = NewGroup(root.transform, LightGroup);
             bool nearOn = VegetationFeatureBridge.Enabled(VegetationFeatureBridge.AllIds[0]);
             bool farOn = VegetationFeatureBridge.Enabled(VegetationFeatureBridge.AllIds[1]);
+            bool treeOn = VegetationFeatureBridge.Enabled(VegetationFeatureBridge.AllIds[2]);
+            bool lightOn = VegetationFeatureBridge.Enabled(VegetationFeatureBridge.AllIds[3]);
             near.SetActive(nearOn);
             far.SetActive(farOn);
+            treeGroup.SetActive(treeOn);
+            lights.SetActive(lightOn);
             var nearMats = new Dictionary<string, List<Matrix4x4>>(StringComparer.Ordinal);
             var farMats = new Dictionary<string, List<Matrix4x4>>(StringComparer.Ordinal);
-            int nNear = 0, nFar = 0;
+            var treeMats = new Dictionary<string, List<Matrix4x4>>(StringComparer.Ordinal);
+            int nNear = 0, nFar = 0, nTrees = 0;
             for (int i = 0; i < points.Count; i++)
             {
                 int h = Hash(seed ^ i * 7919);
@@ -346,12 +362,30 @@ namespace City.Environment
                     AddInstance(farMats, prefab, MatrixFor(at, 0.85f, h % 360));
                     nFar++;
                 }
+                // Anche i mondi piatti devono rispondere ai quattro toggle:
+                // prima i gruppi esistevano ma alberi e luci non venivano
+                // generati, quindi le due voci del menu non facevano nulla.
+                if (treeOn && nTrees < MaxTreesPerChunk)
+                {
+                    int q = Hash(h ^ 0x7a11);
+                    float ta = (q % 360) * Mathf.Deg2Rad;
+                    float tr = 2f + ((q >> 8) % 40) * 0.1f;
+                    var at = new Vector3(c.x + Mathf.Cos(ta) * tr, groundY,
+                        c.y + Mathf.Sin(ta) * tr);
+                    AddInstance(treeMats, ParkTreeNames[q % ParkTreeNames.Length],
+                        MatrixFor(at, 0.85f + (q % 30) * 0.01f, q % 360));
+                    nTrees++;
+                }
+                if (lightOn && lights.transform.childCount < MaxLightsPerChunk)
+                    AddFlatLight(lights, c, groundY);
             }
-            Flush(near, nearMats, 320f, ShadowCastingMode.Off);
-            Flush(far, farMats, 700f, ShadowCastingMode.Off);
-            if (nNear + nFar > 0)
+            int batches = Flush(near, nearMats, 320f, ShadowCastingMode.Off) +
+                          Flush(far, farMats, 700f, ShadowCastingMode.Off) +
+                          Flush(treeGroup, treeMats, 700f, ShadowCastingMode.On);
+            if (nNear + nFar + nTrees > 0)
                 OsmDiag.Log("[Dettagli] mondo piatto: erba/fiori=" + nNear +
-                    " cespugli/rocce=" + nFar);
+                    " cespugli/rocce=" + nFar + " alberi=" + nTrees +
+                    " lotti=" + batches);
             return root;
         }
 
@@ -365,9 +399,12 @@ namespace City.Environment
         {
             if (maxX - minX < 2f || maxZ - minZ < 2f) return 0;
             int placed = 0;
-            int ix = 0, iz = 0;
+            int ix = 0;
             for (float x = minX + step * 0.5f; x < maxX; x += step, ix++)
             {
+                // L'indice di riga ricomincia da ogni colonna: se resta globale
+                // il seme salta righe intere e il prato viene a mancare.
+                int iz = 0;
                 for (float z = minZ + step * 0.5f; z < maxZ; z += step, iz++)
                 {
                     int h = Hash(seed ^ ix * 92837111 ^ iz * 689287499);
@@ -442,7 +479,23 @@ namespace City.Environment
             go.transform.SetParent(parent.transform, false);
             go.transform.localPosition = new Vector3(center.x,
                 SampleHeight(chunk, heights, center) + 2.6f, center.z);
+            CreateLampAndLight(go);
+            return true;
+        }
 
+        /// <summary>La stessa lampada dei chunk, usata dai mondi piatti dove
+        /// non esistono Tile/DEM: al massimo una per root, senza collider.</summary>
+        private static void AddFlatLight(GameObject parent, Vector2 point, float groundY)
+        {
+            if (parent.transform.childCount >= MaxLightsPerChunk) return;
+            var go = new GameObject("LuceParco");
+            go.transform.SetParent(parent.transform, false);
+            go.transform.localPosition = new Vector3(point.x, groundY + 2.6f, point.y);
+            CreateLampAndLight(go);
+        }
+
+        private static void CreateLampAndLight(GameObject go)
+        {
             var lamp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             lamp.name = "LampoParco";
             lamp.transform.SetParent(go.transform, false);
@@ -473,7 +526,6 @@ namespace City.Environment
             light.range = 14f;
             light.shadows = LightShadows.None;
             light.renderMode = LightRenderMode.ForcePixel;
-            return true;
         }
 
         // ── istanze e lotti GPU ───────────────────────────────────────
@@ -664,7 +716,14 @@ namespace City.Environment
             if (chunk == null || chunk.buildingsGo == null) return list;
             var entrances = chunk.buildingsGo.GetComponentsInChildren<BuildingEntrance>(true);
             for (int i = 0; i < entrances.Length; i++)
-                if (entrances[i] != null) list.Add(entrances[i].transform.position);
+            {
+                if (entrances[i] == null || chunk.root == null) continue;
+                // Le porte sono Transform nel mondo, l'erba e' in coordinate
+                // LOCALI del chunk: senza conversione la distanza 4 m diventava
+                // una distanza dall'origine del mondo e la sicurezza non valeva.
+                list.Add(chunk.root.transform.InverseTransformPoint(
+                    entrances[i].transform.position));
+            }
             return list;
         }
 
@@ -714,9 +773,14 @@ namespace City.Environment
 
         private Mesh _mesh;
         private Material _material;
-        private Matrix4x4[][] _blocks;
+        /// <summary>Matrici ORIGINALI, sempre locali al gruppo: non vengono mai
+        /// modificate, cosi' il rebase GPS puo' ricalcolare il mondo da zero.</summary>
+        private Matrix4x4[][] _localBlocks;
+        /// <summary>Matrici world passate a DrawMeshInstanced.</summary>
+        private Matrix4x4[][] _worldBlocks;
+        private Matrix4x4 _lastRoot;
+        private bool _hasRoot;
         private Transform _anchor;
-        private bool _dirty = true;
         private float _maxDistance;
         private ShadowCastingMode _shadows;
 
@@ -728,28 +792,37 @@ namespace City.Environment
             _material = material;
             _maxDistance = maxDistance;
             _shadows = shadows;
-            _blocks = new[] { matrices };
-            _dirty = true;
+            _localBlocks = new[] { matrices };
+            _worldBlocks = new[] { new Matrix4x4[matrices.Length] };
+            _hasRoot = false;
         }
 
         private void Update()
         {
-            if (_mesh == null || _material == null || _blocks == null) return;
+            if (_mesh == null || _material == null || _localBlocks == null) return;
             if (_anchor == null) { enabled = false; return; }
-            if (_anchor.hasChanged) _dirty = true;
-            if (_dirty)
+
+            // Transform.hasChanged e' condiviso da TUTTI i lotti dello stesso
+            // gruppo: il primo che lo azzera nasconderebbe il rebase agli altri.
+            // Lo teniamo come indizio, ma la fonte di verita' e' il confronto
+            // della matrice del gruppo, locale a QUESTO batch.
+            var root = _anchor.localToWorldMatrix;
+            bool rootChanged = !_hasRoot || !SameMatrix(root, _lastRoot) ||
+                               _anchor.hasChanged;
+            if (rootChanged)
             {
-                var rootMatrix = _anchor.localToWorldMatrix;
-                for (int b = 0; b < _blocks.Length; b++)
+                for (int b = 0; b < _localBlocks.Length; b++)
                 {
-                    var local = _blocks[b];
+                    var local = _localBlocks[b];
+                    var world = _worldBlocks[b];
                     for (int i = 0; i < local.Length; i++)
-                        local[i] = rootMatrix * local[i];
+                        world[i] = root * local[i];
                 }
-                _dirty = false;
+                _lastRoot = root;
+                _hasRoot = true;
                 // hasChanged NON si azzera da solo in Unity: senza questo
-                // reset le matrici verrebbero moltiplicate di nuovo a ogni
-                // frame, facendo volare via i dettagli dal chunk.
+                // reset resterebbe true per tutto il frame. Non e' piu' l'unica
+                // guardia (vedi SameMatrix), ma evita lavoro ridondante.
                 _anchor.hasChanged = false;
             }
             var cam = Camera.main;
@@ -759,12 +832,22 @@ namespace City.Environment
                 float dz = cam.transform.position.z - _anchor.position.z;
                 if (dx * dx + dz * dz > _maxDistance * _maxDistance) return;
             }
-            for (int b = 0; b < _blocks.Length; b++)
+            for (int b = 0; b < _worldBlocks.Length; b++)
             {
-                var block = _blocks[b];
+                var block = _worldBlocks[b];
                 Graphics.DrawMeshInstanced(_mesh, 0, _material, block, block.Length,
                     null, _shadows, false, gameObject.layer);
             }
+        }
+
+        /// <summary>Confronto esplicito elemento per elemento: Matrix4x4.Equals
+        /// non e' affidabile presso le versioni mcs/Unity usate dal checker.</summary>
+        private static bool SameMatrix(Matrix4x4 a, Matrix4x4 b)
+        {
+            for (int r = 0; r < 4; r++)
+                for (int c = 0; c < 4; c++)
+                    if (a[r, c] != b[r, c]) return false;
+            return true;
         }
 
         private void OnDisable()

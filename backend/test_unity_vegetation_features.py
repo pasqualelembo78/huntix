@@ -124,6 +124,41 @@ class TestIntegrazioneMondo(unittest.TestCase):
         self.assertIn('col.enabled = false', self.placer)
         self.assertIn('ShadowCastingMode.Off', self.placer)
 
+    def test_rebase_gps_e_distanza_porte_in_coordinate_locali(self):
+        # Il vecchio codice riscriveva in place le matrici world e azzerava
+        # hasChanged sul gruppo condiviso: dopo il rebase GPS i lotti restavano
+        # alle vecchie coordinate. Ora le matrici locali restano immutabili.
+        self.assertIn('private Matrix4x4[][] _localBlocks', self.placer)
+        self.assertIn('private Matrix4x4[][] _worldBlocks', self.placer)
+        self.assertIn(
+            'bool rootChanged = !_hasRoot || !SameMatrix(root, _lastRoot) ||',
+            self.placer)
+        self.assertIn('world[i] = root * local[i]', self.placer)
+        self.assertIn('private static bool SameMatrix(Matrix4x4 a, Matrix4x4 b)',
+                      self.placer)
+        self.assertIn('_anchor.hasChanged = false', self.placer)
+        # Le porte sono in coordinate mondo, l'erba in coordinate locali.
+        self.assertIn('chunk.root.transform.InverseTransformPoint(', self.placer)
+        # L'indice di riga del prato si azzera a ogni colonna.
+        self.assertIn('int iz = 0;', self.placer)
+
+    def test_quattro_toggle_anche_nei_mondi_piatta(self):
+        # Prima i mondi non-chunked creavano solo erba/fiori e cespugli/rocce:
+        # «Alberi nei parchi» e «Luci dei parchi» non generavano nulla.
+        self.assertIn('var treeGroup = NewGroup(root.transform, TreeGroup)',
+                      self.placer)
+        self.assertIn('var lights = NewGroup(root.transform, LightGroup)',
+                      self.placer)
+        self.assertIn(
+            'bool treeOn = VegetationFeatureBridge.Enabled('
+            'VegetationFeatureBridge.AllIds[2])', self.placer)
+        self.assertIn(
+            'bool lightOn = VegetationFeatureBridge.Enabled('
+            'VegetationFeatureBridge.AllIds[3])', self.placer)
+        self.assertIn('AddInstance(treeMats, ParkTreeNames[', self.placer)
+        self.assertIn('AddFlatLight(lights, c, groundY)', self.placer)
+        self.assertIn('private static void AddFlatLight(', self.placer)
+
     def test_riflesso_uova_con_posizione_e_coordinate(self):
         game = read('unity-project/Assets/City/Scripts/Game.cs')
         self.assertIn('public void GrantVegetationEgg(', game)
@@ -132,6 +167,11 @@ class TestIntegrazioneMondo(unittest.TestCase):
         self.assertIn('VegetationFeatureBridge.GrantParkEgg(', self.placer)
         self.assertIn('FeatureEggHidden', self.bridge)
         self.assertIn('WorldOrigin.ToGeo(at)', game)
+        # I giardini OSM hanno un luogo testuale dedicato e l'uovo resta nel
+        # verde anche se l'utente spegne soltanto i prati.
+        self.assertIn('GardenPlace = "città→giardino→cespugli"', self.bridge)
+        self.assertIn('nearOn || farOn || treeOn', self.placer)
+        self.assertIn('garden ? VegetationFeatureBridge.GardenPlace', self.placer)
 
     def test_valori_protetti_invarianti(self):
         self.assertIn('public const int LoadRadius = 3;',

@@ -787,8 +787,9 @@ procedurale, al massimo una per chunk e solo a LOD0.
 Le opzioni sono **attive di default**: Android diventa proprietario della
 preferenza solo dopo il primo toggle, esattamente come i gruppi `huntix_gfx_*`
 e `huntix_os_*`, ma con prefisso dedicato e senza collisioni. Il reset di
-`hasChanged` dopo la trasformazione delle matrici evita che vengano
-moltiplicate di nuovo a ogni frame durante il rebase GPS.
+`hasChanged` evita lavoro ridondante; la sezione 31 corregge il meccanismo
+originale (matrici modificate in place e flag condiviso fra i lotti), che dopo
+il rebase GPS lasciava i dettagli alle vecchie coordinate.
 
 ### 27.3 Riflesso della caccia alle uova
 
@@ -1094,3 +1095,82 @@ già presenti alle stazioni LAVORI e alla consegna non sono state modificate.
   boot. Restano da verificare su dispositivo: lavoro → livello 2 e paga più
   alta, spesa di 1 punto abilità, furto bici al Lv1 e rifiuto di un'auto di
   lusso senza livello.
+
+---
+
+## 31. Erba, giardini e lotti GPU: rebase GPS e toggle dei mondi piatti (26/11/2026)
+
+### 31.1 Richiesta e diagnosi
+
+L'utente ha segnalato che erba, giardini e dettagli naturali «non funzionano
+ancora». I quattro toggle del pannello «Dettagli vegetazione» e il bridge
+Android risultavano corretti, quindi il difetto era nel **disegno a runtime**.
+La revisione statica della catena `ChunkBuilder → NatureDetailPlacer →
+NatureInstancedBatch` ha individuato tre cause concrete:
+
+1. **Matrici GPU modificate in place.** `NatureInstancedBatch` salvava le
+   matrici locali in `_blocks` e many le sostituiva con `rootMatrix * local`.
+   Al primo rebase GPS le matrici erano già world: venivano moltiplicate una
+   seconda volta per la nuova radice e i ciuffi sparivano dal chunk.
+2. **`hasChanged` condiviso.** tutti i lotti di un gruppo (erba, fiori, sassi)
+   leggono lo stesso `Transform.hasChanged`; il primo batch lo azzerava, quindi
+   gli altri non ricevevano più il segnale di rebase e restavano fermi alle
+   coordinate vecchie.
+3. **Mondi piatti incompleti.** `BuildFlat` (Città Gioco e CityOSMWorld) creava
+   i gruppi `AlberiParco` e `LuciNature`, ma non generava alberi né luci: le
+   voci «Alberi nei parchi» e «Luci dei parchi» non avevano effetto.
+
+Due difetti minori concorrevano: le porte venivano confrontate in coordinate
+**mondo** contro l'erba in coordinate **locali** (la distanza di 4 m dalle
+porte non era affidabile fuori dall'origine), e l'indice di riga di
+`ScatterPark` non si azzerava a ogni colonna, saltando righe del prato.
+
+### 31.2 Fix additivi
+
+| File | Modifica |
+|---|---|
+| `Environment/NatureDetailPlacer.cs` | `_localBlocks` immutabili + `_worldBlocks` ricalcolati da `root * local`; `SameMatrix` confronta la radice per ogni batch, `hasChanged` resta solo un indizio e viene azzerato dopo l'uso. Nessuna matrice viene più riscritta in place: ogni rebase riparte dal valore locale originale |
+| `Environment/NatureDetailPlacer.cs` | `CollectDoors` converte le porte con `InverseTransformPoint`; l'indice `iz` riparte da ogni colonna; `BuildFlat` genera anche alberi e una lampada con la stessa logica dei chunk, senza collider |
+| `Diagnostics/VegetationFeatureBridge.cs` | Nuova costante `GardenPlace = "città→giardino→cespugli"` per i giardini OSM (`leisure=garden`) |
+| `backend/test_unity_vegetation_features.py` | 2 nuove guardie: rebase/distanza porte e quattro toggle nei mondi piatti (11 test nel file) |
+| `backend/preprocessing/cscheck/UnityStubs.cs` | Indexer `Matrix4x4` nel solo checker, come gli altri stub già presenti |
+
+Nessun sistema, prefab, toggle o evento esistente è stato rimosso o
+disattivato. La sezione «Natura» storica di `VegetationPlacer` resta intatta.
+
+### 31.3 Riflesso della caccia alle uova
+
+Il gioco è una caccia alle uova: l'uovo resta nascosto **tra cespugli, sassi e
+fiori dei prati e dei giardini**, non accanto al player. Ora l'uovo del parco
+viene generato se è attivo almeno uno fra prati, cespugli o alberi (prima
+bastavano i soli prati), e i giardini OSM usano il luogo testuale dedicato
+`città→giardino→cespugli`. Posizione e coordinate GPS continuano a viaggiare
+via `Game.GrantVegetationEgg → FeatureEggHidden → EggCapturedInCity`, con la
+solita dedup per chiave; Android riceve anche `VegetationFeatureChanged` con
+`lat`/`lng` e timestamp, e rimanda lo stato in `setMode` come
+`vegetationFeatures=id=1,id=0`. Nessuna seconda economia: nessun premio in valuta, solo il riflesso uova.
+
+### 31.4 Verifiche
+
+- `python3 backend/test_unity_vegetation_features.py`: **11 test OK**.
+- `python3 -m unittest discover -p 'test_*.py'` in `backend/`: **333 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori,
+  215 warning preesistenti. `git diff --check` pulito.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
+  **BUILD SUCCESSFUL**.
+- Build release: AAR Unity ricreato in **4m 42s** (prima passata,
+  `SKIP_UNITY_AAR=0`) e APK assemblato/firmato in **1m 33s** (seconda passata,
+  `SKIP_UNITY_AAR=1`). `BUILD SUCCESSFUL` in entrambi i passi; il primo
+  `build_release.sh` era stato interrotto dal timeout durante il packaging,
+  non da un errore di compilazione. APK firmato v3 (1 signer, verifica
+  `apksigner verify`), SHA-256
+  `2179de9614bcbe37a525b68fbfe100d5e26cc8fc5ebf43a2df6cbcd7d8485543`.
+- Nel `global-metadata.dat` dell'AAR sono presenti `GardenPlace`, `SameMatrix`
+  e `_localBlocks`: il fix è entrato davvero nell'artefatto. Il churn della
+  build (`link.xml(.meta)`, `PlayerLocomotion.controller`,
+  `PlayerHero.prefab`, `.meta` generati) è stato ripristinato.
+- QA su device/emulatore: **non eseguito**. `adb devices` riporta
+  `emulator-5554 offline` e il tentativo precedente con `huntix_field` era
+  terminato con `Segmentation fault` prima del boot. Restano da verificare su
+  dispositivo la persistenza visiva dei ciuffi dopo uno spostamento GPS e
+  l'accensione di alberi/luci in Città Gioco e nel mondo legacy.

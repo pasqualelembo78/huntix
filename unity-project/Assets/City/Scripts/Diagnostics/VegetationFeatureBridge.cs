@@ -20,6 +20,9 @@ namespace City.Diagnostics
     {
         public const string PrefPrefix = "huntix_veg_";
         public const string AllPlace = "città→parco→vegetazione";
+        /// <summary>Luogo testuale dei giardini OSM (leisure=garden): l'uovo
+        /// resta nascosto fra cespugli e fiori, con coordinate GPS reali.</summary>
+        public const string GardenPlace = "città→giardino→cespugli";
 
         /// <summary>Id stabili, allineati alle etichette e alle voci del menu.</summary>
         public static readonly string[] AllIds =
