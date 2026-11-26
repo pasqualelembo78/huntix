@@ -30,6 +30,7 @@ namespace City.OSM
         private const float PoiShowSpan = 6400f;
 
         private GameObject root;
+        private GameObject _mapGo;
         private RectTransform mapRt;
         private RawImage mapImg;
         private Texture2D tex;
@@ -103,6 +104,17 @@ namespace City.OSM
         private static readonly Color ColResult = new Color(0.14f, 0.18f, 0.24f, 0.92f);
         private static readonly Color ColResultHi = new Color(0.22f, 0.30f, 0.42f, 0.95f);
 
+        // ── ricerca a schermo intero (senza mappa) ──
+        // La lista dei risultati vive in un pannello separato, fratello della
+        // mappa e disegnato dopo: così i tap non finiscono sotto il RawImage
+        // e la mappa può restare nascosta mentre si cerca. La mappa normale
+        // (categorie hamburger, POI, pan/zoom) resta invariata.
+        private GameObject _soPanel;
+        private InputField _soField;
+        private Text _soStatus;
+        private RectTransform _soContent;
+        private bool _searchOnly;
+
         public static void Ensure()
         {
             if (Instance == null)
@@ -138,7 +150,7 @@ namespace City.OSM
         public static void OpenSearch()
         {
             Open();
-            if (Instance != null) Instance.FocusSearch();
+            if (Instance != null) Instance.EnterSearchOnly();
         }
 
         public static void Toggle()
@@ -166,6 +178,9 @@ namespace City.OSM
                     typeof(EventSystem), typeof(StandaloneInputModule));
             }
             root.SetActive(true);
+            // Riaperto dalla minimappa: si torna SEMPRE alla mappa normale,
+            // anche se l'ultima apertura era stata la ricerca dedicata.
+            ExitSearchOnly();
             panOffset = Vector2.zero;
             dirty = true;
             if (goBtn != null) goBtn.gameObject.SetActive(false);
@@ -179,6 +194,7 @@ namespace City.OSM
             candidate = null;
             dragging = false;
             if (goBtn != null) goBtn.gameObject.SetActive(false);
+            ExitSearchOnly();
         }
 
         // ───────────────────── UI ─────────────────────
@@ -204,6 +220,7 @@ namespace City.OSM
 
             int mapSize = Mathf.Min(Screen.width, Screen.height) - 60;
             var mapGo = new GameObject("Mappa", typeof(RawImage));
+            _mapGo = mapGo;
             mapGo.transform.SetParent(root.transform, false);
             mapImg = mapGo.GetComponent<RawImage>();
             // se la mappa fosse raycastable il tocco risulterebbe "su UI" e
@@ -257,7 +274,14 @@ namespace City.OSM
 
             try { BuildPoiInfo(mapGo.transform); } catch (System.Exception e) { Debug.LogException(e); Debug.LogError("[MapSelectUI] BuildPoiInfo FAILED: " + e.Message); }
 
-            BuildAskDialog(mapGo.transform);
+            // La ricerca destinazione e' una vista sorella della mappa, non
+            // un pannello dentro di essa: disegnata dopo la mappa, la copre
+            // interamente e riceve i tap senza che il RawImage li intercetti.
+            BuildSearchOnlyPanel(root.transform);
+            // Il dialogo TELEPORTA/FRECCETTA deve restare sopra ENTRAMBE le
+            // viste: prima era figlio della mappa e spariva in modalita'
+            // ricerca, rendendo i risultati inutilizzabili.
+            BuildAskDialog(root.transform);
 
             root.SetActive(false);
         }
@@ -484,27 +508,169 @@ namespace City.OSM
             _searchStatus.text = "Mappa → ☰ per CASA / STADIO / IPPODROMO / SOTTERRANEO";
         }
 
-        /// <summary>Porta il focus al campo di ricerca (menu hamburger o chip
-        /// Android). Non apre in automatico la tastiera su editor.</summary>
+        /// <summary>Pannello a schermo intero usato solo da "CERCA DESTINAZIONE".
+        /// Sostituisce la mappa (che in questa sezione non serve e copriva i
+        /// risultati) con campo, stato e lista dei luoghi trovati, tutti
+        /// grandi e tappabili. Viene creato DOPO la mappa in gerarchia.</summary>
+        private void BuildSearchOnlyPanel(Transform parent)
+        {
+            _soPanel = new GameObject("SearchOnly", typeof(Image));
+            _soPanel.transform.SetParent(parent, false);
+            Stretch(_soPanel.GetComponent<RectTransform>());
+            _soPanel.GetComponent<Image>().color =
+                new Color(0.05f, 0.07f, 0.10f, 1f);
+
+            var title = NewText(_soPanel.transform, "Title", 36,
+                new Color(0.95f, 0.96f, 0.98f));
+            var trt = title.rectTransform;
+            trt.anchorMin = new Vector2(0f, 1f);
+            trt.anchorMax = new Vector2(1f, 1f);
+            trt.pivot = new Vector2(0.5f, 1f);
+            trt.anchoredPosition = new Vector2(0f, -46f);
+            trt.sizeDelta = new Vector2(-40f, 62f);
+            title.text = "CERCA DESTINAZIONE";
+
+            MakeBtn(_soPanel.transform, "X", new Vector2(450f, 845f), Close,
+                new Color(0.35f, 0.18f, 0.16f));
+
+            var bar = new GameObject("SearchField", typeof(Image));
+            bar.transform.SetParent(_soPanel.transform, false);
+            var brt = bar.GetComponent<RectTransform>();
+            brt.anchorMin = brt.anchorMax = brt.pivot = new Vector2(0.5f, 0.5f);
+            brt.anchoredPosition = new Vector2(-80f, 745f);
+            brt.sizeDelta = new Vector2(700f, 92f);
+            bar.GetComponent<Image>().color = ColSearch;
+
+            _soField = bar.AddComponent<InputField>();
+            _soField.lineType = InputField.LineType.SingleLine;
+            var txt = NewText(bar.transform, "Text", 28, Color.white);
+            txt.alignment = TextAnchor.MiddleLeft;
+            Stretch(txt.rectTransform);
+            txt.rectTransform.offsetMin = new Vector2(18f, 6f);
+            txt.rectTransform.offsetMax = new Vector2(-14f, -6f);
+            _soField.textComponent = txt;
+            var ph = NewText(bar.transform, "Placeholder", 24,
+                new Color(0.62f, 0.67f, 0.74f));
+            ph.text = "Nome luogo o via + città (es. Foggia)";
+            ph.alignment = TextAnchor.MiddleLeft;
+            Stretch(ph.rectTransform);
+            ph.rectTransform.offsetMin = new Vector2(18f, 6f);
+            ph.rectTransform.offsetMax = new Vector2(-14f, -6f);
+            _soField.placeholder = ph;
+            _soField.onEndEdit.AddListener(delegate { RunSearch(); });
+
+            var searchBtn = MakeBtn(_soPanel.transform, "CERCA",
+                new Vector2(390f, 745f), RunSearch,
+                new Color(0.16f, 0.48f, 0.30f));
+            searchBtn.GetComponent<RectTransform>().sizeDelta =
+                new Vector2(190f, 92f);
+
+            _soStatus = NewText(_soPanel.transform, "Status", 24,
+                new Color(1f, 0.85f, 0.30f));
+            _soStatus.raycastTarget = false;
+            var st = _soStatus.rectTransform;
+            st.anchorMin = st.anchorMax = st.pivot = new Vector2(0.5f, 0.5f);
+            st.anchoredPosition = new Vector2(0f, 655f);
+            st.sizeDelta = new Vector2(1020f, 48f);
+            _soStatus.text = "Scrivi il nome di un luogo (es. Foggia, Via Roma Foggia)";
+
+            // Area risultati scrollabile: stessa logica del menu della mappa,
+            // ma a schermo intero e con righe piu' alte.
+            var listGo = new GameObject("Results", typeof(Image));
+            listGo.transform.SetParent(_soPanel.transform, false);
+            var lrt = listGo.GetComponent<RectTransform>();
+            lrt.anchorMin = new Vector2(0f, 1f);
+            lrt.anchorMax = new Vector2(1f, 1f);
+            lrt.pivot = new Vector2(0.5f, 1f);
+            lrt.anchoredPosition = new Vector2(0f, -300f);
+            lrt.sizeDelta = new Vector2(-40f, 1280f);
+            listGo.GetComponent<Image>().color = Color.clear;
+            listGo.AddComponent<Mask>().showMaskGraphic = false;
+            var scroll = listGo.AddComponent<ScrollRect>();
+
+            var contentGo = new GameObject("Content", typeof(RectTransform));
+            contentGo.transform.SetParent(listGo.transform, false);
+            _soContent = contentGo.GetComponent<RectTransform>();
+            _soContent.anchorMin = new Vector2(0f, 1f);
+            _soContent.anchorMax = new Vector2(1f, 1f);
+            _soContent.pivot = new Vector2(0f, 1f);
+            _soContent.anchoredPosition = Vector2.zero;
+            _soContent.sizeDelta = new Vector2(0f, 8f);
+
+            scroll.content = _soContent;
+            scroll.viewport = lrt;
+            scroll.vertical = true;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+
+            MakeBtn(_soPanel.transform, "CHIUDI", new Vector2(0f, -840f),
+                Close, new Color(0.35f, 0.18f, 0.16f));
+
+            _soPanel.SetActive(false);
+        }
+
+        /// <summary>Attiva la vista di sola ricerca: mappa nascosta, pannello
+        /// pieno visibile, risultati puliti e focus gia' nel campo testo.</summary>
+        private void EnterSearchOnly()
+        {
+            _searchOnly = true;
+            if (_mapGo != null) _mapGo.SetActive(false);
+            if (_menuPanel != null) _menuPanel.SetActive(false);
+            if (_askDialog != null) _askDialog.SetActive(false);
+            if (goBtn != null) goBtn.gameObject.SetActive(false);
+            if (poiPanel != null) poiPanel.SetActive(false);
+            if (_soPanel != null) _soPanel.SetActive(true);
+            ClearResults();
+            if (_soStatus != null)
+                _soStatus.text = "Scrivi il nome di un luogo (es. Foggia, Via Roma Foggia)";
+            FocusSearch();
+        }
+
+        /// <summary>Ripristina la mappa normale (minimappa / aperture future).</summary>
+        private void ExitSearchOnly()
+        {
+            _searchOnly = false;
+            if (_soPanel != null) _soPanel.SetActive(false);
+            if (_mapGo != null) _mapGo.SetActive(true);
+            if (_askDialog != null) _askDialog.SetActive(false);
+        }
+
+        private InputField ActiveField
+        {
+            get { return _searchOnly && _soField != null ? _soField : _searchField; }
+        }
+        private Text ActiveStatus
+        {
+            get { return _searchOnly && _soStatus != null ? _soStatus : _searchStatus; }
+        }
+        private RectTransform ActiveContent
+        {
+            get { return _searchOnly && _soContent != null ? _soContent : _resultContent; }
+        }
+
+        /// <summary>Porta il focus al campo di ricerca attivo (menu hamburger
+        /// o chip Android). Non apre in automatico la tastiera su editor.</summary>
         public void FocusSearch()
         {
-            if (_searchField == null) return;
+            var field = ActiveField;
+            if (field == null) return;
             if (EventSystem.current == null)
             {
                 var es = new GameObject("MapSelectUI_EventSystem",
                     typeof(EventSystem), typeof(StandaloneInputModule));
                 es.transform.SetParent(transform, false);
             }
-            _searchField.Select();
-            _searchField.ActivateInputField();
+            field.Select();
+            field.ActivateInputField();
         }
 
         private void RunSearch()
         {
-            string q = _searchField != null ? _searchField.text.Trim() : "";
+            string q = ActiveField != null ? ActiveField.text.Trim() : "";
             if (q.Length < 3)
             {
-                _searchStatus.text = "Scrivi almeno 3 lettere (es. Zaccheria, Via Roma Foggia)";
+                if (ActiveStatus != null)
+                    ActiveStatus.text = "Scrivi almeno 3 lettere (es. Zaccheria, Via Roma Foggia)";
                 return;
             }
             _lastSearchQuery = q;
@@ -601,33 +767,44 @@ namespace City.OSM
         private void ShowSearchResults(string status)
         {
             ClearResults();
-            if (_menuPanel != null) _menuPanel.SetActive(true);
-            if (_backBtn != null) _backBtn.SetActive(true);
-            if (_searchStatus != null) _searchStatus.text = status;
+            if (_searchOnly)
+            {
+                // Vista dedicata: niente mappa e niente menu POI sovrapposto.
+                if (_soPanel != null) _soPanel.SetActive(true);
+            }
+            else
+            {
+                if (_menuPanel != null) _menuPanel.SetActive(true);
+                if (_backBtn != null) _backBtn.SetActive(true);
+            }
+            if (ActiveStatus != null) ActiveStatus.text = status;
+            float itemH = _searchOnly ? 76f : 66f;
             if (_searchHits.Count == 0)
                 AddMenuActionRow("Nessun risultato: prova unaltro nome o una via + città",
-                    new Color(0.90f, 0.70f, 0.60f), 0, 66f, () => { });
+                    new Color(0.90f, 0.70f, 0.60f), 0, itemH, () => { });
             for (int i = 0; i < _searchHits.Count; i++)
             {
                 var d = _searchHits[i];
                 AddMenuActionRow(d.name + "  (" + FormatDist(DistToPlayer(d.lat, d.lng)) + ")",
-                    CompassUI.KindColor(d.kind), i, 66f,
+                    CompassUI.KindColor(d.kind), i, itemH,
                     () => SelectCategoryPoi(d.name, d.kind, d.lat, d.lng));
             }
-            _resultContent.sizeDelta = new Vector2(0f,
-                8f + (_searchHits.Count + 1) * 66f);
+            if (ActiveContent != null)
+                ActiveContent.sizeDelta = new Vector2(0f,
+                    8f + (_searchHits.Count + 1) * itemH);
         }
 
         /// <summary>Risposta Android → Unity del geocoding "via + città".
         /// I risultati si uniscono a quelli locali senza sostituirli.</summary>
         public void MergeSearchResults(string json)
         {
-            if (string.IsNullOrEmpty(json) || _searchField == null) return;
+            if (string.IsNullOrEmpty(json) || ActiveField == null) return;
             bool ok = json.Contains("\"ok\":true") || json.Contains("\"ok\": true");
             if (!ok)
             {
-                _searchStatus.text = "Indirizzo non trovato. Controlla il testo " +
-                    "(es. 'Via Roma 1, Foggia').";
+                if (ActiveStatus != null)
+                    ActiveStatus.text = "Indirizzo non trovato. Controlla il testo " +
+                        "(es. 'Via Roma 1, Foggia').";
                 return;
             }
             string q = JsonField(json, "query");
@@ -651,11 +828,11 @@ namespace City.OSM
                 AddHit(name, "indirizzo", lat, lng);
                 added++;
             }
-            _searchStatus.text = added > 0
+            string status = added > 0
                 ? _searchHits.Count + " risultati per \"" + _lastSearchQuery +
-                  "\" · scegli e premi TELEPORTA QUI"
+                  "\" · tocca un risultato, poi TELEPORTA QUI"
                 : "Nessun indirizzo trovato per \"" + _lastSearchQuery + "\"";
-            ShowSearchResults(_searchStatus.text);
+            ShowSearchResults(status);
         }
 
         private static string JsonField(string json, string key)
@@ -765,7 +942,7 @@ namespace City.OSM
             int i, float itemH, System.Action onTap)
         {
             var item = new GameObject("Sys_" + i, typeof(Image), typeof(Button));
-            item.transform.SetParent(_resultContent, false);
+            item.transform.SetParent(ActiveContent, false);
             var irt = item.GetComponent<RectTransform>();
             irt.anchorMin = new Vector2(0f, 1f);
             irt.anchorMax = new Vector2(1f, 1f);
@@ -927,8 +1104,12 @@ namespace City.OSM
         {
             foreach (var go in _resultItems) { if (go != null) Destroy(go); }
             _resultItems.Clear();
+            // Azzera entrambe le liste: i risultati di una vista non devono
+            // riapparire nell'altra quando si passa da ricerca a mappa.
             if (_resultContent != null)
                 _resultContent.sizeDelta = new Vector2(0f, 8f);
+            if (_soContent != null)
+                _soContent.sizeDelta = new Vector2(0f, 8f);
         }
 
         // ── dialogo teletrasporto / freccetta ──
@@ -1116,6 +1297,9 @@ namespace City.OSM
         private void Update()
         {
             if (root == null || !root.activeSelf) return;
+            // In modalita' ricerca la mappa e' nascosta: niente pan/zoom e
+            // niente redraw della texture, i tap vanno solo ai risultati.
+            if (_searchOnly) return;
             HandleGestures();
             if (!dirty && Time.unscaledTime >= nextRedraw)
                 dirty = true;

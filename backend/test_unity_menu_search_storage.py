@@ -158,6 +158,33 @@ class TestGestioneSpazio(unittest.TestCase):
         self.assertIn("Per arrivarci davvero premi TELEPORTA", CITYMAP)
         self.assertIn('"DestinationSearchOpen" ->', ABRIDGE)
 
+    def test_ricerca_dedicata_senza_mappa_e_risultati_selezionabili(self):
+        # "CERCA DESTINAZIONE" apre una vista tutta schermo: la mappa viene
+        # nascosta e la lista dei risultati vive in un pannello disegnato
+        # dopo di essa, con righe tappabili e dialogo sopra a tutto.
+        self.assertIn("Instance.EnterSearchOnly();", MAP)
+        self.assertIn("private GameObject _soPanel;", MAP)
+        self.assertIn("private bool _searchOnly;", MAP)
+        self.assertIn("private void EnterSearchOnly()", MAP)
+        self.assertIn("private void ExitSearchOnly()", MAP)
+        self.assertIn("if (_mapGo != null) _mapGo.SetActive(false);", MAP)
+        self.assertIn("if (_mapGo != null) _mapGo.SetActive(true);", MAP)
+        self.assertIn("BuildSearchOnlyPanel(root.transform);", MAP)
+        self.assertIn("BuildAskDialog(root.transform);", MAP)
+        self.assertIn("private InputField ActiveField", MAP)
+        self.assertIn("private Text ActiveStatus", MAP)
+        self.assertIn("private RectTransform ActiveContent", MAP)
+        self.assertIn("item.transform.SetParent(ActiveContent, false);", MAP)
+        self.assertIn(
+            'string q = ActiveField != null ? ActiveField.text.Trim() : "";', MAP)
+        self.assertIn(
+            "() => SelectCategoryPoi(d.name, d.kind, d.lat, d.lng)", MAP)
+        self.assertIn("if (_searchOnly) return;", MAP)
+        # La mappa normale resta invariata: aperta dalla minimappa torna
+        # visibile e mostra le categorie come prima.
+        self.assertIn("ExitSearchOnly();", MAP)
+        self.assertIn("ShowCategories();", MAP)
+
     def test_geocoding_pacato_e_gestito(self):
         self.assertIn("nominatim.openstreetmap.org/search", STORE)
         self.assertIn("GEOCODE_MIN_INTERVAL_MS", STORE)

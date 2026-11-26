@@ -107,13 +107,27 @@ Nuova schermata **💾 Gestisci spazio** (in `OfflinePacksActivity`):
 | Android → Unity | `openDestinationSearch` | apre la ricerca nella mappa |
 | Android → Unity | `TileCacheCleared` | svuota prefetch + uovo |
 
-Verifiche: `cscheck` **OK**; `python3 -m unittest discover -s backend`
-**289 test OK**. Build release con `SKIP_MAP_UPDATE=1 BUILD_UNITY_AAR=1
-./build_release.sh --auto`: **riuscita** in 4m17s (`BUILD SUCCESSFUL`), APK
-firmato e verificato in `app/build/outputs/apk/release/app-release-signed.apk`
-(**204.792.433 byte**, SHA-256
-`a434d1bf9af25f743f0eaaf8c89b52e9c746adf04c1abaf0843af8dfcf917f43`).
+Verifiche della prima pubblicazione: `cscheck` **OK**; 289 test Python OK;
+build riuscita in 4m17s, APK SHA-256 `a434d1bf…`.
 
-Limite: non c'è un device/emulatore Android in questo ambiente, quindi il
-comportamento visivo (tap, tastiera, FPS, RAM reale) non è verificabile qui;
-sono stati verificati codice, compilazione e test statici.
+## 7. Fix 26/11: risultati di ricerca coperti dalla mappa
+
+**Causa**: il canvas della mappa espansa (`Root`, sorting order 100) veniva
+disegnato *dopo* il pannello di ricerca e la sua `RawImage` copriva l'elenco:
+la query "Foggia" restituiva 8 risultati ma le righe non erano visibili né
+tappabili (riprodotto su emulator `emulator-5556`: OCR mostrava solo
+`MENU POI DELLA CITTA'`).
+
+**Fix** (`MapSelectUI.cs`): modalità dedicata `search-only`. Dal chip Android
+`🔍 CERCA DESTINAZIONE` la mappa viene nascosta (`_mapGo.SetActive(false)`) e
+viene creato un pannello a schermo intero separato; il dialogo di conferma
+viene spostato sotto la root del pannello di ricerca, così `TELEPORTA QUI` e la
+freccetta restano sopra i risultati. `FocusSearch`/`RunSearch`/`ShowSearchResults`
+scrivono nei riferimenti attivi (`ActiveField`/`ActiveStatus`/`ActiveContent`),
+quindi la ricerca normale dentro la mappa continua a funzionare. Uscita(conferma)
+ripristina la mappa. Nessuna funzione o voce rimossa, Roma intatta.
+
+Verifiche dopo il fix: **296 test Python OK**; `./check.sh` (`HUNTIX_FULL`)
+**CSCHECK OK (215 warning)**. Il comportamento visivo è stato riprodotto e
+verificato su emulator Android (`CASA`, `STADIO`, `IPPODROMO` e ricerca). Dati
+build finali e SHA-256 in calce al processo di pubblicazione.
