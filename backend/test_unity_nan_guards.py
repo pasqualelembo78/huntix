@@ -107,5 +107,23 @@ class TestJoystickFiniteInput(unittest.TestCase):
             self.assertIn(zero, src, path)
 
 
+class TestFootIkSurfaceFilter(unittest.TestCase):
+    def test_il_ray_ik_non_prende_tetti_e_auto(self):
+        # Log 26/11: footLift sale a 0,92/1,01/1,10 m con bestY≈0,98 (tetto
+        # di un'auto parcheggiata). Le caviglie IK finivano vicino al bacino e
+        # il personaggio piegava le gambe per 2-3 frame all'avvio.
+        src = read(SCRIPTS + 'Player/CharacterWalker.cs')
+        self.assertIn('int mask = groundMask.value & GroundSnapper.WalkableMask;', src)
+        self.assertIn('float maxSurfaceY = groundRef + GroundSnapper.ShortMaxRise;', src)
+        self.assertIn('if (h.point.y > maxSurfaceY) continue;', src)
+        self.assertNotIn(
+            'Physics.RaycastNonAlloc(ray, IkHitsBuffer, maxDist, groundMask,', src)
+        # La sonda del piede usa gia' WalkableMask e il tetto +0,35 m: la
+        # stessa regola vale ora per il target IK del bacino/caviglie.
+        foot = read(SCRIPTS + 'Player/FootIK.cs')
+        self.assertIn('GroundSnapper.WalkableMask,', foot)
+        self.assertIn('MaxPlant', foot)
+
+
 if __name__ == '__main__':
     unittest.main()

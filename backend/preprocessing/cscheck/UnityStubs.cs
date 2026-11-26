@@ -855,6 +855,7 @@ namespace UnityEngine.UI
         public Text placeholder { get; set; }
         public string text { get; set; }
         public LineType lineType { get; set; }
+        public bool shouldHideMobileInput { get; set; }
         public UnityEngine.Events.UnityEvent<string> onValueChanged { get; } = new UnityEngine.Events.UnityEvent<string>();
         public UnityEngine.Events.UnityEvent<string> onEndEdit { get; } = new UnityEngine.Events.UnityEvent<string>();
         public void ActivateInputField() {}
@@ -993,7 +994,8 @@ namespace UnityEngine.EventSystems
         public bool IsPointerOverGameObject(int pointerId) => false;
         public void SetSelectedGameObject(GameObject go) {}
     }
-    public class StandaloneInputModule : Behaviour {}
+    public class BaseInputModule : Behaviour {}
+    public class StandaloneInputModule : BaseInputModule {}
     public class PointerEventData
     {
         public PointerEventData(EventSystem es) {}

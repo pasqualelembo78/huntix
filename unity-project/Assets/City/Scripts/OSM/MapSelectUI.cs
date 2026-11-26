@@ -185,11 +185,7 @@ namespace City.OSM
 
         private void Show()
         {
-            if (EventSystem.current == null)
-            {
-                var esGo = new GameObject("MapSelectUI_EventSystem",
-                    typeof(EventSystem), typeof(StandaloneInputModule));
-            }
+            EnsureMapEventSystem();
             root.SetActive(true);
             // Riaperto dalla minimappa: si torna SEMPRE alla mappa normale,
             // anche se l'ultima apertura era stata la ricerca dedicata.
@@ -483,6 +479,11 @@ namespace City.OSM
 
             _searchField = bar.AddComponent<InputField>();
             _searchField.lineType = InputField.LineType.SingleLine;
+            // FIX TASTIERA ( QA 26/11): il default uGUI e' false, quindi su
+            // Android la tastiera nativa diventa l'editor e il testo digitato
+            // non compare nel campo disegnato da Unity ("non riesco a scrivere").
+            // Con true l'IME resta nascosto e uGUI mostra caret e caratteri.
+            _searchField.shouldHideMobileInput = true;
             var txt = NewText(bar.transform, "Text", 25, Color.white);
             txt.alignment = TextAnchor.MiddleLeft;
             Stretch(txt.rectTransform);
@@ -556,6 +557,9 @@ namespace City.OSM
 
             _soField = bar.AddComponent<InputField>();
             _soField.lineType = InputField.LineType.SingleLine;
+            // Stessa regola del campo nella mappa: testo visibile e caret in
+            // Unity anche quando la tastiera Android e' attiva.
+            _soField.shouldHideMobileInput = true;
             var txt = NewText(bar.transform, "Text", 28, Color.white);
             txt.alignment = TextAnchor.MiddleLeft;
             Stretch(txt.rectTransform);
@@ -663,25 +667,47 @@ namespace City.OSM
             get { return _searchOnly && _soContent != null ? _soContent : _resultContent; }
         }
 
+        /// <summary>EventSystem minimo per la UI della mappa. Se esiste gia'
+        /// (UIManager lo crea all'avvio) lo riutilizziamo; se non ha nessun
+        /// InputModule aggiungiamo quello legacy, necessario ai InputField.
+        /// </summary>
+        private void EnsureMapEventSystem()
+        {
+            if (EventSystem.current == null)
+            {
+                var esGo = new GameObject("MapSelectUI_EventSystem",
+                    typeof(EventSystem), typeof(StandaloneInputModule));
+                esGo.transform.SetParent(transform, false);
+                return;
+            }
+            if (EventSystem.current.GetComponent<BaseInputModule>() == null)
+                EventSystem.current.gameObject.AddComponent<StandaloneInputModule>();
+        }
+
         /// <summary>Porta il focus al campo di ricerca attivo (menu hamburger
-        /// o chip Android). Non apre in automatico la tastiera su editor.</summary>
+        /// o chip Android) e apre la tastiera su device.</summary>
         public void FocusSearch()
         {
             var field = ActiveField;
             if (field == null) return;
-            if (EventSystem.current == null)
-            {
-                var es = new GameObject("MapSelectUI_EventSystem",
-                    typeof(EventSystem), typeof(StandaloneInputModule));
-                es.transform.SetParent(transform, false);
-            }
-            // Su Android il campo deve essere il GameObject selezionato
-            // dell'EventSystem attivo: senza questo ActivateInputField puo'
-            // non aprire la tastiera e la ricerca resta vuota.
+            EnsureMapEventSystem();
+
+            // FIX TASTIERA (QA 26/11): ActivateInputField resta la prima
+            // operazione perché è lui a richiedere il TouchScreenKeyboard e
+            // a sincronizzare l'EventSystem. Il vero difetto era il flag
+            // shouldHideMobileInput=false dei campi creati a runtime: su
+            // Android il testo digitato restava nella tastiera nativa e il
+            // campo Unity restava vuoto. Ora i campi mostrano caret e caratteri.
+            field.ActivateInputField();
+
+            // La selezione esplicita resta come rete di sicurezza per gli
+            // EventSystem condivisi con il resto della UI: mantiene il campo
+            // attivo ai tap successivi senza aprire una seconda tastiera.
             if (EventSystem.current != null)
                 EventSystem.current.SetSelectedGameObject(field.gameObject);
-            field.Select();
-            field.ActivateInputField();
+            OsmDiag.Log("[MapSelect][Focus] campo attivato: " +
+                (field == _soField ? "CERCA DESTINAZIONE" : "mappa") +
+                ", tastiera richiesta");
         }
 
         private void RunSearch()

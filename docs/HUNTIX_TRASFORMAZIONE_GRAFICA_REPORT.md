@@ -1239,3 +1239,75 @@ non c'è premio in valuta e un ripristino passivo da `setMode` non genera uova.
 - `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
   **BUILD SUCCESSFUL** (solo note di API deprecate preesistenti).
 - `git diff --check`: pulito.
+
+## 33. Due bug dal log dell'APK: ricerca non scrivibile e gambe piegate all'avvio (26/11/2026)
+
+### 33.1 Segnalazione e analisi del log
+
+Dopo l'APK con le aree globali l'utente ha segnalato: «se vado in cerca luogo,
+non riesco a scrivere» e «quando si avvia il gioco il personaggio piega le gambe
+fino al bacino per 2 o 3 volte prima di stabilizzarsi». Il log allegato è
+`docs/huntix_log_20261126_222417.txt` (sessione iniziata alle 22:16:57, APP
+v1.16 build 26).
+
+Per le gambe la catena è inequivocabile:
+
+- `22:17:35.126` · `[CharacterWalker][GroundRay][L]` · `hits=8 bestY=0,98`
+  `nY=0,97` `groundRef=0,00` `gap=0,98` `w=0,02`;
+- `22:17:49.371` · `hits=5 bestY=0,99`;
+- `22:18:15.900` · `hits=7 bestY=0,98`.
+
+Negli stessi istanti `[CharacterWalker][Ground][IK]` riporta `footLift` pari a
+`0,92`, `1,01` e `1,10` m, mentre il valore stabile è `0,08..0,21` m. Tre picchi
+isolati, esattamente il numero di «piegate» descritte. La quota 0,98 m con
+normale quasi verticale è il tetto di un'auto parcheggiata: il ray IK partiva da
+`groundRef + 1,1` e, con `groundMask = ~0` (tutti i layer), colpiva l'auto prima
+dell'asfalto, alzando la caviglia IK fino a poco sotto il bacino.
+
+Per la ricerca non c'è una riga di errore nel log: il percorso è la UI runtime
+della mappa (`MapSelectUI`, voce «🔍 Cerca destinazione» e chip Android
+`CERCA DESTINAZIONE`) e la barra «Cerca un locale…» dell'Esplora. Entrambi gli
+`InputField` venivano creati a runtime senza impostare `shouldHideMobileInput`,
+che in uGUI 1.0 vale **false**: su Android la tastiera nativa diventa l'editor e
+il testo digitato non appare nel campo disegnato da Unity. Il campo sembra quindi
+«non scrivibile» anche se l'IME si apre. Ho verificato il sorgente uGUI della
+Unity 2022.3.52f1 installata (`InputField.ActivateInputField` non fa early-return
+se il campo è già selezionato), quindi l'ordine di `Select`/`Activate` non era
+la causa: ho mantenuto l'attivazione esplicita come rete di sicurezza e corretto
+il flag mobile.
+
+### 33.2 Fix additivi
+
+| File | Modifica |
+|---|---|
+| `Player/CharacterWalker.cs` | Il ray IK interseca `groundMask` con `GroundSnapper.WalkableMask` e scarta ogni hit più alto di `groundRef + ShortMaxRise` (0,35 m): tetti di auto, marciapiedi alti e impalcati non diventano target della caviglia. `using City.OSM;` aggiunto |
+| `OSM/MapSelectUI.cs` | `shouldHideMobileInput = true` sui campi della mappa e della ricerca a schermo intero; `EnsureMapEventSystem()` riutilizza l'EventSystem esistente e aggiunge un modulo Legacy solo se manca; `FocusSearch()` chiama `ActivateInputField()`, seleziona il campo e logs `[MapSelect][Focus]` |
+| `Scripts/UI/ExploreUIController.cs` | `shouldHideMobileInput = true` anche nel campo «Cerca un locale…» dell'outdoor |
+| `backend/preprocessing/cscheck/UnityStubs.cs` | Stub `BaseInputModule` e `InputField.shouldHideMobileInput` per il checker C# |
+| `backend/test_unity_menu_search_storage.py` | Guardie sui due flag mobili, sull'ordine attivazione/selezione, sull'EventSystem e sul campo Esplora |
+| `backend/test_unity_nan_guards.py` | Guardia statica sul filtro della mask e del dislivello nel ray IK |
+
+Non è stato rimosso nessun sistema: il `groundMask` pubblico resta configurabile,
+la `WalkableMask` è già la regola del `GroundSnapper`, e l'IK continua a usare la
+superficie reale sotto ogni piede. Nessuna nuova superficie o luogo è stata
+aggiunta, quindi non serve un nuovo riflesso uova.
+
+### 33.3 Verifiche
+
+- `python3 backend/test_unity_menu_search_storage.py`: **16 test OK**.
+- `python3 backend/test_unity_nan_guards.py`: **10 test OK**.
+- `python3 -m unittest discover -s backend -p 'test_*.py'`: **345 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori.
+- `git diff --check`: pulito.
+- APK ricompilato con AAR Unity aggiornato e firmato:
+  `app/build/outputs/apk/release/app-release-signed.apk` (196 MB), SHA-256
+  `635e0ff2b1e08cdb76289600b1df7f72eab0690d36fa5f3a9c5982386afbe327`.
+  Firma verificata con `apksigner` (CN=Huntix).
+
+### 33.4 Limiti di verifica
+
+Il log disponibile termina prima di qualsiasi tap sulla ricerca: il fix della
+tastiera è quindi basato sul comportamento noto di uGUI/Android, non su una
+riga di errore. La correzione delle gambe è invece ricavata direttamente dai tre
+picchi `bestY≈0,98` nel log. Il QA su device resta il passo finale per confermare
+che la tastiera accetti i caratteri e che all'avvio non compaiano più le piegate.

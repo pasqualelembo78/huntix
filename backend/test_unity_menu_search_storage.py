@@ -19,6 +19,7 @@ MENU = read("unity-project/Assets/City/Scripts/UI/HamburgerMenu.cs")
 MAP = read("unity-project/Assets/City/Scripts/OSM/MapSelectUI.cs")
 GAME = read("unity-project/Assets/City/Scripts/Game.cs")
 MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
+EXPLORE = read("unity-project/Assets/Scripts/UI/ExploreUIController.cs")
 UBRIDGE = read("unity-project/Assets/Scripts/Bridge/UnityBridge.cs")
 MINIMAP = read("unity-project/Assets/City/Scripts/OSM/MinimapHud.cs")
 STORE = read("app/src/main/java/com/intelligame/huntix/bridge/StoreUnityBridge.kt")
@@ -87,6 +88,9 @@ class TestRicercaDestinazione(unittest.TestCase):
         self.assertIn("public void FocusSearch()", MAP)
         self.assertIn("private void RunSearch()", MAP)
         self.assertIn("_searchField.onEndEdit.AddListener", MAP)
+        # Stessa correzione nella barra "Esplora" della modalità outdoor.
+        self.assertIn("Cerca un locale", EXPLORE)
+        self.assertIn("field.shouldHideMobileInput = true;", EXPLORE)
 
     def test_registrie_locali_e_geocoding(self):
         self.assertIn("VenueRegistry.All", MAP)
@@ -196,6 +200,24 @@ class TestGestioneSpazio(unittest.TestCase):
         # sfondo pieno e vengono scritte in entrambe le viste: se il bridge
         # geocoding arriva durante un cambio vista i risultati non spariscono.
         self.assertIn("EventSystem.current.SetSelectedGameObject(field.gameObject);", MAP)
+        # Il QA 26/11 ha segnalato "non riesco a scrivere": i campi creati a
+        # runtime avevano shouldHideMobileInput=false (default uGUI), quindi su
+        # Android il testo restava nella tastiera nativa e non compariva nel
+        # campo Unity. Ora i due campi della ricerca mostrano caret e caratteri.
+        self.assertIn("_searchField.shouldHideMobileInput = true;", MAP)
+        self.assertIn("_soField.shouldHideMobileInput = true;", MAP)
+        # L'attivazione resta esplicita e preliminare alla selezione: e' lei a
+        # richiedere il TouchScreenKeyboard; la selezione successiva mantiene
+        # il campo attivo nei tap seguenti senza aprire una seconda tastiera.
+        activation = MAP.index("field.ActivateInputField();")
+        selection = MAP.index(
+            "EventSystem.current.SetSelectedGameObject(field.gameObject);",
+            activation)
+        self.assertLess(activation, selection)
+        self.assertNotIn("field.Select();", MAP)
+        self.assertIn("private void EnsureMapEventSystem()", MAP)
+        self.assertIn("GetComponent<BaseInputModule>() == null", MAP)
+        self.assertIn('OsmDiag.Log("[MapSelect][Focus]', MAP)
         self.assertIn("listGo.AddComponent<RectMask2D>();", MAP)
         self.assertIn("private void AddSearchResultRow(", MAP)
         self.assertIn("private void AddSearchRowTo(", MAP)

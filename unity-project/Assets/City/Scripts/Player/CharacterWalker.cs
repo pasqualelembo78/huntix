@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using City.OSM;
 
 namespace City.Player
 {
@@ -647,10 +648,18 @@ namespace City.Player
             Vector3 targetPos = footWorld;
             Quaternion targetRot = footBone.rotation;
 
-            int n = Physics.RaycastNonAlloc(ray, IkHitsBuffer, maxDist, groundMask,
+            // FIX PIEDI PIEGATI (log 26/11): il campo pubblico e' ~0 (tutti i
+            // layer), quindi il ray prendeva il tetto delle auto parcheggiate
+            // (~1 m) e alzava le caviglie quasi all'altezza del bacino. Si
+            // interseca la mask con WalkableMask (niente edifici) e si scarta
+            // tutto cio' che sta piu' alto di uno scalino: ci pensa gia' lo
+            // step assist a salirci.
+            int mask = groundMask.value & GroundSnapper.WalkableMask;
+            int n = Physics.RaycastNonAlloc(ray, IkHitsBuffer, maxDist, mask,
                 QueryTriggerInteraction.Ignore);
             int best = -1;
             float bestDist = float.MaxValue;
+            float maxSurfaceY = groundRef + GroundSnapper.ShortMaxRise;
             for (int i = 0; i < n; i++)
             {
                 var h = IkHitsBuffer[i];
@@ -662,6 +671,9 @@ namespace City.Player
                 // il piano d'appoggio deve avere la normale verso l'alto
                 // (altrimenti e' il sotto di un impalcato/ponte): lo scartiamo.
                 if (h.normal.y < 0.1f) continue;
+                // Tetti di auto, marciapiedi alti e impalcati NON sono il suolo
+                // su cui poggia il piede: restano fuori dal target IK.
+                if (h.point.y > maxSurfaceY) continue;
                 if (h.distance < bestDist) { bestDist = h.distance; best = i; }
             }
             if (best >= 0)

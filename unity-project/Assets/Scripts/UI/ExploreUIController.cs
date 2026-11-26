@@ -189,6 +189,10 @@ namespace Huntix.UI
             field.placeholder = CreateText(go.transform, placeholder, 26, FontStyle.Italic, TextAnchor.MiddleLeft);
             field.placeholder.color = new Color(1, 1, 1, 0.5f);
             field.caretColor = Color.white;
+            // QA 26/11: su Android il default uGUI (false) lascia il testo nella
+            // tastiera nativa e il campo Unity sembra non scrivibile. Qui il
+            // flag true fa comparire caret e caratteri anche in "Cerca un locale".
+            field.shouldHideMobileInput = true;
 
             return field;
         }
