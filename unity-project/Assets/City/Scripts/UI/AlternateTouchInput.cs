@@ -107,6 +107,12 @@ namespace City.UI
             if (MapOpen()) { Reset(); return; }
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 canvasRoot, eventData.position, eventData.pressEventCamera, out Vector2 pos);
+            if (!WorldOrigin.IsFinite(pos.x) || !WorldOrigin.IsFinite(pos.y) ||
+                !WorldOrigin.IsFinite(origin.x) || !WorldOrigin.IsFinite(origin.y))
+            {
+                target = Vector2.zero;
+                return;
+            }
             Vector2 delta = pos - origin;
             if (delta.magnitude > radius) delta = delta.normalized * radius;
             if (joystickHandle != null) joystickHandle.localPosition = delta;

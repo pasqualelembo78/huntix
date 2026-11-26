@@ -75,6 +75,12 @@ class TestPlayerRecovery(unittest.TestCase):
         self.assertIn('_lastGoodPlayerPos = transform.position;', src)
         self.assertIn('!Finite(transform.rotation)', src)
         self.assertGreaterEqual(src.count('RescueInvalidPlayer();'), 5)
+        # Il QA 26/11 ha mostrato un loop: il guard rilevava un campo non
+        # finito ma il salvataggio non azzerava moveInput/rotazione, quindi
+        # scattava di nuovo a ogni frame. Ora vengono ripristinati entrambi.
+        self.assertIn('moveInput = Vector2.zero;', src)
+        self.assertIn('if (!Finite(transform.rotation)) transform.rotation = safeRot;', src)
+        self.assertIn('causa=[', src)
 
     def test_guard_subito_dopo_controller_move(self):
         src = read(SCRIPTS + 'Player/PlayerController.cs')
@@ -86,6 +92,19 @@ class TestPlayerRecovery(unittest.TestCase):
         # Il percorso finito resta invariato: niente cambi di interpolation.
         vehicle = read(SCRIPTS + 'Vehicle/VehicleController.cs')
         self.assertIn('rb.interpolation = RigidbodyInterpolation.Interpolate;', vehicle)
+
+
+class TestJoystickFiniteInput(unittest.TestCase):
+    def test_drag_non_finito_non_avvelena_l_input(self):
+        expected_zero = {
+            'UI/DynamicJoystick.cs': 'Value = Vector2.zero;',
+            'UI/AlternateTouchInput.cs': 'target = Vector2.zero;',
+        }
+        for path, zero in expected_zero.items():
+            src = read(SCRIPTS + path)
+            self.assertIn('!WorldOrigin.IsFinite(pos.x)', src, path)
+            self.assertIn('!WorldOrigin.IsFinite(origin.x)', src, path)
+            self.assertIn(zero, src, path)
 
 
 if __name__ == '__main__':

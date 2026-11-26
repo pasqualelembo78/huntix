@@ -191,6 +191,8 @@ namespace City.Player
         // propagare il NaN a chunk, rebase, mesh e HUD (log 2026-11-25).
         private Vector3 _lastGoodPlayerPos;
         private bool _hasLastGoodPlayerPos;
+        private Quaternion _lastGoodPlayerRot = Quaternion.identity;
+        private bool _hasLastGoodPlayerRot;
         private int _invalidPlayerRecoveries;
 
         // telemetria camminata per le missioni WalkDistance: accumula i metri
@@ -324,22 +326,46 @@ namespace City.Player
         /// scrivere NaN nel player. Si riparte dall'ultimo stato finito, con
         /// il controller temporaneamente spento per non trascinare la sweep
         /// interna. Il percorso con valori finiti non cambia.</summary>
+        private void RememberGoodPlayer()
+        {
+            if (!Finite(transform.position) || !Finite(transform.rotation)) return;
+            _lastGoodPlayerPos = transform.position;
+            _hasLastGoodPlayerPos = true;
+            _lastGoodPlayerRot = transform.rotation;
+            _hasLastGoodPlayerRot = true;
+        }
+
         private void RescueInvalidPlayer()
         {
             _invalidPlayerRecoveries++;
             Vector3 bad = transform.position;
+            string cause = "";
+            if (!Finite(transform.position)) cause += "pos ";
+            if (!Finite(velocity)) cause += "vel ";
+            if (!Finite(moveDirection)) cause += "dir ";
+            if (!Finite(moveInput)) cause += "input ";
+            if (!Finite(transform.rotation)) cause += "rot ";
+            if (!WorldOrigin.IsFinite(currentSpeed)) cause += "speed ";
+            if (!WorldOrigin.IsFinite(_speedSmoothVel)) cause += "smooth ";
             OsmDiag.LogThrottled("PlayerController",
                 "[PlayerController] SALVATAGGIO NaN #" + _invalidPlayerRecoveries +
-                " pos=" + bad.ToString("F2") + " -> " +
+                " pos=" + bad.ToString("F2") + " causa=[" + cause.Trim() + "] -> " +
                 (_hasLastGoodPlayerPos ? "ultima posizione valida" : "origine+1.2m"));
 
             Vector3 safe = _hasLastGoodPlayerPos && Finite(_lastGoodPlayerPos)
                 ? _lastGoodPlayerPos : new Vector3(0f, 1.2f, 0f);
+            Quaternion safeRot = _hasLastGoodPlayerRot && Finite(_lastGoodPlayerRot)
+                ? _lastGoodPlayerRot : Quaternion.identity;
             bool ccWasEnabled = controller != null && controller.enabled;
             if (controller != null) controller.enabled = false;
             try
             {
                 transform.position = safe;
+                if (!Finite(transform.rotation)) transform.rotation = safeRot;
+                // Un drag con coordinate non finite avvelena moveInput: senza
+                // azzerarlo anche qui il guard in ingresso scatta ogni frame e
+                // il salvataggio entra in loop (visto nel QA del 26/11).
+                moveInput = Vector2.zero;
                 velocity = Vector3.zero;
                 moveDirection = Vector3.zero;
                 currentSpeed = 0f;
@@ -513,8 +539,7 @@ namespace City.Player
                         RescueInvalidPlayer();
                         return;
                     }
-                    _lastGoodPlayerPos = transform.position;
-                    _hasLastGoodPlayerPos = true;
+                    RememberGoodPlayer();
                 }
             }
             else
@@ -559,8 +584,7 @@ namespace City.Player
                         RescueInvalidPlayer();
                         return;
                     }
-                    _lastGoodPlayerPos = transform.position;
-                    _hasLastGoodPlayerPos = true;
+                    RememberGoodPlayer();
                 }
 
                 // Pendio troppo ripido: il personaggio scivola e cade a terra
@@ -584,8 +608,7 @@ namespace City.Player
                 RescueInvalidPlayer();
                 return;
             }
-            _lastGoodPlayerPos = transform.position;
-            _hasLastGoodPlayerPos = true;
+            RememberGoodPlayer();
 
             // GIORNO 4 - VELOCITA' REALE: all'Animator deve arrivare lo
             // spostamento effettivo, non l'input grezzo ne' currentSpeed

@@ -31,6 +31,7 @@ namespace City.UI
             this.canvasRoot = canvasRoot;
             this.joystickBase = joystickBase;
             this.joystickHandle = joystickHandle;
+            radius = Mathf.Max(1f, radius);
         }
 
         public void OnPointerDown(PointerEventData eventData)
@@ -59,6 +60,12 @@ namespace City.UI
                 return;
             }
             RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRoot, eventData.position, eventData.pressEventCamera, out Vector2 pos);
+            if (!WorldOrigin.IsFinite(pos.x) || !WorldOrigin.IsFinite(pos.y) ||
+                !WorldOrigin.IsFinite(origin.x) || !WorldOrigin.IsFinite(origin.y))
+            {
+                Value = Vector2.zero;
+                return;
+            }
             Vector2 delta = pos - origin;
             if (delta.magnitude > radius) delta = delta.normalized * radius;
             if (joystickHandle != null) joystickHandle.localPosition = delta;
