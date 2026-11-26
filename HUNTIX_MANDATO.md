@@ -272,3 +272,36 @@ Regole obbligatorie:
 5. Ogni asset importato conserva il riflesso della caccia alle uova e il ponte
    bidirezionale Obbligatorio del §3: se è un luogo o un oggetto visitabile,
    deve poter ospitare un uovo con posizione registrata e visibile ad Android.
+
+## 13 · MiCittà è una parte del tutto (26/11/2026)
+
+MiCittà **non è un universo a sé stante** e non va mai trattata come un gioco
+separato infilato dentro l'app: è un quartiere dello stesso universo Huntix,
+connesso alla Home, al profilo, all'inventario, alle abilità, al diario e al
+mondo AR/OSM. Tutto ciò che accade dentro MiCittà deve essere **visibile,
+conosciuto e raggiungibile dall'intero gioco**, non solo mentre la scena Unity
+è aperta.
+
+Regole obbligatorie:
+
+1. **Area Inventario e Area Abilità sono globali.** Devono essere raggiungibili
+   dalla Home (in modo evidente), dal menu globale di ogni schermata
+   (`Altro`), dalla partita AR e dal menu di MiCittà. Le voci storiche restano
+   intatte: le nuove aree si aggiungono, non sostituiscono.
+2. **Stato condiviso, non duplicato.** Abilità, inventario, scoperte, acquisti,
+   vendite, lavori, uova e ogni altra azione di MiCittà confluiscono nello
+   stesso profilo Huntix usato da Android (preferenze + `PlayerProfile` +
+   `EggWhereLog`), con ponte bidirezionale obbligatorio: Unity → Android per
+   l'evento e Android → Unity per il ripristino passivo (`setMode`/snapshot).
+3. **Memoria del "dove".** Ogni scoperta, acquisto, vendita e azione rilevante
+   di MiCittà deve poter essere raccontata dal profilo con luogo testuale,
+   coordinate quando disponibili e timestamp. Il diario resta UNO solo.
+4. **Riflesso della caccia alle uova.** Inventario e abilità sono luoghi dove
+   nascondere e trovare uova: l'apertura delle aree globali e le azioni di
+   MiCittà lasciano un uovo con posizione registrata, senza introdurre una
+   seconda economia e senza duplicare uova già premiate.
+5. Nessuna di queste regole autorizza a rimuovere o disattivare sistemi
+   esistenti: la conservazione del §7 e l'autonomia del §11 restano pieni.
+
+Criterio di verifica: **se un evento di MiCittà non è visibile dalla Home o dal
+profilo Android, il lavoro non è finito.**
