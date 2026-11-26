@@ -154,7 +154,8 @@ class TestGestioneSpazio(unittest.TestCase):
     def test_chip_ricerca_e_toast_chiarito(self):
         self.assertIn("EXTRA_FOCUS_SEARCH", CITYMAP)
         self.assertIn("CERCA DESTINAZIONE", CITYMAP)
-        self.assertIn('UnityIpc.sendToUnity("GameManager", "openDestinationSearch", "{}")', CITYMAP)
+        self.assertIn('EXTRA_SEARCH_QUERY', CITYMAP)
+        self.assertIn('UnityIpc.sendToUnity("GameManager", "openDestinationSearch", payload)', CITYMAP)
         self.assertIn("Freccetta impostata", CITYMAP)
         self.assertIn("Per arrivarci davvero premi TELEPORTA", CITYMAP)
         self.assertIn('"DestinationSearchOpen" ->', ABRIDGE)
@@ -172,6 +173,9 @@ class TestGestioneSpazio(unittest.TestCase):
         self.assertIn("if (_mapGo != null) _mapGo.SetActive(true);", MAP)
         self.assertIn("BuildSearchOnlyPanel(root.transform);", MAP)
         self.assertIn("BuildAskDialog(root.transform);", MAP)
+        self.assertIn("public static void OpenSearch(string query)", MAP)
+        self.assertIn("Instance.RunSearch();", MAP)
+        self.assertIn("MapSelectUI.OpenSearch(sm.Groups[1].Value);", MANAGER)
         self.assertIn("private InputField ActiveField", MAP)
         self.assertIn("private Text ActiveStatus", MAP)
         self.assertIn("private RectTransform ActiveContent", MAP)
@@ -185,6 +189,19 @@ class TestGestioneSpazio(unittest.TestCase):
         # visibile e mostra le categorie come prima.
         self.assertIn("ExitSearchOnly();", MAP)
         self.assertIn("ShowCategories();", MAP)
+
+    def test_risultati_ricerca_visibili_e_contrasto(self):
+        # Il QA 26/11 ha segnalato lo stato "trovati N luoghi" senza righe
+        # visibili. Le righe usano una maschera senza alpha, testo bianco su
+        # sfondo pieno e vengono scritte in entrambe le viste: se il bridge
+        # geocoding arriva durante un cambio vista i risultati non spariscono.
+        self.assertIn("EventSystem.current.SetSelectedGameObject(field.gameObject);", MAP)
+        self.assertIn("listGo.AddComponent<RectMask2D>();", MAP)
+        self.assertIn("private void AddSearchResultRow(", MAP)
+        self.assertIn("private void AddSearchRowTo(", MAP)
+        self.assertIn("item.GetComponent<Image>().color = ColResultHi;", MAP)
+        self.assertIn('NewText(item.transform, "L", 25, Color.white)', MAP)
+        self.assertIn('OsmDiag.Log("[MapSelect][Search] righe="', MAP)
 
     def test_geocoding_pacato_e_gestito(self):
         self.assertIn("nominatim.openstreetmap.org/search", STORE)

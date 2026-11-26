@@ -153,6 +153,19 @@ namespace City.OSM
             if (Instance != null) Instance.EnterSearchOnly();
         }
 
+        /// <summary>Apertura con query già nota (chip Android con ricerca
+        /// profonda): precompila il campo ed esegue subito la ricerca, così
+        /// il risultato è verificabile anche senza digitare da Unity.</summary>
+        public static void OpenSearch(string query)
+        {
+            OpenSearch();
+            if (Instance == null || string.IsNullOrEmpty(query)) return;
+            var field = Instance.ActiveField;
+            if (field == null) return;
+            field.text = query;
+            Instance.RunSearch();
+        }
+
         public static void Toggle()
         {
             if (Instance != null && Instance.root.activeSelf) Close();
@@ -585,10 +598,12 @@ namespace City.OSM
             lrt.anchoredPosition = new Vector2(0f, -300f);
             lrt.sizeDelta = new Vector2(-40f, 1280f);
             listGo.GetComponent<Image>().color = Color.clear;
-            listGo.AddComponent<Mask>().showMaskGraphic = false;
+            // RectMask2D non dipende dall'alpha della Graphic: con Mask una
+            // maschera trasparente poteva nascondere le righe dei risultati.
+            listGo.AddComponent<RectMask2D>();
             var scroll = listGo.AddComponent<ScrollRect>();
 
-            var contentGo = new GameObject("Content", typeof(RectTransform));
+            var contentGo = new GameObject("SearchResultsContent", typeof(RectTransform));
             contentGo.transform.SetParent(listGo.transform, false);
             _soContent = contentGo.GetComponent<RectTransform>();
             _soContent.anchorMin = new Vector2(0f, 1f);
@@ -660,6 +675,11 @@ namespace City.OSM
                     typeof(EventSystem), typeof(StandaloneInputModule));
                 es.transform.SetParent(transform, false);
             }
+            // Su Android il campo deve essere il GameObject selezionato
+            // dell'EventSystem attivo: senza questo ActivateInputField puo'
+            // non aprire la tastiera e la ricerca resta vuota.
+            if (EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(field.gameObject);
             field.Select();
             field.ActivateInputField();
         }
@@ -780,18 +800,21 @@ namespace City.OSM
             if (ActiveStatus != null) ActiveStatus.text = status;
             float itemH = _searchOnly ? 76f : 66f;
             if (_searchHits.Count == 0)
-                AddMenuActionRow("Nessun risultato: prova unaltro nome o una via + città",
-                    new Color(0.90f, 0.70f, 0.60f), 0, itemH, () => { });
+                AddSearchResultRow("Nessun risultato: prova unaltro nome o una via + città",
+                    0, itemH, () => { });
             for (int i = 0; i < _searchHits.Count; i++)
             {
                 var d = _searchHits[i];
-                AddMenuActionRow(d.name + "  (" + FormatDist(DistToPlayer(d.lat, d.lng)) + ")",
-                    CompassUI.KindColor(d.kind), i, itemH,
+                AddSearchResultRow(d.name + "  (" + FormatDist(DistToPlayer(d.lat, d.lng)) + ")",
+                    i, itemH,
                     () => SelectCategoryPoi(d.name, d.kind, d.lat, d.lng));
             }
-            if (ActiveContent != null)
-                ActiveContent.sizeDelta = new Vector2(0f,
-                    8f + (_searchHits.Count + 1) * itemH);
+            float h = 8f + (_searchHits.Count + 1) * itemH;
+            if (_resultContent != null) _resultContent.sizeDelta = new Vector2(0f, h);
+            if (_soContent != null) _soContent.sizeDelta = new Vector2(0f, h);
+            OsmDiag.Log("[MapSelect][Search] righe=" + (_searchHits.Count == 0 ? 1 : _searchHits.Count) +
+                " vista=" + (_searchOnly ? "search-only" : "mappa") +
+                " contenuto=" + (ActiveContent != null ? ActiveContent.name : "null"));
         }
 
         /// <summary>Risposta Android → Unity del geocoding "via + città".
@@ -954,6 +977,44 @@ namespace City.OSM
             var lbl = NewText(item.transform, "L", 25, col);
             lbl.text = caption;
             lbl.alignment = TextAnchor.MiddleLeft;
+            Stretch(lbl.rectTransform);
+            lbl.rectTransform.offsetMin = new Vector2(14f, 0f);
+            _resultItems.Add(item);
+        }
+
+        /// <summary>Riga dei risultati di ricerca: testo bianco ad alto
+        /// contrasto su sfondo pieno, così le voci restano leggibili anche
+        /// quando il colore della categoria è scuro. La riga viene scritta
+        /// nella vista attiva e, se diversa, anche nell'altra: se il
+        /// geocoding arriva mentre la vista cambia, i risultati non spariscono.
+        /// </summary>
+        private void AddSearchResultRow(string caption, int i, float itemH,
+            System.Action onTap)
+        {
+            AddSearchRowTo(ActiveContent, caption, i, itemH, onTap);
+            var other = _searchOnly ? _resultContent : _soContent;
+            if (other != null && other != ActiveContent)
+                AddSearchRowTo(other, caption, i, itemH, onTap);
+        }
+
+        private void AddSearchRowTo(RectTransform content, string caption,
+            int i, float itemH, System.Action onTap)
+        {
+            if (content == null) return;
+            var item = new GameObject("Search_" + i, typeof(Image), typeof(Button));
+            item.transform.SetParent(content, false);
+            var irt = item.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0f, 1f);
+            irt.anchorMax = new Vector2(1f, 1f);
+            irt.pivot = new Vector2(0f, 1f);
+            irt.anchoredPosition = new Vector2(4f, -i * itemH);
+            irt.sizeDelta = new Vector2(-8f, itemH - 4f);
+            item.GetComponent<Image>().color = ColResultHi;
+            item.GetComponent<Button>().onClick.AddListener(() => onTap());
+            var lbl = NewText(item.transform, "L", 25, Color.white);
+            lbl.text = caption;
+            lbl.alignment = TextAnchor.MiddleLeft;
+            lbl.raycastTarget = false;
             Stretch(lbl.rectTransform);
             lbl.rectTransform.offsetMin = new Vector2(14f, 0f);
             _resultItems.Add(item);

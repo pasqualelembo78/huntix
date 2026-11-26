@@ -338,7 +338,14 @@ namespace Huntix.Core
                 // Android → Unity: chip "CERCA DESTINAZIONE" nella mappa
                 // Android. Apre la mappa espansa col campo già selezionato.
                 case "openDestinationSearch":
-                    City.OSM.MapSelectUI.OpenSearch();
+                    // Android puo' passare {"query":"..."}: il pannello si apre
+                    // gia' compilato ed esegue la ricerca senza digitazione.
+                    var sm = System.Text.RegularExpressions.Regex.Match(
+                        jsonData ?? "", "\"query\"\\s*:\\s*\"([^\"]*)\"");
+                    if (sm.Success && sm.Groups[1].Value.Length > 0)
+                        City.OSM.MapSelectUI.OpenSearch(sm.Groups[1].Value);
+                    else
+                        City.OSM.MapSelectUI.OpenSearch();
                     break;
                 // Android → Unity: risposta del geocoding via + città.
                 case "OnGeocodeResult":

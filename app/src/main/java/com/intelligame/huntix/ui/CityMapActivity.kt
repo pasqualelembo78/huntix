@@ -32,6 +32,8 @@ class CityMapActivity : AppCompatActivity() {
         /** MiCittà apre la mappa Android evidenziando la ricerca quando
          *  l'utente arriva dal comando "DestinationSearchOpen". */
         const val EXTRA_FOCUS_SEARCH = "EXTRA_FOCUS_SEARCH"
+        /** Query opzionale: il pannello Unity si apre già compilato. */
+        const val EXTRA_SEARCH_QUERY = "EXTRA_SEARCH_QUERY"
     }
 
     private lateinit var mapSurface: MapSurfaceView
@@ -156,8 +158,11 @@ class CityMapActivity : AppCompatActivity() {
                 UiKit.dp(this@CityMapActivity, 8), UiKit.dp(this@CityMapActivity, 8))
             setOnClickListener {
                 val connected = UnityIpc.isUnity || UnityIpc.bridge != null
+                val query = intent.getStringExtra(EXTRA_SEARCH_QUERY)?.trim().orEmpty()
+                val safeQuery = query.replace("\\", "\\\\").replace("\"", "\\\"")
+                val payload = if (query.isEmpty()) "{}" else "{\"query\":\"$safeQuery\"}"
                 try {
-                    UnityIpc.sendToUnity("GameManager", "openDestinationSearch", "{}")
+                    UnityIpc.sendToUnity("GameManager", "openDestinationSearch", payload)
                 } catch (e: Exception) {
                     AppLog.w("CityMap", "openDestinationSearch: ${e.message}")
                 }

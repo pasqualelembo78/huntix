@@ -841,6 +841,7 @@ namespace UnityEngine.UI
     }
 
     public class Mask : Component { public bool showMaskGraphic { get; set; } }
+    public class RectMask2D : Component { }
     public class GraphicRaycaster : Component {}
 
     public class CanvasGroup : Component { public float alpha { get; set; } }
@@ -988,6 +989,7 @@ namespace UnityEngine.EventSystems
         public void RaycastAll(PointerEventData ped,
             System.Collections.Generic.List<RaycastResult> r) {}
         public bool IsPointerOverGameObject(int pointerId) => false;
+        public void SetSelectedGameObject(GameObject go) {}
     }
     public class StandaloneInputModule : Behaviour {}
     public class PointerEventData
