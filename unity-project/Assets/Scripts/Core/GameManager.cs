@@ -295,6 +295,11 @@ namespace Huntix.Core
                 case "EggCaptured":
                     HandleEggCaptured(jsonData);
                     break;
+                // Android → Unity: abilità mestieri aggiornate a caldo
+                // (payload: "mastro_ladro:2;...|punti").
+                case "CitySkillsUpdated":
+                    ApplyCitySkills(jsonData);
+                    break;
                 case "MVCUpdated":
                     HandleMVCUpdated(jsonData);
                     break;
@@ -520,10 +525,35 @@ namespace Huntix.Core
                     System.Globalization.CultureInfo.InvariantCulture, out value);
         }
 
+        /// <summary>Abilità mestieri da Android: evento caldo (dopo una spesa)
+        /// o ripristino passivo in setMode. Nessun premio, solo gate dei furti.
+        /// </summary>
+        private static void ApplyCitySkills(string payload)
+        {
+            if (string.IsNullOrEmpty(payload)) return;
+            string[] parts = payload.Split('|');
+            string levels = parts.Length > 0 ? parts[0] : payload;
+            int points = 0;
+            if (parts.Length > 1) int.TryParse(parts[1], out points);
+            City.Economy.CitySkills.Restore(levels, points);
+            Debug.Log("[GameManager] Abilità mestieri: " + levels + " · punti " + points);
+        }
+
         private void HandleSetMode(string json)
         {
             try
             {
+                // ABILITÀ MESTIERI: fonte di verità Android, ripristinate prima
+                // di qualunque pannello (concessionaria/garage) che ne ha bisogno.
+                var citySkills = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"citySkills\"\\s*:\\s*\"([^\"]*)\"");
+                if (citySkills.Success)
+                {
+                    var skillPoints = System.Text.RegularExpressions.Regex.Match(
+                        json, "\"citySkillPoints\"\\s*:\\s*(\\d+)");
+                    ApplyCitySkills(citySkills.Groups[1].Value +
+                        "|" + (skillPoints.Success ? skillPoints.Groups[1].Value : "0"));
+                }
                 // CITTA' GIOCO: il ripristino da Android DEVE arrivare prima del
                 // caricamento della scena City, cosi' CityChunkedWorld trova il
                 // flag gia' impostato e non streama tile OSM. notify=false:

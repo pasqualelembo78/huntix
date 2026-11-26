@@ -129,6 +129,13 @@ public class BridgeActivity extends UnityPlayerActivity {
                     if (vehicleMount != null && !vehicleMount.isEmpty()) {
                         j.put("vehicleMount", vehicleMount);
                     }
+                    // Abilità dei mestieri (fonte di verità Android): i livelli
+                    // (zero per i nuovi giocatori) e i punti da spendere arrivano
+                    // a Unity prima del caricamento della scena City.
+                    com.intelligame.huntix.gamification.CitySkillManager skills =
+                            com.intelligame.huntix.gamification.CitySkillManager.INSTANCE;
+                    j.put("citySkills", skills.exportLevelsString(this));
+                    j.put("citySkillPoints", skills.points(this));
                     // Innesti MIT dell'audit: preferenze scelte in MiCitta' e
                     // salvate da Android, rimandate a Unity in ripristino passivo.
                     boolean menuAnimation = getSharedPreferences("huntix_prefs", MODE_PRIVATE)

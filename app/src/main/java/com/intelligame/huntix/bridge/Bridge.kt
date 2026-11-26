@@ -274,6 +274,11 @@ object Bridge {
             "RecipeRequest" -> handleRecipeRequest(jsonData)
             // ── MiAcitma → profilo Huntix unificato (un solo player) ──
             "CityXpEarned" -> handleCityXpEarned(jsonData)
+            // ── MiCittà: lavoro completato → +1 livello profilo, +1 punto
+            //    abilità e uovo del pagamento nel diario posizionale. ──
+            "CityJobCompleted" -> handleCityJobCompleted(jsonData)
+            // ── MiCittà: furto auto (gate Mastro Ladro) → diario posizionale. ──
+            "CityVehicleStolen" -> handleCityVehicleStolen(jsonData)
             "CityPowerEarned" -> handleCityPowerEarned(jsonData)
             "CityGemsEarned" -> handleCityGemsEarned(jsonData)
             "CityEnergyUpdate" -> handleCityEnergyUpdate(jsonData)
@@ -363,6 +368,75 @@ object Bridge {
         val newXp = StoreUnityBridge.addXpFromCity(amount)
         val src = j.optString("source", "citta")
         com.intelligame.huntix.AppLog.i("HuntixSync", "XP +$amount ($src) -> totale $newXp")
+    }
+
+    /**
+     * MiCittà: ogni lavoro completato correttamente fa salire il profilo di
+     * UN livello (XP esattamente fino alla soglia successiva), regala un punto
+     * abilità e lascia nel diario il luogo + le coordinate del pagamento.
+     * Il vecchio XP del lavoro continua ad arrivare via CityXpEarned: qui
+     * aggiungiamo solo il salto di livello, senza toccare le soglie storiche.
+     */
+    private fun handleCityJobCompleted(jsonData: String) {
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val job = j.optString("job", "Lavoro")
+        val place = j.optString("place", "MiCittà→lavori→$job")
+        val lat = j.optDouble("lat", 0.0)
+        val lng = j.optDouble("lng", 0.0)
+        val paid = j.optInt("paid", 0)
+        val pm = com.intelligame.huntix.PlayerProfileManager
+        val profile = pm.myProfile ?: return
+
+        val before = profile.level
+        // Un solo lavoro = un solo livello: accredita il fabbisogno esatto.
+        val needed = maxOf(1L, profile.xpForNextLevel - profile.xp)
+        StoreUnityBridge.addXpFromCity(needed)
+        val after = profile.level
+        val gainedLevels = maxOf(0, after - before)
+        val points = com.intelligame.huntix.gamification.CitySkillManager
+            .addPoints(ctx, gainedLevels)
+        com.intelligame.huntix.gamification.CitySkillManager.notifyUnity(ctx)
+
+        com.intelligame.huntix.managers.EggWhereLog.recordActivity(
+            ctx,
+            com.intelligame.huntix.managers.EggWhereLog.KIND_EVENT,
+            "Lavoro $job completato: livello $before → $after, +$paid €",
+            place, lat, lng, "uovo-di-carriera"
+        )
+        // L'uovo eventualmente lasciato nel mondo viene ricordato col suo nome.
+        if (j.optBoolean("eggSpawned", false)) {
+            com.intelligame.huntix.managers.EggWhereLog.record(
+                ctx, j.optString("eggRarity", "common"), place, lat, lng,
+                "uovo del pagamento"
+            )
+        }
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Lavoro $job: livello $before→$after, +$paid €, +$points punti abilità"
+        )
+        showToast("Livello $after! +$paid € · +$points punti abilità 🌱")
+    }
+
+    /** Furto auto in MiCittà: il gate è già stato verificato da Unity; qui
+     *  resta solo la memoria posizionale dell'uovo/auto nel diario unico. */
+    private fun handleCityVehicleStolen(jsonData: String) {
+        val ctx = UnityPlayer.currentActivity ?: UnityAppContext.context ?: return
+        val j: JSONObject = try { JSONObject(jsonData) } catch (_: Exception) { return }
+        val model = j.optString("model", "Auto")
+        val place = j.optString("place", "MiCittà→garage→furto")
+        val lat = j.optDouble("lat", 0.0)
+        val lng = j.optDouble("lng", 0.0)
+        val level = j.optInt("skillLevel", 0)
+        com.intelligame.huntix.gamification.CitySkillManager.recordUse(
+            ctx, "mastro_ladro", level
+        )
+        com.intelligame.huntix.managers.EggWhereLog.record(
+            ctx, "uncommon", place, lat, lng, "uovo nel bagagliaio della $model"
+        )
+        com.intelligame.huntix.AppLog.i(
+            "HuntixSync", "Furto $model con Mastro Ladro liv.$level a $place ($lat,$lng)"
+        )
+        showToast("🚗 $model è tua: usala quanto vuoi!")
     }
 
     /** Potere guadagnato in Miacitta → profilo Huntix. */

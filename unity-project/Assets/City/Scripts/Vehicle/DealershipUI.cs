@@ -83,6 +83,11 @@ namespace City.Vehicle
             {
                 MakeCarRow(def);
             }
+            // ADDITIVO: chi decide di non comprare può rubare, se ha l'abilità.
+            // La concessionaria continua a funzionare esattamente come prima.
+            MakeButton("\uD83D\uDE97 RUB AUTO (Mastro Ladro Lv." +
+                City.Economy.CitySkills.ThiefLevel + ")",
+                () => { Close(); TheftUI.Open(); }, new Color(0.35f, 0.16f, 0.42f, 1f));
             MakeButton("Chiudi", Close, ButtonBg);
         }
 

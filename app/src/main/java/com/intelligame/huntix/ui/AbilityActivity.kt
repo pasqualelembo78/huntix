@@ -9,6 +9,7 @@ import androidx.cardview.widget.CardView
 import com.intelligame.huntix.PlayerProfileManager
 import com.intelligame.huntix.gamification.AbilityManager
 import com.intelligame.huntix.gamification.AbilityManager.Ability
+import com.intelligame.huntix.gamification.CitySkillManager
 import com.intelligame.huntix.BaseNavActivity
 
 class AbilityActivity : BaseNavActivity() {
@@ -31,6 +32,9 @@ class AbilityActivity : BaseNavActivity() {
 
         abilitiesContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(abilitiesContainer)
+        // Mestieri di MiCittà: sistema separato dalle 6 abilità caccia-uova,
+        // con punti guadagnati a ogni lavoro e livelli a partire da ZERO.
+        root.addView(buildCitySkillsSection())
         root.addView(tv("Caricamento...", 13f, "#888888").also { it.gravity = Gravity.CENTER })
 
         setContentView(scroll)
@@ -154,6 +158,93 @@ class AbilityActivity : BaseNavActivity() {
             col.addView(btnRow)
         } else {
             col.addView(tv("🔒 Sblocca al Livello ${ability.unlockLevel}", 12f, "#888888").also { it.setPadding(0, dp(8), 0, 0) })
+        }
+
+        card.addView(col)
+        return card
+    }
+
+    /** Sezione MiCittà: qui l'utente vede e spende i punti abilità ottenuti
+     *  completando i lavori. Le abilità caccia-uova qui sopra non cambiano. */
+    private fun buildCitySkillsSection(): LinearLayout {
+        val section = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#141430"))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = dp(14) }
+        }
+        section.addView(titleTv("🏙️ Mestieri di MiCittà", "#FFD54F"))
+        section.addView(tv(
+            "Punti disponibili: ${CitySkillManager.points(this)} · " +
+                "+1 punto per ogni lavoro completato. Nuovi giocatori partono da Lv.0.",
+            12f, "#BDBDE0"
+        ).also { it.gravity = Gravity.CENTER; it.setPadding(0, 0, 0, dp(10)) })
+
+        for (skill in CitySkillManager.SKILLS) {
+            section.addView(buildCitySkillCard(skill))
+        }
+        return section
+    }
+
+    private fun buildCitySkillCard(skill: CitySkillManager.Skill): CardView {
+        val level = CitySkillManager.level(this, skill.id)
+        val maxed = level >= CitySkillManager.MAX_LEVEL
+        val card = CardView(this).apply {
+            radius = dp(12).toFloat(); cardElevation = dp(4).toFloat()
+            setCardBackgroundColor(Color.parseColor(if (level > 0) "#173022" else "#0A0A1A"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.bottomMargin = dp(8) }
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = skill.emoji; textSize = 26f
+            layoutParams = LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+        header.addView(tv("${skill.name} · Lv.$level/${CitySkillManager.MAX_LEVEL}",
+            15f, if (level > 0) "#FFFFFF" else "#777799", bold = true).also {
+            it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        col.addView(header)
+        col.addView(tv(skill.description, 12f, "#9A9AC4").also { it.setPadding(0, dp(4), 0, 0) })
+        col.addView(tv(skill.unlocks, 11f, "#7CB9E8").also { it.setPadding(0, dp(3), 0, 0) })
+
+        if (maxed) {
+            col.addView(tv("⭐ LIVELLO MASSIMO", 12f, "#E0E0FF")
+                .also { it.setPadding(0, dp(8), 0, 0) })
+        } else {
+            val canSpend = CitySkillManager.points(this) > 0
+            col.addView(Button(this).apply {
+                text = if (canSpend) "⬆️ POTENZIA (1 punto)" else "⬆️ SERVE 1 PUNTO (fai un lavoro)"
+                setTextColor(Color.WHITE); textSize = 13f
+                isEnabled = canSpend
+                setBackgroundColor(Color.parseColor(if (canSpend) "#8E24AA" else "#333344"))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(40)
+                ).also { it.topMargin = dp(8) }
+                setOnClickListener {
+                    if (CitySkillManager.spendPoint(this@AbilityActivity, skill.id)) {
+                        Toast.makeText(
+                            this@AbilityActivity,
+                            "${skill.name} → Lv.${CitySkillManager.level(this@AbilityActivity, skill.id)} 🌱",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        recreate()
+                    } else {
+                        Toast.makeText(this@AbilityActivity, "Punti insufficienti", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
         }
 
         card.addView(col)

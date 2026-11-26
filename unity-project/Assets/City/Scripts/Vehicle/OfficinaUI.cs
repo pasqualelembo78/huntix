@@ -80,6 +80,12 @@ namespace City.Vehicle
                 if (my == null)
                 {
                     MakeNote("Non possedi nessun veicolo.");
+                    // ADDITIVO: senza auto si può comunque rubare, se si ha
+                    // l'abilità Mastro Ladro. Riparazioni/antifurti intatti.
+                    MakeButton("🚗 RUB AUTO (Mastro Ladro Lv." +
+                        City.Economy.CitySkills.ThiefLevel + ")",
+                        () => { Close(); TheftUI.Open(); },
+                        new Color(0.35f, 0.16f, 0.42f, 1f));
                     MakeButton("Chiudi", Close, ButtonBg);
                     return;
                 }
@@ -191,6 +197,14 @@ namespace City.Vehicle
                             });
                         });
                 }
+
+                // ADDITIVO: l'officina resta il posto delle riparazioni, ma da
+                // qui si può anche scegliere di prendere un'altra auto senza
+                // pagarla (gate: livello di Mastro Ladro salvato su Android).
+                MakeButton("🚗 RUB AUTO (Mastro Ladro Lv." +
+                    City.Economy.CitySkills.ThiefLevel + ")",
+                    () => { Close(); TheftUI.Open(); },
+                    new Color(0.35f, 0.16f, 0.42f, 1f));
                 MakeButton("Chiudi", Close, ButtonBg);
             });
         }
