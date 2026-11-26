@@ -60,6 +60,14 @@ namespace City.Economy
         private const string XpKeyPrefix = "city_job_xp_";
         private const float FilmHoldSeconds = 2.5f;
 
+        // Carriera MiCittà: OGNI lavoro completato fa salire di UN livello il
+        // profilo Huntix (bridge Android) e la paga cresce col livello raggiunto.
+        // Il vecchio livello del singolo lavoro (PayMult) resta invariato: questo
+        // moltiplicatore è ADDITIVO e parte da 1.0 quando il profilo è livello 1.
+        private const string CareerLevelFallbackKey = "city_job_career_level";
+        private const float CareerPayStep = 0.10f;
+        private const int CareerPayMaxLevel = 50;
+
         // Riflesso della caccia alle uova: ogni stazione LAVORI ha una chance
         // di nascondere un uovo dietro il cartello, e ogni lavoro completato
         // puo' lasciare un uovo a sorpresa nel punto di consegna.
@@ -255,6 +263,52 @@ namespace City.Economy
         private static float PayMult(JobType t)
         {
             return 1f + 0.15f * (Level(t) - 1);
+        }
+
+        /// <summary>Livello del profilo Huntix (unica fonte di verità), con
+        /// fallback locale per editor o bridge non ancora connesso.</summary>
+        private static int CareerLevel()
+        {
+            int level = 1;
+            #if UNITY_ANDROID && !UNITY_EDITOR
+            try { level = Huntix.Bridge.UnityBridge.GetPlayerLevel(); }
+            catch (System.Exception e) { OsmDiag.Log("[JobManager] CareerLevel bridge: " + e.Message); }
+            #endif
+            if (level < 1) level = PlayerPrefs.GetInt(CareerLevelFallbackKey, 1);
+            return Mathf.Max(1, level);
+        }
+
+        /// <summary>Paga più alta col livello di carriera: +10% per livello,
+        /// senza toccare il +15% storico del livello del singolo lavoro.</summary>
+        private static float CareerPayMult()
+        {
+            return 1f + CareerPayStep *
+                Mathf.Clamp(CareerLevel() - 1, 0, CareerPayMaxLevel - 1);
+        }
+
+        /// <summary>Universo unico: il lavoro completato sale di livello su
+        /// Android, regala 1 punto abilità e lascia l'uovo del pagamento nel
+        /// diario posizionale ( luogo testuale + coordinate ).</summary>
+        private static void NotifyJobCompleted(Vector3 at, string jobTitle,
+            int paid, string eggRarity, bool eggSpawned)
+        {
+            try
+            {
+                GeoCoord g = City.OSM.WorldOrigin.ToGeo(at);
+                string place = "MiCittà→lavori→" + jobTitle;
+                string json = "{\"source\":\"lavoro\",\"job\":\"" + jobTitle +
+                    "\",\"paid\":" + paid +
+                    ",\"place\":\"" + place +
+                    "\",\"lat\":\"" + g.lat.ToString("F6", System.Globalization.CultureInfo.InvariantCulture) +
+                    "\",\"lng\":\"" + g.lng.ToString("F6", System.Globalization.CultureInfo.InvariantCulture) +
+                    "\",\"eggSpawned\":" + (eggSpawned ? "true" : "false") +
+                    ",\"eggRarity\":\"" + eggRarity + "\"}";
+                Huntix.Bridge.UnityBridge.SendMessageToAndroid("CityJobCompleted", json);
+            }
+            catch (System.Exception e)
+            {
+                OsmDiag.Log("[JobManager] NotifyJobCompleted fallito: " + e.Message);
+            }
         }
 
         // stazione LAVORI
@@ -592,7 +646,7 @@ namespace City.Economy
         /// una finestra (non catturato) per non inquinare il mondo.
         /// </summary>
         private void SpawnJobEgg(Vector3 around, EggController.EggType type,
-            Transform parent = null)
+            Transform parent = null, EggController.Rarity? rarity = null)
         {
             Vector3 pos = around;
             RaycastHit hit;
@@ -608,7 +662,7 @@ namespace City.Economy
             col.radius = 0.5f;
             col.isTrigger = true;
             var egg = go.AddComponent<EggController>();
-            egg.Init(pos, RollEggRarity(), type);
+            egg.Init(pos, rarity ?? RollEggRarity(), type);
             if (parent == null)
             {
                 _jobEggs.Add(go);
@@ -647,24 +701,38 @@ namespace City.Economy
                 else
                     pay = _job.def.payPerStep * _job.def.steps +
                         (_job.def.type == JobType.Ronda ? 15f : 0f);
-                pay *= PayMult(_job.def.type);
+                // Moltiplicatore di carriera: più sali di livello, più guadagni.
+                // Quello storico del lavoro resta attivo e invariato.
+                int livelloCarriera = CareerLevel();
+                pay *= PayMult(_job.def.type) * CareerPayMult();
                 int paid = Mathf.RoundToInt(pay);
 
                 PlayerPrefs.SetInt(XpKeyPrefix + _job.def.type,
                     Xp(_job.def.type) + xpGain + 10);
+                PlayerPrefs.SetInt(CareerLevelFallbackKey, livelloCarriera + 1);
                 PlayerPrefs.Save();
                 Wallet.Earn(paid);
                 SyncXpToHuntix(xpGain + 10, "lavoro_" + _job.def.type.ToString());
+
                 // Riflesso uova: a volte il lavoro lascia un uovo a sorpresa
                 // proprio nel punto dove si e' concluso (consegna/scena finale).
-                if (UnityEngine.Random.value < JobEggChance)
+                var rarity = RollEggRarity();
+                bool eggSpawned = UnityEngine.Random.value < JobEggChance;
+                if (eggSpawned)
                     SpawnJobEgg(playerPos + new Vector3(
                         UnityEngine.Random.Range(-3f, 3f), 0f,
                         UnityEngine.Random.Range(-3f, 3f)),
-                        EggController.EggType.Consegna);
+                        EggController.EggType.Consegna, null, rarity);
+                // Ogni lavoro completato sale di livello su Android, dà 1 punto
+                // abilità e racconta al diario dove è successo (con coordinate).
+                NotifyJobCompleted(playerPos, _job.def.title, paid,
+                    rarity.ToString().ToLowerInvariant(), eggSpawned);
+
                 Toast("[OK] " + _job.def.title + " completato! +" + paid +
-                    "\u20ac" + (PayMult(_job.def.type) > 1.01f
-                        ? " (liv. " + Level(_job.def.type) + ")" : ""));
+                    "\u20ac · livello " + livelloCarriera + " → " +
+                    (livelloCarriera + 1) +
+                    (PayMult(_job.def.type) > 1.01f
+                        ? " (liv. lavoro " + Level(_job.def.type) + ")" : ""));
                 EndJobVisuals();
                 _job = null;
                 _jobTaxi = null;
