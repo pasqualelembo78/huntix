@@ -45,6 +45,11 @@ namespace City.Interior
         private bool _enteringPrefab;
         private GameObject _doorMark;
 
+        /// <summary>True solo per le case visitabili del registro: il portale
+        /// deve essere visibile appena il chunk carica, non solo quando il
+        /// lazy dell'interno si attiva vicino al player.</summary>
+        public bool forceDoorMarker;
+
         /// <summary>Crea il segnaposto visivo della porta SOLO quando serve
         /// (chiamato da InteriorGenerator.BuildInteriorNow, entro 30 m dal
         /// player). Prima era un Quad/Renderer creato per ogni edificio della
@@ -60,14 +65,46 @@ namespace City.Interior
             mark.name = "PortaSegnaposto";
             mark.transform.SetParent(transform, false);
             mark.transform.localPosition = Vector3.zero;
+            // Il quad guarda lungo il +Z locale del trigger: BuildingPlacer
+            // ruota il trigger verso la porta vera del registro, non verso il
+            // facciata presunta del prefab.
             mark.transform.localRotation = Quaternion.identity;
             Vector3 s = transform.lossyScale;
+            float w = forceDoorMarker ? 2.9f : 2.3f;
+            float h = forceDoorMarker ? 2.5f : 2.1f;
             mark.transform.localScale = new Vector3(
-                s.x != 0f ? 2.3f / s.x : 2.3f,
-                s.y != 0f ? 2.1f / s.y : 2.1f, 1f);
-            mark.GetComponent<Renderer>().sharedMaterial =
-                City.OSM.BuildingPlacer.DoorMarkMaterial();
+                s.x != 0f ? w / s.x : w,
+                s.y != 0f ? h / s.y : h, 1f);
+            var mat = forceDoorMarker
+                ? City.OSM.BuildingPlacer.DoorMarkMaterial(true)
+                : City.OSM.BuildingPlacer.DoorMarkMaterial();
+            mark.GetComponent<Renderer>().sharedMaterial = mat;
             _doorMark = mark;
+            if (!forceDoorMarker) return;
+            // Solo le due case configurate: tre stipiti luminosi rendono
+            // l'ingresso riconoscibile anche su una facciata chiara. Nessun
+            // collider e nessun Update, costo trascurabile (2 portali).
+            DoorFramePart("StipiteSx", -w * 0.5f, 0f, 0.16f, h, 0.18f, s, mat);
+            DoorFramePart("StipiteDx", w * 0.5f, 0f, 0.16f, h, 0.18f, s, mat);
+            DoorFramePart("Architrave", 0f, h * 0.5f, w + 0.16f, 0.18f, 0.18f, s, mat);
+        }
+
+        private void DoorFramePart(string name, float x, float y,
+            float worldW, float worldH, float worldD, Vector3 s, Material mat)
+        {
+            var part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Object.Destroy(part.GetComponent<Collider>());
+            part.name = name;
+            part.transform.SetParent(transform, false);
+            part.transform.localPosition = new Vector3(
+                s.x != 0f ? x / s.x : x,
+                s.y != 0f ? y / s.y : y,
+                s.z != 0f ? 0.04f / s.z : 0.04f);
+            part.transform.localScale = new Vector3(
+                s.x != 0f ? worldW / s.x : worldW,
+                s.y != 0f ? worldH / s.y : worldH,
+                s.z != 0f ? worldD / s.z : worldD);
+            part.GetComponent<Renderer>().sharedMaterial = mat;
         }
 
         private static void LogEntrance(string msg)
@@ -216,9 +253,10 @@ namespace City.Interior
                 gen.SetLight(true); // subito, senza attendere il ticker 0,25s
                 gen.SetPrefabExteriorVisible(false);
 
-                // dentro l'impronta, poco oltre la soglia, rivolto verso la stanza
-                Vector3 pos = gen.transform.TransformPoint(gen.PrefabEnterLocal);
-                Quaternion rot = gen.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+                // dentro l'impronta, poco oltre la soglia, rivolto verso la stanza.
+                // La soglia e' quella del trigger porta (lato giusto del registro).
+                Vector3 pos = gen.PrefabEnterWorld;
+                Quaternion rot = gen.PrefabEnterRotation;
                 InteriorTeleport.Move(pos, rot, g);
 
                 if (mgr != null) mgr.MarkInside(this);

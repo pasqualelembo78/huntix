@@ -289,8 +289,8 @@ namespace City.Interior
 
             if (g != null && g.player != null && gen != null)
             {
-                Vector3 pos = gen.transform.TransformPoint(gen.PrefabExitLocal);
-                InteriorTeleport.Move(pos, gen.transform.rotation, g);
+                Vector3 pos = gen.PrefabExitWorld;
+                InteriorTeleport.Move(pos, gen.PrefabExitRotation, g);
                 gen.SetPrefabExteriorVisible(true); // esterno di nuovo visibile
             }
 

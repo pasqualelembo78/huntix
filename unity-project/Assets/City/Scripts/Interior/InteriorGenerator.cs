@@ -125,6 +125,10 @@ namespace City.Interior
         {
             get
             {
+                // La porta delle case visitabili puo' stare su QUALSIASI lato:
+                // usare il trigger reale evita che il lazy dell'interno misuri
+                // la distanza da un punto inventato davanti al prefab.
+                if (Entrance != null) return Entrance.transform.position;
                 Vector3 f = transform.forward;
                 return transform.position + f * (ShellD * 0.5f + 0.5f);
             }
@@ -501,6 +505,57 @@ namespace City.Interior
         public Vector3 PrefabExitLocal
         {
             get { return new Vector3(0f, 1f, ShellD * 0.5f + 1.6f); }
+        }
+
+        /// <summary>Soglia reale in world-space: dentro la porta, in modo che
+        /// l'ingresso funzioni anche quando il portale e' su un lato diverso
+        /// dal +Z del prefab. Fallback = vecchia posizione locale.</summary>
+        public Vector3 PrefabEnterWorld
+        {
+            get
+            {
+                if (Entrance == null) return transform.TransformPoint(PrefabEnterLocal);
+                Vector3 p = Entrance.transform.position -
+                            Entrance.transform.forward * 1.3f;
+                p.y = transform.position.y + 1f;
+                return p;
+            }
+        }
+
+        /// <summary>Direzione dell'ingresso: si guarda verso l'interno.</summary>
+        public Quaternion PrefabEnterRotation
+        {
+            get
+            {
+                if (Entrance == null)
+                    return transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+                return Quaternion.LookRotation(-Entrance.transform.forward,
+                    Vector3.up);
+            }
+        }
+
+        /// <summary>Soglia esterna in world-space, uscita dal portale.</summary>
+        public Vector3 PrefabExitWorld
+        {
+            get
+            {
+                if (Entrance == null) return transform.TransformPoint(PrefabExitLocal);
+                Vector3 p = Entrance.transform.position +
+                            Entrance.transform.forward * 1.6f;
+                p.y = transform.position.y + 1f;
+                return p;
+            }
+        }
+
+        /// <summary>Uscita: si guarda verso l'esterno.</summary>
+        public Quaternion PrefabExitRotation
+        {
+            get
+            {
+                if (Entrance == null) return transform.rotation;
+                return Quaternion.LookRotation(Entrance.transform.forward,
+                    Vector3.up);
+            }
         }
 
         /// <summary>Mostra l'esterno (prefab + segnaposto porta) e nasconde

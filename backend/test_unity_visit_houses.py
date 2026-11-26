@@ -6,6 +6,7 @@ nascondigli, innesti su ingresso/uscita e bridge bidirezionale con Android.
 Nessun test dichiara un test visivo o su device non eseguito.
 """
 import glob
+import math
 import os
 import re
 import unittest
@@ -143,6 +144,58 @@ class TestPlacementOSM(unittest.TestCase):
         self.assertIn("entrance.buildingName = visitSpec.label;", PLACER)
         self.assertIn("if (!visitConfigured) enterableBudget--;", PLACER)
         self.assertIn("gen.SetOsmId(b.id);", PLACER)
+
+    def test_porta_sul_lato_indicato_dal_registro(self):
+        # Il QA 26/11 ha trovato la casa illuminata senza porta visibile:
+        # il segnaposto veniva creato solo col lazy dell'interno e il portale
+        # stava a meta' muro. Ora lato E posizione lungo il muro vengono dal
+        # registro; i valori qui sotto sono verificati sulle geo IT_082_087 e
+        # IT_087_061 (dims OSM 26.5x13.7 e 21.0x13.6).
+        self.assertIn("TryDoorLocalOffset(Spec spec, float yawDeg", REGISTRY)
+        self.assertIn("spec.centerLat", REGISTRY)
+        self.assertIn("TryDoorLocalOffset(\n                        visitSpec, b.r", PLACER)
+        self.assertIn("doorX = baseB.center.x + Mathf.Clamp(lx, -marginX, marginX);", PLACER)
+        self.assertIn("doorZ = baseB.center.z + Mathf.Clamp(lz, -marginZ, marginZ);", PLACER)
+        self.assertIn("doorYaw", PLACER)
+        self.assertIn("trig.transform.localRotation = Quaternion.Euler(0f, doorYaw, 0f);",
+                      PLACER)
+        self.assertIn("entrance.forceDoorMarker = visitConfigured && haveSpec;", PLACER)
+        self.assertIn("public bool forceDoorMarker;", ENTRANCE)
+        self.assertIn("DoorFramePart(\"StipiteSx\"", ENTRANCE)
+        self.assertIn("Entrance.transform.position", GENERATOR)
+        self.assertIn("gen.PrefabEnterWorld", ENTRANCE)
+        self.assertIn("gen.PrefabExitWorld", INTERIOR_MANAGER)
+
+        def door(label, yaw, dims):
+            block = REGISTRY.split('label = "' + label + '"', 1)[1].split(
+                "new Spec", 1)[0]
+            def num(key):
+                return float(re.search(r"\b" + key + r" = ([0-9.]+)", block).group(1))
+            lat, lng = num("lat"), num("lng")
+            clat, clon = num("centerLat"), num("centerLng")
+            east = (lng - clon) * 111320.0 * math.cos(math.radians(
+                (lat + clat) * 0.5))
+            north = (lat - clat) * 110540.0
+            rad = math.radians(yaw)
+            c, s = math.cos(rad), math.sin(rad)
+            x, z = east * c - north * s, east * s + north * c
+            half_x, half_z = dims[0] * 0.5, dims[1] * 0.5
+            # Faccia piu' vicina: conta la distanza in frazione
+            # di semilato, non il valore assoluto in metri.
+            if abs(x) / half_x >= abs(z) / half_z:
+                side = "+X" if x >= 0 else "-X"
+                along = min(max(z, -half_z + 0.6), half_z - 0.6)
+            else:
+                side = "+Z" if z >= 0 else "-Z"
+                along = min(max(x, -half_x + 0.6), half_x - 0.6)
+            return side, along, (x, z)
+
+        foggia = door("Casa di Foggia", 311, (26.5, 13.7))
+        roma = door("Casa di Roma", 317, (21.0, 13.6))
+        self.assertEqual(foggia[0], "+Z")
+        self.assertLess(foggia[1], -6.0)  # vicino all'angolo ovest, non a meta' muro
+        self.assertEqual(roma[0], "+Z")
+        self.assertAlmostEqual(roma[1], 0.0, delta=1.0)
 
     def test_decorator_innestato_dopo_builder(self):
         self.assertIn("VisitInteriorDecorator.Decorate(parent, visitId", GENERATOR)

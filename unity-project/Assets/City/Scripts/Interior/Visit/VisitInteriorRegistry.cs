@@ -35,9 +35,11 @@ namespace City.Interior.Visit
             public string label = "Casa visitabile";
             public string note = "";
             // Coordinate della PORTA (non del centro dell'edificio): sono
-            // quelle che la mappa espansa usa per TELEPORTA/FRECCETTA.
-            // La porta e' sul lato +Z locale (rotazione 318°), ~6,9 m
-            // a nord-ovest dal centro OSM.
+            // quelle che la mappa espansa usa per TELEPORTA/FRECCETTA e la
+            // fonte di verita' per scegliere il lato del portale nel mondo.
+            // Non si deduce piu' dalla rotazione del prefab: per Foggia il
+            // lato +Z locale dava una porta a nord-est, mentre quella vera
+            // e' a ovest verso Via Silvio Pellico.
             public double lat;
             public double lng;
             public double centerLat;
@@ -101,6 +103,28 @@ namespace City.Interior.Visit
         {
             Spec unused;
             return TryGet(osmId, out unused);
+        }
+
+        /// <summary>Direzione della porta rispetto al centro dell'edificio,
+        /// espressa nel sistema locale del prefab (metri, X=east/Z=north
+        /// ruotati di -yaw). La usa BuildingPlacer per mettere il portale sul
+        /// lato indicato dalle coordinate, non sempre sul +Z locale: il +Z
+        /// della rotazione OSM puntava dalla parte sbagliata della casa.</summary>
+        public static bool TryDoorLocalOffset(Spec spec, float yawDeg,
+            out float x, out float z)
+        {
+            x = 0f;
+            z = 0f;
+            if (spec == null) return false;
+            double midLat = (spec.lat + spec.centerLat) * 0.5;
+            double east = (spec.lng - spec.centerLng) * 111320.0 *
+                          Math.Cos(midLat * Math.PI / 180.0);
+            double north = (spec.lat - spec.centerLat) * 110540.0;
+            double rad = yawDeg * Math.PI / 180.0;
+            double c = Math.Cos(rad), s = Math.Sin(rad);
+            x = (float)(east * c - north * s);
+            z = (float)(east * s + north * c);
+            return Math.Abs(x) + Math.Abs(z) > 0.01;
         }
 
         /// <summary>Chiave stabile dell'edificio, indipendente dal rebase del

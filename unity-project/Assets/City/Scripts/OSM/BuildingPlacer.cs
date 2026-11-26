@@ -243,20 +243,37 @@ namespace City.OSM
         // Materiale del segnaposto porta condiviso tra tutti gli ingressi
         // (fix #3): prima ogni porta clonava un Material nuovo -> spreco GC.
         private static Material _doorMarkMat;
-        public static Material DoorMarkMaterial() { return DoorMarkMat(); }
-        private static Material DoorMarkMat()
+        private static Material _doorMarkMatBright;
+        public static Material DoorMarkMaterial() { return DoorMarkMat(false); }
+        public static Material DoorMarkMaterial(bool bright) { return DoorMarkMat(bright); }
+        private static Material DoorMarkMat(bool bright)
         {
-            if (_doorMarkMat == null)
+            var cached = bright ? _doorMarkMatBright : _doorMarkMat;
+            if (cached != null) return cached;
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) shader = Shader.Find("Standard");
+            var mat = new Material(shader);
+            // Il portale delle case visitabili e' visibly diverso dalle porte
+            // dei negozi: oro emissivo e doppia faccia, cosi' si vede anche
+            // avvicinandosi dal lato sbagliato. Nessun materiale condiviso
+            // viene modificato dopo la creazione.
+            Color col = bright ? new Color(1f, 0.78f, 0.18f)
+                               : new Color(0.35f, 0.28f, 0.2f);
+            if (shader != null && shader.name.StartsWith("Universal Render Pipeline/Lit"))
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit");
-                if (shader == null) shader = Shader.Find("Standard");
-                _doorMarkMat = new Material(shader);
-                if (shader != null && shader.name.StartsWith("Universal Render Pipeline/Lit"))
-                    _doorMarkMat.SetColor("_BaseColor", new Color(0.35f, 0.28f, 0.2f));
-                else
-                    _doorMarkMat.SetColor("_Color", new Color(0.35f, 0.28f, 0.2f));
+                mat.SetColor("_BaseColor", col);
+                mat.SetColor("_EmissionColor", col * (bright ? 0.65f : 0f));
             }
-            return _doorMarkMat;
+            else
+            {
+                mat.SetColor("_Color", col);
+                mat.SetColor("_EmissionColor", col * (bright ? 0.65f : 0f));
+            }
+            mat.EnableKeyword("_EMISSION");
+            mat.SetInt("_Cull", 0);
+            if (bright) _doorMarkMatBright = mat;
+            else _doorMarkMat = mat;
+            return mat;
         }
 
         // ── Entrate interni (Fase 4) ─────────────────────────────────────
@@ -768,18 +785,65 @@ namespace City.OSM
                         iType == "clothes" || iType == "hairdresser" ||
                         iType == "dogwash" || iType == "carwash" || iType == "ticket";
 
-            // Lato porta = +Z locale (facciata), coerente con la PortaIngresso
-            // interna di InteriorGenerator (a +d*0.5). Il trigger-porta sporge
-            // appena oltre il muro frontale e resta stretto in larghezza, cosi'
-            // il giocatore deve passare ATTRAVERSO la porta, non solo accanto.
+            // Lato porta: per gli edifici ordinari resta il +Z locale del
+            // prefab. Per le case visitabili la sorgente e' la coppia
+            // center/lat,lng del registro: il portale va messo SUL PUNTO della
+            // facciata indicato li', non a meta' muro. Per Foggia il punto e'
+            // vicino all'angolo ovest di Via Silvio Pellico, quindi la
+            // posizione lungo il muro conta quanto il lato.
             const float doorW = 2.4f;     // larghezza porta (mondo)
             const float doorT = 0.4f;     // spessore fascia porta (mondo)
             const float protr = 0.15f;    // sporgenza oltre il muro (mondo)
             const float doorCenterY = 1.0f; // altezza centro porta (mondo)
 
-            // offset del muro frontale rispetto al box center (+ baseB.size.z/2)
-            float frontOffsetZ = baseB.size.z * 0.5f + protr;
-            float doorCenterZ = baseB.center.z + frontOffsetZ;
+            City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
+            bool haveSpec = City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                b.id, out visitSpec);
+            float doorX = baseB.center.x;
+            float doorZ = baseB.center.z + baseB.size.z * 0.5f + protr / sz;
+            float doorYaw = 0f;
+            string doorSide = "+Z";
+            if (haveSpec)
+            {
+                float dx, dz;
+                if (City.Interior.Visit.VisitInteriorRegistry.TryDoorLocalOffset(
+                        visitSpec, b.r, out dx, out dz))
+                {
+                    // dx/dz sono METRI MONDO; il prefab e' scalato in modo non
+                    // uniforme, quindi li riporto alle unita' locali del box.
+                    float lx = dx / Mathf.Max(sx, 1e-3f);
+                    float lz = dz / Mathf.Max(sz, 1e-3f);
+                    float halfX = baseB.size.x * 0.5f;
+                    float halfZ = baseB.size.z * 0.5f;
+                    float marginX = Mathf.Max(halfX - 0.6f, 0f);
+                    float marginZ = Mathf.Max(halfZ - 0.6f, 0f);
+                    bool usaX = Mathf.Abs(lx) / Mathf.Max(halfX, 0.1f) >=
+                                Mathf.Abs(lz) / Mathf.Max(halfZ, 0.1f);
+                    if (usaX)
+                    {
+                        bool plus = lx >= 0f;
+                        doorX = baseB.center.x + (plus ? 1f : -1f) *
+                            (halfX + protr / sx);
+                        // lungo il muro: non un punto qualunque, ma dove il
+                        // registro dichiara la porta (entro i margini del box).
+                        doorZ = baseB.center.z + Mathf.Clamp(lz, -marginZ, marginZ);
+                        doorYaw = plus ? 90f : -90f;
+                        doorSide = plus ? "+X" : "-X";
+                    }
+                    else
+                    {
+                        bool plus = lz >= 0f;
+                        doorZ = baseB.center.z + (plus ? 1f : -1f) *
+                            (halfZ + protr / sz);
+                        doorX = baseB.center.x + Mathf.Clamp(lx, -marginX, marginX);
+                        doorYaw = plus ? 0f : 180f;
+                        doorSide = plus ? "+Z" : "-Z";
+                    }
+                }
+                OsmDiag.LogDebug("[Building][Porta] id=" + b.id +
+                    " lato=" + doorSide + " yaw=" + doorYaw.ToString("F0") +
+                    " locale=" + doorX.ToString("F2") + "," + doorZ.ToString("F2"));
+            }
 
             var trig = new GameObject("Porta");
             trig.transform.SetParent(inst.transform, false);
@@ -789,7 +853,8 @@ namespace City.OSM
             // al centro. Le coordinate locali sono sottoposte alla scala NON
             // uniforme del genitore -> divido per (sx,sy,sz) per i metri mondo.
             trig.transform.localPosition =
-                new Vector3(baseB.center.x, doorCenterY / sy, doorCenterZ / sz);
+                new Vector3(doorX, doorCenterY / sy, doorZ);
+            trig.transform.localRotation = Quaternion.Euler(0f, doorYaw, 0f);
             var tc = trig.AddComponent<BoxCollider>();
             tc.isTrigger = true;
             tc.center = Vector3.zero;
@@ -799,14 +864,15 @@ namespace City.OSM
             // viene piu' creato qui per OGNI edificio (~15.700 per citta').
             // Lo crea BuildingEntrance.EnsureDoorMarker() quando l'interno viene
             // costruito lazy, cioe' quando il player si avvicina alla soglia.
+            // Le due case visitabili sono l'eccezione: il portale e' grande,
+            // luminoso e creato subito, senza attendere il lazy dell'interno.
 
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
             entrance.buildingType = iType;
             entrance.buildingName = FriendlyBuildingName(iType, b.id);
             entrance.osmId = b.id;
-            City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
-            bool haveSpec = City.Interior.Visit.VisitInteriorRegistry.TryGet(
-                b.id, out visitSpec);
+            entrance.forceDoorMarker = visitConfigured && haveSpec;
+            if (entrance.forceDoorMarker) entrance.EnsureDoorMarker();
             if (visitConfigured && haveSpec)
             {
                 entrance.buildingName = visitSpec.label;
