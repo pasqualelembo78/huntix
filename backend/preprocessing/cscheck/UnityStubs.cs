@@ -210,6 +210,8 @@ namespace UnityEngine
         public Matrix4x4 worldToLocalMatrix => new Matrix4x4();
         public Matrix4x4 localToWorldMatrix => new Matrix4x4();
         public Vector3 lossyScale => default(Vector3);
+        // Usato dal batch di dettagli naturali: il chunk si muove col rebase GPS.
+        public bool hasChanged { get; set; }
         public void SetParent(Transform p, bool worldStays) {}
         public void SetParent(Transform p) {}
         public System.Collections.IEnumerator GetEnumerator() { yield break; }
@@ -234,7 +236,15 @@ namespace UnityEngine
         public void SetAsFirstSibling() {}
         public Rigidbody attachedRigidbody => null;
     }
-    public struct Matrix4x4 { public Vector3 MultiplyPoint3x4(Vector3 p) => p; }
+    public struct Matrix4x4
+    {
+        public Vector3 MultiplyPoint3x4(Vector3 p) => p;
+        public Matrix4x4 inverse => new Matrix4x4();
+        public static Matrix4x4 TRS(Vector3 pos, Quaternion rot, Vector3 scale) => new Matrix4x4();
+        public static Matrix4x4 operator *(Matrix4x4 a, Matrix4x4 b) => new Matrix4x4();
+    }
+    // Mesh combinata una volta per prefab dei dettagli naturali (Kenney CC0).
+    public struct CombineInstance { public Mesh mesh; public Matrix4x4 transform; }
     public struct BoneWeight
     {
         public float weight0, weight1, weight2, weight3;
@@ -315,6 +325,7 @@ namespace UnityEngine
         public Bounds bounds => new Bounds(Vector3.zero, new Vector3(1000f, 1000f, 1000f));
         public void SetVertices(List<Vector3> v) {} public void SetUVs(int i, List<Vector2> u) {}
         public void SetTriangles(List<int> t, int sub) {}
+        public void CombineMeshes(CombineInstance[] combine, bool mergeSubMeshes, bool useMatrices) {}
         public void RecalculateNormals() {} public void RecalculateBounds() {}
         public int blendShapeCount => 0;
         public string GetBlendShapeName(int i) => "";
@@ -322,6 +333,9 @@ namespace UnityEngine
         public void AddBlendShapeFrame(string n, float f, Vector3[] dv, Vector3[] dn, float[] dt) {} }
 
     public class Material : Object { public Material(Shader s) {}
+        // Copy constructor + enableInstancing: lotti GPU dei dettagli naturali.
+        public Material(Material source) {}
+        public bool enableInstancing { get; set; }
         public Shader shader { get; set; }
         public Color color { get; set; }
         public bool HasProperty(string n) => false;
@@ -437,11 +451,13 @@ namespace UnityEngine
     public class Light : Behaviour { public LightType type { get; set; }
         public float intensity { get; set; } public Color color { get; set; }
         public float range { get; set; }
+        public LightRenderMode renderMode { get; set; }
         public LightShadows shadows { get; set; }
         public float shadowStrength { get; set; }
         public Transform transform => null; }
     public enum LightType { Spot, Directional, Point, Area }
     public enum LightShadows { None, Hard, Soft }
+    public enum LightRenderMode { Auto, ForcePixel, ForceVertex }
     public static class RenderSettings
     {
         public static Light sun { get; set; }
@@ -458,6 +474,14 @@ namespace UnityEngine
         public static float fogEndDistance { get; set; }
     }
     public enum FogMode { Linear, Exponential, ExponentialSquared }
+    // Batch GPU dei dettagli naturali: nessuna istanza GameObject per pianta.
+    public static class Graphics
+    {
+        public static void DrawMeshInstanced(Mesh mesh, int submeshIndex, Material material,
+            Matrix4x4[] matrices, int count, object properties,
+            UnityEngine.Rendering.ShadowCastingMode castShadows,
+            bool receiveShadows, int layer) {}
+    }
     public static class Vibration
     {
         public static void Vibrate(long milliseconds) {}

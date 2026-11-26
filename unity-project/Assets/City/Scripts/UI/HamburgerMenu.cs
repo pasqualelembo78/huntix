@@ -23,6 +23,7 @@ namespace City.UI
         private GameObject skinPanel;
         private GameObject profilePanel;
         private GameObject cinematicPanel;
+        private GameObject vegetationPanel;
         // Tutti i sotto-pannelli creati a runtime: CloseAll li chiude anche se
         // non sono campi dedicati, così nessuna funzione resta aperta.
         private readonly List<GameObject> _subPanels = new List<GameObject>();
@@ -39,6 +40,8 @@ namespace City.UI
         private Text _openSourceLabel;
         private Text _cinematicLabel;
         private Text[] _cinematicDetailLabels;
+        private Text _vegLabel;
+        private Text[] _vegDetailLabels;
         private Text _companionLabel;
         private Transform _canvas;
 
@@ -282,6 +285,7 @@ namespace City.UI
             if (idx == 19) _shopLabel = lbl;
             if (idx == 20) _venueLabel = lbl;
             if (idx == 21) _perfLabel = lbl;
+            if (idx == 22) _vegLabel = lbl;
         }
 
         /// <summary>Spiegazione permanente nel pannello: l'utente non deve più
@@ -400,7 +404,7 @@ namespace City.UI
 
         private void BuildSettingsPanel()
         {
-            _settingsPanel = MakeSubPanel("SettingsPanel", 700f, 1110f);
+            _settingsPanel = MakeSubPanel("SettingsPanel", 700f, 1240f);
             AddHeader(_settingsPanel, "IMPOSTAZIONI E STRUMENTI");
             var rows = new List<MenuEntry>
             {
@@ -416,6 +420,12 @@ namespace City.UI
                 }),
                 new MenuEntry("Qualità grafica: Media", 6, () => ToggleQuality()),
                 new MenuEntry("Prestazioni adattive: Attive", 21, () => ToggleAdaptivePerformance()),
+                new MenuEntry("Dettagli naturali: On", 22, () => ToggleVegetationAll()),
+                new MenuEntry("Dettagli vegetazione", 23, () =>
+                {
+                    CloseAll();
+                    OpenVegetationPanel();
+                }),
                 new MenuEntry("Input touch: Huntix", 8, () => ToggleTouch()),
                 new MenuEntry("Mondo: Reale", 9, () => ToggleWorldMode()),
                 new MenuEntry("Animazione menu: Huntix", 10, () => ToggleMenuAnimation()),
@@ -524,6 +534,8 @@ namespace City.UI
             RefreshQaConsoleLabel();
             RefreshOpenSourceLabel();
             RefreshCinematicLabel();
+            RefreshVegetationLabel();
+            RefreshVegetationDetailLabels();
             RefreshNpcCompanionLabel();
         }
 
@@ -743,6 +755,89 @@ namespace City.UI
                 City.Diagnostics.CinematicFeatureBridge.AllPlace);
             RefreshCinematicLabel();
             RefreshCinematicDetailLabels();
+        }
+
+        // ---- dettagli naturali di tutto il mondo (additivi) ----
+
+        private void RefreshVegetationLabel()
+        {
+            if (_vegLabel == null) return;
+            _vegLabel.text = "Dettagli naturali: " +
+                (City.Diagnostics.VegetationFeatureBridge.AllEnabled ? "On" : "Off");
+        }
+
+        private void ToggleVegetationAll()
+        {
+            bool on = !City.Diagnostics.VegetationFeatureBridge.AllEnabled;
+            City.Diagnostics.VegetationFeatureBridge.SetAll(on);
+            RefreshVegetationLabel();
+            RefreshVegetationDetailLabels();
+            if (UIManager.Instance != null)
+                UIManager.Instance.ShowToast(on
+                    ? "Dettagli naturali attivati in tutto il mondo"
+                    : "Dettagli naturali disattivati");
+        }
+
+        private void OpenVegetationPanel()
+        {
+            SetVisible(false);
+            if (vegetationPanel == null) BuildVegetationPanel();
+            RefreshVegetationDetailLabels();
+            vegetationPanel.SetActive(true);
+        }
+
+        private void BuildVegetationPanel()
+        {
+            vegetationPanel = MakeSubPanel("VegetationPanel", 480f, 620f);
+            AddHeader(vegetationPanel, "DETTAGLI VEGETAZIONE E PAESAGGIO");
+            string[] ids = City.Diagnostics.VegetationFeatureBridge.AllIds;
+            _vegDetailLabels = new Text[ids.Length];
+            for (int i = 0; i < ids.Length; i++)
+            {
+                int idx = i;
+                var row = new GameObject("V_" + i, typeof(Image), typeof(Button));
+                row.transform.SetParent(vegetationPanel.transform, false);
+                var rt = row.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.anchoredPosition = new Vector2(20f, -190f - i * 68f);
+                rt.sizeDelta = new Vector2(-40f, 62f);
+                row.GetComponent<Image>().color = RowBg;
+                row.GetComponent<Button>().onClick.AddListener(() => ToggleVegetationDetail(idx));
+                var lbl = NewLabel(row.transform);
+                lbl.alignment = TextAnchor.MiddleLeft;
+                lbl.rectTransform.anchorMin = Vector2.zero;
+                lbl.rectTransform.anchorMax = Vector2.one;
+                lbl.rectTransform.sizeDelta = Vector2.zero;
+                lbl.rectTransform.offsetMin = new Vector2(14f, 0f);
+                lbl.rectTransform.offsetMax = new Vector2(-14f, 0f);
+                _vegDetailLabels[i] = lbl;
+            }
+        }
+
+        private void RefreshVegetationDetailLabels()
+        {
+            if (_vegDetailLabels == null) return;
+            string[] ids = City.Diagnostics.VegetationFeatureBridge.AllIds;
+            for (int i = 0; i < ids.Length && i < _vegDetailLabels.Length; i++)
+                _vegDetailLabels[i].text =
+                    City.Diagnostics.VegetationFeatureBridge.LabelFor(ids[i]) +
+                    ": " + (City.Diagnostics.VegetationFeatureBridge.Enabled(ids[i])
+                        ? "On" : "Off");
+        }
+
+        private void ToggleVegetationDetail(int idx)
+        {
+            string[] ids = City.Diagnostics.VegetationFeatureBridge.AllIds;
+            if (idx < 0 || idx >= ids.Length) return;
+            string id = ids[idx];
+            bool on = !City.Diagnostics.VegetationFeatureBridge.Enabled(id);
+            City.Diagnostics.VegetationFeatureBridge.SetToggle(id, on,
+                City.Diagnostics.VegetationFeatureBridge.LabelFor(id),
+                City.Diagnostics.VegetationFeatureBridge.AllPlace);
+            RefreshVegetationLabel();
+            RefreshVegetationDetailLabels();
         }
 
         // ---- compagno NPC (pattern MIT SanAndreasUnity, riscritto) ----

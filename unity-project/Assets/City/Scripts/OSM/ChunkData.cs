@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using City.Environment;
 
 namespace City.OSM
 {
@@ -21,6 +22,9 @@ namespace City.OSM
         public GameObject sidewalksGo;      // marciapiedi rialzati + cordoli
         public GameObject buildingsGo;
         public GameObject natureGo;
+        /// <summary>Dettagli naturali additivi (erba/fiori/cespugli/rocce/
+        /// alberi di parco/luci). Figlio di root, con LOD e pref dedicati.</summary>
+        public GameObject detailsGo;
         public GameObject npcsGo;           // pedoni animati sui marciapiedi
         public GameObject airportsGo;       // piste + velivoli degli aeroporti OSM
 
@@ -60,6 +64,16 @@ namespace City.OSM
             lod = level;
 
             if (natureGo != null) natureGo.SetActive(level <= 0);
+            SetDetailLod(NatureDetailPlacer.NearGroup, level <= 0,
+                Diagnostics.VegetationFeatureBridge.AllIds[0]);
+            SetDetailLod(NatureDetailPlacer.FarGroup, level <= 1,
+                Diagnostics.VegetationFeatureBridge.AllIds[1]);
+            SetDetailLod(NatureDetailPlacer.TreeGroup, level <= 1,
+                Diagnostics.VegetationFeatureBridge.AllIds[2]);
+            // Le luci punto costano carello: restano solo nel chunk sotto i
+            // piedi (LOD0), non in tutti i 25 chunk del raggio LOD1.
+            SetDetailLod(NatureDetailPlacer.LightGroup, level <= 0,
+                Diagnostics.VegetationFeatureBridge.AllIds[3]);
             if (npcsGo != null) npcsGo.SetActive(level <= 1);
             if (terrainGo != null)
                 SetTerrainCollider(terrainGo, level <= TerrainColliderLod);
@@ -91,6 +105,38 @@ namespace City.OSM
                 SetBuildingShadows(buildingsGo, keepShadows);
             }
             if (airportsGo != null) airportsGo.SetActive(level <= 1);
+        }
+
+        /// <summary>Un gruppo naturale resta visibile solo se e' nel suo LOD
+        /// E se l'utente non lo ha disattivato dal menu: i due interruttori
+        /// sono indipendenti (il toggle non puo' riaccendere un LOD spento).</summary>
+        private void SetDetailLod(string group, bool lodOn, string featureId)
+        {
+            if (detailsGo == null) return;
+            var t = detailsGo.transform.Find(group);
+            if (t == null) return;
+            bool enabled = Diagnostics.VegetationFeatureBridge.Enabled(featureId);
+            t.gameObject.SetActive(lodOn && enabled);
+        }
+
+        /// <summary>Il menu puo' cambiare una preferenza mentre il chunk e'
+        /// gia' in scena: il gruppo resta spento se il LOD corrente non lo
+        /// prevede (i due interruttori sono indipendenti).</summary>
+        public void SetDetailPreference(string group, bool enabled)
+        {
+            if (detailsGo == null) return;
+            var t = detailsGo.transform.Find(group);
+            if (t == null) return;
+            bool lodOn = lod < 0 || GroupDetailLodAllows(group, lod);
+            t.gameObject.SetActive(lodOn && enabled);
+        }
+
+        private static bool GroupDetailLodAllows(string group, int level)
+        {
+            if (string.Equals(group, NatureDetailPlacer.NearGroup, System.StringComparison.Ordinal) ||
+                string.Equals(group, NatureDetailPlacer.LightGroup, System.StringComparison.Ordinal))
+                return level <= 0;
+            return level <= 1; // cespugli/rocce e alberi di parco
         }
 
         /// <summary>LOD fino al quale il MeshCollider del terreno resta in
@@ -183,6 +229,7 @@ namespace City.OSM
             sidewalksGo = null;
             buildingsGo = null;
             natureGo = null;
+            detailsGo = null;
             npcsGo = null;
             airportsGo = null;
         }

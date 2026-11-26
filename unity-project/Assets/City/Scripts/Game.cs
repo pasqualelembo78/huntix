@@ -365,6 +365,18 @@ namespace City
                 EggController.Rarity.Rare, place, at);
         }
 
+        /// <summary>Riflesso uova della vegetazione: l'uovo viene piazzato
+        /// DENTRO il parco (cespugli/sassi/fiori), non accanto al player.
+        /// Posizione testuale e coordinate viaggiano via FeatureEggHidden con
+        /// lo stesso formato delle altre uova-feature.</summary>
+        public void GrantVegetationEgg(string featureId, string label,
+            Vector3 at, string place)
+        {
+            if (EggSpawnManager.Instance == null) return;
+            SpawnFeatureEggAt(featureId, label, EggController.Rarity.Rare,
+                place, at);
+        }
+
         /// <summary>Uovo-indizio delle migliorie dell'audit open source: stesso
         /// canale FeatureEggHidden delle altre feature, senza premi ne' valute.
         /// </summary>

@@ -5,6 +5,7 @@
 using System;
 using UnityEngine;
 using City.Diagnostics;
+using City.Environment;
 using City.OSM;
 
 namespace City.Fictional
@@ -291,6 +292,7 @@ namespace City.Fictional
                     new Vector3(1f, 3f, extent), groundMat, _root.transform, true);
 
                 int parks = 0, buildings = 0;
+                var parkCenters = new System.Collections.Generic.List<Vector2>();
                 float cellAreaKm2 = block * block / 1000000f;
                 int targetBuildings = Mathf.Clamp(
                     Mathf.RoundToInt(density * cellAreaKm2), 1, 9);
@@ -311,6 +313,7 @@ namespace City.Fictional
                                 new Vector3(cx, 0.05f, cz),
                                 new Vector3(block * 0.88f, 0.1f, block * 0.88f),
                                 parkMat, _root.transform);
+                            parkCenters.Add(new Vector2(cx, cz));
                             continue;
                         }
 
@@ -335,6 +338,25 @@ namespace City.Fictional
                             buildings++;
                         }
                     }
+                }
+
+                // Stessi dettagli naturali dei chunk OSM, adattati al suolo
+                // piatto della Citta' Gioco (nessun tile/DEM a runtime).
+                try
+                {
+                    if (parkCenters.Count > 0 && _root != null)
+                    {
+                        NatureDetailPlacer.BuildFlat(_root.transform, parkCenters,
+                            0.12f, (int)(r.seed & 0x7fffffff), 260f);
+                        var c = parkCenters[0];
+                        VegetationFeatureBridge.GrantParkEgg("citta-gioco",
+                            _root.transform.position + new Vector3(c.x, 0.65f, c.y),
+                            "città→città-gioco→parco→vegetazione");
+                    }
+                }
+                catch (Exception e)
+                {
+                    OsmDiag.Log("[CittaGioco] dettagli naturali non disponibili: " + e.Message);
                 }
 
                 int pois = PlacePois(rng, spacing, half, poiMat);

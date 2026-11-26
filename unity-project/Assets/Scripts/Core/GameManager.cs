@@ -675,6 +675,15 @@ namespace Huntix.Core
                     City.Diagnostics.CinematicFeatureBridge.RestoreFromAndroid(
                         gfxFlags.Groups[1].Value);
 
+                // Dettagli naturali: terzo gruppo di preferenze visive.
+                // Ripristino passivo, senza uova ne' notifiche: Android resta
+                // il proprietario dello stato (huntix_veg_*).
+                var vegFlags = System.Text.RegularExpressions.Regex.Match(
+                    json, "\"vegetationFeatures\"\\s*:\\s*\"([^\"]*)\"");
+                if (vegFlags.Success)
+                    City.Diagnostics.VegetationFeatureBridge.RestoreFromAndroid(
+                        vegFlags.Groups[1].Value);
+
                 var activityLogCount = System.Text.RegularExpressions.Regex.Match(
                     json, "\"activityLogCount\"\\s*:\\s*(\\d+)");
                 if (activityLogCount.Success)

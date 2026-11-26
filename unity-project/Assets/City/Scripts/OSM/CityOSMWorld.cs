@@ -5,6 +5,8 @@ using System.Globalization;
 using UnityEngine;
 using TMPro;
 using City.World;
+using City.Environment;
+using City.Diagnostics;
 using City.Player;
 using City.Vehicle;
 using City.Vehicle.Traffic;
@@ -1727,12 +1729,19 @@ namespace City.OSM
         {
             LoadNaturePrefabs();
             int built = 0;
+            // Punti d'ancora per i dettagli naturali additivi (erba/fiori/
+            // cespugli/rocce con GPU instancing): stessi luoghi degli alberi
+            // e dei parchi gia' costruiti, nessuna modifica al codice esistente.
+            var detailAnchors = new List<Vector2>();
 
             if (env.trees != null)
             {
                 foreach (var t in env.trees)
                 {
-                    SpawnKenneyTree(parent, new Vector2(CoordinateConverter.LonToX(t.lng), CoordinateConverter.LatToZ(t.lat)), Math.Abs((int)t.lat * 31 + (int)t.lng));
+                    var tp = new Vector2(CoordinateConverter.LonToX(t.lng),
+                        CoordinateConverter.LatToZ(t.lat));
+                    detailAnchors.Add(tp);
+                    SpawnKenneyTree(parent, tp, Math.Abs((int)t.lat * 31 + (int)t.lng));
                     if (++built % 20 == 0) yield return null;
                 }
             }
@@ -1744,6 +1753,7 @@ namespace City.OSM
                 {
                     var fp = CalcFootprint(p.points);
                     if (fp == null) continue;
+                    detailAnchors.Add(new Vector2(fp.CenterX, fp.CenterZ));
                     int treeCount = Mathf.Clamp(Mathf.RoundToInt(fp.Width * fp.Depth / 100f), 3, 6);
                     for (int k = 0; k < treeCount; k++)
                     {
@@ -1770,6 +1780,26 @@ namespace City.OSM
                     }
                     parkIndex++;
                     if (built % 20 == 0) yield return null;
+                }
+            }
+
+            // Dettagli additivi anche nel percorso legacy (mondo non-chunked):
+            // le stesse mesh Kenney con GPU instancing, senza toccare le
+            // piante instantiate qui sopra ne' i loro materiali.
+            if (detailAnchors.Count > 0)
+            {
+                try
+                {
+                    NatureDetailPlacer.BuildFlat(parent, detailAnchors, 0f, 20261126, 320f);
+                    var c = detailAnchors[detailAnchors.Count - 1];
+                    VegetationFeatureBridge.GrantParkEgg("mondo-osm",
+                        parent.position + new Vector3(c.x, 0.65f, c.y),
+                        "città→mondo-osm→parco→vegetazione");
+                }
+                catch (Exception e)
+                {
+                    UnityBridge.LogToAndroid("CityOSM",
+                        "Dettagli naturali non disponibili: " + e.Message);
                 }
             }
         }

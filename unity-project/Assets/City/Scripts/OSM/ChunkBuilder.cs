@@ -460,6 +460,25 @@ namespace City.OSM
             if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
             if (!ChunkAlive(chunk)) yield break;
 
+            // ── dettagli naturali additivi (tutto il mondo, LOD + GPU instancing) ──
+            // Non tocca la sezione Natura esistente: aggiunge prati, fiori,
+            // aiuole, cespugli, rocce, alberi di parco e luci calde con lotti
+            // di istanze GPU. Nessun collider, distanza di sicurezza porte.
+            Section("Dettagli naturali");
+            try
+            {
+                if (ChunkAlive(chunk))
+                    City.Environment.NatureDetailPlacer.Build(
+                        chunk, heights, ToLocal, bounds);
+            }
+            catch (System.Exception e)
+            {
+                UnityEngine.Debug.LogError("[ChunkBuilder] " + chunk.key +
+                    " ERRORE sezione DETTAGLI NATURALI: " + e);
+            }
+            if (clock.ElapsedMilliseconds > budgetMs) { clock.Reset(); clock.Start(); yield return null; }
+            if (!ChunkAlive(chunk)) yield break;
+
             // yield after heavy sections to keep frame budget
             yield return null;
             if (!ChunkAlive(chunk)) yield break;
