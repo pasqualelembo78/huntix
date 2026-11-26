@@ -851,3 +851,70 @@ quindi i dettagli seguono il DEM senza creare proxy dalle altezze degli edifici.
   `true` e le opzioni tornano tutte On; lo stato di prova dell'emulatore è
   stato ripulito. Nessun crash/ANR dell'app: solo rumore di piattaforma
   (`StrictMode`, `ChimeraSrvcProxy`) non legato a queste modifiche.
+
+---
+
+## 28. QA attivo su emulatore, loop anti-NAN trovato e corretto (26/11/2026)
+
+### 28.1 Il guasto riproducibile
+
+Durante la prova di forza su `emulator-5556` in MiCittà, dopo il ciclo di
+toggle del menu (eventi sportivi, stile edifici, negozio, impostazioni) il log
+mostrava ripetutamente:
+
+`[PlayerController] SALVATAGGIO NaN #73 pos=(0.95, 1.05, 0.00) -> ultima posizione valida`
+
+Il rescue scattava decine di volte di fila mentre la telemetria segnalava
+`fps=2 frame=800.0ms ... LAG`. Non era un crash Java ma un **blocco
+funzionale**: il guard rilevava un campo non finito ma il salvataggio
+ripristinava solo la posizione. Se il velo era `moveInput` o la rotazione, il
+guard scattava di nuovo al frame successivo. Un drag con coordinate non finite
+poteva inoltre avvelenare l'input alla sorgente.
+
+### 28.2 Fix additivo
+
+| File | Modifica |
+|---|---|
+| `Player/PlayerController.cs` | `RememberGoodPlayer()` memorizza anche l'ultima rotazione finita; `RescueInvalidPlayer()` ripristina la rotazione, azzera `moveInput`/velocità/direzione e scrive `causa=[...]` nel log per diagnosticare il campo incriminato |
+| `UI/DynamicJoystick.cs` | raggio minimo 1 e filtro su coordinate screen/local non finite prima di calcolare il delta |
+| `UI/AlternateTouchInput.cs` | stesso filtro sul drag prima di calcolare il delta |
+| `backend/test_unity_nan_guards.py` | guardia statica sul loop, sul log con `causa=[`, sul ripristino della rotazione e sui filtri dei due stick |
+
+Nessuna funzione esistente è stata rimossa o disattivata. Il percorso con
+valori finiti resta invariato. Il riflesso uova non introduce nuove chiavi: i
+canali `VegetationFeatureChanged`/`FeatureEggHidden` e le uova con coordinate
+restano quelli della sezione 27, compresi i nuovi eventi generati durante il
+QA (`vegetazione->parco->fioriture|41.113083|16.866607` e
+`vegetazione->tutto|41.1171|16.871942`).
+
+### 28.3 Verifiche e nuova build
+
+- `python3 -m unittest discover -p 'test_*.py'` in `backend/`: **317 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori,
+  215 warning preesistenti. `git diff --check` pulito.
+- `SKIP_INSTALL=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh`:
+  **BUILD SUCCESSFUL in 4m 46s** e **BUILD SUCCESSFUL in 1m 54s**. APK firmato
+  con schema v3 (1 signer). **SHA-256**:
+  `8fedfa9e9a4314dc8121db33b7d4a01926dc280bcd750dd1ef8aa9cc97d56bc1`.
+  I token `causa=[` e `moveInput` sono presenti nel `global-metadata.dat` di
+  AAR e APK: il fix è entrato davvero nell'artefatto. Il churn della build
+  (`link.xml.meta`, `PlayerLocomotion.controller`, `PlayerHero.prefab`) è stato
+  ripristinato e non fa parte del commit.
+
+### 28.4 Collaudo sul dispositivo
+
+APK reinstallato su `emulator-5556`, pref di prova `world_mode=fictional`
+ripristinate e MiCittà avviata via `BridgeActivity`. Ripetendo la sequenza che
+innescava il guasto: **0** occorrenze di `SALVATAGGIO NaN`, **0** `causa=[`,
+nessun `FATAL EXCEPTION`, `ANR in`, `NullReferenceException`,
+`IndexOutOfRangeException`, `ArgumentException` o `InvalidOperationException`,
+app ancora in primo piano. Le uova con posizione testuale e coordinate GPS
+sono state generate regolarmente anche dopo il fix.
+
+Stress successivo con `monkey -p com.intelligame.huntix --pct-syskeys 0
+--throttle 80 500`: **500 eventi iniettati**, nessun crash/ANR dell'app e
+ancora **0** rescue NaN. I valori `fps` bassi restano quelli dell'emulatore
+software (SwiftShader, senza GPU reale), non una regressione del fix; durante
+la build l'emulatore era andato in segfault per pressione RAM/CPU della
+macchina, quindi è stato riavviato a build terminata e non è un guasto del
+gioco. Le preferenze di prova dell'emulatore sono state ripristinate dal backup.
