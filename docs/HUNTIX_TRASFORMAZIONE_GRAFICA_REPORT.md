@@ -753,3 +753,101 @@ zone con varchi. Lo switch serve a confrontarli nello stesso edificio, non a
 sostituire gli interni universali. Senza device restano da verificare
 visivamente arredi, uova nei contenitori, FPS e restore dello switch. Nulla è
 stato pushato.
+
+## 27. Dettagli naturali di tutto il mondo — 26/11/2026
+
+Obiettivo: rendere più ricco e naturale **ogni** mondo Huntix (MiCittà/OSM,
+Città Gioco, mondo legacy e AR Android) senza sostituire la vegetazione
+esistente e senza nuovi download. Nessuna funzione preesistente è stata
+rimossa o disattivata.
+
+### 27.1 Asset e licenze
+
+Riusati i **118 FBX già importati** da Kenney Nature Kit in
+`unity-project/Assets/Resources/Nature/` (CC0 1.0, sorgente
+`kit/kenney_nature-kit.zip`, licenza in `assets/nature/License.txt`,
+inventario in `assets/INVENTORY.md`). Non è stato importato QuaterniusNature
+né alcun duplicato: il report precedente (§21) resta invariato. Nuovo utilizzo
+dei modelli: erba, fiori, cespugli, sassi e alberi di parco; la luce calda è
+procedurale, al massimo una per chunk e solo a LOD0.
+
+### 27.2 Sistema additivo
+
+| File | Ruolo |
+|---|---|
+| `Environment/NatureDetailPlacer.cs` | Lotti di istanze GPU (`Graphics.DrawMeshInstanced`), mesh del prefab combinate una volta, materiali condivisi con `enableInstancing`, distanza di streaming, nessun collider e distanza di 4 m dalle porte |
+| `Diagnostics/VegetationFeatureBridge.cs` | Quattro preferenze (`prati-fioriti`, `cespugli-rocce`, `alberi-parco`, `luci-naturali`), pref `huntix_veg_*`, evento `VegetationFeatureChanged`, ripristino passivo e riflesso uova |
+| `OSM/ChunkBuilder.cs` | Nuova sezione isolata `Dettagli naturali`, dopo la sezione Natura storica (che resta intatta) |
+| `OSM/ChunkData.cs` | `detailsGo`, LOD dedicato e preferenze applicate a caldo senza riaccendere un LOD spento |
+| `Game/FictionalCityWorld.cs`, `OSM/CityOSMWorld.cs` | Stessi lotti GPU nei mondi piatti e legacy |
+| `reallife/OsmCityBuilder.kt` | Ciuffi d'erba e sassi additivi nella AR Android, dentro il budget `MAX_NODES` già esistente |
+| `UI/HamburgerMenu.cs` | Voci «Dettagli naturali: On» e «Dettagli vegetazione» (pannello con 4 toggle) |
+| `Bridge.kt`, `UnityIpc.kt`, `BridgeActivity.java`, `GameManager.cs` | Ponte bidirezionale: Android salva le preferenze e le rimanda in `setMode` come `vegetationFeatures=id=1,id=0` |
+
+Le opzioni sono **attive di default**: Android diventa proprietario della
+preferenza solo dopo il primo toggle, esattamente come i gruppi `huntix_gfx_*`
+e `huntix_os_*`, ma con prefisso dedicato e senza collisioni. Il reset di
+`hasChanged` dopo la trasformazione delle matrici evita che vengano
+moltiplicate di nuovo a ogni frame durante il rebase GPS.
+
+### 27.3 Riflesso della caccia alle uova
+
+Uova nascoste **tra cespugli, sassi e fiori** delle nuove zone verdi, non
+accanto al player. Chiavi `vegetazione->parco->fioriture`,
+`vegetazione->tutto` e `vegetazione-><id>`; luogo testuale
+`città→parco→vegetazione` (varianti `città→città-gioco/…` e
+`città→mondo-osm/…`). Posizione e coordinate GPS viaggiano sul canale
+canonico `FeatureEggHidden` tramite `Game.GrantVegetationEgg` →
+`SpawnFeatureEggAt` → `EggCapturedInCity`: nessun premio duplicato, nessuna
+seconda economia e dedup Android per chiave esatta.
+
+### 27.4 Invarianti rispettati
+
+`LoadRadius=3`, `UnloadRadius=4`, `TerrainColliderLod=0`, step DEM/mesh 15/45 m,
+kit edifici e `CarsPerTile=22`/`MaxCars=180` invariati,
+`TileClient.CacheVersion=5` (nessun cambio di formato geo/graph),
+`VegetationPlacer.MaxTreesPerChunk=400`. Il campionamento altimetrico usa
+`TerrainHeightField.HeightNear` con fallback `TileElevation.TryHeightAtWorld`,
+quindi i dettagli seguono il DEM senza creare proxy dalle altezze degli edifici.
+
+### 27.5 Verifiche
+
+- `python3 -m unittest discover -p 'test_*.py'` in `backend/`: **316 test OK**
+  (9 nuovi guardia statica degli asset CC0, ponte, menu, uova, LOD,
+  instancing e invarianti; aggiornato il conteggio voci menu a 29).
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori,
+  215 warning preesistenti. Stub estesi (solo nel checker, mai nel progetto
+  Unity) per `CombineInstance`, `Mesh.CombineMeshes`, `Material.enableInstancing`,
+  copy constructor, `Transform.hasChanged`, `Matrix4x4.TRS/inverse/*`,
+  `LightRenderMode` e `Graphics.DrawMeshInstanced`.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`:
+  **BUILD SUCCESSFUL** (solo il solito avviso di deprecated API in
+  `BridgeActivity.java`).
+- Build release con AAR Unity ricreato e APK firmato: **BUILD SUCCESSFUL in 5m 49s**
+  (`SKIP_INSTALL=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh`,
+  log `/tmp/opencode/build_veg.log`). APK `app/build/outputs/apk/release/app-release-signed.apk`,
+  204.882.545 byte, firma v3 verificata (1 signer). **SHA-256**:
+  `0af97a2179fc7bf566e865400bd725cd1cc938fa47532d1ffe843ca510af82c9`.
+  Nel `global-metadata.dat` dell'AAR e dell'APK sono presenti i token
+  `VegetationFeatureChanged`, `vegetationFeatures`, `Dettagli vegetazione` e
+  il prefisso `huntix_veg_`: il codice nuovo è entrato davvero nell'artefatto.
+  Artefatti collaterali della build (`link.xml.meta`, `PlayerLocomotion.controller`,
+  `PlayerHero.prefab`) sono stati ripristinati e non fanno parte del commit.
+- Collaudo su `emulator-5556`: APK installato e permessi concessi, avvio di
+  MiCittà in modalità «Città Gioco» tramite `BridgeActivity`. Il `setModeJson`
+  iniziale contiene `vegetationFeatures=""`; menu ☰ → «Impostazioni e
+  strumenti» → «Dettagli vegetazione» mostra le quattro opzioni attive
+  («Prati e fiori: On», «Cespugli e rocce: On», «Alberi nei parchi: On»,
+  «Luci dei parchi: On»). Disattivando «Luci dei parchi» il log Android registra
+  `I/HuntixSync: Vegetazione: luci-naturali on=false` e la pref diventa
+  `huntix_veg_luci-naturali=false`. Dopo force-stop e riavvio il
+  `setModeJson` contiene `vegetationFeatures=luci-naturali=0` e il pannello
+  ripropone «Luci dei parchi: Off» (con «Dettagli naturali: Off»): ritorno
+  Android→Unity e persistenza confermati. Nel diary `feature_eggs` sono
+  comparse le chiavi con coordinate
+  `vegetazione->parco->fioriture|41.113083|16.866607` e
+  `vegetazione->luci-naturali|41.1171|16.871931`: uova nel verde con posizione
+  testuale e GPS, senza duplicati. Ripristinando il toggle a On la pref torna
+  `true` e le opzioni tornano tutte On; lo stato di prova dell'emulatore è
+  stato ripulito. Nessun crash/ANR dell'app: solo rumore di piattaforma
+  (`StrictMode`, `ChimeraSrvcProxy`) non legato a queste modifiche.

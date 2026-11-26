@@ -552,3 +552,24 @@ I cinque kit UI gratuiti dell'Unity Asset Store identificati nella ricerca
 richiedono un account Unity autenticato per il download: non sono stati
 scaricati ne' aggirati. FancyScrollView e' l'alternativa MIT verificata e
 effettivamente integrata.
+
+---
+
+## Dettagli naturali di tutto il mondo — 26/11/2026
+
+- **Kenney Nature Kit**, https://kenney.nl/assets/nature-kit — **CC0 1.0**,
+  https://creativecommons.org/publicdomain/zero/1.0/.
+- Sorgente grezza: `kit/kenney_nature-kit.zip`; copia estratta e licenza
+  originale in `assets/nature/` (inventario: `assets/INVENTORY.md`).
+- Già importato in `unity-project/Assets/Resources/Nature/` (118 FBX) da
+  commit precedenti: **nessun nuovo download e nessun nuovo kit duplicato**
+  (QuaterniusNature non è stato importato).
+- Nuovo utilizzo a runtime: `Environment/NatureDetailPlacer.cs` combina le
+  mesh di erba, fiori, cespugli, sassi e alberi di parco in lotti
+  `Graphics.DrawMeshInstanced`, con materiali condivisi abilitati
+  all'instancing. Nessun collider viene creato sui dettagli.
+- Android AR: `reallife/OsmCityBuilder.kt` riutilizza gli stessi concetti con
+  primitive Filament dentro il budget `MAX_NODES` esistente.
+- Preferenze dedicate `huntix_veg_*`, evento `VegetationFeatureChanged` e
+  ritorno `vegetationFeatures` nel JSON `setMode`: nessuna modifica ai gruppi
+  `huntix_gfx_*`/`huntix_os_*`.
