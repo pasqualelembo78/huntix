@@ -130,6 +130,20 @@ namespace City.Interior.Visit
             },
             new Spec
             {
+                osmId = 405221437L,
+                kind = "casa",
+                label = "Casa country di Via Silvio Pellico",
+                note = "Via Silvio Pellico, Foggia — edificio OSM 405221437; "
+                     + "Сountry House FREE di Objective Environment (Unity Asset Store, "
+                     + "Standard Unity Asset Store EULA) — casa completa con interni",
+                lat = 41.4552530,
+                lng = 15.5379497,
+                centerLat = 41.4554042,
+                centerLng = 15.5377034,
+                exteriorPrefab = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab"
+            },
+            new Spec
+            {
                 osmId = 204023010L,
                 kind = "casa",
                 label = "Casa di Roma",

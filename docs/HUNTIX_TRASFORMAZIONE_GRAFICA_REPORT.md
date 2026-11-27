@@ -2005,7 +2005,7 @@ Backup prima della modifica: `/tmp/opencode/backup_camera_gta_20261127`
 - Il giudizio estetico finale resta demandato a un dispositivo reale:
   l'emulazione software non permette di valutare la fluidità della camera.
 
-## 41. Cinque case nuove in Via Silvio Pellico con asset CC0/CC BY (27/11/2026)
+## 41. Sei case nuove in Via Silvio Pellico con asset CC0/CC BY e Asset Store (27–28/11/2026)
 
 ### 41.1 Richiesta e diagnosi
 
@@ -2017,16 +2017,28 @@ seconda piccola casa da premere») veniva dal prefab generico Kenney/Quaternius
 adattato all'impronta OSM e poi stirato a 10,5 m per le case visitabili: il
 guscio perdeva le proporzioni e la vestizione artificiale (`GrandHouseExterior`)
 aggiungeva fasce/finestre fuori scala. La soluzione non è stata un altro
-adattamento del vecchio prefab, ma l'innesto di **cinque gusci esterni reali**,
+adattamento del vecchio prefab, ma l'innesto di **sei gusci esterni reali**,
 uno per edificio OSM, lasciando intatti interni, scale/collider, uova e bridge.
+Dopo la prima build i cinque FBX importati risultavano però **100× più piccoli**
+(bounds iniziali ~0,13 × 0,10 × 0,11 m): il tetto arrivava all'altezza dei
+piedi del personaggio. La causa era `globalScale: 1` nel blocco
+`ModelImporter` dei cinque `.fbx.meta`; è stata corretta a `globalScale: 100`
+senza modificare i sorgenti FBX. Misure dopo il fix: Grab3D
+12,98 × 10,05 × 11,10 m, Victorian 14,53 × 12,65 × 13,75 m; la sesta casa
+dell'Asset Store misura 14,82 × 7,91 × 12,60 m.
 
 ### 41.2 Asset inclusi e mappatura
 
 Gli asset proprietari di Brookhaven non sono stati riusati. Sono stati
 scaricati e inclusi solo modelli con licenza esplicita; i GLB sorgente sono
 stati riconvertiti in FBX con `assimp` per Unity 2022.3, senza modificarne la
-geometria, i materiali o le texture. Il catalogo Unity Asset Store è stato
-consultato, ma i pacchetti richiedono account/login e non sono stati inclusi.
+geometria, i materiali o le texture. Il 28/11/2026 è stato inoltre scaricato
+dall'Unity Asset Store, con account autorizzato, **Сountry House FREE** di
+Objective Environment: una casa completa (esterno e interni, 4.700 triangoli)
+distribuita dentro il gioco sotto **Standard Unity Asset Store EULA**, non come
+pack autonomo. Le texture 4096 px sono state portate a 2048 px per il peso
+Android; geometria e materiali sono invariati. Nessun asset Brookhaven è stato
+importato.
 
 | Id OSM edificio | Luogo | Guscio esterno | Licenza |
 |---|---|---|---|
@@ -2035,6 +2047,7 @@ consultato, ma i pacchetti richiedono account/login e non sono stati inclusi.
 | 405228884 | Via Silvio Pellico 55 | vinish.dev Townhouses | CC BY 4.0 |
 | 405228771 | Via Silvio Pellico 53 | vinish.dev Mediterranean Villa | CC BY 4.0 |
 | 405227079 | Via Silvio Pellico (edificio a nord) | vinish.dev Victorian House | CC BY 4.0 |
+| 405221437 | Via Silvio Pellico (edificio a nord, porta 41,4552530/15,5379497) | Сountry House FREE — Objective Environment, casa completa con interni | Standard Unity Asset Store EULA |
 
 Coordinate e porte sono state lette dagli edifici reali presenti nel dump OSM
 locale (`italy-latest.osm.pbf`), non inventate. I file e le licenze originali
@@ -2047,7 +2060,7 @@ sono in `Assets/ThirdPartyLicenses.md`.
   `TryGetExteriorPrefab` espone il percorso `Resources` senza toccare le
   `Spec` storiche. Roma, che non ha un guscio dedicato, conserva il
   comportamento precedente.
-- `BuildingPlacer.PlaceLegacy` carica il FBX dedicato con
+- `BuildingPlacer.PlaceLegacy` carica il prefab/FBX dedicato con
   `Resources.Load<GameObject>`, lo istanzia al posto del prefab generico e
   applica **una sola scala uniforme** sull'impronta OSM: nessuno stiramento e
   nessuna facciata deformata. Per questi gusci non scattano il clamp a 10,5 m
@@ -2059,60 +2072,73 @@ sono in `Assets/ThirdPartyLicenses.md`.
 - Collider, porta OSM, layer 8, guardia anti-volo del player, conversione dei
   materiali a URP/Lit e posizionamento sul terreno restano invariati.
 - Il modello sorgente non viene modificato: cambia solo l'istanza in scena.
+  La correzione `globalScale: 100` agisce sull'import FBX, non sulla geometria;
+  i 50 collider del prefab Asset Store vengono rimossi a runtime e sostituiti
+  dal solo `BoxCollider` di `BuildingPlacer`. Nessun «secondo edificio» viene
+  aggiunto sopra la casa.
 
 ### 41.4 Riflesso della caccia alle uova e ponte bidirezionale
 
 Nessuna nuova economia e nessun uovo aggiunto: i 9 nascondigli della villa da
 300 mq, i trigger `ContainerEgg`, `HouseVisitState`, il diario Android e le
-coordinate della porta restano identici. I cinque gusci sono una sostituzione
-puramente visiva; non introduce nuovi tipi di premio né nuovi canali bridge.
+coordinate della porta restano identici. I sei gusci sono una sostituzione
+puramente visiva; non introducono nuovi tipi di premio né nuovi canali bridge.
 Se in futuro si vorrà un indizio legato all'architettura esterna, la via
 compatibile è un `CityGlobalAreasBridge.Record` con chiave stabile
 `casa-osm-<id>` e la solita posizione della porta, senza toccare le uova.
 
 ### 41.5 Verifiche
 
-- Nuove guardie statiche in `backend/test_unity_house_assets.py` (6 test):
-  id OSM, path dei cinque FBX, Scala uniforme, esclusione da stiramento e
+- Nuove guardie statiche in `backend/test_unity_house_assets.py` (7 test):
+  id OSM, path dei sei gusci (cinque FBX + un prefab Asset Store),
+  `globalScale: 100` sui cinque FBX, scala uniforme, esclusione da stiramento e
   vestizione, licenze e assenza di nuova economia uova.
 - Guardie storiche aggiornate per il nuovo ramo «guscio dedicato» in
   `backend/test_unity_victorian_interior.py` e
   `backend/test_unity_visit_houses.py`; Roma e le case senza prefab dedicato
   conservano le guardie originali.
 - `python3 -m pytest backend -q --ignore=backend/test_security.py`:
-  **396 test OK**, 1 warning preesistente di pytest/dash.
+  **397 test OK**, 1 warning preesistente di pytest/dash.
 - `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori.
 - `git diff --check`: OK.
-- Verifica sui dati: i cinque id OSM sono presenti nella tile reale
+- Sonda in batchmode Unity 2022.3.52f1: il prefab `CountryHouse_Prefab` ha
+  bounds `14,82 × 7,91 × 12,60 m` (50 renderer, 50 collider sorgente) e Grab3D
+  `12,98 × 10,05 × 11,10 m`, contro i ~0,1 m precedenti al fix del meta.
+- Verifica sui dati: i cinque id OSM iniziali sono presenti nella tile reale
   `IT_082_087_geo.json.gz` (9165 edifici), con impronte 26×24 m, 31×14 m,
-  26,5×13,7 m, 26,3×13,4 m e 26×13,4 m. La scala uniforme del guscio usa
+  26,5×13,7 m, 26,3×13,4 m e 26×13,4 m. Il sesto edificio (`405221437`) è
+  stato letto dal dump OSM locale, con porta al 41,4552530/15,5379497 e
+  centro al 41,4554042/15,5377034. La scala uniforme del guscio usa
   l'impronta come posizione, non come deformazione.
 
 ### 41.6 Build e QA
 
+Gli SHA della build intermedia (prima del fix `globalScale` e della sesta
+casa) — AAR `85424aa8f550a1772893cfed098df027f6dac35f2c4003fcaf0b8e0ce7307f70`
+e APK `0cd67415a5dd151e34efbce52cc74a88345e84fab4b01f85144238eaf83938fb` —
+sono superati. Build finale del 28/11/2026 con
+`BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh --auto`:
+
 - Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 37s`.
-  `app/libs/unityLibrary-release.aar` (102 MB), SHA-256
-  `85424aa8f550a1772893cfed098df027f6dac35f2c4003fcaf0b8e0ce7307f70`.
-  I cinque nomi dei gusci dedicati sono presenti in
-  `global-metadata.dat`, quindi le nuove costanti `Resources` sono compilate
-  nel player.
-- Primo packaging APK: `processReleaseResources` è fallito con errori AAPT
-  `Invalid entry name`/`IO error` su alcune drawable, dopo aver esaurito lo
-  spazio disponibile durante la creazione AAR. Rimosso `unity-export.gradle`
-  (5 GB) e ricreati gli intermedi Gradle, il packaging è stato rilanciato con
-  `SKIP_UNITY_AAR=1` (AAR già pronto): `BUILD SUCCESSFUL in 1m 29s`.
-- APK firmato e verificato:
-  `app/build/outputs/apk/release/app-release-signed.apk` (197 MB), SHA-256
-  `0cd67415a5dd151e34efbce52cc74a88345e84fab4b01f85144238eaf83938fb`.
+  `app/libs/unityLibrary-release.aar` (126 MB), SHA-256
+  `b72bc466a33b231c55ecbc3c7848419b92270da5fcabbb93b3580aaa9b6b67d4`.
+  Le sei costanti `Resources` dei gusci sono compilate nel player.
+- Packaging APK: `BUILD SUCCESSFUL in 1m 53s`, senza ripetere l'errore AAPT
+  della build intermedia; non è stato necessario il fallback
+  `SKIP_UNITY_AAR=1`.
+- APK firmato e verificato (`apksigner`):
+  `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `79850571575622fa92000d45de314212c2e5846053d420bf7c16f054490f4a1a`.
   Artefatti collaterali rigenerati da Unity (`link.xml`, `link.xml.meta`,
   `PlayerLocomotion.controller`, `PlayerHero.prefab`) sono stati ripristinati
   da git e non inclusi nel commit.
-- Il giudizio estetico finale (gusci, assenza di deformazioni, accesso diretto
-  alla villa da 300 mq, scale/collider reali, fluidità e uova) resta da fare
-  su dispositivo reale. L'emulazione software non rende attendibile la
-  valutazione. Se il dispositivo mostra ancora una «seconda casa» prima del
-  salone, serve uno screenshot del punto esatto: nel codice l'ingresso alla
-  porta chiama già `VictorianGrandInterior.TryEnter`, senza un secondo
-  portaletto nuovo.
+- Il giudizio estetico finale (tetti all'altezza utile, gusci non minuscoli,
+  assenza di deformazioni e di una «seconda casa», accesso diretto alla villa
+  da 300 mq, scale/collider reali, fluidità e uova) resta da fare su
+  dispositivo reale: l'emulazione software non rende attendibile la
+  valutazione. Se il dispositivo mostra ancora una casa piccola o una seconda
+  casa prima del salone, serve uno screenshot del punto esatto: nel codice
+  l'ingresso alla porta chiama già `VictorianGrandInterior.TryEnter`, senza un
+  secondo portaletto nuovo.
 
 Backup prima delle modifiche: `/tmp/opencode/backup_case_brookhaven_20261127`.

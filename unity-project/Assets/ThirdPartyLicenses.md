@@ -242,5 +242,15 @@ dedicato, caricato da `Resources/Houses/ViaSilvioPellico/`. I modelli restano
   House” by vinish.dev (https://vinish.dev/free-3d-models/), CC BY 4.0.
 - **Kenney City Kit Suburban (CC0)** — già presente nel progetto prima di
   questo intervento; continua a vestire gli edifici ordinari non configurati.
-- **Unity Asset Store** — il catalogo è stato consultato, ma i pacchetti
-  richiedono account/login e non sono stati scaricati né inclusi.
+- **Unity Asset Store — Сountry House FREE** (Objective Environment,
+  https://assetstore.unity.com/packages/3d/environments/urban/country-house-free-125731):
+  **scaricato e incluso** il 28/11/2026 con account Unity autorizzato, sotto
+  **Standard Unity Asset Store EULA** (https://unity.com/legal/as-terms,
+  Extension Asset). È una casa completa con interni, porte, materiali e
+  texture (modello da 4.700 triangoli). File:
+  `Assets/ALP_Assets/country house01/` e
+  `Assets/Resources/Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab.prefab`.
+  Modifiche dichiarate: texture ridotte da 4096 a 2048 px, scena demo e
+  post-processing esclusi; geometria e materiali invariati. Testo e crediti in
+  `Assets/Resources/Houses/ViaSilvioPellico/LICENSE_assetstore_country_house.txt`.
+  Usato come sesto guscio dedicato sull'edificio OSM `405221437`.

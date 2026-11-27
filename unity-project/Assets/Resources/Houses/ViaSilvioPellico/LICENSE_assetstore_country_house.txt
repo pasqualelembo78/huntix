@@ -1,0 +1,23 @@
+Сountry House FREE — Objective Environment
+===========================================
+
+Fonte: Unity Asset Store
+https://assetstore.unity.com/packages/3d/environments/urban/country-house-free-125731
+Autore/publisher: Objective Environment (https://www.artstation.com/aleksey8310)
+Licenza: Standard Unity Asset Store EULA
+https://unity.com/legal/as-terms
+Tipo licenza: Extension Asset. Versione 1.1, release 11/08/2023.
+Data acquisizione: 28/11/2026 con account Unity autorizzato.
+
+File importati in Huntix:
+- Assets/ALP_Assets/country house01/ (modello House.fbx, prefab, materiali e texture)
+- Assets/Resources/Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab.prefab
+  (copia del prefab House_Prefab dentro Resources per il caricamento runtime)
+
+Modifiche dichiarate: le texture 4096x4096 sono state ridimensionate a 2048x2048
+per limitare peso e memoria su Android; la scena demo, il post-processing e le
+lightmap non sono stati importati. Geometria, materiali e prefab originali sono
+altrimenti invariati. Nessun codice o script del pacchetto è stato importato.
+
+L'asset è distribuito solo dentro il gioco finito HUNTIX, non come pack autonomo,
+in accordo con l'Asset Store EULA.
