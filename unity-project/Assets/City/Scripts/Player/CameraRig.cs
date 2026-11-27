@@ -207,6 +207,16 @@ namespace City.Player
         private const int CameraCollisionMask = ~0;
         private float _nextAdaptLog;
 
+        // ── Inquadratura ORIZZONTALE a piedi (richiesta del proprietario) ──
+        // I profili indoor storici passano pitch 16-22 gradi e altezze fino a
+        // 3,4 m: finche' il blend indoor veniva abbandonato a regime non si
+        // vedeva, ora che il profilo resta attivo la scena appariva inclinata.
+        // A piedi la vista resta livello e il braccio sta all'altezza del
+        // torace; in guida l'inquadratura dall'alto sull'auto e' invariata.
+        private const float ThirdPersonPitch = 0f;
+        private const float MinThirdPersonHeight = 1.35f;
+        private const float MaxThirdPersonHeight = 1.75f;
+
         private float pinchStartDistance;
 
         private void Awake()
@@ -752,6 +762,17 @@ namespace City.Player
                 p = indoorPitch;
             }
 
+            // Si normalizza SOLO l'inquadratura a piedi: i valori dei chiamanti
+            // restano intatti (nessun default di sistema cambiato) e la guida
+            // conserva il pitch alto che inquadra l'auto da dietro/sopra.
+            // p=0 rende la vista orizzontale; l'altezza e' quella del torace,
+            // cosi' il personaggio resta al centro senza scatti in apertura.
+            if (!drivingMode)
+            {
+                p = ThirdPersonPitch;
+                h = Mathf.Clamp(h, MinThirdPersonHeight, MaxThirdPersonHeight);
+            }
+
             float castRadius = ArmRadius;
             if (useFrustumCollisionRadius && _sceneCamera != null)
                 castRadius = CameraCollisionRadius.FromCamera(
@@ -773,10 +794,15 @@ namespace City.Player
                 {
                     float rise = h * Mathf.Cos(p * Mathf.Deg2Rad) +
                                  d * Mathf.Sin(p * Mathf.Deg2Rad);
-                    float avail = Mathf.Max(0.35f, ceiling - HeadroomPadding);
-                    if (rise > avail && rise > 0.01f)
+                    // Il cast parte dal TORACE (ArmPivotHeight), non dai
+                    // piedi: il soffitto limita solo il dislivello fra torace
+                    // e camera. Confrontare l'altezza assoluta (vecchio bug)
+                    // abbassava la camera a ~0,5 m in ogni stanza.
+                    float abovePivot = rise - ArmPivotHeight;
+                    float avail = Mathf.Max(0.15f, ceiling - HeadroomPadding);
+                    if (abovePivot > avail && abovePivot > 0.01f && rise > 0.01f)
                     {
-                        float k = avail / rise;
+                        float k = Mathf.Clamp((ArmPivotHeight + avail) / rise, 0f, 1f);
                         h *= k;
                         p *= k;
                         if (Time.time >= _nextAdaptLog)
