@@ -371,6 +371,17 @@ namespace City.OSM
             return 1;
         }
 
+        // Villa da 300 mq (3 livelli x 100 mq) per le case configurate:
+        // l'impronta OSM resta invariata (la porta del registro e le
+        // coordinate Android non si spostano), cambia solo l'altezza finale
+        // e la vestizione visiva dei piani superiori.
+        public const int GrandVillaFloors =
+            City.Interior.Visit.GrandHouseExterior.Floors;
+        public const float GrandVillaFloorHeight =
+            City.Interior.Visit.GrandHouseExterior.FloorHeight;
+        public const float GrandVillaHeight =
+            City.Interior.Visit.GrandHouseExterior.TotalHeight;
+
         public static bool IsIndustrial(string t)
         {
             return ContainsAny(t, "industrial", "warehouse", "farm_auxiliary",
@@ -550,6 +561,12 @@ namespace City.OSM
                 : Hash(((long)Mathf.FloorToInt(centerLocal.x / 120f) << 16) ^
                        (long)Mathf.FloorToInt(centerLocal.z / 120f));
             string prefabName = PickPrefabName(b, out h, blockSeed);
+            // Case visitabili configurate: la casa deve vedersi grande DA
+            // FUORI. Il prefab Kenney/Quaternius di default è alto 4,5-6 m
+            // (una casa a un piano e mezzo): qui portiamo il guscio a 10,5 m,
+            // cioè tre piani da 3,5 m, senza cambiare impronta né porta.
+            bool grandVilla = City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id);
+            if (grandVilla) h = Mathf.Max(h, GrandVillaHeight);
             GameObject prefab = null;
 
             // Edifici non visitabili: prima si prova il kit high-quality
@@ -660,6 +677,16 @@ namespace City.OSM
             // dopo la correzione aspect s puo' essere sceso sotto il minimo: ok
             float s = Mathf.Max(sx, sz);
             float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
+            if (grandVilla)
+            {
+                // Le fasce/finestre della villa 300 mq sono a 3,5 e 7 m e il
+                // cornicione a 10,5 m: il guscio deve arrivare ESATTAMENTE a
+                // quell'altezza, altrimenti i piani superiori resterebbero
+                // sospesi sopra un edificio più basso. Il clamp generico dei
+                // prefab qui non si applica (è per le case ordinarie).
+                sy = Mathf.Clamp(GrandVillaHeight / Mathf.Max(baseB.size.y, 0.01f),
+                    0.5f, 12f);
+            }
             inst.transform.localScale = new Vector3(sx, sy, sz);
             inst.transform.localRotation = Quaternion.Euler(0f, b.r, 0f);
             inst.transform.localPosition = Vector3.zero;
@@ -686,6 +713,19 @@ namespace City.OSM
             {
                 float nearestHeight = heights.HeightNear(centerLocal.x, centerLocal.z);
                 inst.transform.localPosition += new Vector3(0f, nearestHeight, 0f);
+            }
+
+            // Vestizione ADDITIVA del terzo piano: fasce, finestre, balconi,
+            // cornicione e portico sopra l'edificio OSM già pronto. Nessun
+            // collider nuovo e nessuna modifica a porta/faro/interiore.
+            if (grandVilla)
+            {
+                City.Interior.Visit.VisitInteriorRegistry.Spec grandSpec;
+                string grandLabel = City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                        b.id, out grandSpec)
+                    ? grandSpec.label : FriendlyBuildingName(MapInteriorType(b.t), b.id);
+                City.Interior.Visit.GrandHouseExterior.Dress(parent, centerLocal,
+                    inst.transform.localPosition.y + wb.min.y, w, d, b.r, grandLabel);
             }
 
             // Un collider solo, dimensionato sui bounds reali del modello.
@@ -751,7 +791,10 @@ namespace City.OSM
             OsmDiag.LogDebug("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
                 "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +
                 " bounds=" + baseB.size.ToString("F2") +
-                " porta=" + (entranceComp != null) + " interno=si");
+                " porta=" + (entranceComp != null) + " interno=si" +
+                " villa300mq=" + grandVilla + " piani=" +
+                (grandVilla ? GrandVillaFloors.ToString()
+                            : SuggestedFloors(h).ToString()));
             return true;
         }
 

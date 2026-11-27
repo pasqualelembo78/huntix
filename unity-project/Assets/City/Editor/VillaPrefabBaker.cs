@@ -72,6 +72,248 @@ namespace City.Interior.Victorian.Editor
             Debug.Log("[VillaPrefabBaker] prefab completo creato: " + PrefabPath);
         }
 
+        // ── VILLA DA 300 MQ IN 3 LIVELLI (casa configurata) ──────────
+        // Nuovo prefab ADDITIVO: la reggia TARDIS di sopra resta intatta e
+        // continua a essere il fallback delle case non configurate.
+        public const string Prefab300Path =
+            "Assets/Resources/Villas/Villa300mqTreLivelli.prefab";
+        public const string Resource300Path = "Villas/Villa300mqTreLivelli";
+        public const int Piani300 = 3;
+        public const float LatoPiano300 = 10f;      // 10 x 10 m = 100 mq
+        public const float AltezzaPiano300 = 3.5f; // 3 piani = 10,5 m
+        public const float AreaPiano300 = LatoPiano300 * LatoPiano300;
+        public const float AreaTotale300 = Piani300 * AreaPiano300; // 300 mq
+
+        [MenuItem("Huntix/Bake Villa 300 mq (3 livelli)")]
+        public static void Bake300()
+        {
+            EnsureFolder("Assets/Resources", "Villas");
+            EnsureFolder("Assets/Resources/Villas", "Materials");
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var go = new GameObject("Villa300mqTreLivelli");
+            _root = go.transform;
+
+            Material cream = Mat("Villa_Cream", new Color(0.86f, 0.79f, 0.67f));
+            Material wood = Mat("Villa_Wood", new Color(0.34f, 0.20f, 0.11f));
+            Material red = Mat("Villa_Red", new Color(0.46f, 0.09f, 0.12f));
+            Material green = Mat("Villa_Green", new Color(0.12f, 0.28f, 0.20f));
+            Material gold = Mat("Villa_Gold", new Color(0.74f, 0.56f, 0.20f));
+            Material stone = Mat("Villa_Stone", new Color(0.48f, 0.40f, 0.32f));
+            Material glow = Mat("Villa_Glow", new Color(1f, 0.93f, 0.74f), true);
+
+            Build300Piani(cream, wood, stone, gold, glow);
+            Build300Arredi(wood, red, green, gold, glow, stone);
+            Build300Uova(wood, gold);
+            Build300Uscita(wood, gold, glow);
+
+            GameObject saved = PrefabUtility.SaveAsPrefabAsset(go, Prefab300Path);
+            if (saved == null)
+                throw new System.Exception("Salvataggio prefab villa 300 mq fallito: " + Prefab300Path);
+
+            Object.DestroyImmediate(go);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[VillaPrefabBaker] villa 300 mq / 3 piani creata: " + Prefab300Path +
+                " (" + AreaTotale300.ToString("F0") + " mq)");
+        }
+
+        /// <summary>Coordinate locali di un oggetto del piano. La radice del
+        /// prefab coincide con la radice della tasca: il piano 1 è a quota 0.</summary>
+        private static Vector3 InPiano(int floor, float x, float y, float z)
+        {
+            return new Vector3(x, floor * AltezzaPiano300 + y, z);
+        }
+
+        private static void Build300Piani(Material cream, Material wood,
+            Material stone, Material gold, Material glow)
+        {
+            const float lato = LatoPiano300;
+            const float h = AltezzaPiano300;
+            float half = lato * 0.5f;
+            for (int f = 0; f < Piani300; f++)
+            {
+                float y = f * h;
+                // Pavimento calpestabile: layer 0, come ogni altro interno,
+                // così il GroundSnapper trova il suolo del piano giusto.
+                Collider("Collider300_Pavimento" + f, InPiano(f, 0f, -0.15f, 0f),
+                    new Vector3(lato, 0.3f, lato), 0);
+                Panel("Shell/CI_Shell_Floor_Herringbone_2m", "Pavimento300_" + f,
+                    InPiano(f, 0f, -0.15f, 0f), new Vector3(lato, 0.3f, lato), 0f,
+                    f % 2 == 0 ? wood : stone);
+
+                Collider("Collider300_PareteN" + f, InPiano(f, 0f, h * 0.5f, -half),
+                    new Vector3(lato, h, 0.3f), 8);
+                Panel("Shell/CI_Shell_Wall_Window_2m", "Parete300_N" + f,
+                    InPiano(f, 0f, h * 0.5f, -half), new Vector3(lato, h, 0.3f), 180f, cream);
+                Collider("Collider300_PareteS" + f, InPiano(f, 0f, h * 0.5f, half),
+                    new Vector3(lato, h, 0.3f), 8);
+                Panel(f == 0 ? "Shell/CI_Shell_Wall_DoorDouble_2m"
+                             : "Shell/CI_Shell_Wall_Window_2m",
+                    "Parete300_S" + f, InPiano(f, 0f, h * 0.5f, half),
+                    new Vector3(lato, h, 0.3f), 0f, cream);
+                Collider("Collider300_PareteE" + f, InPiano(f, half, h * 0.5f, 0f),
+                    new Vector3(0.3f, h, lato), 8);
+                Panel("Shell/CI_Shell_Wall_Window_2m", "Parete300_E" + f,
+                    InPiano(f, half, h * 0.5f, 0f), new Vector3(0.3f, h, lato), -90f, cream);
+                Collider("Collider300_PareteO" + f, InPiano(f, -half, h * 0.5f, 0f),
+                    new Vector3(0.3f, h, lato), 8);
+                Panel("Shell/CI_Shell_Wall_Window_2m", "Parete300_O" + f,
+                    InPiano(f, -half, h * 0.5f, 0f), new Vector3(0.3f, h, lato), 90f, cream);
+
+                Panel("Shell/CI_Shell_Ceiling_Flat_2m", "Soffitto300_" + f,
+                    InPiano(f, 0f, h - 0.15f, 0f), new Vector3(lato, 0.3f, lato), 0f, cream);
+                LightAt("Luce300_Piano" + f, InPiano(f, 0f, h - 0.9f, 0f), 1.05f, 15f);
+                Primitive(PrimitiveType.Sphere, "Plafoniera300_" + f,
+                    InPiano(f, 0f, h - 0.55f, 0f), new Vector3(1.1f, 0.3f, 1.1f), glow);
+
+                if (f < Piani300 - 1) Build300ScalaSu(f, stone, gold);
+                if (f > 0) Build300ScalaGiù(f, gold);
+            }
+        }
+
+        /// <summary>Scale visive + trigger che portano al piano superiore.
+        /// Nessun sistema di fisica nuovo: si riusa InteriorTeleport come
+        /// per tutti gli altri gate dell'interior.</summary>
+        private static void Build300ScalaSu(int floor, Material stone, Material gold)
+        {
+            for (int i = 0; i < 6; i++)
+                Primitive(PrimitiveType.Cube, "Gradino300_Su" + floor + "_" + i,
+                    InPiano(floor, -2.8f, 0.3f + i * 0.52f, -2.2f - i * 0.42f),
+                    new Vector3(2f, 0.26f, 0.5f), stone);
+            var go = new GameObject("Scala300_Su" + floor);
+            go.transform.SetParent(_root, false);
+            go.transform.localPosition = InPiano(floor, -2.8f, 1.15f, -3.6f);
+            var col = go.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(2.6f, 2.2f, 1.4f);
+            var stairs = go.AddComponent<City.Interior.Victorian.GrandVillaStairs>();
+            stairs.targetFloor = floor + 1;
+            stairs.down = false;
+            Primitive(PrimitiveType.Sphere, "LuceScala300_Su" + floor,
+                InPiano(floor, -2.8f, AltezzaPiano300 - 0.5f, -3.6f),
+                new Vector3(0.5f, 0.5f, 0.5f), gold);
+        }
+
+        private static void Build300ScalaGiù(int floor, Material gold)
+        {
+            var go = new GameObject("Scala300_Giu" + floor);
+            go.transform.SetParent(_root, false);
+            go.transform.localPosition = InPiano(floor, 2.6f, 1.15f, -3.6f);
+            var col = go.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(2.4f, 2.2f, 1.4f);
+            var stairs = go.AddComponent<City.Interior.Victorian.GrandVillaStairs>();
+            stairs.targetFloor = floor - 1;
+            stairs.down = true;
+            Primitive(PrimitiveType.Sphere, "LuceScala300_Giu" + floor,
+                InPiano(floor, 2.6f, AltezzaPiano300 - 0.5f, -3.6f),
+                new Vector3(0.5f, 0.5f, 0.5f), gold);
+        }
+
+        private static void Build300Arredi(Material wood, Material red,
+            Material green, Material gold, Material glow, Material stone)
+        {
+            // PIANO 1 — salone + cucina + atrio.
+            Model("Decor/CI_Decor_Rug_LargeRect", "TappetoSalone300",
+                InPiano(0, 0f, 0.06f, 0.5f), new Vector3(6f, 0.12f, 5f), 0f);
+            Model("Living/CI_Living_Sofa_ThreeSeat", "DivanoSalone300",
+                InPiano(0, -2.5f, 0f, 2f), new Vector3(3.2f, 1.8f, 1.6f), 0f);
+            Model("Living/CI_Living_CoffeeTable", "TavolinoSalone300",
+                InPiano(0, 0f, 0f, 1.2f), new Vector3(1.6f, 0.9f, 1.2f), 0f);
+            Model("Decor/CI_Decor_CeilingLight_ThreeArm", "LampadarioSalone300",
+                InPiano(0, 0f, 2.4f, 0.5f), new Vector3(2.6f, 1.2f, 2.6f), 0f);
+            Model("Kitchen/CI_Kitchen_RangeCooker", "FornoCucina300",
+                InPiano(0, 3.8f, 0f, -2.5f), new Vector3(1.3f, 1.7f, 1.3f), -90f);
+            Model("Kitchen/CI_Kitchen_Table", "TavoloCucina300",
+                InPiano(0, 2f, 0f, -0.8f), new Vector3(1.8f, 1.2f, 1.8f), 0f);
+            Model("Kitchen/CI_Kitchen_Fridge_Retro", "FrigoCucina300",
+                InPiano(0, 4.1f, 0f, 1.5f), new Vector3(1.2f, 2.8f, 1.2f), -90f);
+
+            // PIANO 2 — camera + bagno + studio.
+            Model("Bedroom/CI_Bedroom_Bed_Double", "LettoCamera300",
+                InPiano(1, -2f, 0f, 1.8f), new Vector3(3f, 1.6f, 4f), 0f);
+            Model("Bedroom/CI_Bedroom_Wardrobe_Double", "ArmadioCamera300",
+                InPiano(1, -4f, 0f, -1.5f), new Vector3(1.8f, 3f, 2.4f), 90f);
+            Model("Bathroom/CI_Bathroom_Bathtub_Clawfoot", "VascaBagno300",
+                InPiano(1, 3f, 0f, -2.5f), new Vector3(2.6f, 1.6f, 1.6f), 90f);
+            Model("Bathroom/CI_Bathroom_Vanity_Basin", "LavandinoBagno300",
+                InPiano(1, 4f, 0f, 0.5f), new Vector3(1.8f, 1.6f, 1f), 0f);
+            Model("Office/CI_Office_Desk_Writing", "ScrivaniaStudio300",
+                InPiano(1, 0.5f, 0f, -3.5f), new Vector3(2.8f, 1.5f, 1.4f), 0f);
+            Model("Office/CI_Office_Bookcase_Glazed", "LibreriaStudio300",
+                InPiano(1, 3f, 0f, 3.5f), new Vector3(1.8f, 3f, 2.4f), 90f);
+
+            // PIANO 3 — biblioteca + stanza bambini + terrazza.
+            Model("Office/CI_Office_Bookcase_Glazed", "LibreriaBiblioteca300",
+                InPiano(2, -4f, 0f, 0f), new Vector3(1.8f, 3f, 5f), 90f);
+            Model("Living/CI_Living_Bookcase_Low", "LibreriaBassa300",
+                InPiano(2, -1f, 0f, 3.8f), new Vector3(2.6f, 1.8f, 1f), 0f);
+            Model("Kids/CI_Kids_BunkBed", "LettiBambini300",
+                InPiano(2, 3f, 0f, -2.2f), new Vector3(2.4f, 3f, 3.4f), 0f);
+            Model("Kids/CI_Kids_ToyChest", "CassaGiochi300",
+                InPiano(2, 0.5f, 0f, -3.8f), new Vector3(1.5f, 1.2f, 1.2f), 0f);
+            Model("Cafe/CI_Cafe_Table_Bistro", "TavolinoTerrazza300",
+                InPiano(2, 2f, 0f, 2f), new Vector3(1.4f, 1.3f, 1.4f), 0f);
+            Model("Decor/CI_Decor_Plant_Monstera", "PiantaTerrazza300",
+                InPiano(2, 4f, 0f, 3.6f), new Vector3(1.2f, 2f, 1.2f), 0f);
+        }
+
+        /// <summary>Nove nascondigli, tre per piano: ogni stanza ha il proprio
+        /// uovo con luogo testuale che include il livello. Nessun id duplicato
+        /// rispetto alla reggia TARDIS (prefabs mutually exclusive a runtime).</summary>
+        private static void Uovo300(string id, string room, string thing,
+            string model, Vector3 center, Vector3 size, Material mat)
+        {
+            Egg(id, room, thing, model, center, size, mat);
+        }
+
+        private static void Build300Uova(Material wood, Material gold)
+        {
+            Uovo300("salotto-piano1", "salone al piano 1", "cassetto del tavolino del salone",
+                "Decor/CI_Decor_StorageBox_Pair", InPiano(0, 0f, 0f, 1.2f),
+                new Vector3(1.2f, 0.9f, 0.9f), wood);
+            Uovo300("cucina-piano1", "cucina al piano 1", "forno della cucina",
+                "Kitchen/CI_Kitchen_RangeCooker", InPiano(0, 3.6f, 0f, -2.5f),
+                new Vector3(1.2f, 1.2f, 1.2f), gold);
+            Uovo300("atrio-piano1", "atrio al piano 1", "consolle dell'atrio",
+                "Living/CI_Living_Sideboard", InPiano(0, 4f, 0f, 3.6f),
+                new Vector3(1.4f, 1.2f, 0.9f), wood);
+
+            Uovo300("camera-piano2", "camera al piano 2", "armadio della camera",
+                "Bedroom/CI_Bedroom_Wardrobe_Double", InPiano(1, -4f, 0f, -1.5f),
+                new Vector3(1.4f, 1.4f, 1.2f), wood);
+            Uovo300("bagno-piano2", "bagno al piano 2", "mobile del lavandino",
+                "Bathroom/CI_Bathroom_Vanity_Basin", InPiano(1, 4f, 0f, 0.5f),
+                new Vector3(1.2f, 1.2f, 1f), gold);
+            Uovo300("studio-piano2", "studio al piano 2", "scrivania dello studio",
+                "Office/CI_Office_Desk_Writing", InPiano(1, 0.5f, 0f, -3.5f),
+                new Vector3(1.4f, 1.1f, 1f), wood);
+
+            Uovo300("biblioteca-piano3", "biblioteca al piano 3", "scaffale della biblioteca",
+                "Office/CI_Office_Bookcase_Glazed", InPiano(2, -4f, 0f, 0f),
+                new Vector3(1.2f, 1.4f, 1.8f), wood);
+            Uovo300("bambini-piano3", "stanza dei bambini al piano 3", "cassa dei giocattoli",
+                "Kids/CI_Kids_ToyChest", InPiano(2, 0.5f, 0f, -3.8f),
+                new Vector3(1.2f, 1.1f, 1f), wood);
+            Uovo300("terrazza-piano3", "terrazza al piano 3", "tavolino della terrazza",
+                "Cafe/CI_Cafe_Table_Bistro", InPiano(2, 2f, 0f, 2f),
+                new Vector3(1.1f, 1.1f, 1.1f), gold);
+        }
+
+        private static void Build300Uscita(Material wood, Material gold, Material glow)
+        {
+            Panel("Shell/CI_Shell_Wall_DoorDouble_2m", "PortaUscita300",
+                InPiano(0, 0f, 1.75f, LatoPiano300 * 0.5f + 0.02f),
+                new Vector3(3f, 3.5f, 0.4f), 180f, wood);
+            Primitive(PrimitiveType.Sphere, "LuceUscita300",
+                InPiano(0, 0f, 3f, LatoPiano300 * 0.5f - 0.4f),
+                new Vector3(0.6f, 0.6f, 0.6f), glow);
+            Primitive(PrimitiveType.Sphere, "ManigliaUscita300",
+                InPiano(0, 1f, 1.4f, LatoPiano300 * 0.5f - 0.35f),
+                new Vector3(0.3f, 0.3f, 0.3f), gold);
+        }
+
         private static void EnsureFolder(string parent, string name)
         {
             string path = parent + "/" + name;

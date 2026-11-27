@@ -27,6 +27,10 @@ namespace City.Interior.Victorian
         public Vector3 doorForward = Vector3.forward;
         public Vector3 entryLocal = new Vector3(0f, -999f, 42f);
         public Vector3 exitLocal = new Vector3(0f, -998.6f, 51f);
+        // Case configurate: usano la villa da 300 mq / 3 piani; le altre
+        // conservano la reggia TARDIS storica (nessun sistema rimosso).
+        public bool grand = false;
+        public long osmId = 0L;
 
         private void OnDisable()
         {
@@ -69,6 +73,16 @@ namespace City.Interior.Victorian
         // primitivo: nessuna casa resta vuota.
         private const string VillaPrefabResource = "Villas/VillaVittorianaCompleta";
 
+        // Nuova villa da 300 mq: 3 piani x 100 mq (10 x 10 m), altezza 10,5 m.
+        // Viene preferita SOLO per le case configurate; il prefab storico e il
+        // fallback primitivo restano intatti per tutte le altre.
+        private const string GrandVillaPrefabResource = "Villas/Villa300mqTreLivelli";
+        public const int GrandFloors = 3;
+        public const float GrandFloorHeight = 3.5f;
+        public const float GrandSide = 10f;
+        public const float GrandAreaPerFloor = 100f;
+        public const float GrandTotalArea = 300f;
+
         private static readonly Dictionary<string, Material> Mats =
             new Dictionary<string, Material>();
 
@@ -99,6 +113,9 @@ namespace City.Interior.Victorian
             Vector3 forward = entrance != null ? entrance.transform.forward : parent.forward;
             string key = StableKey(entrance, door, buildingName);
             string label = string.IsNullOrEmpty(buildingName) ? "Casa" : buildingName;
+            long osmId = entrance != null ? entrance.osmId : 0L;
+            bool grand = osmId != 0L &&
+                City.Interior.Visit.VisitInteriorRegistry.IsConfigured(osmId);
 
             // Centro della tasca in world-space: sotto la casa, non dentro al
             // guscio. La radice è figlia del GENERATORE, non del Floor_0: con
@@ -119,8 +136,14 @@ namespace City.Interior.Victorian
             pocket.key = key;
             pocket.doorWorld = door;
             pocket.doorForward = forward;
-            pocket.entryLocal = new Vector3(0f, 1.1f, 42f);
-            pocket.exitLocal = new Vector3(0f, 1.1f, 51f);
+            pocket.osmId = osmId;
+            pocket.grand = grand;
+            // La villa da 300 mq è compatta (10 x 10 m per piano): l'ingresso
+            // sta davanti alla porta, non in fondo al salone da 164 m.
+            pocket.entryLocal = grand ? new Vector3(0f, 1.15f, 3.2f)
+                                      : new Vector3(0f, 1.1f, 42f);
+            pocket.exitLocal = grand ? new Vector3(0f, 1.15f, 4.5f)
+                                     : new Vector3(0f, 1.1f, 51f);
 
             BuildVilla(go.transform, pocket, label);
             go.SetActive(false); // nessun costo finché il player non entra
@@ -128,8 +151,10 @@ namespace City.Interior.Victorian
             try
             {
                 UnityBridge.LogToAndroid(Tag,
-                    "casa vittoriana pronta: " + label + " (" + key +
-                    ") — fuori piccola, dentro salone + città interna");
+                    "casa vittoriana pronta: " + label + " (" + key + ") — " +
+                    (grand ? "villa 300 mq in 3 piani" +
+                             " (fuori tre livelli, dentro 100 mq per piano)"
+                           : "fuori piccola, dentro salone + città interna"));
             }
             catch (System.Exception) { }
         }
@@ -161,10 +186,14 @@ namespace City.Interior.Victorian
                 if (g.rig != null)
                     g.rig.SetIndoorOverride(true, CameraOwner, 7f, 3.4f, 16f);
                 if (g.ui != null)
-                    g.ui.ShowToast("Sei nella Casa Vittoriana: dentro è molto più grande di fuori!");
+                    g.ui.ShowToast(pocket.grand
+                        ? "Sei nella villa da 300 mq: tre piani da 100 mq!"
+                        : "Sei nella Casa Vittoriana: dentro è molto più grande di fuori!");
             }
-            Discover(pocket, "salone", "Salone dei lampadari",
-                "città→casa→" + pocket.key + "→salone dei lampadari");
+            Discover(pocket, pocket.grand ? "salotto-piano1" : "salone",
+                pocket.grand ? "Salone del piano 1" : "Salone dei lampadari",
+                "città→casa→" + pocket.key + "→" +
+                (pocket.grand ? "salone al piano 1" : "salone dei lampadari"));
             try
             {
                 UnityBridge.LogToAndroid(Tag, "ingresso tasca vittoriana: " + pocket.key);
@@ -289,22 +318,116 @@ namespace City.Interior.Victorian
         private static void BuildVilla(Transform root, VictorianPocket p, string label)
         {
             GameObject prefab = null;
-            try { prefab = Resources.Load<GameObject>(VillaPrefabResource); }
+            bool grandWanted = p != null && p.grand;
+            // Prima scelta per le case configurate: la villa da 300 mq.
+            // Se il prefab nuovo non c'è, si ripiega sulla reggia storica e
+            // poi sul fallback primitivo: nessuna casa resta vuota.
+            try { prefab = Resources.Load<GameObject>(
+                grandWanted ? GrandVillaPrefabResource : VillaPrefabResource); }
             catch (System.Exception) { prefab = null; }
+            if (grandWanted && prefab == null)
+            {
+                try { prefab = Resources.Load<GameObject>(VillaPrefabResource); }
+                catch (System.Exception) { prefab = null; }
+            }
 
             bool prefabUsed = prefab != null;
+            bool grandUsed = grandWanted && prefabUsed &&
+                prefab.name.IndexOf("300mqTreLivelli", System.StringComparison.Ordinal) >= 0;
             if (prefabUsed)
             {
                 var villa = UnityEngine.Object.Instantiate(prefab, root, false) as GameObject;
                 if (villa != null)
                 {
-                    villa.name = "VillaVittorianaCompleta";
+                    villa.name = grandUsed ? "Villa300mqTreLivelli" : "VillaVittorianaCompleta";
                     villa.SetActive(true);
                 }
                 else prefabUsed = false;
             }
             if (!prefabUsed) BuildFallbackArchitecture(root, p, label);
-            FinalizePocket(root, p, label, prefabUsed);
+            if (grandUsed) FinalizeGrandVilla(root, p, label);
+            else FinalizePocket(root, p, label, prefabUsed);
+        }
+
+        /// <summary>Completamento runtime della villa da 300 mq: marker dei
+        /// contenitori, uscita, etichette e nove zone (tre per piano). Usa gli
+        /// stessi eventi bridge di FinalizePocket, senza seconda economia.</summary>
+        private static void FinalizeGrandVilla(Transform root, VictorianPocket p,
+            string label)
+        {
+            HouseEggSpot[] spots = root.GetComponentsInChildren<HouseEggSpot>(true);
+            for (int i = 0; i < spots.Length; i++)
+            {
+                HouseEggSpot spot = spots[i];
+                if (spot == null || spot.GetComponent<UniversalContainerMarker>() != null) continue;
+                var marker = spot.gameObject.AddComponent<UniversalContainerMarker>();
+                marker.room = spot.room;
+                marker.interiorKey = "vittoriano";
+            }
+
+            Material gold = Mat("gold", new Color(0.72f, 0.55f, 0.20f));
+            var trigger = new GameObject("TriggerUscitaVittoriana");
+            trigger.transform.SetParent(root, false);
+            trigger.transform.localPosition = new Vector3(0f, 1.15f, 4.35f);
+            var col = trigger.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(3f, 2.2f, 1f);
+            trigger.AddComponent<VictorianExit>();
+
+            Label(root, "PIANO 1 — SALONE E CUCINA", new Vector3(0f, 2.95f, 4.55f),
+                new Vector3(20f, 1.4f, 1f), gold);
+            Label(root, "PIANO 2 — CAMERA, BAGNO E STUDIO", new Vector3(0f, 6.45f, 4.55f),
+                new Vector3(22f, 1.4f, 1f), gold);
+            Label(root, "PIANO 3 — BIBLIOTECA, BAMBINI E TERRAZZA",
+                new Vector3(0f, 9.95f, 4.55f), new Vector3(24f, 1.4f, 1f), gold);
+
+            AddZonaVilla(root, p, "salotto-piano1", "Salone del piano 1",
+                "città→casa→" + p.key + "→salone al piano 1",
+                new Vector3(0f, 1.15f, 0.5f));
+            AddZonaVilla(root, p, "cucina-piano1", "Cucina del piano 1",
+                "città→casa→" + p.key + "→cucina al piano 1",
+                new Vector3(2.6f, 1.15f, -1.5f));
+            AddZonaVilla(root, p, "atrio-piano1", "Atrio del piano 1",
+                "città→casa→" + p.key + "→atrio al piano 1",
+                new Vector3(3.4f, 1.15f, 3f));
+            AddZonaVilla(root, p, "camera-piano2", "Camera del piano 2",
+                "città→casa→" + p.key + "→camera al piano 2",
+                new Vector3(-2f, 4.65f, 1.8f));
+            AddZonaVilla(root, p, "bagno-piano2", "Bagno del piano 2",
+                "città→casa→" + p.key + "→bagno al piano 2",
+                new Vector3(3.4f, 4.65f, -1f));
+            AddZonaVilla(root, p, "studio-piano2", "Studio del piano 2",
+                "città→casa→" + p.key + "→studio al piano 2",
+                new Vector3(0.5f, 4.65f, -3f));
+            AddZonaVilla(root, p, "biblioteca-piano3", "Biblioteca del piano 3",
+                "città→casa→" + p.key + "→biblioteca al piano 3",
+                new Vector3(-3f, 8.15f, 0f));
+            AddZonaVilla(root, p, "bambini-piano3", "Stanza dei bambini al piano 3",
+                "città→casa→" + p.key + "→stanza dei bambini al piano 3",
+                new Vector3(3f, 8.15f, -2f));
+            AddZonaVilla(root, p, "terrazza-piano3", "Terrazza del piano 3",
+                "città→casa→" + p.key + "→terrazza al piano 3",
+                new Vector3(2f, 8.15f, 2.4f));
+
+            try
+            {
+                UnityBridge.LogToAndroid(Tag,
+                    "villa 300 mq: " + label + " — 3 piani, 9 uova, 9 zone");
+            }
+            catch (System.Exception) { }
+        }
+
+        private static void AddZonaVilla(Transform root, VictorianPocket p,
+            string id, string label, string place, Vector3 pos)
+        {
+            var go = new GameObject("ZonaVilla300_" + id);
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = pos;
+            var zone = go.AddComponent<VictorianZone>();
+            zone.featureId = id;
+            zone.label = label;
+            zone.place = place;
+            zone.radius = 3.5f;
         }
 
         /// <summary>Il prefab contiene già i cinque contenitori, ma il marker
