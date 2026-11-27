@@ -91,6 +91,19 @@ namespace City.Player
         // solo il proprio contributo (niente conteggi che vanno male).
         private readonly HashSet<string> _indoorOwners = new HashSet<string>();
         private bool indoorOverrideActive => _indoorOwners.Count > 0;
+        /// <summary>Profilo per OGNI owner attivo: prima i target erano tre
+        /// scalari globali, quindi due interni attivi insieme (porta + negozio,
+        /// casa + vehicle-poi) si sovrascrivevano a vicenda e il rilascio di
+        /// uno solo ripristinava i valori sbagliati (scatto). Ora l'override
+        /// effettivo e' la composizione dei contributi attivi.</summary>
+        private sealed class IndoorProfile
+        {
+            public float distance;
+            public float height;
+            public float pitch;
+        }
+        private readonly Dictionary<string, IndoorProfile> _indoorProfiles =
+            new Dictionary<string, IndoorProfile>();
         private float indoorDistance;
         private float indoorHeight;
         private float indoorPitch;
@@ -170,6 +183,29 @@ namespace City.Player
         private const float MinCameraDistance = 4.5f;
         private const float MaxCameraDistance = 30f;
         private const float RayOriginHeight = 5f;
+
+        // ── Camera adattiva per interni/open-world ──
+        // Il vecchio braccio non poteva scendere sotto 4,5 m e escludeva il
+        // layer 8: in una stanza da 10 m o in un corridoio la camera restava
+        // fuori dal muro (o lo attraversava). Queste costanti valgono SOLO
+        // per la collisione automatica: lo zoom dell'utente resta clampato
+        // a MinCameraDistance/MaxCameraDistance come prima.
+        private const float MinIndoorArmDistance = 0.85f;
+        private const float MinOutdoorArmDistance = 1.6f;
+        private const float WallPadding = 0.35f;
+        private const float HeadroomPadding = 0.25f;
+        /// <summary>Il braccio si accorcia SUBITO (evita di entrare nel muro)
+        /// e si allunga gradualmente (niente scatti quando lo spazio rientra).
+        /// </summary>
+        private const float CollapseSmoothScale = 0.45f;
+        private const float ExpandSmoothScale = 2.2f;
+        private const int BuildingLayer = 8;
+        /// <summary>La mask ora INCLUDE gli edifici: muri, soffitti e mobili
+        /// (layer 8) bloccano la camera esattamente come gli altri ostacoli.
+        /// I trigger restano ignorati e l'uovo del cassetto e' protetto dal
+        /// controllo EggArmClearance qui sotto.</summary>
+        private const int CameraCollisionMask = ~0;
+        private float _nextAdaptLog;
 
         private float pinchStartDistance;
 
@@ -412,18 +448,51 @@ namespace City.Player
             {
                 bool hadAny = _indoorOwners.Count > 0;
                 _indoorOwners.Add(owner);
-                indoorTargetDistance = distance;
-                indoorTargetHeight = height;
-                indoorTargetPitch = pitch;
+                IndoorProfile prof;
+                if (!_indoorProfiles.TryGetValue(owner, out prof))
+                {
+                    prof = new IndoorProfile();
+                    _indoorProfiles[owner] = prof;
+                }
+                prof.distance = distance;
+                prof.height = height;
+                prof.pitch = pitch;
+                EffectiveIndoorTargets(out indoorTargetDistance,
+                    out indoorTargetHeight, out indoorTargetPitch);
                 if (!hadAny) InitializeIndoorBlend();
             }
             else
             {
                 _indoorOwners.Remove(owner);
+                _indoorProfiles.Remove(owner);
+                EffectiveIndoorTargets(out indoorTargetDistance,
+                    out indoorTargetHeight, out indoorTargetPitch);
                 if (_indoorOwners.Count == 0)
                 {
                     // nessun owner attivo: il blend fara' il restore
                 }
+            }
+        }
+
+        /// <summary>Composizione dei profili attivi: vale la distanza PIU'
+        /// corta, l'altezza PIU' bassa e il pitch PIU' guardato-giu. Cosi'
+        /// due owner simultanei non si annullano e non generano scatti.</summary>
+        private void EffectiveIndoorTargets(out float d, out float h, out float p)
+        {
+            d = float.MaxValue;
+            h = float.MaxValue;
+            p = float.MinValue;
+            foreach (IndoorProfile prof in _indoorProfiles.Values)
+            {
+                if (prof.distance < d) d = prof.distance;
+                if (prof.height < h) h = prof.height;
+                if (prof.pitch > p) p = prof.pitch;
+            }
+            if (_indoorProfiles.Count == 0)
+            {
+                d = distance;
+                h = height;
+                p = pitch;
             }
         }
 
@@ -442,23 +511,36 @@ namespace City.Player
             indoorPitch = drivingMode ? drivePitch : pitch;
         }
 
+        /// <summary>Blend esponenziale (1-exp(-k*dt)): il vecchio
+        /// Mathf.Lerp(..., dt*5) con frame da 250 ms diventava 1,25 e
+        /// superava il target, producing lo scatto all'ingresso. La nuova
+        /// formula e' stabile a qualsiasi framerate.</summary>
         private void UpdateIndoorBlend(float dt)
         {
-            float blendSpeed = 5f;
+            const float blendSpeed = 5f;
+            if (!indoorOverrideActive && indoorDistance <= 0f) return;
+            float td, th, tp;
             if (indoorOverrideActive)
             {
-                indoorDistance = Mathf.Lerp(indoorDistance, indoorTargetDistance, dt * blendSpeed);
-                indoorHeight = Mathf.Lerp(indoorHeight, indoorTargetHeight, dt * blendSpeed);
-                indoorPitch = Mathf.Lerp(indoorPitch, indoorTargetPitch, dt * blendSpeed);
+                td = indoorTargetDistance;
+                th = indoorTargetHeight;
+                tp = indoorTargetPitch;
             }
-            else if (indoorDistance > 0f)
+            else
             {
-                float baseDist = drivingMode ? driveDistance : distance;
-                float baseHeight = drivingMode ? driveHeight : height;
-                float basePitch = drivingMode ? drivePitch : pitch;
-                indoorDistance = Mathf.Lerp(indoorDistance, baseDist, dt * blendSpeed);
-                indoorHeight = Mathf.Lerp(indoorHeight, baseHeight, dt * blendSpeed);
-                indoorPitch = Mathf.Lerp(indoorPitch, basePitch, dt * blendSpeed);
+                td = drivingMode ? driveDistance : distance;
+                th = drivingMode ? driveHeight : height;
+                tp = drivingMode ? drivePitch : pitch;
+            }
+            float k = 1f - (float)System.Math.Exp(-blendSpeed * dt);
+            indoorDistance += (td - indoorDistance) * k;
+            indoorHeight += (th - indoorHeight) * k;
+            indoorPitch += (tp - indoorPitch) * k;
+            if (!indoorOverrideActive && Mathf.Abs(indoorDistance - td) < 0.02f)
+            {
+                indoorDistance = 0f; // blend terminato: torna ai valori base
+                indoorHeight = 0f;
+                indoorPitch = 0f;
             }
         }
 
@@ -470,8 +552,26 @@ namespace City.Player
         private void Update()
         {
             ApplyGyro();
+            // La bussola uova funziona ANCHE in guida: prima stava dentro
+            // HandlePinchZoom, che non viene mai chiamato quando drivingMode
+            // e' true (early-return qui sopra), quindi l'hook era morto.
+            ApplyEggCompass();
             if (drivingMode) return;
             HandlePinchZoom();
+        }
+
+        private void ApplyEggCompass()
+        {
+            // Android_Unity3D_OpenWorld (senza licenza): assistenza bussola
+            // solo con opzione attiva, in guida e sotto 2 m/s. Sopra soglia la
+            // camera resta identica: nessun conflitto con la guida touch.
+            if (City.Player.EggCompassAssist.Enabled && Game.Instance != null &&
+                Game.Instance.IsDriving && Game.Instance.CurrentVehicle != null)
+            {
+                City.Player.EggCompassAssist.Apply(this,
+                    Game.Instance.CurrentVehicle.GetCurrentSpeedKmh() / 3.6f,
+                    Time.deltaTime);
+            }
         }
 
         /// <summary>Rotazione 360° con il giroscopio. Yaw (asse Y del
@@ -551,17 +651,34 @@ namespace City.Player
                     pinchStartDistance = currDist;
                 }
             }
+            // Nota: la bussola uova e' ora richiamata da Update (ApplyEggCompass)
+            // anche in guida; qui non serve piu' e resta solo il pinch.
+        }
 
-            // Android_Unity3D_OpenWorld (senza licenza): assistenza bussola
-            // solo con opzione attiva, in guida e sotto 2 m/s. Sopra soglia la
-            // camera resta identica: nessun conflitto con la guida touch.
-            if (City.Player.EggCompassAssist.Enabled && Game.Instance != null &&
-                Game.Instance.IsDriving && Game.Instance.CurrentVehicle != null)
+        /// <summary>Distanza del hit VALIDO piu' vicino restituito dall'ultimo
+        /// SphereCastNonAlloc, oppure float.MaxValue se non c'e' niente.
+        /// Physics NON ordina i risultati: prendere hits[0] (o il piu' alto)
+        /// e' il bug che piazzava la camera sul tetto. Esclude il player e
+        /// l'uovo del cassetto esattamente come faceva il vecchio blocco, e
+        /// limita la scansione ai soli slot realmente scritti dal cast.</summary>
+        private float NearestArmHit(int found, float maxDist)
+        {
+            float best = float.MaxValue;
+            int slots = Mathf.Min(found, ArmHitSlots);
+            for (int i = 0; i < slots; i++)
             {
-                City.Player.EggCompassAssist.Apply(this,
-                    Game.Instance.CurrentVehicle.GetCurrentSpeedKmh() / 3.6f,
-                    Time.deltaTime);
+                RaycastHit hitInfo = _armHits[i];
+                if (hitInfo.collider == null) continue;
+                if (hitInfo.distance <= 0f || hitInfo.distance > maxDist) continue;
+                Transform hitTransform = hitInfo.collider.transform;
+                if (hitTransform == target || hitTransform.IsChildOf(target)) continue;
+                // RIFLESSO UOVA: la camera non si avvicina abbastanza da
+                // tagliare l'uovo del cassetto (sola distanza, nessuna rivelazione).
+                if (City.Interior.ContainerEgg.DistanceToChosen(hitInfo.point) <=
+                    EggArmClearance) continue;
+                if (hitInfo.distance < best) best = hitInfo.distance;
             }
+            return best;
         }
 
         // ── Diagnostica camminata ([WalkDiag] di PlayerController) ────────────
@@ -622,16 +739,54 @@ namespace City.Player
             float h = drivingMode ? driveHeight : height;
             float p = drivingMode ? drivePitch : pitch;
 
-            if (!drivingMode)
+            if (!drivingMode && (indoorOverrideActive || indoorDistance > 0f))
             {
-                bool blendingIn = indoorOverrideActive && indoorDistance > indoorTargetDistance + 0.05f;
-                bool blendingOut = !indoorOverrideActive && indoorDistance > 0f &&
-                    indoorDistance < distance - 0.05f;
-                if (blendingIn || blendingOut)
+                // Prima si usava il profilo indoor SOLO finche' indoorDistance
+                // era maggiore del target: a blend completato (per esempio
+                // 6,0 m dentro un negozio) la camera tornava ai 7,0 m base,
+                // cioe' il "resta distante dentro casa" dei screenshot.
+                // Ora il profilo resta attivo per tutto il tempo in cui un
+                // owner indoor e' attivo (e durante il rientro alla base).
+                d = indoorDistance;
+                h = indoorHeight;
+                p = indoorPitch;
+            }
+
+            float castRadius = ArmRadius;
+            if (useFrustumCollisionRadius && _sceneCamera != null)
+                castRadius = CameraCollisionRadius.FromCamera(
+                    _sceneCamera.fieldOfView, _sceneCamera.aspect,
+                    _sceneCamera.nearClipPlane);
+            Vector3 start = target.position + Vector3.up * ArmPivotHeight;
+
+            // SOFFITTO: prima di calcolare l'offset misuriamo quanto spazio
+            // c'e' sopra il torace. Se il soffitto e' basso riduciamo altezza
+            // E pitch in proporzione: la camera non sale dentro il piano
+            // superiore e non scatta perche' il taglio e' continuo.
+            if (_fpBlend < 0.5f)
+            {
+                int upFound = Physics.SphereCastNonAlloc(start, castRadius,
+                    Vector3.up, _armHits, h + d + HeadroomPadding,
+                    CameraCollisionMask, QueryTriggerInteraction.Ignore);
+                float ceiling = NearestArmHit(upFound, h + d + HeadroomPadding);
+                if (ceiling < float.MaxValue)
                 {
-                    d = indoorDistance;
-                    h = indoorHeight;
-                    p = indoorPitch;
+                    float rise = h * Mathf.Cos(p * Mathf.Deg2Rad) +
+                                 d * Mathf.Sin(p * Mathf.Deg2Rad);
+                    float avail = Mathf.Max(0.35f, ceiling - HeadroomPadding);
+                    if (rise > avail && rise > 0.01f)
+                    {
+                        float k = avail / rise;
+                        h *= k;
+                        p *= k;
+                        if (Time.time >= _nextAdaptLog)
+                        {
+                            _nextAdaptLog = Time.time + 15f;
+                            OsmDiag.Log("[Camera][Adapt] soffitto a " +
+                                ceiling.ToString("F2") + "m: h/p ridotti a " +
+                                h.ToString("F2") + "/" + p.ToString("F1"));
+                        }
+                    }
                 }
             }
 
@@ -639,71 +794,62 @@ namespace City.Player
             Vector3 armDir = offset.normalized;
             float dist = offset.magnitude;
             float wantedArmDist = dist;
+            float minArm = indoorOverrideActive ? MinIndoorArmDistance : MinOutdoorArmDistance;
 
             if (_fpBlend < 0.5f)
             {
-                // GIORNO 9: sphere-cast dal torace, non un raggio sin sottile
-                // partito 5 m sopra il player (bucava muri di taglio e cornici).
-                // Un solo query/frame, buffer riusato, hit PIU' VICINO (regola
-                // del Mandato: mai il piu' alto/ultimo di RaycastAll).
-                Vector3 start = target.position + Vector3.up * ArmPivotHeight;
-                int mask = ~(1 << 8);   // layer 8 = edifici, invariato
-                float castRadius = ArmRadius;
-                if (useFrustumCollisionRadius && _sceneCamera != null)
-                    castRadius = CameraCollisionRadius.FromCamera(
-                        _sceneCamera.fieldOfView, _sceneCamera.aspect,
-                        _sceneCamera.nearClipPlane);
+                // Sphere-cast dal torace, non un raggio sottile partito 5 m
+                // sopra il player. Ora la mask INCLUDE il layer 8: muri e
+                // soffitti degli edifici bloccano davvero la camera.
                 int found = Physics.SphereCastNonAlloc(start, castRadius, armDir,
-                    _armHits, dist + castRadius, mask, QueryTriggerInteraction.Ignore);
-                RaycastHit best = default(RaycastHit);
-                float bestDist = float.MaxValue;
-                bool blocked = false;
-                for (int i = 0; i < found && i < ArmHitSlots; i++)
+                    _armHits, dist + castRadius, CameraCollisionMask,
+                    QueryTriggerInteraction.Ignore);
+                float nearest = NearestArmHit(found, dist + castRadius);
+
+                // Nei locali stretti (o quando un muro e' gia' vicino) sondiamo
+                // anche i lati del braccio: misura la larghezza del corridoio
+                // e avvicina la camera invece di lasciarla fuori dal muro.
+                if (indoorOverrideActive || nearest < dist)
                 {
-                    RaycastHit hitInfo = _armHits[i];
-                    if (hitInfo.collider == null || hitInfo.distance <= 0f) continue;
-                    if (hitInfo.collider.transform == target) continue;   // self-hit
-                    // RIFLESSO UOVA: in AR indoor la camera non taglia l'uovo
-                    // del cassetto. La distanza e' sola lettura, NON rivela
-                    // l'uovo e NON tocca il mini-gioco.
-                    if (City.Interior.ContainerEgg.DistanceToChosen(hitInfo.point) <= EggArmClearance)
-                        continue;
-                    if (hitInfo.distance < bestDist)
+                    Vector3 side = Vector3.Cross(Vector3.up, armDir);
+                    if (side.sqrMagnitude > 1e-6f)
                     {
-                        bestDist = hitInfo.distance;
-                        best = hitInfo;
-                        blocked = true;
+                        side.Normalize();
+                        for (int s = -1; s <= 1; s += 2)
+                        {
+                            Vector3 sideStart = start + side * (0.45f * s);
+                            int sideFound = Physics.SphereCastNonAlloc(sideStart,
+                                castRadius * 0.8f, armDir, _armHits,
+                                dist + castRadius, CameraCollisionMask,
+                                QueryTriggerInteraction.Ignore);
+                            float sideNearest = NearestArmHit(sideFound, dist + castRadius);
+                            if (sideNearest < nearest) nearest = sideNearest;
+                        }
                     }
                 }
-                if (blocked)
+
+                if (nearest < float.MaxValue)
                 {
-                    float hitDist = Vector3.Distance(target.position, best.point);
-                    if (hitDist > MinCameraDistance + 1f)
+                    wantedArmDist = Mathf.Clamp(nearest - WallPadding, minArm, dist);
+                    LastObstaclePull = wantedArmDist < dist - 0.05f;
+                    if (LastObstaclePull && nearest < dist * 0.8f && Time.time >= _nextPushLog)
                     {
-                        wantedArmDist = Mathf.Max(MinCameraDistance, hitDist - 0.5f);
-                        LastObstaclePull = true;
-                        // Audit: la camera e' stata tirata dentro da un ostacolo
-                        // (radice di "camera in prima persona" dentro un edificio).
-                        if (hitDist < dist * 0.8f && Time.time >= _nextPushLog)
-                        {
-                            _nextPushLog = Time.time + 15f;
-                            OsmDiag.Log("[Audit] Camera tirata dentro: " +
-                                target.name + " dist " + dist.ToString("F1") + " -> " +
-                                hitDist.ToString("F1") + "m hit=" + best.collider.name);
-                        }
+                        _nextPushLog = Time.time + 15f;
+                        OsmDiag.Log("[Audit] Camera tirata dentro: " +
+                            target.name + " dist " + dist.ToString("F1") + " -> " +
+                            wantedArmDist.ToString("F1") + "m");
                     }
                 }
             }
 
-            // La lunghezza del braccio viene smorzata con la STESSA costante di
-            // tempo della posizione (smoothTime): nel log 23/11 il camDist
-            // oscillava fra 5,95 e 7,45 m a ogni hit, trascinando la vista e
-            // le ombre. La direzione non cambia: si smorza solo la distanza,
-            // quindi la geometria della spring arm resta identica.
-            wantedArmDist = Mathf.Max(MinCameraDistance, wantedArmDist);
+            // Smorzamento con ISTERESI: si accorcia veloce (non entra nel muro)
+            // e si allunga piano (niente scatti quando lo spazio rientra).
+            wantedArmDist = Mathf.Max(minArm, wantedArmDist);
             if (float.IsNaN(_smoothedArmDist)) _smoothedArmDist = wantedArmDist;
+            float armTau = smoothTime * (wantedArmDist < _smoothedArmDist
+                ? CollapseSmoothScale : ExpandSmoothScale);
             _smoothedArmDist += (wantedArmDist - _smoothedArmDist) *
-                (1f - (float)System.Math.Exp(-dt / smoothTime));
+                (1f - (float)System.Math.Exp(-dt / Mathf.Max(0.02f, armTau)));
             Vector3 desired = target.position + armDir * _smoothedArmDist;
 
             Vector3 firstPos = target.position + Vector3.up * FirstPersonEyeHeight();
@@ -713,9 +859,8 @@ namespace City.Player
                 ref velocity, smoothTime);
             // Il ritardo fisiologico di un filtro che insegue un bersaglio in
             // moto e' v*tau (velocita' per la costante di tempo). A 7,5 m/s e
-            // tau=0,12 s sono ~0,90 m: il tetto fisso di 0,35 m faceva scattare
-            // la camera (camSnap=Y in 11 dei 17 campioni del log 23/11). Ora il
-            // tetto include il ritardo atteso e resta solo rete per i teleport.
+            // tau=0,12 s sono ~0,90 m: il tetto include il ritardo atteso e
+            // resta solo rete per i teleport.
             float followSpeed = _walker != null ? _walker.Speed : 0f;
             float gapLimit = MaxSmoothGap + followSpeed * Mathf.Max(dt, smoothTime);
             if (Vector3.Distance(smoothed, finalDesired) > gapLimit)
@@ -725,6 +870,32 @@ namespace City.Player
                 LastSnap = true;
             }
             transform.position = smoothed;
+
+            // CORREZIONE FINALE: dopo SmoothDamp la posizione puo' aver
+            // oltrepassato un muro per un frame (il cast iniziale usava il
+            // punto desiderato, non quello smorzato). Un ultimo cast corto
+            // riporta la camera dentro lo spazio libero, senza scatti perche'
+            // la direzione non cambia.
+            if (_fpBlend < 0.5f)
+            {
+                Vector3 toCam = smoothed - start;
+                float len = toCam.magnitude;
+                if (len > 0.2f)
+                {
+                    Vector3 dirCam = toCam / len;
+                    int finalFound = Physics.SphereCastNonAlloc(start,
+                        castRadius * 0.5f, dirCam, _armHits, len,
+                        CameraCollisionMask, QueryTriggerInteraction.Ignore);
+                    float finalHit = NearestArmHit(finalFound, len);
+                    if (finalHit < len)
+                    {
+                        smoothed = start + dirCam * Mathf.Max(0.5f, finalHit - 0.12f);
+                        velocity *= 0.5f;
+                        LastObstaclePull = true;
+                        transform.position = smoothed;
+                    }
+                }
+            }
             // Diagnostiche PRIMA del bob: devono misurare il ritardo della
             // camera rispetto al punto desiderato, non il tremolio del passo.
             LastSmoothGap = Vector3.Distance(transform.position, finalDesired);
