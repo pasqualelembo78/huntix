@@ -10,11 +10,12 @@ namespace City.Player
         public static CameraRig Instance;
 
         public Transform target;
-        // Vista stile Brookhaven: camera quasi ORIZZONTALE (altezza torace) con
-        // il player al centro della scena. Il vecchio assetto (height 3.2,
-        // pitch 18) guardava troppo dall'alto e il player stava in basso.
+        // Vista GTA: camera dietro e SOPRA il personaggio, punto di mira al
+        // torace; il pitch della vista e' derivato dal punto di mira (vedi
+        // LateUpdate) e non dall'inclinazione del braccio. Valori coerenti con
+        // il PlayerCamera serializzato in City.unity.
         public float distance = 7f;
-        public float height = 1.6f;
+        public float height = 3f;
         public float pitch = 5f;
         public float smoothTime = 0.12f;
         /// <summary>Con frame da 400 ms SmoothDamp non converge e la camera
@@ -207,15 +208,29 @@ namespace City.Player
         private const int CameraCollisionMask = ~0;
         private float _nextAdaptLog;
 
-        // ── Inquadratura ORIZZONTALE a piedi (richiesta del proprietario) ──
-        // I profili indoor storici passano pitch 16-22 gradi e altezze fino a
-        // 3,4 m: finche' il blend indoor veniva abbandonato a regime non si
-        // vedeva, ora che il profilo resta attivo la scena appariva inclinata.
-        // A piedi la vista resta livello e il braccio sta all'altezza del
-        // torace; in guida l'inquadratura dall'alto sull'auto e' invariata.
-        private const float ThirdPersonPitch = 0f;
-        private const float MinThirdPersonHeight = 1.35f;
-        private const float MaxThirdPersonHeight = 1.75f;
+        // ── Inquadratura GTA a piedi (richiesta del proprietario, 27/11) ──
+        // Il vecchio fix "orizzontale" (p=0, h=1,35-1,75 m) metteva la camera
+        // ALL'altezza della testa e la faceva guardare dritto: Melissa restava
+        // nella meta' inferiore e il terreno occupava la scena. Ora il braccio
+        // sale SOPRA la testa e il punto di mira e' il torace: l'inclinazione
+        // verso il basso nasce dalla geometria (LookRotation verso il punto di
+        // mira), non viene piu' confusa con l'inclinazione del braccio.
+        // I profili indoor/guida restano invariati: il loro pitch storico viene
+        // tradotto in quota del punto di mira, con un clamp anatomico.
+        private const float MinThirdPersonHeight = 2.6f;
+        private const float MaxThirdPersonHeight = 4.2f;
+        /// <summary>Quota del punto di mira rispetto al pivot del player
+        /// (pivot = piedi, CharacterController alto 1,8 m): spalle di Melissa.
+        /// Il baricentro del personaggio resta cosi' leggermente sotto il
+        /// centro dello schermo, come nei giochi in terza persona.</summary>
+        private const float MinThirdPersonLookHeight = 1.25f;
+        private const float MaxThirdPersonLookHeight = 1.7f;
+        /// <summary>In guida si mira piu' alto (carrozzeria/abitacolo).</summary>
+        private const float DriveLookHeight = 1.8f;
+        /// <summary>Il punto di mira e' protetto contro pitch estremi quando il
+        /// braccio si accorcia molto (camera incastrata fra muri/colonne).</summary>
+        private const float MaxDownPitch = 45f;
+        private const float MaxUpPitch = 15f;
 
         private float pinchStartDistance;
 
@@ -762,15 +777,27 @@ namespace City.Player
                 p = indoorPitch;
             }
 
-            // Si normalizza SOLO l'inquadratura a piedi: i valori dei chiamanti
-            // restano intatti (nessun default di sistema cambiato) e la guida
-            // conserva il pitch alto che inquadra l'auto da dietro/sopra.
-            // p=0 rende la vista orizzontale; l'altezza e' quella del torace,
-            // cosi' il personaggio resta al centro senza scatti in apertura.
-            if (!drivingMode)
+            // Framing stile GTA: il braccio resta SOPRA la testa del player,
+            // mentre il punto di mira sta al torace. I valori passati dai
+            // chiamanti non vengono toccati: il pitch storico e' solo tradotto
+            // nella quota del punto di mira (h - d*tan(p)), limitata a un
+            // intervallo anatomico. In guida si mira la carrozzeria.
+            float followSpeed = _walker != null ? _walker.Speed : 0f;
+            float lookHeight;
+            if (drivingMode)
             {
-                p = ThirdPersonPitch;
+                lookHeight = DriveLookHeight;
+            }
+            else
+            {
                 h = Mathf.Clamp(h, MinThirdPersonHeight, MaxThirdPersonHeight);
+                // In corsa il braccio si allunga di pochi centimetri: la stessa
+                // isteresi della collisione lo smorza, senza oscillazioni.
+                if (!indoorOverrideActive)
+                    d += Mathf.Clamp(followSpeed, 0f, 8f) * 0.08f;
+                lookHeight = Mathf.Clamp(
+                    h - d * Mathf.Tan(p * Mathf.Deg2Rad),
+                    MinThirdPersonLookHeight, MaxThirdPersonLookHeight);
             }
 
             float castRadius = ArmRadius;
@@ -792,8 +819,11 @@ namespace City.Player
                 float ceiling = NearestArmHit(upFound, h + d + HeadroomPadding);
                 if (ceiling < float.MaxValue)
                 {
-                    float rise = h * Mathf.Cos(p * Mathf.Deg2Rad) +
-                                 d * Mathf.Sin(p * Mathf.Deg2Rad);
+                    // Il braccio e' ora dritto dietro il player (solo yaw):
+                    // la quota della camera rispetto ai piedi e' esattamente h.
+                    // Prima rise includeva anche l'inclinazione del braccio,
+                    // che non esiste piu' e faceva sbagliare il taglio.
+                    float rise = h;
                     // Il cast parte dal TORACE (ArmPivotHeight), non dai
                     // piedi: il soffitto limita solo il dislivello fra torace
                     // e camera. Confrontare l'altezza assoluta (vecchio bug)
@@ -804,19 +834,23 @@ namespace City.Player
                     {
                         float k = Mathf.Clamp((ArmPivotHeight + avail) / rise, 0f, 1f);
                         h *= k;
-                        p *= k;
+                        // Il pitch di vista non viene piu' scalato a mano:
+                        // nasce dal punto di mira, quindi segue h da solo.
                         if (Time.time >= _nextAdaptLog)
                         {
                             _nextAdaptLog = Time.time + 15f;
                             OsmDiag.Log("[Camera][Adapt] soffitto a " +
-                                ceiling.ToString("F2") + "m: h/p ridotti a " +
-                                h.ToString("F2") + "/" + p.ToString("F1"));
+                                ceiling.ToString("F2") + "m: h ridotta a " +
+                                h.ToString("F2") + ", pitch di vista ricalcolato");
                         }
                     }
                 }
             }
 
-            Vector3 offset = Quaternion.Euler(p, yaw, 0f) * new Vector3(0f, h, -d);
+            // DIETRO e SOPRA: solo lo yaw ruota il braccio. L'inclinazione
+            // della vista NON deve inclinare il braccio, altrimenti il punto
+            // di mira e la posizione camera si inseguono a vicenda.
+            Vector3 offset = Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, h, -d);
             Vector3 armDir = offset.normalized;
             float dist = offset.magnitude;
             float wantedArmDist = dist;
@@ -887,7 +921,6 @@ namespace City.Player
             // moto e' v*tau (velocita' per la costante di tempo). A 7,5 m/s e
             // tau=0,12 s sono ~0,90 m: il tetto include il ritardo atteso e
             // resta solo rete per i teleport.
-            float followSpeed = _walker != null ? _walker.Speed : 0f;
             float gapLimit = MaxSmoothGap + followSpeed * Mathf.Max(dt, smoothTime);
             if (Vector3.Distance(smoothed, finalDesired) > gapLimit)
             {
@@ -949,8 +982,31 @@ namespace City.Player
                 transform.position += _bobApplied;
             }
 
-            float targetYaw = yaw + (_gyroEnabled ? _gyroYawOffset : 0f);
-            float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)
+            // INQUADRATURA: punto di mira esplicito (torace/spalle di Melissa,
+            // carrozzeria in guida). La rotazione della camera deriva da
+            // LookRotation(lookAt - cameraPos, up): cosi' il personaggio resta
+            // centrato anche quando il braccio viene accorciato dai muri o la
+            // posizione e' ancora in ritardo dopo uno scatto di direzione.
+            // Il roll e' escluso di proposito (orizzonte sempre livello):
+            // l'unica inclinazione laterale e' il micro-bob del passo.
+            Vector3 lookAt = target.position + Vector3.up * lookHeight;
+            Vector3 toLook = lookAt - transform.position;
+            Vector3 flatLook = new Vector3(toLook.x, 0f, toLook.z);
+            if (flatLook.sqrMagnitude < 0.25f)
+                flatLook = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward * 0.5f;
+            Vector3 lookDir = new Vector3(flatLook.x, toLook.y, flatLook.z);
+            if (lookDir.sqrMagnitude < 0.0001f)
+                lookDir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            Quaternion lookRot = Quaternion.LookRotation(lookDir.normalized,
+                Vector3.up);
+            float lookPitch = lookRot.eulerAngles.x;
+            if (lookPitch > 180f) lookPitch -= 360f;
+            lookPitch = Mathf.Clamp(lookPitch, -MaxUpPitch, MaxDownPitch);
+            // In prima persona lo yaw resta quello del player (il punto di
+            // mira e' dietro l'occhio e non e' un riferimento stabile).
+            float targetYaw = Mathf.LerpAngle(yaw, lookRot.eulerAngles.y,
+                1f - _fpBlend) + (_gyroEnabled ? _gyroYawOffset : 0f);
+            float viewPitch = Mathf.Lerp(lookPitch, 0f, _fpBlend)
                 + (_gyroEnabled ? _gyroPitchOffset : 0f);
             // GIORNO 9: smoothing della ROTAZIONE separato da quello della
             // posizione (che resta SmoothDamp 0,12 s + snap 0,35 m). La vista

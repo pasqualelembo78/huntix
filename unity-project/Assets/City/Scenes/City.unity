@@ -113462,7 +113462,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 1238724283}
   distance: 7
-  height: 1.6
+  height: 3
   pitch: 5
   smoothTime: 0.12
   orbitSpeed: 5

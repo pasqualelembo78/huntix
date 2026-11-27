@@ -1905,3 +1905,102 @@ economia (il percorso resta `FeatureEggHidden`/`ContainerEgg` + `HouseVisitState
 - Il controllo visivo definitivo dell'inquadratura va fatto su device:
   l'emulatore software non rende affidabile il giudizio sui movimenti della
   camera.
+
+## 40. Telecamera GTA: dietro, rialzata e con punto di mira esplicito (27/11/2026)
+
+### 40.1 Richiesta e diagnosi
+
+> «Melissa si trova troppo in basso rispetto allo schermo, quasi al margine
+> inferiore, mentre gran parte della visuale è occupata dal terreno davanti a
+> lei.».
+
+La causa non è un valore casuale ma una **divergenza geometrica** nella
+`CameraRig`: la posizione del braccio era
+`target.position + Quaternion.Euler(p, yaw, 0) * (0, h, -d)` e la rotazione
+era `Euler(p, yaw, -bobRoll)`: lo stesso `p` comandava sia l'elevazione del
+braccio sia il pitch della vista. Con la normalizzazione della sezione 39
+(`p = 0`, `h` clampato a 1,35-1,75 m) la camera finiva **all'altezza degli
+occhi di Melissa e guardava dritto**: il punto di mira sul piano del
+personaggio era ~1,6 m, cioè la testa, quindi il corpo restava tutto sotto il
+centro e metà schermo era asfalto. Il punto di mira era implicito e troppo alto
+rispetto al baricentro del personaggio. Alzare `h` senza correggere la rotazione
+avrebbe peggiorato il difetto (il personaggio sarebbe sceso ancora).
+
+È stato inoltre verificato il `Camera Follow Target`: l'unico rig attivo è
+`City.Player.CameraRig` su `PlayerCamera` in `City.unity` (`target` =
+`Player`, FOV 60°); non esistono `CinemachineBrain`/`VirtualCamera` nella
+scena di gioco (Cinemachine è presente solo in un asset di terze parti non
+usato dalla camera del player). Il pivot del player è ai piedi
+(`CharacterController` alto 1,8 m, centro 0,9 m): quindi `h` è una quota
+assoluta dal suolo e il vecchio clamp a 1,75 m coincideva con la testa.
+
+### 40.2 Fix applicato
+
+- **Altezza/pitch disaccoppiati**: il braccio ora ruota solo con lo yaw
+  (`Quaternion.Euler(0f, yaw, 0f) * (0, h, -d)`); `h` va da 2,6 a 4,2 m,
+  cioè sopra la testa. Il pitch della vista **non** inclina più il braccio.
+- **Punto di mira esplicito**: `lookAt = target.position + up * lookHeight`,
+  con `lookHeight` derivata dai profili storici (`h - d*tan(p)`) e clampata
+  a 1,25-1,7 m (torace/spalle); in guida si mira la carrozzeria a 1,8 m.
+  La rotazione nasce da `Quaternion.LookRotation(lookAt - cameraPos, up)`,
+  con smoothing separato (`RotationFollow`) e roll solo il micro-bob del
+  passo: orizzonte livello, niente inclinazioni laterali.
+- **Framing**: Melissa resta centrata orizzontalmente e leggermente sotto il
+  centro verticale (il punto di mira è sopra il suo baricentro), con una
+  leggera inclinazione verso il basso (~10-16° all'aperto).
+- **Inseguimento**: invariati `SmoothDamp`, `MaxSmoothGap`, snap sui teleport,
+  head bob fase del passo e giroscopio (solo vista). In corsa il braccio si
+  allunga al massimo di 0,64 m, smorzato dall'isteresi della collisione;
+  da fermo la distanza è stabile.
+- **Distanza dinamica**: intatti sfera-cast con layer 8, sonde laterali,
+  isteresi (0,45× contrazione / 2,2× espansione), correzione finale anti-muro,
+  override indoor owner-keyed e soffitto. Il taglio soffitto usa ora
+  `rise = h` (il braccio non è più inclinato) e riduce solo `h`: il pitch si
+  ricalcola dal punto di mira, senza più scalature a mano.
+- **Default coerenti**: `height = 3` sia nel campo che nel `PlayerCamera`
+  serializzato in `City.unity`; i profili dei chiamanti
+  (`BuildingEntrance`, `VictorianGrandInterior`, `VehiclePoiZone`,
+  `InteriorManager`) restano intatti (Mandato §7).
+
+### 40.3 Riflesso della caccia alle uova e ponte bidirezionale
+
+Nessun uovo nuovo: i 9 nascondigli storici della villa e la bussola uova in
+guida (già attiva in `Update`) restano invariati, senza seconda economia. La
+vista più alta rende più leggibili i contenitori addosso alle pareti; come già
+proposto nella sezione 39, se il proprietario approva si può aggiungere un
+richiamo della bussola quando la camera inquadra un `ContainerEgg` già
+esistente, con posizione registrata e bridge `HouseVisitState` ↔ Android.
+
+| File | Modifica |
+|---|---|
+| `City/Scripts/Player/CameraRig.cs` | Punto di mira esplicito, braccio dietro/sopra, pitch derivato, distanza in corsa |
+| `City/Scenes/City.unity` | `PlayerCamera.height` 1,6 → 3 |
+| `backend/test_unity_villa_skin_camera.py` | Guardie sostituite/aggiunte per il framing GTA (17 test) |
+| `docs/HUNTIX_TRASFORMAZIONE_GRAFICA_REPORT.md` | Questa sezione |
+
+Backup prima della modifica: `/tmp/opencode/backup_camera_gta_20261127`
+(`CameraRig.cs`, `City.unity`, test e report).
+
+### 40.4 Verifiche
+
+- `python3 backend/test_unity_villa_skin_camera.py`: **17 test OK**,
+  incluso il ricalcolo numerico dell'inquadratura (baricentro a ~60% dall'alto,
+  piedi a ~71%: dentro il frame, non sul bordo).
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **390 test OK**, 1 warning preesistente di pytest/dash.
+- `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori
+  (217 warning preesistenti).
+- Build firmata: primo tentativo con AAR automatico → export Unity e AAR
+  riusciti (`BUILD SUCCESSFUL in 4m 38s`, AAR 101 MB con
+  `MinThirdPersonLookHeight`/`MaxThirdPersonLookHeight`/`DriveLookHeight`
+  presenti in `global-metadata.dat`), packaging APK poi interrotto da
+  `No space left on device`. Dopo la rimozione di `unity-export.gradle` (5 GB)
+  e degli intermedi rigenerabili, rilanciato con `SKIP_UNITY_AAR=1`:
+  `EXIT=0`, `BUILD SUCCESSFUL in 1m 30s`. APK
+  `app/build/outputs/apk/release/app-release-signed.apk` (196 MB), SHA-256
+  `e1337d761c902d81682bd29fe130058b3ed1db4c9c4a6881cda484bc7887500b`.
+  Artefatti collaterali della build (`link.xml`, `link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit.
+- Il giudizio estetico finale resta demandato a un dispositivo reale:
+  l'emulazione software non permette di valutare la fluidità della camera.

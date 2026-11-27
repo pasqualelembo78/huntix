@@ -11,7 +11,9 @@ Eseguibile senza Unity, senza rete e senza device:
     python3 backend/test_unity_villa_skin_camera.py
 """
 
+import math
 import os
+import re
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,20 +86,63 @@ class TestCameraAdattiva(unittest.TestCase):
         self.assertNotIn("bool blendingIn =", self.rig)
         self.assertIn("1f - (float)System.Math.Exp(-blendSpeed * dt)", self.rig)
 
-    def test_inquadratura_orizzontale_a_piedi(self):
-        self.assertIn("private const float ThirdPersonPitch = 0f;", self.rig)
-        self.assertIn("private const float MinThirdPersonHeight = 1.35f;", self.rig)
-        self.assertIn("private const float MaxThirdPersonHeight = 1.75f;", self.rig)
-        self.assertIn("p = ThirdPersonPitch;", self.rig)
+    def test_inquadratura_gta_punto_di_mira(self):
+        # Il braccio sta SOPRA la testa; il punto di mira e' il torace: la
+        # vista guarda leggermente giu' senza confondere altezza e pitch.
+        self.assertIn("private const float MinThirdPersonHeight = 2.6f;", self.rig)
+        self.assertIn("private const float MaxThirdPersonHeight = 4.2f;", self.rig)
+        self.assertIn("MinThirdPersonLookHeight = 1.25f;", self.rig)
+        self.assertIn("MaxThirdPersonLookHeight = 1.7f;", self.rig)
         self.assertIn("h = Mathf.Clamp(h, MinThirdPersonHeight, MaxThirdPersonHeight);",
                       self.rig)
+        self.assertNotIn("private const float ThirdPersonPitch = 0f;", self.rig)
+        self.assertNotIn("Quaternion.Euler(p, yaw, 0f)", self.rig)
+        self.assertIn("Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, h, -d)",
+                      self.rig)
+        self.assertIn("float rise = h;", self.rig)
         # La normalizzazione e' DOPPO la scelta del profilo e vale solo a piedi:
         # in guida l'inquadratura dall'alto dell'auto resta quella storica.
         profile = self.rig.index("float d = drivingMode ? driveDistance : distance;")
-        norm = self.rig.index("// Si normalizza SOLO l'inquadratura a piedi")
+        norm = self.rig.index("// Framing stile GTA:")
         self.assertGreater(norm, profile)
-        self.assertIn("if (!drivingMode)\n            {\n                p = ThirdPersonPitch;",
+
+    def test_rotazione_deriva_da_punto_di_mira_e_orizzonte_livello(self):
+        self.assertIn("Vector3 lookAt = target.position + Vector3.up * lookHeight;",
                       self.rig)
+        self.assertIn("Quaternion.LookRotation(lookDir.normalized,", self.rig)
+        self.assertIn("lookPitch = Mathf.Clamp(lookPitch, -MaxUpPitch, MaxDownPitch);",
+                      self.rig)
+        self.assertIn("Mathf.LerpAngle(yaw, lookRot.eulerAngles.y,", self.rig)
+        # Nessun roll statico: solo il bob laterale, gia' presente.
+        self.assertIn("Quaternion.Euler(_viewPitch, _viewYaw, -bobRoll)", self.rig)
+        self.assertNotIn("float viewPitch = Mathf.Lerp(p, 0f, _fpBlend)", self.rig)
+        self.assertIn("float viewPitch = Mathf.Lerp(lookPitch, 0f, _fpBlend)",
+                      self.rig)
+
+    def test_distanza_aumenta_in_corsa_e_scene_aggiornata(self):
+        self.assertIn("d += Mathf.Clamp(followSpeed, 0f, 8f) * 0.08f;", self.rig)
+        scene = read(os.path.join(UNITY, "City", "Scenes", "City.unity"))
+        self.assertIn("  distance: 7\n  height: 3\n  pitch: 5", scene)
+
+    def test_framing_numerico_personaggio_sotto_il_centro(self):
+        # Ricalcolo della geometria con i valori serializzati (FOV 60°,
+        # camera a 3 m dietro 7 m): il baricentro del player (0,9 m) deve
+        # stare sotto il centro ma non vicino al bordo, e i piedi devono
+        # restare dentro l'inquadratura.
+        h = float(re.search(r"public float height = ([0-9.]+)f;", self.rig).group(1))
+        d = float(re.search(r"public float distance = ([0-9.]+)f;", self.rig).group(1))
+        scene = read(os.path.join(UNITY, "City", "Scenes", "City.unity"))
+        self.assertIn("  distance: 7\n  height: 3\n  pitch: 5", scene)
+        look = min(1.7, max(1.25, h - d * math.tan(math.radians(5.0))))
+        pitch = math.degrees(math.atan2(h - look, d))
+        self.assertGreater(pitch, 8.0)
+        self.assertLess(pitch, 16.0)
+        half_screen = math.tan(math.radians(60.0 / 2.0))
+        body = 0.5 - ((0.9 - look) / d) / (2.0 * half_screen)
+        feet = 0.5 - ((0.0 - look) / d) / (2.0 * half_screen)
+        self.assertGreater(body, 0.5)
+        self.assertLess(body, 0.7)
+        self.assertLess(feet, 0.85)
 
     def test_profili_chiamanti_non_modificati(self):
         # La correzione e' additiva nel rig: i valori storici dei caller restano.
@@ -110,6 +155,8 @@ class TestCameraAdattiva(unittest.TestCase):
                       entrance)
 
     def test_bussola_in_update_e_un_solo_rig(self):
+        scene = read(os.path.join(UNITY, "City", "Scenes", "City.unity"))
+        self.assertNotIn("Cinemachine", scene)
         update = self.rig.index("private void Update()")
         late = self.rig.index("private void LateUpdate()")
         hook = self.rig.index("EggCompassAssist.Apply(this")
