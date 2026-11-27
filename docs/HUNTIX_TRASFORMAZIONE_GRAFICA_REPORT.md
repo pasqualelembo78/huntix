@@ -1619,3 +1619,25 @@ La differenza media (2,7 ms) è dentro il quantizzamento del frame
 ha un costo misurabile. La generazione iniziale resta una volta sola
 (`fictional` 274-388 ms include l'intero quartiere di 192 edifici, non solo
 l'erba); i modelli combined e i materiali instanziati sono in cache.
+
+Il **consumo RAM reale** è stato misurato con `dumpsys meminfo` a 20-22 s
+dall'avvio, stessa scena, due ripetizioni con i quattro toggle tutti on e
+tutti off:
+
+| Misura | Vegetazione on | Vegetazione off | Delta |
+|---|---|---|---|
+| PSS totale, 1ª prova | 60.525 kB | 60.111 kB | +414 kB |
+| PSS totale, 2ª prova | 60.581 kB | 60.079 kB | +502 kB |
+| Heap Dalvik, 2ª prova | 12.839 kB | 12.100 kB | +739 kB |
+| Heap native, 2ª prova | 4.814 kB | 4.888 kB | -74 kB (rumore) |
+
+Quindi nella Città Gioco l'erba costa **circa mezzo megabyte di RAM**, non
+decine: 330 kB sono le due copie delle matrici, il resto sono i mesh combined
+di undici prefab, i materiali con instancing e i diciotto GameObject dei lotti
+(nessun GameObject per pianta). Il contatore Unity `ram=175MB` è una stima
+grezza di `Profiler.GetTotalAllocatedMemoryLong` e non distingue la vegetazione.
+
+Nei chunk OSM il limite teorico è 900 ciuffi + 300 cespugli/sassi + 16 alberi
+per chunk: con 49 chunk caricati sono ~59.600 istanze, cioè ~7,6 MB di matrici
+più i mesh in cache. Anche in quel caso non esiste un oggetto per pianta e i
+lotti fuori dal raggio vengono disegnati solo entro 260/620/700 m.
