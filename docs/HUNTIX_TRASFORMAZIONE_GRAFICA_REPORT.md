@@ -1734,3 +1734,120 @@ premio o inventario nuovo.
   interattivo (scale/uova nel diario Android) non sono automatizzabili in questo
   ambiente (emulazione software a 6-7 fps, nessun input visivo): vanno
   confermati a mano su hardware reale.
+
+## 38. Villa rifinita e camera adattiva in interni (27/11/2026)
+
+### 38.1 Richiesta
+
+> «migliora l'estetica della villa 3D (facciata, finestre realistiche, tetto,
+> balconi, terrazze, ingresso, materiali, giardino) e rendi la telecamera del
+> personaggio fluida e adattiva in interni, scale, corridoi e esterni, senza
+> scatti né disallineamenti».
+
+Il guscio a tre livelli della sezione 37 era corretto nelle dimensioni ma
+ancora riverso di pannelli luminosi piatti, senza vere aperture e con balconi
+ridotti a una barra. La camera, d'altra parte, era stata pensata per la strada:
+distanza minima 4,5 m e mask che **escludeva** il layer 8 degli edifici, quindi
+in una stanza o in un corridoio restava fuori dal muro (o lo attraversava).
+
+### 38.2 Villa: skin additiva, zero collider nuovi
+
+`GrandHouseExterior.Dress` resta invariato e chiama alla fine
+`GrandHouseSkin.Apply(root.transform, w, d)`: la geometria storica, la porta,
+il trigger di `BuildingEntrance` e le coordinate Android non si spostano. Il
+nuovo livello è idempotente (una seconda chiamata non duplica nulla) e copre i
+vecchi pannelli con:
+
+- **facciata** in intonaco texturizzato con lamelle fra i vani, pilastri
+  d'angolo e solchi scuri sotto ogni piano;
+- **finestre** con cassa in ombra, vetro riflettente, telaio perimetrale,
+  mullione, traversa, davanzale, architrave e maniglia — il vano nuovo sta a
+  `Out + 0,12` m, davanti al vecchio pannello a `hd + 0,06`;
+- **tetto** a due falde con colmo e **terrazza** sul lato ingresso, parapetto a
+  tre lati, corrimano e montanti;
+- **balconi** con ringhiera piena e montanti invece della sola barra;
+- **ingresso** con stipiti, architrave, tre gradini poggiati l'uno sull'altro e
+  vialetto in lastre con bordini;
+- **giardino** con aiuole rialzate, prato, terriccio e piante SENDU
+  (`CI_Decor_Plant_OliveTree`, `CI_Decor_Plant_Monstera`) già licenziate in
+  `Assets/ThirdPartyLicenses.md`.
+
+Ogni primitiva distrugge il collider prima di essere disegnata, le piante hanno
+i collider rimossi e il LOD1 disattivato: la camminabilità resta quella del
+guscio OSM, non nascono Luci nuove e non viene caricato nessun asset esterno.
+
+### 38.3 Camera: un solo rig, corretto e adattivo
+
+`CameraRig.cs` resta l'unico sistema di camera attivo (nessun
+`AddComponent<CameraRig>` aggiunto). Le correzioni:
+
+- **override indoor composito**: ogni owner (`building`, `vehicle-poi`,
+  `vittoriana`) ha il proprio profilo in un `Dictionary`; valgono la distanza
+  più corta, l'altezza più bassa e il pitch più rivolto verso il basso. Prima due owner
+  simultanei si sovrascrivevano e il rilascio di uno generava uno scatto.
+- **profilo mantenuto a regime**: prima il profilo indoor veniva abbandonato
+  appena il blend raggiungeva il target (6 m dentro un negozio tornavano a 7 m);
+  ora resta attivo finché c'è un owner, con rientro graduale alla base.
+- **blend esponenziale** `1-exp(-k*dt)`: il vecchio `Lerp(..., dt*5)` con frame
+  da 250 ms superava il target e produceva lo scatto all'ingresso.
+- **collisione reale**: la mask include il layer 8 (muri, soffitti, mobili),
+  i trigger restano ignorati e l'uovo del cassetto è protetto da
+  `EggArmClearance`. La distanza minima dinamica scende a 0,85 m in interni e
+  1,6 m all'aperto, senza toccare lo zoom dell'utente (4,5-30 m).
+- **sonda soffitto e lati**: un cast verso l'alto riduce altezza e pitch in
+  proporzione allo spazio disponibile; due cast laterali misurano la larghezza
+  del corridoio. L'isteresi (`0,45×` in contrazione, `2,2×` in espansione) accorcia
+  subito e allunga piano; un ultimo cast dopo `SmoothDamp` impedisce che la
+  posizione smorzata oltrepassi un muro per un frame.
+- **bussola uova in guida**: `EggCompassAssist.Apply` è stato spostato da
+  `HandlePinchZoom` (mai chiamato in guida) a `Update`, quindi funziona anche
+  con l'auto a bassa velocità.
+
+### 38.4 Riflesso della caccia alle uova e ponte bidirezionale
+
+Nessun uovo nuovo: giardino e terrazza sono **candidati** a futuri nascondigli,
+ma non viene creato alcun `HouseEggSpot` e non nasce una seconda economia. I 9
+nascondigli della villa 300 mq restano nel prefab storico (generato da
+`Uovo300(...)` con `featureId = "uovo-" + id`), con le stesse chiavi, zone e
+premi. Se l'utente approverà i nuovi luoghi, l'integrazione seguirà il percorso
+canonico `FeatureEggHidden`/`ContainerEgg` e il bridge `HouseVisitState`.
+
+| File | Modifica |
+|---|---|
+| `City/Scripts/Interior/Visit/GrandHouseSkin.cs` (+ `.meta`) | Nuova skin moderna additiva della villa |
+| `City/Scripts/Interior/Visit/GrandHouseExterior.cs` | Chiamata a `GrandHouseSkin.Apply` alla fine di `Dress` |
+| `City/Scripts/Player/CameraRig.cs` | Camera adattiva, override composito, collisioni, bussola in `Update` |
+| `backend/test_unity_villa_skin_camera.py` | 12 nuove guardie statiche su camera e skin |
+| `docs/HUNTIX_TRASFORMAZIONE_GRAFICA_REPORT.md` | Questa sezione |
+
+### 38.5 Verifiche
+
+- `python3 backend/test_unity_villa_skin_camera.py`: **12 test OK**;
+  `python3 backend/test_unity_victorian_interior.py`: **17 test OK**;
+  `python3 backend/test_unity_visit_houses.py`: **29 test OK**.
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **385 test OK**, 1 warning preesistente di pytest/dash.
+- `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori
+  (214 warning preesistenti).
+- Unity 2022.3.52f1 batchmode (`-batchmode -nographics -quit`): `EXIT=0`,
+  nessun `error CS` nel log `/tmp/opencode/unity-compile-villa.log`.
+- Build firmata: `SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 AUTH_MODE=api
+  SKIP_INSTALL=1 FORCE_UNITY_AAR=1 ./build_release.sh` → `EXIT=0`,
+  `BUILD SUCCESSFUL in 2m 40s`. APK
+  `app/build/outputs/apk/release/app-release-signed.apk` (197 MB), SHA-256
+  `a8e8dcdb2522bbdaec75c35d7740d6d6dd9a5245165094be5764ef6abdeda911`,
+  certificato Huntix digest SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  Il log di export contiene un `CS0103 GrandHouseSkin` transitorio nella prima
+  passata di import, prima che Unity registrasse il nuovo script: la passata
+  finale ha compilato e l'AAR contiene `GrandHouseSkin` (3 occorrenze) e
+  `Villa300mq_SkinModerna` (2) nel `global-metadata.dat` IL2CPP.
+- QA su emulatore `emulator-5580` (Android 15, swiftshader): APK installato e
+  avviato, `HomeActivity` caricata in 3,9 s, **0 FATAL / eccezioni** nei 50 s
+  successivi. L'ingresso nel mondo e la resa visiva della villa richiedono
+  interazione manuale (emulazione software, nessun input visivo automatizzato):
+  vanno confermati a mano su hardware reale, come per la sezione 37.
+- Effetti collaterali noti della build (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nei commit; la cartella rigenerabile `unity-export.gradle` (5 GB)
+  è stata rimossa per liberare spazio e consentire il QA sull'emulatore.
