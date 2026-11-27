@@ -1851,3 +1851,57 @@ canonico `FeatureEggHidden`/`ContainerEgg` e il bridge `HouseVisitState`.
   `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
   inclusi nei commit; la cartella rigenerabile `unity-export.gradle` (5 GB)
   è stata rimossa per liberare spazio e consentire il QA sull'emulatore.
+
+## 39. Camera di nuovo dietro il personaggio, in orizzontale (27/11/2026)
+
+### 39.1 Richiesta e diagnosi
+
+> «ora la camera riprende leggermente in diagonale. giusto? dovrebbe riprendere
+> il personaggio da dietro, in orizzontale».
+
+La causa è il punto 38.3: mantenendo il profilo indoor fino a regime (fix del
+"resta distante dentro casa"), sono diventati permanenti i valori storici dei
+chiamanti — pitch 16-22° e altezze 2,6-3,4 m in `VictorianGrandInterior`,
+`BuildingEntrance` e `VehiclePoiZone`. Prima il blend li abbandonava e si
+tornava ai 5° della vista base; ora quella inclinazione resta visibile.
+
+### 39.2 Fix additivo
+
+In `CameraRig.cs`, subito dopo la scelta del profilo indoor e prima dei cast,
+l'inquadratura **a piedi** viene normalizzata: `p = 0` (vista livello) e
+`h` clampato a 1,35-1,75 m (altezza del torace). I valori passati dai caller
+restano intatti (nessun default di sistema modificato, Mandato §7) e la guida
+continua a usare il suo pitch alto sull'auto. La sonda soffitto continua a
+funzionare perché `rise` usa lo stesso `p` normalizzato. È stato inoltre
+corretto il confronto con il soffitto: il cast parte dal torace
+(`ArmPivotHeight`), quindi il limite va applicato al dislivello fra torace e
+camera, non all'altezza assoluta (che abbassava la camera a ~0,5 m in stanza).
+
+### 39.3 Riflesso della caccia alle uova
+
+L'inquadratura orizzontale rende più leggibili i nascondigli addosso alle
+pareti (cassetti, scaffali, davanzali delle nuove finestre della villa): la
+caccia alle uova resta il centro dell'inquadratura. **Proposta all'utente**:
+se approva, aggiungiamo un leggero richiamo della bussola uova quando la camera
+inquadra un contenitore già presente, senza creare nuove uova né seconda
+economia (il percorso resta `FeatureEggHidden`/`ContainerEgg` + `HouseVisitState`).
+
+### 39.4 Verifiche
+
+- Nuove guardie in `backend/test_unity_villa_skin_camera.py` sulla
+  normalizzazione e sul fatto che i profili dei chiamanti non siano toccati.
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`: 387 test OK.
+- `backend/preprocessing/cscheck/check.sh`: CSCHECK OK, 0 errori.
+- Build firmata: l'export Unity ha rigenerato l'AAR con la nuova camera
+  (`ThirdPersonPitch` presente in `global-metadata.dat`); il primo packaging è
+  poi fallito per `No space left on device` durante l'injection Sentry. Dopo
+  aver rimosso `unity-export.gradle` e gli intermedi rigenerabili, il
+  packaging è stato rilanciato con `SKIP_UNITY_AAR=1` (AAR già pronto) e
+  `EXIT=0`, `BUILD SUCCESSFUL in 1m 27s`. APK
+  `app/build/outputs/apk/release/app-release-signed.apk` (196 MB), SHA-256
+  `b31fc5170d0b94f19969f800e294697bcf0a41a49194da94d81c1e3a5ab78f65`.
+  Artefatti collaterali della build (`link.xml`, `link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git.
+- Il controllo visivo definitivo dell'inquadratura va fatto su device:
+  l'emulatore software non rende affidabile il giudizio sui movimenti della
+  camera.

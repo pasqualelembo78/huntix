@@ -54,6 +54,12 @@ class TestCameraAdattiva(unittest.TestCase):
         self.assertIn("float ceiling = NearestArmHit(upFound, h + d + HeadroomPadding);", self.rig)
         self.assertIn("Vector3 side = Vector3.Cross(Vector3.up, armDir);", self.rig)
         self.assertIn("[Camera][Adapt] soffitto a ", self.rig)
+        # Il taglio va misurato dal torace, non dai piedi: il vecchio confronto
+        # assoluto abbassava la camera a ~0,5 m dentro le stanze.
+        self.assertIn("float abovePivot = rise - ArmPivotHeight;", self.rig)
+        self.assertIn("float k = Mathf.Clamp((ArmPivotHeight + avail) / rise, 0f, 1f);",
+                      self.rig)
+        self.assertNotIn("float k = avail / rise;", self.rig)
 
     def test_isteresi_e_correzione_dopo_smoothdamp(self):
         self.assertIn("private const float CollapseSmoothScale = 0.45f;", self.rig)
@@ -77,6 +83,31 @@ class TestCameraAdattiva(unittest.TestCase):
                       self.rig)
         self.assertNotIn("bool blendingIn =", self.rig)
         self.assertIn("1f - (float)System.Math.Exp(-blendSpeed * dt)", self.rig)
+
+    def test_inquadratura_orizzontale_a_piedi(self):
+        self.assertIn("private const float ThirdPersonPitch = 0f;", self.rig)
+        self.assertIn("private const float MinThirdPersonHeight = 1.35f;", self.rig)
+        self.assertIn("private const float MaxThirdPersonHeight = 1.75f;", self.rig)
+        self.assertIn("p = ThirdPersonPitch;", self.rig)
+        self.assertIn("h = Mathf.Clamp(h, MinThirdPersonHeight, MaxThirdPersonHeight);",
+                      self.rig)
+        # La normalizzazione e' DOPPO la scelta del profilo e vale solo a piedi:
+        # in guida l'inquadratura dall'alto dell'auto resta quella storica.
+        profile = self.rig.index("float d = drivingMode ? driveDistance : distance;")
+        norm = self.rig.index("// Si normalizza SOLO l'inquadratura a piedi")
+        self.assertGreater(norm, profile)
+        self.assertIn("if (!drivingMode)\n            {\n                p = ThirdPersonPitch;",
+                      self.rig)
+
+    def test_profili_chiamanti_non_modificati(self):
+        # La correzione e' additiva nel rig: i valori storici dei caller restano.
+        victorian = read(os.path.join(SCRIPTS, "Interior", "Victorian",
+                                      "VictorianGrandInterior.cs"))
+        entrance = read(os.path.join(SCRIPTS, "Interior", "BuildingEntrance.cs"))
+        self.assertIn("SetIndoorOverride(true, CameraOwner, 7f, 3.4f, 16f);",
+                      victorian)
+        self.assertIn("rig.SetIndoorOverride(active, \"building\", dist, height, pitch);",
+                      entrance)
 
     def test_bussola_in_update_e_un_solo_rig(self):
         update = self.rig.index("private void Update()")
