@@ -48,10 +48,16 @@ namespace City.Interior.Victorian.Editor
 
             BuildColliders();
             BuildShell(cream, wood, gold, stone);
+            BuildFoyer(cream, wood, red, gold, glow, stone);
             BuildSalon(wood, red, gold, glow);
             BuildLibrary(wood, green, gold, glow);
             BuildDining(wood, red, gold, glow);
             BuildCityInside(cream, wood, gold, glow, stone);
+            BuildMasterBedroom(cream, wood, red, gold, glow);
+            BuildBathroom(cream, wood, gold, glow, stone);
+            BuildKitchen(cream, wood, red, gold, glow, stone);
+            BuildKidsAndStudy(cream, wood, green, gold, glow);
+            BuildExtraComforts(wood, red, gold, glow, stone);
             BuildExitDoor(wood, gold, glow);
             BuildLighting(gold, glow);
             BuildEggSpots(wood, gold);
@@ -126,35 +132,48 @@ namespace City.Interior.Victorian.Editor
         private static void BuildShell(Material cream, Material wood,
             Material gold, Material stone)
         {
-            // Quattro ambienti reali, tutti calpestabili: salone, biblioteca,
-            // sala da pranzo e la "città" con piazzetta.
-            for (int ix = -2; ix <= 1; ix++)
-                for (int iz = 0; iz < 3; iz++)
-                    Panel("Shell/CI_Shell_Floor_Herringbone_2m",
-                        "ParquetSalone_" + ix + "_" + iz,
-                        new Vector3(ix * 16f + 8f, 0f, 6f + iz * 14f),
-                        new Vector3(16f, 0.3f, 14f), 0f, wood);
-            for (int ix = -3; ix <= -2; ix++)
-                for (int iz = -2; iz <= 1; iz++)
-                    Panel("Shell/CI_Shell_Floor_Planks_2m",
-                        "ParquetBiblioteca_" + ix + "_" + iz,
-                        new Vector3(ix * 18f + 9f, 0f, iz * 11f + 5.5f),
-                        new Vector3(18f, 0.3f, 11f), 0f, wood);
-            for (int ix = 2; ix <= 3; ix++)
-                for (int iz = -2; iz <= 1; iz++)
-                    Panel("Shell/CI_Shell_Floor_HexTile_2m",
-                        "PavimentoPranzo_" + ix + "_" + iz,
-                        new Vector3(ix * 18f - 9f, 0f, iz * 11f + 5.5f),
-                        new Vector3(18f, 0.3f, 11f), 0f, stone);
-            for (int ix = -2; ix <= 1; ix++)
-                for (int iz = -3; iz <= 0; iz++)
-                    Panel("Shell/CI_Shell_Floor_SquareTile_2m",
-                        "PavimentoCitta_" + ix + "_" + iz,
-                        new Vector3(ix * 16f + 8f, 0f, iz * 14f - 7f),
-                        new Vector3(16f, 0.3f, 14f), 0f, stone);
+            // Pavimento continuo su TUTTA la tasca (164 x 114 m): nessun buco
+            // fra gli ambienti. Il materiale cambia da stanza a stanza, così
+            // la pianta si legge camminando anche con il soffitto chiuso.
+            for (int ix = -4; ix <= 3; ix++)
+                for (int iz = -4; iz <= 3; iz++)
+                {
+                    float x = ix * 20f + 10f;
+                    float z = iz * 16f + 8f;
+                    string res;
+                    Material mat;
+                    if (z > 2f && Mathf.Abs(x) < 36f)
+                    {
+                        res = "Shell/CI_Shell_Floor_Herringbone_2m"; mat = wood;
+                    }
+                    else if (z > 2f && x < -36f)
+                    {
+                        res = "Shell/CI_Shell_Floor_Carpet_2m"; mat = redFloor();
+                    }
+                    else if (z > 2f)
+                    {
+                        res = "Shell/CI_Shell_Floor_HexTile_2m"; mat = stone;
+                    }
+                    else if (Mathf.Abs(x) < 36f)
+                    {
+                        res = "Shell/CI_Shell_Floor_SquareTile_2m"; mat = stone;
+                    }
+                    else if (x < -36f)
+                    {
+                        res = "Shell/CI_Shell_Floor_Planks_2m"; mat = wood;
+                    }
+                    else
+                    {
+                        res = z > -22f ? "Shell/CI_Shell_Floor_HexTile_2m"
+                                       : "Shell/CI_Shell_Floor_Planks_2m";
+                        mat = z > -22f ? stone : wood;
+                    }
+                    Panel(res, "Pavimento_" + ix + "_" + iz,
+                        new Vector3(x, 0f, z), new Vector3(20f, 0.3f, 16f), 0f, mat);
+                }
 
-            // Guscio esterno a moduli: finestre sul lato lungo, cornicioni,
-            // due ordini di pannelli per i soffitti alti 12 m.
+            // Guscio esterno: due ordini da 6 m = pareti alte 12 m, circa
+            // sette volte la statura del giocatore (1,7 m).
             for (int row = 0; row < 2; row++)
             {
                 float y = row * 6f + 3f;
@@ -181,25 +200,77 @@ namespace City.Interior.Victorian.Editor
                 }
             }
             for (int i = -5; i <= 5; i++)
+            {
                 Panel("Shell/CI_Shell_Trim_Crown_2m", "CorniceSud_" + i,
                     new Vector3(i * 16f, 12f, 55.4f),
                     new Vector3(16f, 0.5f, 0.5f), 0f, gold);
-
-            // Setto interno: archi verso biblioteca, pranzo e città.
-            for (int i = -5; i <= 5; i++)
-            {
-                bool arch = (i == -3 || i == 0 || i == 3);
-                Panel(arch ? "Shell/CI_Shell_Wall_Arch_1p5m" : "Shell/CI_Shell_Wall_Dado_2m",
-                    "SettoSalone_" + i, new Vector3(i * 16f, 3f, 2f),
-                    new Vector3(16f, 6f, 0.5f), 180f, cream);
+                Panel("Shell/CI_Shell_Trim_Crown_2m", "CorniceNord_" + i,
+                    new Vector3(i * 16f, 12f, -55.4f),
+                    new Vector3(16f, 0.5f, 0.5f), 180f, gold);
             }
-            for (int side = -1; side <= 1; side += 2)
-                for (int i = 0; i < 2; i++)
-                    Panel("Shell/CI_Shell_HalfWall_2m", "SettoLato_" + side + "_" + i,
-                        new Vector3(side * 34f, 3f, -6f - i * 14f),
-                        new Vector3(16f, 6f, 0.5f), side > 0 ? 90f : -90f, cream);
+            for (int i = -3; i <= 3; i++)
+            {
+                Panel("Shell/CI_Shell_Trim_Crown_2m", "CorniceEst_" + i,
+                    new Vector3(80.4f, 12f, i * 16f),
+                    new Vector3(16f, 0.5f, 0.5f), -90f, gold);
+                Panel("Shell/CI_Shell_Trim_Crown_2m", "CorniceOvest_" + i,
+                    new Vector3(-80.4f, 12f, i * 16f),
+                    new Vector3(16f, 0.5f, 0.5f), 90f, gold);
+            }
 
-            // Colonnato e soffitto a cassettoni: la scala della villa.
+            // Setti interni a tutta altezza: la villa è divisa in ali e
+            // stanze vere, con archi di passaggio al piano terra.
+            for (int row = 0; row < 2; row++)
+                for (int i = -5; i <= 5; i++)
+                {
+                    bool arch = row == 0 && (i == -3 || i == 0 || i == 3);
+                    Panel(arch ? "Shell/CI_Shell_Wall_Arch_1p5m"
+                               : "Shell/CI_Shell_Wall_Dado_2m",
+                        "SettoCentrale_" + row + "_" + i,
+                        new Vector3(i * 16f, row * 6f + 3f, 2f),
+                        new Vector3(16f, 6f, 0.5f), 180f, cream);
+                }
+            for (int side = -1; side <= 1; side += 2)
+            {
+                // Ali nord (salone/atrio ↔ camera e cucina).
+                for (int row = 0; row < 2; row++)
+                    for (int i = 0; i < 5; i++)
+                    {
+                        bool arch = row == 0 && (i == 2 || i == 4);
+                        Panel(arch ? "Shell/CI_Shell_Wall_Arch_1p5m"
+                                   : "Shell/CI_Shell_Wall_Dado_2m",
+                            "SettoLatoNord_" + side + "_" + row + "_" + i,
+                            new Vector3(side * 35f, row * 6f + 3f, 7f + i * 10f),
+                            new Vector3(10f, 6f, 0.5f), side > 0 ? -90f : 90f, cream);
+                    }
+                // Ali sud (città ↔ biblioteca/pranzo ↔ bagno, bambini, studio).
+                for (int row = 0; row < 2; row++)
+                    for (int i = 0; i < 6; i++)
+                    {
+                        bool arch = row == 0 && (i == 1 || i == 4);
+                        Panel(arch ? "Shell/CI_Shell_Wall_Arch_1p5m"
+                                   : "Shell/CI_Shell_Wall_Dado_2m",
+                            "SettoLatoSud_" + side + "_" + row + "_" + i,
+                            new Vector3(side * 35f, row * 6f + 3f, -51f + i * 10f),
+                            new Vector3(10f, 6f, 0.5f), side > 0 ? -90f : 90f, cream);
+                    }
+                // Tramezze trasversali che separano le stanze delle ali.
+                for (int row = 0; row < 2; row++)
+                    for (int wing = 0; wing < 2; wing++)
+                        for (int i = 0; i < 4; i++)
+                        {
+                            bool arch = row == 0 && i == 2;
+                            string tag = wing == 0 ? "Nord" : "Sud";
+                            Panel(arch ? "Shell/CI_Shell_Wall_Arch_1p5m"
+                                       : "Shell/CI_Shell_Wall_Dado_2m",
+                                "SettoTrasversale_" + side + "_" + tag + "_" + row + "_" + i,
+                                new Vector3(side * (45f + i * 10f), row * 6f + 3f,
+                                    wing == 0 ? 22f : -22f),
+                                new Vector3(10f, 6f, 0.5f), 180f, cream);
+                        }
+            }
+
+            // Colonnato monumentale del salone (12 m di altezza).
             for (int side = -1; side <= 1; side += 2)
                 for (int i = -3; i <= 3; i++)
                 {
@@ -213,16 +284,25 @@ namespace City.Interior.Victorian.Editor
                         new Vector3(side * 27f, 11.6f, 12f + i * 12f),
                         new Vector3(2.4f, 0.6f, 2.4f), 0f, gold);
                 }
-            for (int ix = -2; ix <= 1; ix++)
-                for (int iz = -3; iz <= 2; iz++)
+
+            // Soffitto a cassettoni: copre TUTTA la superficie, non solo il
+            // salone. Nove file x otto colonne di pannelli 20 x 16 m.
+            for (int ix = -4; ix <= 3; ix++)
+                for (int iz = -4; iz <= 3; iz++)
                     Panel("Shell/CI_Shell_Ceiling_Flat_2m",
                         "Soffitto_" + ix + "_" + iz,
-                        new Vector3(ix * 16f + 8f, 12.2f, iz * 16f),
-                        new Vector3(16f, 0.4f, 16f), 0f, cream);
-            for (int i = -3; i <= 3; i++)
+                        new Vector3(ix * 20f + 10f, 12.4f, iz * 16f + 8f),
+                        new Vector3(20f, 0.4f, 16f), 0f, cream);
+            for (int i = -3; i <= 2; i++)
                 Panel("Shell/CI_Shell_Ceiling_Beam_2m", "Trave_" + i,
-                    new Vector3(0f, 11.9f, i * 16f),
-                    new Vector3(160f, 0.5f, 0.7f), 0f, wood);
+                    new Vector3(0f, 12f, i * 16f + 8f),
+                    new Vector3(164f, 0.5f, 0.8f), 0f, wood);
+        }
+
+        private static Material redFloor()
+        {
+            // Tappeto della camera: materiale dedicato, creato una sola volta.
+            return Mat("Villa_Carpet", new Color(0.42f, 0.16f, 0.19f));
         }
 
         private static void BuildSalon(Material wood, Material red,
@@ -361,6 +441,267 @@ namespace City.Interior.Victorian.Editor
                 new Vector3(0f, 0.06f, -48f), new Vector3(22f, 0.12f, 22f), 0f);
         }
 
+        /// <summary>Atrio d'onore: il primo ambiente che si vede varcando la
+        /// porta, collegato al salone e alle due ali della villa.</summary>
+        private static void BuildFoyer(Material cream, Material wood,
+            Material red, Material gold, Material glow, Material stone)
+        {
+            Model("Decor/CI_Decor_Rug_Runner", "TappetoAtrio",
+                new Vector3(0f, 0.06f, 46f), new Vector3(6f, 0.12f, 16f), 0f);
+            Model("Living/CI_Living_Sideboard", "ConsolleAtrio",
+                new Vector3(-24f, 0f, 46f), new Vector3(4f, 2f, 1.6f), 90f);
+            Model("Bedroom/CI_Bedroom_Mirror_Floor", "SpecchioAtrio",
+                new Vector3(-24f, 0f, 50f), new Vector3(2f, 4f, 0.3f), 90f);
+            Model("Decor/CI_Decor_Plant_Monstera", "MonsteraAtrio",
+                new Vector3(28f, 0f, 50f), new Vector3(2f, 3f, 2f), 0f);
+            Model("Bedroom/CI_Bedroom_CoatStand", "AttaccapanniAtrio",
+                new Vector3(-28f, 0f, 38f), new Vector3(1.4f, 3f, 1.4f), 0f);
+            Model("Cafe/CI_Cafe_UmbrellaStand", "PortaOmbrelliAtrio",
+                new Vector3(28f, 0f, 38f), new Vector3(1.2f, 1.6f, 1.2f), 0f);
+            Model("Decor/CI_Decor_Clock_Round", "OrologioAtrio",
+                new Vector3(0f, 5f, 55f), new Vector3(2f, 2f, 0.3f), 180f);
+            Model("Decor/CI_Decor_Doormat", "ZerbinoAtrio",
+                new Vector3(0f, 0.05f, 52f), new Vector3(4f, 0.1f, 2f), 0f);
+            Model("Decor/CI_Decor_CeilingLight_ThreeArm", "LampadarioAtrio",
+                new Vector3(0f, 10.2f, 46f), new Vector3(5f, 2.6f, 5f), 0f);
+            Primitive(PrimitiveType.Sphere, "CuoreLampadarioAtrio",
+                new Vector3(0f, 9.4f, 46f), new Vector3(1f, 1f, 1f), glow);
+            // Scale monumentali: due statue di pietra ai lati dell'atrio.
+            Primitive(PrimitiveType.Cylinder, "PiedistalloAtrioSX",
+                new Vector3(-18f, 1f, 54f), new Vector3(2f, 2f, 2f), stone);
+            Primitive(PrimitiveType.Cylinder, "PiedistalloAtrioDX",
+                new Vector3(18f, 1f, 54f), new Vector3(2f, 2f, 2f), stone);
+            Primitive(PrimitiveType.Sphere, "VasoAtrioSX",
+                new Vector3(-18f, 2.6f, 54f), new Vector3(1.6f, 1.6f, 1.6f), gold);
+            Primitive(PrimitiveType.Sphere, "VasoAtrioDX",
+                new Vector3(18f, 2.6f, 54f), new Vector3(1.6f, 1.6f, 1.6f), gold);
+        }
+
+        private static void BuildMasterBedroom(Material cream, Material wood,
+            Material red, Material gold, Material glow)
+        {
+            Model("Bedroom/CI_Bedroom_Bed_Double", "LettoMatrimoniale",
+                new Vector3(-58f, 0f, 42f), new Vector3(5f, 1.8f, 6f), 0f);
+            Model("Bedroom/CI_Bedroom_BedsideTable_Drawer", "ComodinoCameraSX",
+                new Vector3(-64f, 0f, 42f), new Vector3(1.6f, 1.4f, 1.6f), 0f);
+            Model("Bedroom/CI_Bedroom_BedsideTable_Drawer", "ComodinoCameraDX",
+                new Vector3(-52f, 0f, 42f), new Vector3(1.6f, 1.4f, 1.6f), 0f);
+            Model("Bedroom/CI_Bedroom_Lamp_Bedside", "LampadaComodinoSX",
+                new Vector3(-64f, 1.5f, 42f), new Vector3(0.8f, 1.2f, 0.8f), 0f);
+            Model("Bedroom/CI_Bedroom_Lamp_Bedside", "LampadaComodinoDX",
+                new Vector3(-52f, 1.5f, 42f), new Vector3(0.8f, 1.2f, 0.8f), 0f);
+            Model("Bedroom/CI_Bedroom_Wardrobe_Double", "ArmadioCamera",
+                new Vector3(-76f, 0f, 34f), new Vector3(3f, 5f, 5f), 90f);
+            Model("Bedroom/CI_Bedroom_Dresser_Mirror", "SpecchieraCamera",
+                new Vector3(-76f, 0f, 48f), new Vector3(3f, 3f, 4f), 90f);
+            Model("Bedroom/CI_Bedroom_Armchair_Reading", "PoltronaCamera",
+                new Vector3(-48f, 0f, 50f), new Vector3(2.4f, 2f, 2.4f), -90f);
+            Model("Living/CI_Living_Footstool", "PoggiapiediCamera",
+                new Vector3(-48f, 0f, 46f), new Vector3(1.4f, 0.8f, 1.4f), 0f);
+            Model("Bedroom/CI_Bedroom_BlanketChest", "CassaCoperte",
+                new Vector3(-70f, 0f, 53f), new Vector3(3f, 1.4f, 2f), 0f);
+            Model("Decor/CI_Decor_Rug_LargeRect", "TappetoCamera",
+                new Vector3(-58f, 0.06f, 42f), new Vector3(16f, 0.12f, 12f), 0f);
+            Model("Bedroom/CI_Bedroom_Pendant_Fabric", "LampadaCamera",
+                new Vector3(-58f, 9.6f, 42f), new Vector3(4f, 2.4f, 4f), 0f);
+            Primitive(PrimitiveType.Sphere, "LuceCamera",
+                new Vector3(-58f, 9f, 42f), new Vector3(0.9f, 0.9f, 0.9f), glow);
+            Model("Bedroom/CI_Bedroom_Mirror_Floor", "SpecchioCamera",
+                new Vector3(-72f, 0f, 52f), new Vector3(1.8f, 3.6f, 0.3f), 90f);
+            Model("Bedroom/CI_Bedroom_PhotoFrame_Pair", "FotoCamera",
+                new Vector3(-64f, 2.6f, 36f), new Vector3(1.4f, 1.2f, 0.2f), 0f);
+            Model("Bedroom/CI_Bedroom_JewelleryBox", "Gioielliere",
+                new Vector3(-76f, 3.1f, 48f), new Vector3(0.8f, 0.4f, 0.6f), 90f);
+            Model("Bedroom/CI_Bedroom_Slippers", "PantofoleCamera",
+                new Vector3(-58f, 0.1f, 35f), new Vector3(1f, 0.2f, 0.8f), 0f);
+            Model("Bedroom/CI_Bedroom_LaundryBasket", "CestoBucatoCamera",
+                new Vector3(-70f, 0f, 28f), new Vector3(1.2f, 1.2f, 1.2f), 0f);
+        }
+
+        private static void BuildBathroom(Material cream, Material wood,
+            Material gold, Material glow, Material stone)
+        {
+            Model("Bathroom/CI_Bathroom_Bathtub_Clawfoot", "VascaBagno",
+                new Vector3(-70f, 0f, -30f), new Vector3(5f, 2f, 3f), 90f);
+            Model("Bathroom/CI_Bathroom_RubberDuck", "PaperellaBagno",
+                new Vector3(-70f, 1.9f, -30f), new Vector3(0.6f, 0.6f, 0.6f), 0f);
+            Model("Bathroom/CI_Bathroom_BathCandles", "CandeleBagno",
+                new Vector3(-74f, 2.1f, -27f), new Vector3(0.8f, 0.5f, 0.8f), 0f);
+            Model("Bathroom/CI_Bathroom_BathMat", "TappetinoBagno",
+                new Vector3(-60f, 0.06f, -30f), new Vector3(2f, 0.12f, 3f), 0f);
+            Model("Bathroom/CI_Bathroom_Basin_Pedestal", "LavandinoBagno",
+                new Vector3(-60f, 0f, -28f), new Vector3(1.6f, 2f, 1.2f), 0f);
+            Model("Bathroom/CI_Bathroom_Vanity_Basin", "MobileLavandino",
+                new Vector3(-60f, 0f, -40f), new Vector3(3f, 2f, 1.4f), 0f);
+            Model("Bathroom/CI_Bathroom_MirrorCabinet", "ArmadioSpecchioBagno",
+                new Vector3(-60f, 2.6f, -40f), new Vector3(2.4f, 2f, 0.3f), 0f);
+            Model("Bathroom/CI_Bathroom_Toilet", "WC",
+                new Vector3(-52f, 0f, -30f), new Vector3(1.4f, 1.8f, 1.6f), 0f);
+            Model("Bathroom/CI_Bathroom_TowelRail_Towels", "AsciugamaniBagno",
+                new Vector3(-76f, 1.6f, -36f), new Vector3(1.6f, 1.4f, 0.3f), 90f);
+            Model("Bathroom/CI_Bathroom_LinenCabinet_Tall", "ArmadioBiancheria",
+                new Vector3(-76f, 0f, -48f), new Vector3(2f, 4f, 1.6f), 0f);
+            Model("Bathroom/CI_Bathroom_LaundryHamper", "CestoBucatoBagno",
+                new Vector3(-70f, 0f, -48f), new Vector3(1.2f, 1.4f, 1.2f), 0f);
+            Model("Bathroom/CI_Bathroom_Sconce_Wall", "AppliqueBagno",
+                new Vector3(-58f, 4f, -50f), new Vector3(1f, 1.4f, 0.4f), 180f);
+            Model("Bathroom/CI_Bathroom_ShowerRail", "DocciaBagno",
+                new Vector3(-50f, 1.8f, -50f), new Vector3(2f, 3f, 2f), 0f);
+            Model("Decor/CI_Decor_Basket_Lidded", "CestoBagno",
+                new Vector3(-52f, 0f, -44f), new Vector3(1.2f, 1.4f, 1.2f), 0f);
+            Primitive(PrimitiveType.Sphere, "LuceBagno",
+                new Vector3(-62f, 7f, -38f), new Vector3(0.6f, 0.6f, 0.6f), glow);
+        }
+
+        private static void BuildKitchen(Material cream, Material wood,
+            Material red, Material gold, Material glow, Material stone)
+        {
+            Model("Kitchen/CI_Kitchen_Base_Sink_1m", "LavelloCucina",
+                new Vector3(76f, 0f, 34f), new Vector3(2f, 1.8f, 1.6f), -90f);
+            Model("Kitchen/CI_Kitchen_RangeCooker", "FornoCucina",
+                new Vector3(76f, 0f, 44f), new Vector3(2f, 2f, 2f), -90f);
+            Model("Kitchen/CI_Kitchen_RangeHood", "CappaCucina",
+                new Vector3(76f, 3.6f, 44f), new Vector3(2f, 1.4f, 2f), -90f);
+            Model("Kitchen/CI_Kitchen_Fridge_Retro", "FrigoCucina",
+                new Vector3(76f, 0f, 52f), new Vector3(2f, 3.4f, 2f), -90f);
+            Model("Kitchen/CI_Kitchen_Pantry_Tall", "DispensaCucina",
+                new Vector3(66f, 0f, 52f), new Vector3(3f, 5f, 1.6f), 0f);
+            Model("Kitchen/CI_Kitchen_WallCabinet_0p6m", "PensileCucina",
+                new Vector3(77f, 3f, 34f), new Vector3(1.4f, 1.6f, 1.6f), -90f);
+            Model("Kitchen/CI_Kitchen_Table", "TavoloCucina",
+                new Vector3(54f, 0f, 40f), new Vector3(4f, 1.4f, 4f), 0f);
+            Model("Kitchen/CI_Kitchen_Chair", "SediaCucinaA",
+                new Vector3(50f, 0f, 40f), new Vector3(1.6f, 1.6f, 1.6f), -90f);
+            Model("Kitchen/CI_Kitchen_Chair", "SediaCucinaB",
+                new Vector3(58f, 0f, 40f), new Vector3(1.6f, 1.6f, 1.6f), 90f);
+            Model("Kitchen/CI_Kitchen_Kettle", "BollitoreCucina",
+                new Vector3(75f, 2.1f, 44f), new Vector3(0.8f, 0.8f, 0.8f), 0f);
+            Model("Kitchen/CI_Kitchen_Toaster", "ToasterCucina",
+                new Vector3(75f, 2.1f, 48f), new Vector3(0.8f, 0.7f, 0.9f), 0f);
+            Model("Kitchen/CI_Kitchen_FruitBowl", "FruttaCucina",
+                new Vector3(54f, 1.5f, 40f), new Vector3(1f, 0.4f, 1f), 0f);
+            Model("Kitchen/CI_Kitchen_StorageJars", "BarattoliCucina",
+                new Vector3(66f, 3.2f, 52f), new Vector3(1f, 0.9f, 0.8f), 0f);
+            Model("Kitchen/CI_Kitchen_HerbPots", "ErbeCucina",
+                new Vector3(77f, 1.2f, 30f), new Vector3(1.2f, 0.8f, 0.8f), 0f);
+            Model("Kitchen/CI_Kitchen_WallClock", "OrologioCucina",
+                new Vector3(40f, 4f, 52f), new Vector3(1.4f, 1.4f, 0.3f), -90f);
+            Model("Kitchen/CI_Kitchen_PedalBin", "PattumieraCucina",
+                new Vector3(70f, 0f, 30f), new Vector3(1f, 1.4f, 1f), 0f);
+            Model("Decor/CI_Decor_Rug_BraidedOval", "TappetoCucina",
+                new Vector3(54f, 0.06f, 40f), new Vector3(10f, 0.12f, 8f), 0f);
+            Model("Decor/CI_Decor_Pendant_Glass", "LampadaCucina",
+                new Vector3(54f, 9.6f, 40f), new Vector3(2f, 3f, 2f), 0f);
+            Primitive(PrimitiveType.Sphere, "LuceCucina",
+                new Vector3(54f, 9f, 40f), new Vector3(0.7f, 0.7f, 0.7f), glow);
+        }
+
+        private static void BuildKidsAndStudy(Material cream, Material wood,
+            Material green, Material gold, Material glow)
+        {
+            // Ala sud-est: stanza dei bambini e studio privato, divise da un
+            // setto con arco in corrispondenza di x = 58.
+            Model("Kids/CI_Kids_BunkBed", "LettiBambini",
+                new Vector3(44f, 0f, -30f), new Vector3(4f, 4f, 6f), 0f);
+            Model("Kids/CI_Kids_ToyChest", "CassaGiochi",
+                new Vector3(44f, 0f, -42f), new Vector3(2.4f, 1.6f, 1.8f), 0f);
+            Model("Kids/CI_Kids_TeddyBear", "Orsetto",
+                new Vector3(44f, 3.2f, -30f), new Vector3(0.9f, 0.9f, 0.9f), 0f);
+            Model("Kids/CI_Kids_ToyCar", "Macchinina",
+                new Vector3(48f, 0.1f, -36f), new Vector3(1.2f, 0.6f, 0.9f), 0f);
+            Model("Kids/CI_Kids_TrainSet", "TrenoGiocattolo",
+                new Vector3(48f, 0.1f, -48f), new Vector3(5f, 0.5f, 5f), 0f);
+            Model("Kids/CI_Kids_CubbyShelf", "ScaffaleGiochi",
+                new Vector3(38f, 0f, -48f), new Vector3(4f, 3f, 1.2f), 90f);
+            Model("Kids/CI_Kids_Desk", "ScrivaniaBambini",
+                new Vector3(52f, 0f, -48f), new Vector3(3f, 1.6f, 1.6f), 180f);
+            Model("Kids/CI_Kids_Chair", "SediaBambini",
+                new Vector3(52f, 0f, -51f), new Vector3(1.2f, 1.6f, 1.2f), 0f);
+            Model("Kids/CI_Kids_BeanBag", "SaccoBambini",
+                new Vector3(48f, 0f, -52f), new Vector3(1.6f, 1f, 1.6f), 0f);
+            Model("Kids/CI_Kids_NightLamp_Mushroom", "LucinaBambini",
+                new Vector3(46f, 0f, -26f), new Vector3(0.8f, 1f, 0.8f), 0f);
+            Model("Kids/CI_Kids_PictureBooks", "LibriBambini",
+                new Vector3(38f, 1.6f, -48f), new Vector3(1f, 0.6f, 1f), 90f);
+            Model("Decor/CI_Decor_Rug_SmallRect", "TappetoBambini",
+                new Vector3(44f, 0.06f, -38f), new Vector3(10f, 0.12f, 8f), 0f);
+
+            Model("Office/CI_Office_Desk_Writing", "ScrivaniaStudio",
+                new Vector3(70f, 0f, -30f), new Vector3(6f, 2f, 4f), 0f);
+            Model("Office/CI_Office_Chair_Swivel", "SediaStudio",
+                new Vector3(70f, 0f, -35f), new Vector3(2f, 2f, 2f), 180f);
+            Model("Office/CI_Office_Bookcase_Glazed", "LibreriaStudio",
+                new Vector3(76f, 0f, -42f), new Vector3(3f, 6f, 8f), 90f);
+            Model("Office/CI_Office_Typewriter", "MacchinaDaScrivere",
+                new Vector3(70f, 2.1f, -30f), new Vector3(1.4f, 0.8f, 1.4f), 0f);
+            Model("Office/CI_Office_Lamp_Banker", "LampadaStudio",
+                new Vector3(67f, 2.1f, -30f), new Vector3(0.8f, 0.8f, 0.8f), 0f);
+            Model("Office/CI_Office_Map_Framed", "MappaStudio",
+                new Vector3(64f, 5f, -54f), new Vector3(4f, 3f, 0.3f), 180f);
+            Model("Office/CI_Office_FilingCabinet", "ArchivioStudio",
+                new Vector3(70f, 0f, -48f), new Vector3(2f, 2.4f, 1.6f), 0f);
+            Model("Decor/CI_Decor_Rug_SmallRect", "TappetoStudio",
+                new Vector3(68f, 0.06f, -38f), new Vector3(8f, 0.12f, 6f), 0f);
+            Model("Decor/CI_Decor_Plant_SnakePlant", "PiantaStudio",
+                new Vector3(76f, 0f, -26f), new Vector3(1.4f, 2.4f, 1.4f), 0f);
+            Primitive(PrimitiveType.Sphere, "LuceStudioBambini",
+                new Vector3(60f, 8f, -38f), new Vector3(0.7f, 0.7f, 0.7f), glow);
+        }
+
+        /// <summary>Comodità diffuse: salone, biblioteca, pranzo e città
+        /// interna ricevono gli oggetti che mancavano al primo passo.</summary>
+        private static void BuildExtraComforts(Material wood, Material red,
+            Material gold, Material glow, Material stone)
+        {
+            Model("Living/CI_Living_FireTools", "AttrezziCamino",
+                new Vector3(-26f, 0f, 46f), new Vector3(1f, 2f, 1f), 0f);
+            Model("Living/CI_Living_LogBasket", "CestoLegna",
+                new Vector3(-24f, 0f, 44f), new Vector3(1.4f, 1f, 1.4f), 0f);
+            Model("Living/CI_Living_RockingChair", "SediaADondolareSalone",
+                new Vector3(28f, 0f, 54f), new Vector3(2f, 2f, 2f), -90f);
+            Model("Living/CI_Living_Lamp_Floor", "LampadaSalone",
+                new Vector3(-28f, 0f, 12f), new Vector3(1.2f, 3f, 1.2f), 0f);
+            Model("Living/CI_Living_MantelClock", "OrologioCamino",
+                new Vector3(-30f, 5f, 46f), new Vector3(1.2f, 0.8f, 0.6f), 0f);
+            Model("Living/CI_Living_RecordCabinet", "DiscotecaSalone",
+                new Vector3(30f, 0f, 8f), new Vector3(2f, 2f, 3f), -90f);
+            Model("Living/CI_Living_ValveRadio", "RadioSalone",
+                new Vector3(30f, 2.1f, 8f), new Vector3(1.4f, 0.9f, 1f), -90f);
+            Model("Living/CI_Living_Cushion_Pair", "CusciniSalone",
+                new Vector3(-11f, 1.5f, 26f), new Vector3(1f, 0.5f, 1f), 0f);
+
+            Model("Office/CI_Office_Book_Stack_Desk", "LibriScrivaniaBiblioteca",
+                new Vector3(-48f, 2.1f, -8f), new Vector3(1f, 0.5f, 1f), 0f);
+            Model("Decor/CI_Decor_Clock_Round", "OrologioBiblioteca",
+                new Vector3(-44f, 5f, 20f), new Vector3(1.6f, 1.6f, 0.3f), 180f);
+            Model("Decor/CI_Decor_Plant_FernStand", "FelceBiblioteca",
+                new Vector3(-38f, 0f, -18f), new Vector3(1.6f, 2.4f, 1.6f), 0f);
+            Model("Living/CI_Living_Bookcase_Low", "LibreriaBassaBiblioteca",
+                new Vector3(-58f, 0f, 18f), new Vector3(4f, 2.4f, 1.4f), 0f);
+
+            Model("Bakery/CI_Bakery_Cake_Stand", "TortaPranzo",
+                new Vector3(54f, 1.5f, 0f), new Vector3(1.2f, 0.9f, 1.2f), 0f);
+            Model("Cafe/CI_Cafe_Cup_Stack", "TazzePranzo",
+                new Vector3(74f, 5.1f, 0f), new Vector3(0.8f, 0.5f, 0.8f), -90f);
+            Model("Living/CI_Living_Candle_Cluster", "CandelePranzo",
+                new Vector3(54f, 1.5f, 6f), new Vector3(0.8f, 0.6f, 0.8f), 0f);
+            Model("Decor/CI_Decor_Frame_Medium", "QuadroPranzo",
+                new Vector3(78f, 5f, 8f), new Vector3(2f, 2f, 0.3f), -90f);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float z = -14f - i * 9f;
+                Model("Cafe/CI_Cafe_Table_Bistro", "TavolinoCitta_" + i,
+                    new Vector3(-4f, 0f, z), new Vector3(2f, 1.6f, 2f), 0f);
+                Model("Cafe/CI_Cafe_Chair_Bistro", "SediaCitta_" + i,
+                    new Vector3(-7f, 0f, z), new Vector3(1.2f, 1.6f, 1.2f), 90f);
+                Model("Bakery/CI_Bakery_DisplayCounter_Glass", "VetrinaCitta_" + i,
+                    new Vector3(20f, 0f, z), new Vector3(3f, 2.4f, 2f), -90f);
+                Model("Cafe/CI_Cafe_MenuBoard_Wall", "MenuCitta_" + i,
+                    new Vector3(23f, 3f, z), new Vector3(1.2f, 1.6f, 0.3f), -90f);
+            }
+        }
+
         private static void BuildExitDoor(Material wood, Material gold, Material glow)
         {
             Panel("Shell/CI_Shell_Wall_DoorDouble_2m", "PortaUscitaVittoriana",
@@ -382,6 +723,11 @@ namespace City.Interior.Victorian.Editor
             LightAt("LuceBibliotecaVera", new Vector3(-54f, 9.2f, 0f), 1f, 30f);
             LightAt("LucePranzoVera", new Vector3(54f, 9.2f, 0f), 1f, 30f);
             LightAt("LuceCittaVera", new Vector3(0f, 8f, -36f), 0.9f, 34f);
+            LightAt("LuceAtrioVero", new Vector3(0f, 9f, 46f), 1f, 30f);
+            LightAt("LuceCameraVera", new Vector3(-58f, 8.6f, 42f), 1f, 32f);
+            LightAt("LuceBagnoVero", new Vector3(-62f, 6f, -38f), 0.8f, 26f);
+            LightAt("LuceCucinaVera", new Vector3(54f, 8.6f, 40f), 1f, 32f);
+            LightAt("LuceStudioVero", new Vector3(60f, 8f, -38f), 0.8f, 30f);
         }
 
         private static void LightAt(string name, Vector3 pos, float intensity, float range)
@@ -413,6 +759,23 @@ namespace City.Interior.Victorian.Editor
             Egg("fontana-piazzetta", "piazzetta della fontana", "vasca della fontana",
                 "Decor/CI_Decor_Bowl_Ceramic",
                 new Vector3(6f, 0f, -48f), new Vector3(2.4f, 1.4f, 2.4f), gold);
+            // Le nuove comodità della villa sono anche nuovi nascondigli del
+            // Riflesso uova: ogni stanza ha il suo oggetto e il suo luogo.
+            Egg("armadio-camera", "camera da letto", "armadio della camera da letto",
+                "Bedroom/CI_Bedroom_Wardrobe_Double",
+                new Vector3(-76f, 0f, 34f), new Vector3(2.4f, 1.4f, 1.8f), wood);
+            Egg("lavandino-bagno", "bagno", "lavandino del bagno",
+                "Bathroom/CI_Bathroom_Vanity_Basin",
+                new Vector3(-60f, 0f, -40f), new Vector3(2.4f, 1.4f, 1.8f), gold);
+            Egg("forno-cucina", "cucina", "forno della cucina",
+                "Kitchen/CI_Kitchen_RangeCooker",
+                new Vector3(76f, 0f, 44f), new Vector3(2.4f, 1.4f, 1.8f), gold);
+            Egg("cassetto-bambini", "stanza dei bambini", "cassetto dei giocattoli",
+                "Kids/CI_Kids_ToyChest",
+                new Vector3(44f, 0f, -42f), new Vector3(2.4f, 1.4f, 1.8f), wood);
+            Egg("scrivania-studio", "studio privato", "scrivania dello studio",
+                "Office/CI_Office_Desk_Writing",
+                new Vector3(70f, 0f, -30f), new Vector3(2.4f, 1.4f, 1.8f), wood);
         }
 
         private static void Egg(string id, string room, string thing,

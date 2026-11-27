@@ -43,6 +43,19 @@ class TestTascaVittoriana(unittest.TestCase):
         self.assertIn("Colonna_", self.victorian)
         self.assertIn("CasaVittoriana_TARDIS", self.victorian)
 
+    def test_tasca_non_e_sepolta_nell_interno_disattivato(self):
+        # Con gli esterni prefab InteriorGenerator disattiva "_interiorRoot":
+        # se la tasca restasse sua figlia, il teleporto arriverebbe nel vuoto
+        # (l'utente vedeva ancora la casa piccola). La tasca è agganciata al
+        # generatore e l'ingresso riattiva ogni antenato disattivato.
+        self.assertIn("Transform anchor = gen != null ? gen.transform : parent;",
+                      self.victorian)
+        self.assertIn("go.transform.SetParent(anchor, true);", self.victorian)
+        self.assertIn("for (Transform t = pocket.transform.parent; t != null; t = t.parent)",
+                      self.victorian)
+        self.assertIn("if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);",
+                      self.victorian)
+
     def test_salone_lampadari_biblioteca_e_citta_interna(self):
         for token in ("Salone dei lampadari", "LampadarioCerchio", "Candela_",
                       "BIBLIOTECA", "SALA DA PRANZO", "LA CITTÀ DENTRO CASA",
@@ -87,7 +100,7 @@ class TestRiflessoUovaESpecchioAndroid(unittest.TestCase):
         self.ipc = read(os.path.join(APP, "bridge", "UnityIpc.kt"))
 
     def test_uova_nascoste_con_luogo_testuale(self):
-        self.assertEqual(self.victorian.count("EggSpot(root,"), 5)
+        self.assertEqual(self.victorian.count("EggSpot(root,"), 10)
         self.assertIn("HouseEggSpot", self.victorian)
         self.assertIn("UniversalContainerMarker", self.victorian)
         self.assertIn('"città→casa→Casa Vittoriana→" + room + "→" + thing',
@@ -96,7 +109,7 @@ class TestRiflessoUovaESpecchioAndroid(unittest.TestCase):
                       self.container)
 
     def test_zone_con_coordinate_e_dedup_nello_snapshot(self):
-        self.assertEqual(self.victorian.count("Zone(root, p,"), 6)
+        self.assertEqual(self.victorian.count("Zone(root, p,"), 12)
         self.assertIn("CityGlobalAreasBridge.Record(\"scoperte\",", self.victorian)
         self.assertIn("HouseInteriorState.MarkEgg(featureId)", self.victorian)
         self.assertIn("pocket.doorWorld", self.victorian)
@@ -151,15 +164,34 @@ class TestPrefabVillaCompleta(unittest.TestCase):
         self.assertIn("VillaVittorianaCompleta.prefab", self.baker)
         self.assertIn("LightAt(", self.baker)
 
-    def test_prefab_contiene_collider_luci_e_cinque_uova(self):
+    def test_villa_reggia_con_soffitto_intero_e_stanze_nuove(self):
+        # La villa occupa tutta la tasca: pareti 12 m (≈7 × 1,7 m), soffitto
+        # 164 × 114 m senza buchi, e le comodità mancanti nella build 3ea97…
+        self.assertIn("Soffitto_\" + ix + \"_\" + iz", self.baker)
+        self.assertIn("new Vector3(20f, 0.4f, 16f)", self.baker)
+        self.assertIn("for (int ix = -4; ix <= 3; ix++)", self.baker)
+        self.assertIn("for (int iz = -4; iz <= 3; iz++)", self.baker)
+        self.assertIn("BuildFoyer(", self.baker)
+        self.assertIn("BuildMasterBedroom(", self.baker)
+        self.assertIn("BuildBathroom(", self.baker)
+        self.assertIn("BuildKitchen(", self.baker)
+        self.assertIn("BuildKidsAndStudy(", self.baker)
+        for token in ("Bedroom/CI_Bedroom_Bed_Double",
+                      "Bathroom/CI_Bathroom_Bathtub_Clawfoot",
+                      "Kitchen/CI_Kitchen_RangeCooker",
+                      "Kids/CI_Kids_BunkBed",
+                      "Office/CI_Office_Desk_Writing"):
+            self.assertIn(token, self.baker)
+
+    def test_prefab_contiene_collider_luci_e_dieci_uova(self):
         self.assertIn("!u!65", self.prefab_text)  # BoxCollider
         self.assertIn("!u!108", self.prefab_text)  # Light
         egg_guid = self.guid(os.path.join(
             UNITY, "City", "Scripts", "Interior", "Visit",
             "HouseEggSpot.cs.meta"))
         self.assertTrue(egg_guid)
-        self.assertGreaterEqual(self.prefab_text.count(egg_guid), 5)
-        self.assertEqual(self.baker.count('Egg("'), 5)
+        self.assertGreaterEqual(self.prefab_text.count(egg_guid), 10)
+        self.assertEqual(self.baker.count('Egg("'), 10)
 
     def test_marker_aggiunto_a_runtime_per_i_contenitori_del_prefab(self):
         # UniversalContainerMarker è una classe MonoBehaviour secondaria nello
@@ -172,10 +204,10 @@ class TestPrefabVillaCompleta(unittest.TestCase):
         self.assertIn("marker.room = spot.room", self.victorian)
 
     def test_uova_non_duplicate(self):
-        # Il fallback conserva le cinque uova storiche; il prefab ne ha altre
-        # cinque, ma i due rami sono mutually exclusive a runtime.
-        self.assertEqual(self.victorian.count("EggSpot(root,"), 5)
-        self.assertEqual(self.victorian.count("Zone(root, p,"), 6)
+        # Il fallback conserva le dieci uova della villa; il prefab ne ha
+        # altrettante, ma i due rami sono mutually exclusive a runtime.
+        self.assertEqual(self.victorian.count("EggSpot(root,"), 10)
+        self.assertEqual(self.victorian.count("Zone(root, p,"), 12)
         self.assertIn("bool prefabUsed = prefab != null;", self.victorian)
         self.assertIn("BuildFallbackArchitecture", self.victorian)
 

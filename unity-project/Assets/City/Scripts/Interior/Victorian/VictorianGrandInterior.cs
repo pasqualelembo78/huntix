@@ -101,17 +101,18 @@ namespace City.Interior.Victorian
             string label = string.IsNullOrEmpty(buildingName) ? "Casa" : buildingName;
 
             // Centro della tasca in world-space: sotto la casa, non dentro al
-            // guscio. La radice è figlia del generatore così si scarica col chunk.
+            // guscio. La radice è figlia del GENERATORE, non del Floor_0: con
+            // gli esterni prefab InteriorGenerator disattiva "_interiorRoot"
+            // dopo aver costruito l'interno. Se la tasca fosse sua figlia,
+            // resterebbe invisibile anche dopo SetActive(true) sull'ingresso.
+            // Così si scarica comunque col chunk, ma si accende da sola.
             Vector3 center = new Vector3(door.x, door.y - PocketDrop, door.z);
             var go = new GameObject("CasaVittoriana_TARDIS");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = parent.InverseTransformPoint(center);
-            Vector3 lossy = parent.lossyScale;
-            go.transform.localScale = new Vector3(
-                Mathf.Abs(lossy.x) > 0.0001f ? 1f / lossy.x : 1f,
-                Mathf.Abs(lossy.y) > 0.0001f ? 1f / lossy.y : 1f,
-                Mathf.Abs(lossy.z) > 0.0001f ? 1f / lossy.z : 1f);
-            go.transform.localRotation = Quaternion.Inverse(parent.rotation);
+            go.transform.position = center;
+            go.transform.rotation = Quaternion.identity;
+            go.transform.localScale = Vector3.one;
+            Transform anchor = gen != null ? gen.transform : parent;
+            go.transform.SetParent(anchor, true);
 
             var pocket = go.AddComponent<VictorianPocket>();
             pocket.owner = gen;
@@ -146,6 +147,11 @@ namespace City.Interior.Victorian
             if (pocket == null) return;
 
             _active = pocket;
+            // SetActive(true) sulla tasca non basta se un antenato è stato
+            // disattivato (Floor_0 dei prefab): risaliamo la catena e lo
+            // riaccendiamo, senza toccare gli altri interni del chunk.
+            for (Transform t = pocket.transform.parent; t != null; t = t.parent)
+                if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
             pocket.gameObject.SetActive(true);
             var g = Game.Instance;
             if (g != null)
@@ -333,6 +339,21 @@ namespace City.Interior.Victorian
                 new Vector3(16f, 1.6f, 1f), gold);
             Label(root, "LA CITTÀ DENTRO CASA", new Vector3(0f, 3.4f, -32f),
                 new Vector3(28f, 1.6f, 1f), gold);
+            // Le comodità della villa vera: atrio, camera, bagno, cucina,
+            // stanza dei bambini e studio privato. Etichette e zone usano gli
+            // stessi eventi bridge delle zone storiche, senza nuova economia.
+            Label(root, "ATRIO D'ONORE", new Vector3(0f, 4f, 36f),
+                new Vector3(18f, 1.6f, 1f), gold);
+            Label(root, "CAMERA PADRONALE", new Vector3(-58f, 4f, 22.5f),
+                new Vector3(20f, 1.6f, 1f), gold);
+            Label(root, "BAGNO E SPOGLIATOIO", new Vector3(-58f, 4f, -23.5f),
+                new Vector3(20f, 1.6f, 1f), gold);
+            Label(root, "CUCINA E DISPENSA", new Vector3(58f, 4f, 22.5f),
+                new Vector3(20f, 1.6f, 1f), gold);
+            Label(root, "STANZA DEI BAMBINI", new Vector3(52f, 4f, -23.5f),
+                new Vector3(18f, 1.6f, 1f), gold);
+            Label(root, "STUDIO PRIVATO", new Vector3(70f, 4f, -23.5f),
+                new Vector3(16f, 1.6f, 1f), gold);
 
             Zone(root, p, "salone", "Salone dei lampadari",
                 "città→casa→" + p.key + "→salone dei lampadari",
@@ -352,6 +373,24 @@ namespace City.Interior.Victorian
             Zone(root, p, "lampadari", "Lampadari del salone",
                 "città→casa→" + p.key + "→lampadari del salone",
                 new Vector3(0f, 1f, 30f), 12f);
+            Zone(root, p, "atrio", "Atrio d'onore",
+                "città→casa→" + p.key + "→atrio d'onore",
+                new Vector3(0f, 1f, 48f), 12f);
+            Zone(root, p, "camera", "Camera padronale",
+                "città→casa→" + p.key + "→camera padronale",
+                new Vector3(-58f, 1f, 42f), 18f);
+            Zone(root, p, "bagno", "Bagno e spogliatoio",
+                "città→casa→" + p.key + "→bagno e spogliatoio",
+                new Vector3(-58f, 1f, -38f), 16f);
+            Zone(root, p, "cucina", "Cucina e dispensa",
+                "città→casa→" + p.key + "→cucina e dispensa",
+                new Vector3(58f, 1f, 42f), 16f);
+            Zone(root, p, "bambini", "Stanza dei bambini",
+                "città→casa→" + p.key + "→stanza dei bambini",
+                new Vector3(52f, 1f, -36f), 14f);
+            Zone(root, p, "studio", "Studio privato",
+                "città→casa→" + p.key + "→studio privato",
+                new Vector3(70f, 1f, -30f), 12f);
         }
 
         // ── ARCHITETTURA DI FALLBACK ─────────────────────────────────
@@ -445,6 +484,10 @@ namespace City.Interior.Victorian
             // Uovo 1: cassetto sotto il lampadario centrale.
             EggSpot(root, "cassetto-lampadario", "salone", "cassetto sotto il lampadario",
                 new Vector3(4f, 0.6f, 30f));
+            // Comodità aggiuntive (prefab e fallback): anche l'armadio della
+            // camera è un nascondiglio stabile del Riflesso uova.
+            EggSpot(root, "armadio-camera", "camera da letto", "armadio della camera da letto",
+                new Vector3(-36f, 0.6f, 50f));
         }
 
         private static void BuildLibrary(Transform root, Material dark,
@@ -464,6 +507,8 @@ namespace City.Interior.Victorian
             // Uovo 2: cassetto della scrivania in biblioteca.
             EggSpot(root, "cassetto-biblioteca", "biblioteca", "cassetto della scrivania",
                 new Vector3(-44f, 0.7f, -6f));
+            EggSpot(root, "lavandino-bagno", "bagno", "lavandino del bagno",
+                new Vector3(-36f, 0.7f, -18f));
         }
 
         private static void BuildDining(Transform root, Material dark,
@@ -483,6 +528,8 @@ namespace City.Interior.Victorian
             // Uovo 3: credenza della sala da pranzo.
             EggSpot(root, "credenza-pranzo", "sala da pranzo", "credenza della sala da pranzo",
                 new Vector3(66f, 0.7f, 2f));
+            EggSpot(root, "forno-cucina", "cucina", "forno della cucina",
+                new Vector3(66f, 0.7f, 18f));
         }
 
         private static void BuildCityInside(Transform root, Material wall,
@@ -535,6 +582,10 @@ namespace City.Interior.Victorian
             // Uovo 5: vasca della fontana nella piazzetta.
             EggSpot(root, "fontana-piazzetta", "piazzetta della fontana", "vasca della fontana",
                 new Vector3(6f, 0.7f, -48f));
+            EggSpot(root, "cassetto-bambini", "stanza dei bambini", "cassetto dei giocattoli",
+                new Vector3(-22f, 0.7f, -18f));
+            EggSpot(root, "scrivania-studio", "studio privato", "scrivania dello studio",
+                new Vector3(22f, 0.7f, -18f));
         }
 
         private static void BuildExit(Transform root, Material dark,
