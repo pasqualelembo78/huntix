@@ -122,6 +122,12 @@ namespace City.Interior.Visit
             Cylinder(root.transform, "ColonnaPorticoVilla_DX",
                 new Vector3(2.2f, 1.45f, hd + 1.75f),
                 new Vector3(0.26f, 1.45f, 0.26f), cream);
+
+            // SKIN MODERNA ADDITIVA: la vestizione storica resta dov'e' (porte,
+            // collider, trigger e coordinate Android invariati). Il livello
+            // nuovo copre i pannelli emissivi con veri infissi e rifinisce
+            // facciata, tetto/terrazza, balconi, ingresso e giardino.
+            GrandHouseSkin.Apply(root.transform, w, d);
         }
 
         private static Transform Box(Transform root, string name, Vector3 pos,
