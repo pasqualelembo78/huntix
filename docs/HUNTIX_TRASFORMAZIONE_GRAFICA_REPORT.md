@@ -2004,3 +2004,115 @@ Backup prima della modifica: `/tmp/opencode/backup_camera_gta_20261127`
   inclusi nel commit.
 - Il giudizio estetico finale resta demandato a un dispositivo reale:
   l'emulazione software non permette di valutare la fluidità della camera.
+
+## 41. Cinque case nuove in Via Silvio Pellico con asset CC0/CC BY (27/11/2026)
+
+### 41.1 Richiesta e diagnosi
+
+> «Ogni Asset deve essere una nuova casa [...] 4 o 5 case in luoghi diversi
+> di via Silvio Pellico.»
+
+Il difetto segnalato («fuori una casa orribile, dentro un abominio e una
+seconda piccola casa da premere») veniva dal prefab generico Kenney/Quaternius
+adattato all'impronta OSM e poi stirato a 10,5 m per le case visitabili: il
+guscio perdeva le proporzioni e la vestizione artificiale (`GrandHouseExterior`)
+aggiungeva fasce/finestre fuori scala. La soluzione non è stata un altro
+adattamento del vecchio prefab, ma l'innesto di **cinque gusci esterni reali**,
+uno per edificio OSM, lasciando intatti interni, scale/collider, uova e bridge.
+
+### 41.2 Asset inclusi e mappatura
+
+Gli asset proprietari di Brookhaven non sono stati riusati. Sono stati
+scaricati e inclusi solo modelli con licenza esplicita; i GLB sorgente sono
+stati riconvertiti in FBX con `assimp` per Unity 2022.3, senza modificarne la
+geometria, i materiali o le texture. Il catalogo Unity Asset Store è stato
+consultato, ma i pacchetti richiedono account/login e non sono stati inclusi.
+
+| Id OSM edificio | Luogo | Guscio esterno | Licenza |
+|---|---|---|---|
+| 405219860 | Via Silvio Pellico 59 | Grab3D Suburban Family House (due piani, garage e portico) | CC0 1.0 |
+| 405228832 | Via Silvio Pellico 57 | vinish.dev Family House | CC BY 4.0 |
+| 405228884 | Via Silvio Pellico 55 | vinish.dev Townhouses | CC BY 4.0 |
+| 405228771 | Via Silvio Pellico 53 | vinish.dev Mediterranean Villa | CC BY 4.0 |
+| 405227079 | Via Silvio Pellico (edificio a nord) | vinish.dev Victorian House | CC BY 4.0 |
+
+Coordinate e porte sono state lette dagli edifici reali presenti nel dump OSM
+locale (`italy-latest.osm.pbf`), non inventate. I file e le licenze originali
+sono in `Assets/Resources/Houses/ViaSilvioPellico/`; le attribuzioni globali
+sono in `Assets/ThirdPartyLicenses.md`.
+
+### 41.3 Integrazione additiva
+
+- `VisitInteriorRegistry.Spec` ha un nuovo campo opzionale `exteriorPrefab`;
+  `TryGetExteriorPrefab` espone il percorso `Resources` senza toccare le
+  `Spec` storiche. Roma, che non ha un guscio dedicato, conserva il
+  comportamento precedente.
+- `BuildingPlacer.PlaceLegacy` carica il FBX dedicato con
+  `Resources.Load<GameObject>`, lo istanzia al posto del prefab generico e
+  applica **una sola scala uniforme** sull'impronta OSM: nessuno stiramento e
+  nessuna facciata deformata. Per questi gusci non scattano il clamp a 10,5 m
+  (`GrandVillaHeight`) né `GrandHouseExterior.Dress`.
+- L'interno da 300 mq resta quello esistente: l'ingresso alla porta apre
+  direttamente la tasca con tre piani da 100 mq, scale e collider reali
+  (`VictorianGrandInterior.TryEnter`). Nessun nuovo portaletto è stato
+  aggiunto; la percezione della «seconda casa» era il vecchio guscio deforme.
+- Collider, porta OSM, layer 8, guardia anti-volo del player, conversione dei
+  materiali a URP/Lit e posizionamento sul terreno restano invariati.
+- Il modello sorgente non viene modificato: cambia solo l'istanza in scena.
+
+### 41.4 Riflesso della caccia alle uova e ponte bidirezionale
+
+Nessuna nuova economia e nessun uovo aggiunto: i 9 nascondigli della villa da
+300 mq, i trigger `ContainerEgg`, `HouseVisitState`, il diario Android e le
+coordinate della porta restano identici. I cinque gusci sono una sostituzione
+puramente visiva; non introduce nuovi tipi di premio né nuovi canali bridge.
+Se in futuro si vorrà un indizio legato all'architettura esterna, la via
+compatibile è un `CityGlobalAreasBridge.Record` con chiave stabile
+`casa-osm-<id>` e la solita posizione della porta, senza toccare le uova.
+
+### 41.5 Verifiche
+
+- Nuove guardie statiche in `backend/test_unity_house_assets.py` (6 test):
+  id OSM, path dei cinque FBX, Scala uniforme, esclusione da stiramento e
+  vestizione, licenze e assenza di nuova economia uova.
+- Guardie storiche aggiornate per il nuovo ramo «guscio dedicato» in
+  `backend/test_unity_victorian_interior.py` e
+  `backend/test_unity_visit_houses.py`; Roma e le case senza prefab dedicato
+  conservano le guardie originali.
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **396 test OK**, 1 warning preesistente di pytest/dash.
+- `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori.
+- `git diff --check`: OK.
+- Verifica sui dati: i cinque id OSM sono presenti nella tile reale
+  `IT_082_087_geo.json.gz` (9165 edifici), con impronte 26×24 m, 31×14 m,
+  26,5×13,7 m, 26,3×13,4 m e 26×13,4 m. La scala uniforme del guscio usa
+  l'impronta come posizione, non come deformazione.
+
+### 41.6 Build e QA
+
+- Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 37s`.
+  `app/libs/unityLibrary-release.aar` (102 MB), SHA-256
+  `85424aa8f550a1772893cfed098df027f6dac35f2c4003fcaf0b8e0ce7307f70`.
+  I cinque nomi dei gusci dedicati sono presenti in
+  `global-metadata.dat`, quindi le nuove costanti `Resources` sono compilate
+  nel player.
+- Primo packaging APK: `processReleaseResources` è fallito con errori AAPT
+  `Invalid entry name`/`IO error` su alcune drawable, dopo aver esaurito lo
+  spazio disponibile durante la creazione AAR. Rimosso `unity-export.gradle`
+  (5 GB) e ricreati gli intermedi Gradle, il packaging è stato rilanciato con
+  `SKIP_UNITY_AAR=1` (AAR già pronto): `BUILD SUCCESSFUL in 1m 29s`.
+- APK firmato e verificato:
+  `app/build/outputs/apk/release/app-release-signed.apk` (197 MB), SHA-256
+  `0cd67415a5dd151e34efbce52cc74a88345e84fab4b01f85144238eaf83938fb`.
+  Artefatti collaterali rigenerati da Unity (`link.xml`, `link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) sono stati ripristinati
+  da git e non inclusi nel commit.
+- Il giudizio estetico finale (gusci, assenza di deformazioni, accesso diretto
+  alla villa da 300 mq, scale/collider reali, fluidità e uova) resta da fare
+  su dispositivo reale. L'emulazione software non rende attendibile la
+  valutazione. Se il dispositivo mostra ancora una «seconda casa» prima del
+  salone, serve uno screenshot del punto esatto: nel codice l'ingresso alla
+  porta chiama già `VictorianGrandInterior.TryEnter`, senza un secondo
+  portaletto nuovo.
+
+Backup prima delle modifiche: `/tmp/opencode/backup_case_brookhaven_20261127`.

@@ -223,3 +223,24 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
   trigger scala (`GrandVillaStairs`) che riusano `InteriorTeleport`.
 - **Attribuzione**: identica a quella della reggia; nessun credito obbligatorio,
   credito riportato qui e nel README del kit.
+
+### Gusci esterni di Via Silvio Pellico — Grab3D e vinish.dev (27/11/2026)
+
+Cinque edifici reali di Via Silvio Pellico (Foggia) usano ora un guscio
+dedicato, caricato da `Resources/Houses/ViaSilvioPellico/`. I modelli restano
+**inalterati**: sono stati solo riconvertiti da GLB a FBX per l'import Unity
+2022.3 (nessuno shader/script del sorgente è stato importato). L'interno da
+300 mq, le uova e il bridge Android restano identici: cambia solo l'esterno.
+
+- **Suburban Family House** — Grab3D, CC0 1.0, senza attribuzione obbligatoria.
+  File: `grab3d_suburban_family_house.fbx`; origine e licenza in
+  `LICENSE_grab3d.txt` e `manifest_grab3d.json`.
+- **Family House**, **Townhouses**, **Mediterranean Villa**, **Victorian House**
+  — vinish.dev, CC BY 4.0. File: `vinish_*.fbx`; crediti e licenza in
+  `CREDITS_vinish.txt`, `LICENSE_vinish.txt`, `README_vinish.txt`.
+  Credito: “Family House”, “Townhouses”, “Mediterranean Villa” e “Victorian
+  House” by vinish.dev (https://vinish.dev/free-3d-models/), CC BY 4.0.
+- **Kenney City Kit Suburban (CC0)** — già presente nel progetto prima di
+  questo intervento; continua a vestire gli edifici ordinari non configurati.
+- **Unity Asset Store** — il catalogo è stato consultato, ma i pacchetti
+  richiedono account/login e non sono stati scaricati né inclusi.

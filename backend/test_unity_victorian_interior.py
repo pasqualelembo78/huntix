@@ -266,7 +266,7 @@ class TestVilla300MqTreLivelli(unittest.TestCase):
             self.assertIn(token, self.exterior)
         for token in ("GrandVillaFloors",
                       "City.Interior.Visit.GrandHouseExterior.TotalHeight",
-                      "if (grandVilla) h = Mathf.Max(h, GrandVillaHeight);",
+                      "if (grandVilla && !customExterior) h = Mathf.Max(h, GrandVillaHeight);",
                       "GrandHouseExterior.Dress(parent, centerLocal",
                       "villa300mq=",
                       "sy = Mathf.Clamp(GrandVillaHeight / Mathf.Max(baseB.size.y"):

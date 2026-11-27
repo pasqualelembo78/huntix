@@ -48,6 +48,11 @@ namespace City.Interior.Visit
             /// esistenti non vedono le uova rimontare. Le case nuove usano id
             /// con prefisso OSM, così ogni casa ha le PROPRIE uova.</summary>
             public bool legacyEggIds;
+
+            /// <summary>Percorso Resources del guscio esterno dedicato (senza
+            /// estensione). Se vuoto si conserva il vecchio prefab generico
+            /// Kenney/Quaternius con la vestizione GrandHouseExterior.</summary>
+            public string exteriorPrefab = "";
         }
 
         /// <summary>
@@ -68,7 +73,60 @@ namespace City.Interior.Visit
                 lat = 41.4530015,
                 lng = 15.5344424,
                 centerLat = 41.4530382,
-                centerLng = 15.5346125
+                centerLng = 15.5346125,
+                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_mediterranean_villa"
+            },
+            new Spec
+            {
+                osmId = 405219860L,
+                kind = "casa",
+                label = "Casa di Via Silvio Pellico 59",
+                note = "Via Silvio Pellico 59, Foggia — edificio OSM 405219860; "
+                     + "guscio CC0 Suburban Family House",
+                lat = 41.4521960,
+                lng = 15.5334512,
+                centerLat = 41.4521655,
+                centerLng = 15.5338318,
+                exteriorPrefab = "Houses/ViaSilvioPellico/grab3d_suburban_family_house"
+            },
+            new Spec
+            {
+                osmId = 405228832L,
+                kind = "casa",
+                label = "Casa di Via Silvio Pellico 57",
+                note = "Via Silvio Pellico 57, Foggia — edificio OSM 405228832; "
+                     + "guscio CC BY Family House di vinish.dev",
+                lat = 41.4526131,
+                lng = 15.5337777,
+                centerLat = 41.4524872,
+                centerLng = 15.5340025,
+                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_family_house"
+            },
+            new Spec
+            {
+                osmId = 405228884L,
+                kind = "casa",
+                label = "Case a schiera di Via Silvio Pellico 55",
+                note = "Via Silvio Pellico 55, Foggia — edificio OSM 405228884; "
+                     + "guscio CC BY Townhouses di vinish.dev",
+                lat = 41.4528745,
+                lng = 15.5340667,
+                centerLat = 41.4527468,
+                centerLng = 15.5343063,
+                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_townhouses"
+            },
+            new Spec
+            {
+                osmId = 405227079L,
+                kind = "casa",
+                label = "Casa vittoriana di Via Silvio Pellico",
+                note = "Via Silvio Pellico, Foggia — edificio OSM 405227079; "
+                     + "guscio CC BY Victorian House di vinish.dev",
+                lat = 41.4551864,
+                lng = 15.5399702,
+                centerLat = 41.4550924,
+                centerLng = 15.5402222,
+                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_victorian_house"
             },
             new Spec
             {
@@ -103,6 +161,21 @@ namespace City.Interior.Visit
         {
             Spec unused;
             return TryGet(osmId, out unused);
+        }
+
+        /// <summary>Risorsa Resources del guscio dedicato, se configurata.
+        /// Il prefab resta un asset esterno intatto: qui serve solo il path.</summary>
+        public static bool TryGetExteriorPrefab(long osmId, out string resource)
+        {
+            Spec spec;
+            if (TryGet(osmId, out spec) && spec != null &&
+                !string.IsNullOrEmpty(spec.exteriorPrefab))
+            {
+                resource = spec.exteriorPrefab;
+                return true;
+            }
+            resource = "";
+            return false;
         }
 
         /// <summary>Direzione della porta rispetto al centro dell'edificio,

@@ -1,0 +1,47 @@
+{
+ "slug": "suburban-family-house",
+ "triangles": 29644,
+ "texture_px": 2048,
+ "triangles_light": null,
+ "texture_px_light": null,
+ "files": {
+  "glb": {
+   "name": "suburban-family-house.glb",
+   "bytes": 2709752
+  },
+  "blend": {
+   "name": "suburban-family-house.blend",
+   "bytes": 1971899
+  },
+  "fbx": {
+   "name": "suburban-family-house.fbx",
+   "bytes": 3709452
+  },
+  "obj": {
+   "name": "suburban-family-house-obj.zip",
+   "bytes": 2136600
+  },
+  "usdz": {
+   "name": "suburban-family-house.usdz",
+   "bytes": 3858259
+  }
+ },
+ "extras": {
+  "license": "CC0-1.0",
+  "source": "grab3d.com",
+  "dimensions_m": "12.980 x 11.100 x 10.051",
+  "triangles": 29644,
+  "textures": "PBR 2048px: base color, roughness, metallic, normal (baked)",
+  "generator": "Created by grab3d",
+  "created": "2026-09-26",
+  "real_size": "two-storey family house with attached garage, approx. 12.6 x 10.2 m footprint incl. porch and roof overhang, 10.5 m tall (chimney)",
+  "notes": "exterior only (closed building, opaque windows, no interior); front faces -Y; garage door is a separate object with its origin on the upper edge (tilt it up by rotating around local X, up to about -90 degrees); no signs, no text, no brand",
+  "set": "Cozy Buildings Kit"
+ },
+ "origin": {
+  "method": "procedural",
+  "detail": "Built procedurally with Blender scripts. The scripts were written with the help of an AI coding assistant. No generative AI model produced the geometry or textures directly.",
+  "ai_content": false,
+  "ai_assisted_code": true
+ }
+}

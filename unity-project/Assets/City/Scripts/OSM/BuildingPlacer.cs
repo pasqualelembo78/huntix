@@ -561,42 +561,67 @@ namespace City.OSM
                 : Hash(((long)Mathf.FloorToInt(centerLocal.x / 120f) << 16) ^
                        (long)Mathf.FloorToInt(centerLocal.z / 120f));
             string prefabName = PickPrefabName(b, out h, blockSeed);
-            // Case visitabili configurate: la casa deve vedersi grande DA
-            // FUORI. Il prefab Kenney/Quaternius di default è alto 4,5-6 m
-            // (una casa a un piano e mezzo): qui portiamo il guscio a 10,5 m,
-            // cioè tre piani da 3,5 m, senza cambiare impronta né porta.
+            // Case visitabili configurate SENZA guscio dedicato: la casa deve
+            // vedersi grande DA FUORI. Il prefab Kenney/Quaternius di default
+            // è alto 4,5-6 m (una casa a un piano e mezzo): qui portiamo il
+            // guscio a 10,5 m, cioè tre piani da 3,5 m, senza cambiare
+            // impronta né porta. Le case con asset dedicato mantengono invece
+            // le proporzioni originali del modello.
             bool grandVilla = City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id);
-            if (grandVilla) h = Mathf.Max(h, GrandVillaHeight);
-            GameObject prefab = null;
 
-            // Edifici non visitabili: prima si prova il kit high-quality
+            // Case visitabili con guscio dedicato: il file dell'asset resta
+            // INALTERATO (materiali, portico e proporzioni originali). Quando
+            // serve, l'istanza viene solo adattata all'impronta OSM in modo
+            // uniforme. Niente stiramento a 10,5 m e nessuna vestizione
+            // fasce/finestre sopra. L'interno da 300 mq, le uova e il bridge
+            // Android restano invariati: cambia SOLO l'esterno.
+            string customExteriorResource;
+            GameObject customPrefab = null;
+            if (City.Interior.Visit.VisitInteriorRegistry.TryGetExteriorPrefab(
+                    b.id, out customExteriorResource) &&
+                !string.IsNullOrEmpty(customExteriorResource))
+            {
+                try { customPrefab = Resources.Load<GameObject>(customExteriorResource); }
+                catch (System.Exception) { customPrefab = null; }
+            }
+            bool customExterior = customPrefab != null;
+            string prefabVia = customExterior ? "AssetDedicated" : "Kenney";
+
+            if (grandVilla && !customExterior) h = Mathf.Max(h, GrandVillaHeight);
+            GameObject prefab = customPrefab;
+
+            // Edifici senza guscio dedicato: prima si prova il kit high-quality
             // Quaternius (facciate gia' texturizzate, piu' belle dei prefab
             // Kenney piatti), altrimenti si ripiega sul prefab Kenney legacy.
             // La scelta volume (Small/Medium/Large) segue l'area. Lo switch
             // stile (hamburger menu / PlayerPrefs) torna a Kenney a caldo:
             // basta rigenerare il chunk per riapplicare la scelta.
-            bool useQ = City.UI.CityStyle.UseQuaternius;
-            GameObject quat = useQ ? LoadQuaternius(w, d) : null;
-            if (quat != null)
+            if (prefab == null)
             {
-                prefab = quat;
-                h = SuggestQuaterniusHeight(b.t, w, d, h);
-            }
-            else
-            {
-                prefab = registry != null ? registry.Get(prefabName) : null;
-                if (prefab == null)
+                bool useQ = City.UI.CityStyle.UseQuaternius;
+                GameObject quat = useQ ? LoadQuaternius(w, d) : null;
+                if (quat != null)
                 {
-                    string folder = IsIndustrial(b.t) ? "Industrial"
-                        : IsCommercial(b.t) ? "Commercial" : "Suburban";
-                    prefab = LoadKenney(folder, prefabName);
+                    prefab = quat;
+                    prefabVia = "Quaternius";
+                    h = SuggestQuaterniusHeight(b.t, w, d, h);
+                }
+                else
+                {
+                    prefab = registry != null ? registry.Get(prefabName) : null;
+                    if (prefab == null)
+                    {
+                        string folder = IsIndustrial(b.t) ? "Industrial"
+                            : IsCommercial(b.t) ? "Commercial" : "Suburban";
+                        prefab = LoadKenney(folder, prefabName);
+                    }
                 }
             }
             OsmDiag.LogDebug("[Building][Pick] id=" + b.id + " t='" + b.t + "' w=" + w.ToString("F1") +
                 " d=" + d.ToString("F1") + " area=" + (w * d).ToString("F0") +
-                " useQuaternius=" + useQ +
+                " useQuaternius=" + (prefabVia == "Quaternius") +
                 " prefab=" + (prefab != null ? prefab.name : "NULL") +
-                " via=" + (quat != null ? "Quaternius" : "Kenney"));
+                " via=" + prefabVia);
             if (prefab == null) return false;
 
             var inst = UnityEngine.Object.Instantiate(prefab, parent);
@@ -674,16 +699,24 @@ namespace City.OSM
                     sx *= k; sz *= k;
                 }
             }
-            // dopo la correzione aspect s puo' essere sceso sotto il minimo: ok
-            float s = Mathf.Max(sx, sz);
-            float sy = Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
-            if (grandVilla)
+            // Gusci dedicati: una sola scala uniforme, quindi il modello non
+            // viene mai deformato (niente facciate stirate). Le dimensioni OSM
+            // indicano dove posare la casa, non quanto schiacciarla.
+            float uniformCustomScale = customExterior
+                ? Mathf.Clamp(Mathf.Min(sx, sz), 0.2f, MaxScale)
+                : 1f;
+            if (customExterior)
             {
-                // Le fasce/finestre della villa 300 mq sono a 3,5 e 7 m e il
-                // cornicione a 10,5 m: il guscio deve arrivare ESATTAMENTE a
-                // quell'altezza, altrimenti i piani superiori resterebbero
-                // sospesi sopra un edificio più basso. Il clamp generico dei
-                // prefab qui non si applica (è per le case ordinarie).
+                sx = sz = uniformCustomScale;
+            }
+            float s = Mathf.Max(sx, sz);
+            float sy = customExterior
+                ? uniformCustomScale
+                : Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
+            if (grandVilla && !customExterior)
+            {
+                // Solo il vecchio guscio generico va stirato a 10,5 m: con un
+                // asset dedicato l'altezza è quella reale del modello.
                 sy = Mathf.Clamp(GrandVillaHeight / Mathf.Max(baseB.size.y, 0.01f),
                     0.5f, 12f);
             }
@@ -718,7 +751,7 @@ namespace City.OSM
             // Vestizione ADDITIVA del terzo piano: fasce, finestre, balconi,
             // cornicione e portico sopra l'edificio OSM già pronto. Nessun
             // collider nuovo e nessuna modifica a porta/faro/interiore.
-            if (grandVilla)
+            if (grandVilla && !customExterior)
             {
                 City.Interior.Visit.VisitInteriorRegistry.Spec grandSpec;
                 string grandLabel = City.Interior.Visit.VisitInteriorRegistry.TryGet(
