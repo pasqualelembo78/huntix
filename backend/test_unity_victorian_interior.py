@@ -212,5 +212,105 @@ class TestPrefabVillaCompleta(unittest.TestCase):
         self.assertIn("BuildFallbackArchitecture", self.victorian)
 
 
+class TestVilla300MqTreLivelli(unittest.TestCase):
+    """Nuova villa da 300 mq (3 x 100) per le case configurate.
+    La reggia TARDIS storica resta intatta come fallback: qui si verificano
+    solo le aggiunte, senza toccare le guardie sulle dieci uova vecchie."""
+
+    def setUp(self):
+        base = os.path.join(UNITY, "City")
+        self.victorian = read(os.path.join(
+            base, "Scripts", "Interior", "Victorian", "VictorianGrandInterior.cs"))
+        self.stairs = read(os.path.join(
+            base, "Scripts", "Interior", "Victorian", "GrandVillaStairs.cs"))
+        self.exterior = read(os.path.join(
+            base, "Scripts", "Interior", "Visit", "GrandHouseExterior.cs"))
+        self.placer = read(os.path.join(base, "Scripts", "OSM", "BuildingPlacer.cs"))
+        self.baker = read(os.path.join(base, "Editor", "VillaPrefabBaker.cs"))
+        self.prefab = os.path.join(
+            UNITY, "Resources", "Villas", "Villa300mqTreLivelli.prefab")
+        self.prefab_text = read(self.prefab)
+
+    @staticmethod
+    def guid(meta_path):
+        for line in read(meta_path).splitlines():
+            if line.startswith("guid: "):
+                return line.split(": ", 1)[1].strip()
+        return ""
+
+    def test_tre_livelli_da_cento_mq_ciascuno(self):
+        for token in ("GrandFloors = 3", "GrandFloorHeight = 3.5f",
+                      "GrandAreaPerFloor = 100f", "GrandTotalArea = 300f",
+                      "pocket.grand = grand", "GrandVillaPrefabResource"):
+            self.assertIn(token, self.victorian)
+        for token in ("Piani300 = 3", "LatoPiano300 = 10f",
+                      "AreaPiano300 = LatoPiano300 * LatoPiano300",
+                      "AreaTotale300 = Piani300 * AreaPiano300",
+                      "for (int f = 0; f < Piani300; f++)",
+                      'Collider("Collider300_Pavimento"',
+                      '"Pavimento300_" + f', '"Soffitto300_" + f'):
+            self.assertIn(token, self.baker)
+        self.assertTrue(os.path.isfile(self.prefab))
+        self.assertIn("Villa300mqTreLivelli", self.prefab_text)
+        self.assertIn("Pavimento300_0", self.prefab_text)
+        self.assertIn("Pavimento300_1", self.prefab_text)
+        self.assertIn("Pavimento300_2", self.prefab_text)
+
+    def test_grandezza_visibile_da_fuori(self):
+        for token in ("Floors = 3", "FloorHeight = 3.5f",
+                      "TotalHeight = Floors * FloorHeight",
+                      "AreaPerFloor = 100f", "TotalArea = Floors * AreaPerFloor",
+                      '"FasciaPiano" + floor', '"FinestraPiano" + floor',
+                      '"BalconePiano" + floor', "CornicioneVilla",
+                      "ComignoloVilla", "PorticoIngressoVilla"):
+            self.assertIn(token, self.exterior)
+        for token in ("GrandVillaFloors",
+                      "City.Interior.Visit.GrandHouseExterior.TotalHeight",
+                      "if (grandVilla) h = Mathf.Max(h, GrandVillaHeight);",
+                      "GrandHouseExterior.Dress(parent, centerLocal",
+                      "villa300mq=",
+                      "sy = Mathf.Clamp(GrandVillaHeight / Mathf.Max(baseB.size.y"):
+            self.assertIn(token, self.placer)
+        # L'impronta OSM e la porta del registro NON si spostano.
+        self.assertIn("float w = Mathf.Clamp(Mathf.Max(b.d[0], 1.5f), 1.5f, 90f);",
+                      self.placer)
+        self.assertIn("TryDoorLocalOffset(\n                        visitSpec, b.r",
+                      self.placer)
+        self.assertIn("entrance.floorCount = SuggestedFloors(h);", self.placer)
+
+    def test_prefab_con_nove_uova_e_quattro_scale(self):
+        egg_guid = self.guid(os.path.join(
+            UNITY, "City", "Scripts", "Interior", "Visit", "HouseEggSpot.cs.meta"))
+        stairs_guid = self.guid(os.path.join(
+            UNITY, "City", "Scripts", "Interior", "Victorian",
+            "GrandVillaStairs.cs.meta"))
+        self.assertTrue(egg_guid)
+        self.assertTrue(stairs_guid)
+        self.assertGreaterEqual(self.prefab_text.count(egg_guid), 9)
+        self.assertGreaterEqual(self.prefab_text.count(stairs_guid), 4)
+        self.assertEqual(self.baker.count('Uovo300("'), 9)
+        for token in ('"Scala300_Su" + floor', '"Scala300_Giu" + floor',
+                      "stairs.targetFloor = floor + 1",
+                      "stairs.targetFloor = floor - 1",
+                      "private static void Uovo300("):
+            self.assertIn(token, self.baker)
+        for floor in ("piano1", "piano2", "piano3"):
+            self.assertIn(floor, self.baker)
+
+    def test_riflesso_uova_e_bridge_per_tutti_i_piani(self):
+        self.assertEqual(self.victorian.count("AddZonaVilla(root, p,"), 9)
+        self.assertIn("private static void AddZonaVilla(", self.victorian)
+        self.assertIn('"città→casa→" + p.key + "→salone al piano 1"', self.victorian)
+        self.assertIn("CityGlobalAreasBridge.Record(\"scoperte\",", self.victorian)
+        self.assertIn("pocket.doorWorld", self.victorian)
+        self.assertIn("FinalizeGrandVilla(root, p, label)", self.victorian)
+        self.assertIn("GetComponentsInChildren<HouseEggSpot>(true)", self.victorian)
+        self.assertIn("InteriorTeleport.Move(pocket.transform.TransformPoint(local)",
+                      self.stairs)
+        self.assertIn("UnityBridge.LogToAndroid", self.stairs)
+        self.assertNotIn("Wallet.Earn", self.victorian)
+        self.assertNotIn("Wallet.TrySpend", self.stairs)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

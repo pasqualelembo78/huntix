@@ -201,3 +201,25 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
 - **Attribuzione**: non richiesta dalla licenza SENDU («Credit is not required
   but appreciated»); il credito è comunque riportato qui e nel testo integrale
   `Assets/Resources/HouseInteriors/Sendu/README_models.txt`.
+
+### Villa da 300 mq in 3 livelli — stesso kit SENDU (27/11/2026)
+
+- **Prefab aggiuntivo**: `Assets/Resources/Villas/Villa300mqTreLivelli.prefab`,
+  generato da `VillaPrefabBaker.Bake300()` nello stesso baker editoriale.
+  La reggia TARDIS da 164 × 114 m resta intatta come fallback per le case non
+  configurate: nessun sistema, prefab o modello è stato rimosso.
+- **Modelli usati**: 18 reference a FBX SENDU già importati e licenziati sopra
+  (`Shell`, `Bedroom`, `Bathroom`, `Kids`, `Living`, `Office`, `Kitchen`,
+  `Cafe`, `Decor`), fra cui letto/armadio, vasca/lavandino, librerie/scrivania,
+  forno/tavolo/frigo, divano/tavolino, letti a castello/cassa giochi, tavolino
+  bistrot e pianta. Nessun nuovo download, nessun nuovo file sorgente del kit.
+- **Materiali**: gli stessi URP/Lit creati per la reggia (`Villa_Cream`,
+  `Villa_Wood`, `Villa_Red`, `Villa_Green`, `Villa_Gold`, `Villa_Stone`,
+  `Villa_Glow`) in `Assets/Resources/Villas/Materials/`.
+- **Modifiche dichiarate**: i moduli architettonici 2 m sono scalati su tre
+  piani da 10 × 10 m (100 mq ciascuno, 300 mq totali, 3,5 m di altezza per
+  piano); i mobili mantengono scala uniforme e i figli `_LOD1`/`_LOD2` restano
+  disattivati. Il baker aggiunge 9 `HouseEggSpot` — tre per piano — e quattro
+  trigger scala (`GrandVillaStairs`) che riusano `InteriorTeleport`.
+- **Attribuzione**: identica a quella della reggia; nessun credito obbligatorio,
+  credito riportato qui e nel README del kit.

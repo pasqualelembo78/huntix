@@ -1641,3 +1641,96 @@ Nei chunk OSM il limite teorico è 900 ciuffi + 300 cespugli/sassi + 16 alberi
 per chunk: con 49 chunk caricati sono ~59.600 istanze, cioè ~7,6 MB di matrici
 più i mesh in cache. Anche in quel caso non esiste un oggetto per pianta e i
 lotti fuori dal raggio vengono disegnati solo entro 260/620/700 m.
+
+## 37. Casa da 300 mq in 3 livelli, grande anche da fuori (27/11/2026)
+
+### 37.1 Richiesta
+
+> «la casa è sempre troppo piccola. ma cmq devi fare in modo che anche da fuori
+> si veda la grandezza della casa. consideriamo in mq2? voglio una casa suddivisa
+> in 3 livelli da totale 300 metri quadrati».
+
+La reggia TARDIS era enorme **dentro** (164 × 114 m) ma l'esterno restava
+l'edificio OSM generico, alto circa 4,5-6 m: da strada la casa sembrava ancora
+una casetta a un piano. La richiesta non è di ingrandire la tasca (già troppo
+grande), ma di rendere **la casa reale** un volume di 300 mq su tre piani e di
+farlo leggere dall'esterno.
+
+### 37.2 Scelta implementativa
+
+Le due case configurate in `VisitInteriorRegistry` (`405228771` Foggia,
+`204023010` Roma) hanno impronte OSM già ampie — rispettivamente 26,5 × 13,7 m
+e 21,3 × 13,5 m — quindi la superficie c'è già: mancava l'altezza. Il fix è
+additivo e restituisce esattamente tre livelli da 3,5 m (10,5 m totali):
+
+- `GrandHouseExterior.cs` veste l'edificio OSM già istanziato con due fasce di
+  piano, tre file di finestre, balconi, cornicione, comignolo e portico
+  d'ingresso. Nessun collider nuovo, nessuna luce dinamica, nessun materiale
+  scaricato; la porta del registro e le coordinate Android non si spostano.
+- `BuildingPlacer` forza l'altezza del guscio a 10,5 m **anche dopo** il clamp
+  generico dei prefab (`sy = GrandVillaHeight / baseB.size.y`), così le fasce a
+  3,5 e 7 m e il cornicione a 10,5 m non restano sospesi sopra un tetto basso.
+  L'impronta OSM, la rotazione e il `TryDoorLocalOffset` restano intatti.
+- `VillaPrefabBaker.Bake300()` crea un **nuovo** prefab
+  `Villa300mqTreLivelli.prefab`: 3 piani da 10 × 10 m = 100 mq, pavimenti e
+  soffitti, pareti, 3 luci, 18 arredi SENDU, 9 uova (3 per piano) e 4 scale.
+  Il vecchio `VillaVittorianaCompleta.prefab` e il fallback primitivo restano
+  il percorso di tutte le altre case.
+- `VictorianGrandInterior` preferisce il nuovo prefab solo quando
+  `entrance.osmId` è una casa configurata; `GrandVillaStairs` usa lo stesso
+  `InteriorTeleport` degli altri gate. Nessun sistema preesistente disattivato.
+
+### 37.3 Riflesso della caccia alle uova e ponte bidirezionale
+
+Ogni piano ha tre nascondigli con luogo testuale che include il livello:
+salotto/cucina/atrio al piano 1, camera/bagno/studio al piano 2,
+biblioteca/bambini/terrazza al piano 3. Le nove zone usano
+`città→casa→<chiave>→<stanza al piano N>`, la prima visita passa da
+`CityGlobalAreasBridge.Record("scoperte", …, pocket.doorWorld)` e le chiavi
+tornano a Unity nello snapshot `HouseVisitState`. Le uova seguono il percorso
+canonico `FeatureEggHidden`/`ContainerEgg`: non esiste seconda economia,
+premio o inventario nuovo.
+
+| File | Modifica |
+|---|---|
+| `City/Scripts/Interior/Visit/GrandHouseExterior.cs` (+ `.meta`) | Vestizione esterna additiva dei tre piani |
+| `City/Scripts/OSM/BuildingPlacer.cs` | Altezza 10,5 m per le case configurate, guscio allineato, log `villa300mq`/`piani` |
+| `City/Editor/VillaPrefabBaker.cs` | `Bake300()` + costanti 3 × 100 mq, generazione del nuovo prefab |
+| `City/Scripts/Interior/Victorian/VictorianGrandInterior.cs` | `grand` per osmId, prefab 300 mq, 9 zone, marker runtime, toast dedicato |
+| `City/Scripts/Interior/Victorian/GrandVillaStairs.cs` (+ `.meta`) | Scale fra piani via `InteriorTeleport` |
+| `Resources/Villas/Villa300mqTreLivelli.prefab` (+ `.meta`) | Nuovo prefab spedito nell'APK (9 uova, 4 scale, 3 luci) |
+| `backend/test_unity_victorian_interior.py`, `backend/test_unity_visit_houses.py` | 6 nuove guardie statiche su 300 mq, esterno, uova/zone per piano |
+| `Assets/ThirdPartyLicenses.md` | Dichiarazione dei 18 modelli SENDU riutilizzati |
+
+### 37.4 Verifiche
+
+- `python3 backend/test_unity_victorian_interior.py`: **17 test OK** (13
+  storici + 4 nuovi); `python3 backend/test_unity_visit_houses.py`: **29 test
+  OK** (27 storici + 2 nuovi).
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **373 test OK** (367 storici + 6 nuovi). `test_security.py` resta non
+  eseguibile in questo ambiente perché richiede il server su `127.0.0.1:5000`.
+- `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori,
+  214 warning preesistenti.
+- Unity 2022.3.52f1 batchmode: ricompilazione `EXIT=0`, 0 errori CS;
+  `Bake300()` → `EXIT=0`, prefab 266 kB con 9 `HouseEggSpot` e 4
+  `GrandVillaStairs` serializzati, nessun modello mancante.
+- Build firmata: `SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 AUTH_MODE=api
+  SKIP_INSTALL=1 FORCE_UNITY_AAR=1 ./build_release.sh` → `EXIT=0`, build
+  successful. APK `app/build/outputs/apk/release/app-release-signed.apk`
+  (196 MB), SHA-256 `108fd71fa6a6c37f8287d0d6cbe4c1f56ba13e0687aee4c691f6b9bb3d918a9f`,
+  certificato Huntix digest SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  Il prefab è spedito nell'AAR (`catalog.json`, `global-metadata.dat`, asset
+  `a4cb282c0c38b56ae84cf04d3b2f7f26` con `Pavimento300_*`, `Scala300_*`,
+  `uovo-*-pianoN`).
+- QA su emulatore `emulator-5580` (Android 14, swiftshader): dopo aver
+  ripristinato lo spawn `41.4530382,15.5346125` (Foggia) e la modalità Reale,
+  il mondo OSM carica correttamente (`chunk=3`, `tiles=1`, `stradeMesh=3/3`,
+  nessun 404) e i log runtime confermano `CasaVittoriana: villa 300 mq: Casa
+  di Foggia — 3 piani, 9 uova, 9 zone` e `casa vittoriana pronta … villa 300
+  mq in 3 piani (fuori tre livelli, dentro 100 mq per piano)`. Nessun FATAL o
+  eccezione. Limite: la resa estetica del guscio a tre livelli e l'ingresso
+  interattivo (scale/uova nel diario Android) non sono automatizzabili in questo
+  ambiente (emulazione software a 6-7 fps, nessun input visivo): vanno
+  confermati a mano su hardware reale.

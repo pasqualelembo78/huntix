@@ -418,5 +418,37 @@ class TestCasaFoggiaELuovoMetro(unittest.TestCase):
         self.assertIn("Casa di Foggia", CITY_MAP_ACTIVITY)
 
 
+class TestVilla300MqDaFuori(unittest.TestCase):
+    """Le case configurate sono visibilmente grandi da fuori: tre piani,
+    stessa impronta OSM e stessa porta (coordinate Android invariate)."""
+
+    EXTERIOR = read("unity-project/Assets/City/Scripts/Interior/Visit/GrandHouseExterior.cs")
+
+    def test_altezza_tre_piani_senza_spostare_impronta_e_porta(self):
+        self.assertIn("public const int GrandVillaFloors =", PLACER)
+        self.assertIn("public const float GrandVillaHeight =", PLACER)
+        self.assertIn("if (grandVilla) h = Mathf.Max(h, GrandVillaHeight);", PLACER)
+        self.assertIn("GrandHouseExterior.Dress(parent, centerLocal", PLACER)
+        self.assertIn("float w = Mathf.Clamp(Mathf.Max(b.d[0], 1.5f), 1.5f, 90f);",
+                      PLACER)
+        self.assertIn("float d = Mathf.Clamp(Mathf.Max(b.d[1], 1.5f), 1.5f, 90f);",
+                      PLACER)
+        self.assertIn("TryDoorLocalOffset(\n                        visitSpec, b.r", PLACER)
+        self.assertIn("entrance.floorCount = SuggestedFloors(h);", PLACER)
+        self.assertIn("Floors = 3", self.EXTERIOR)
+        self.assertIn("FloorHeight = 3.5f", self.EXTERIOR)
+        self.assertIn("TotalHeight = Floors * FloorHeight", self.EXTERIOR)
+
+    def test_prefab_villa_300_mq_generato_dal_baker(self):
+        base = os.path.join(ROOT, "unity-project", "Assets")
+        prefab = os.path.join(base, "Resources", "Villas",
+                              "Villa300mqTreLivelli.prefab")
+        self.assertTrue(os.path.isfile(prefab))
+        self.assertTrue(os.path.isfile(prefab + ".meta"))
+        self.assertTrue(os.path.isfile(os.path.join(
+            base, "City", "Scripts", "Interior", "Victorian",
+            "GrandVillaStairs.cs.meta")))
+
+
 if __name__ == "__main__":
     unittest.main()
