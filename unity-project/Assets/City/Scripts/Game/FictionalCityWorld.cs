@@ -270,6 +270,10 @@ namespace City.Fictional
                     new Vector3(extent + 80f, 0.5f, extent + 80f),
                     groundMat, _root.transform, false, true);
 
+                // Punti d'erba sui due lati di ogni strada: nelle prime build
+                // i dettagli naturali ricevevano SOLO i centri dei parchi
+                // (1-2 nel quartiere), quindi l'erba era praticamente invisibile.
+                var vergePoints = new System.Collections.Generic.List<Vector2>();
                 for (int i = 0; i <= BlocksPerSide; i++)
                 {
                     float p = -half + i * spacing;
@@ -277,7 +281,24 @@ namespace City.Fictional
                         new Vector3(width, 0.06f, extent), roadMat, _root.transform);
                     Box("StradaEO_" + i, new Vector3(0f, 0.04f, p),
                         new Vector3(extent, 0.06f, width), roadMat, _root.transform);
+
+                    float verge = width * 0.5f + 1.4f;
+                    for (float t = -half + 8f; t < half - 8f; t += 13f)
+                    {
+                        vergePoints.Add(new Vector2(p + verge, t));
+                        vergePoints.Add(new Vector2(p - verge, t));
+                        vergePoints.Add(new Vector2(t, p + verge));
+                        vergePoints.Add(new Vector2(t, p - verge));
+                    }
                 }
+                // Ordine a stride: se il budget di istanze viene raggiunto, i
+                // ciuffi coprono uniformemente tutte le strade invece di
+                // esaurirsi sulle prime due.
+                var orderedVerge = new System.Collections.Generic.List<Vector2>(vergePoints.Count);
+                const int stride = 11;
+                for (int s = 0; s < stride && s < vergePoints.Count; s++)
+                    for (int i = s; i < vergePoints.Count; i += stride)
+                        orderedVerge.Add(vergePoints[i]);
 
                 // Confinamento morale del quartiere: muri bassi, non cambiano
                 // la fisica del mondo reale perche' vivono sotto questo root.
@@ -346,8 +367,14 @@ namespace City.Fictional
                 {
                     if (parkCenters.Count > 0 && _root != null)
                     {
+                        int vegSeed = (int)(r.seed & 0x7fffffff);
+                        // I parchi restano densi; le strade ricevono ciuffi
+                        // piccoli e distribuiti, senza alberi sull'asfalto.
                         NatureDetailPlacer.BuildFlat(_root.transform, parkCenters,
-                            0.12f, (int)(r.seed & 0x7fffffff), 260f);
+                            0.12f, vegSeed, 900f, 8f, 8, 14);
+                        if (orderedVerge.Count > 0)
+                            NatureDetailPlacer.BuildFlat(_root.transform, orderedVerge,
+                                0.12f, vegSeed ^ 0x5eed, 2600f, 2.4f, 2, 4, true);
                         var c = parkCenters[0];
                         VegetationFeatureBridge.GrantParkEgg("citta-gioco",
                             _root.transform.position + new Vector3(c.x, 0.65f, c.y),

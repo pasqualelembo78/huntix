@@ -724,7 +724,7 @@ class OsmCityBuilder(
             // Dettagli naturali additivi: ciuffi d'erba e sassi fra i fiori.
             // Budget gia' esistente (MAX_NODES) e nessun collider: la AR non
             // deve mai bloccare il passaggio davanti alle porte.
-            val grassCount = (fp.width * fp.depth / 400f).toInt().coerceIn(2, 8)
+            val grassCount = (fp.width * fp.depth / 90f).toInt().coerceIn(6, 24)
             for (g in 0 until grassCount) {
                 if (currentNodeCount >= MAX_NODES - 2) break
                 val seed = (park.id.toInt() * 19 + g * 43) and 0x7FFFFFFF

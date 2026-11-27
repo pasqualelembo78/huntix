@@ -159,6 +159,27 @@ class TestIntegrazioneMondo(unittest.TestCase):
         self.assertIn('AddFlatLight(lights, c, groundY)', self.placer)
         self.assertIn('private static void AddFlatLight(', self.placer)
 
+    def test_prati_densi_e_bordi_strada_nella_citta_fittizia(self):
+        # Prima della correzione la Citta' Gioco passava a BuildFlat solo i
+        # centri dei parchi (uno nel quartiere): 6 ciuffi in 1 km2, invisibili.
+        self.assertIn('var vergePoints = new System.Collections.Generic.List<Vector2>()',
+                      self.fictional)
+        self.assertIn('NatureDetailPlacer.BuildFlat(_root.transform, orderedVerge,',
+                      self.fictional)
+        self.assertIn('2600f, 2.4f, 2, 4, true', self.fictional)
+        self.assertIn('900f, 8f, 8, 14', self.fictional)
+        self.assertIn('float scatterRadius = 8f, int minNear = 3, int maxNear = 7,',
+                      self.placer)
+        self.assertIn('bool vergeMode = false', self.placer)
+        self.assertIn('if (!vergeMode && treeOn', self.placer)
+        # Il root piatto e' uno solo: il culling dal centro nascondeva l'erba
+        # ai bordi, quindi le tre Flush del mondo piatto non hanno distanza.
+        self.assertIn('Flush(near, nearMats, 0f, ShadowCastingMode.Off)', self.placer)
+        self.assertIn('private const int MaxNearPerChunk = 900;', self.placer)
+        self.assertIn('9f, chunk, heights, doorPos, nearMats, ref nNear', self.placer)
+        self.assertIn('val grassCount = (fp.width * fp.depth / 90f).toInt()'
+                      '.coerceIn(6, 24)', self.android_city)
+
     def test_riflesso_uova_con_posizione_e_coordinate(self):
         game = read('unity-project/Assets/City/Scripts/Game.cs')
         self.assertIn('public void GrantVegetationEgg(', game)

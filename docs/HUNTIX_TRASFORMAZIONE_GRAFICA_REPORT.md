@@ -1400,24 +1400,33 @@ entra, quindi non aggiunge costi di rendering alle città già popolose.
 
 Dopo la prima versione in primitive, su richiesta dell'utente («importante è
 che si tratta di una bella villa… un bel prefab completo») l'interno è stato
-sostituito da una **villa prefabbricata completa** composta con 57 modelli SENDU
-già importati e licenziati (`Shell`, `Living`, `Office`, `Kitchen`, `Decor`):
-pavimenti diversi per ambiente, pareti a due ordini con finestre e cornicioni,
-setti ad archi, colonnato, soffitto a cassettoni, camino monumentale, pianoforte,
-divani, librerie, scrivania con globo, tavoli da pranzo, facciate di negozi,
-lampioni, panchine, olivi e fontana in piazzetta. Il baker editoriale
-`Assets/City/Editor/VillaPrefabBaker.cs` crea il prefab in
-`Assets/Resources/Villas/VillaVittorianaCompleta.prefab` (1,2 MB, 5 uova,
-6 collider, 5 luci point, materiali URP dedicati); non fa parte del player.
-A runtime il prefab viene caricato una sola volta per tasca; se non è presente
-resta attivo il fallback primitivo, senza case vuote né uova duplicate.
+sostituito da una **villa prefabbricata completa** composta con modelli SENDU
+già importati e licenziati. Nella seconda iterazione («lo spazio sta… occupiamolo
+con una villa vera», «manca il soffitto», «mancano tutte le comodità di una
+casa») la villa è diventata una **reggia di 164 × 114 m con pareti alte 12 m**
+(circa sette volte il giocatore di 1,7 m) e soffitto a cassettoni che copre
+l'intera superficie, non più solo il salone. Sono state aggiunte l'atrio
+d'onore, la camera padronale, il bagno e spogliatoio, la cucina con dispensa,
+la stanza dei bambini e lo studio privato, oltre ai complementi mancanti in
+salone/biblioteca/pranzo/città interna (119 reference FBX SENDU di nove kit:
+`Shell`, `Bedroom`, `Bathroom`, `Kids`, `Living`, `Office`, `Kitchen`, `Cafe`,
+`Bakery`, `Decor`). Il baker editoriale `Assets/City/Editor/VillaPrefabBaker.cs`
+crea il prefab in `Assets/Resources/Villas/VillaVittorianaCompleta.prefab`
+(2,2 MB, 10 uova, 6 collider, 10 luci point, materiali URP dedicati); non fa
+parte del player. A runtime il prefab viene caricato una sola volta per tasca;
+se non è presente resta attivo il fallback primitivo, senza case vuote né uova
+duplicate.
 
 ### 35.2 Riflesso della caccia alle uova e ponte bidirezionale
 
-Come da Mandato §4, ogni superficie nuova è anche un nascondiglio: cinque
-`HouseEggSpot` stabili nei cassetti del salone e della biblioteca, nella
-credenza della sala da pranzo, in una vetrina della città interna e nella vasca
-della fontana. Le uova usano il normale `EggController` (tipo `Edificio`), la
+Come da Mandato §4, ogni superficie nuova è anche un nascondiglio: dieci
+`HouseEggSpot` stabili — i cinque storici (cassetto del salone, scrivania della
+biblioteca, credenza del pranzo, vetrina della città, vasca della fontana) e i
+cinque delle comodità nuove (armadio in camera, lavandino in bagno, forno in
+cucina, cassa dei giocattoli, scrivania dello studio). Le dodici zone (sei
+storiche più atrio, camera, bagno, cucina, bambini e studio) registrano la
+prima visita con luogo testuale e coordinate della porta. Le uova usano il
+normale `EggController` (tipo `Edificio`), la
 rarità calcolata da seed stabile e il riempimento per prossimità di
 `ContainerEgg`: non esiste una seconda economia né un secondo inventario.
 
@@ -1435,14 +1444,14 @@ presenti in `UnityIpc.APP_EVENTS`.
 
 | File | Modifica |
 |---|---|
-| `Interior/Victorian/VictorianGrandInterior.cs` | Nuovo builder additivo: `VictorianPocket`, `VictorianZone`, `VictorianExit`, ingresso/uscita con `InteriorTeleport`, camera indoor dedicata, ticker zone, cinque uova e sei zone con chiavi stabili |
+| `Interior/Victorian/VictorianGrandInterior.cs` | Nuovo builder additivo: `VictorianPocket`, `VictorianZone`, `VictorianExit`, ingresso/uscita con `InteriorTeleport`, camera indoor dedicata, ticker zone, dieci uova e dodici zone con chiavi stabili. Secondo passo: la tasca è agganciata al generatore (non al `Floor_0` disattivato) e l'ingresso riattiva gli antenati |
 | `Interior/Victorian.meta`, `VictorianGrandInterior.cs.meta` | GUID Unity delle nuove asset |
 | `Interior/InteriorGenerator.cs` | Chiamata in coda a `VisitInteriorDecorator.Decorate`, limitata a casa/appartamento e idempotente |
 | `Interior/InteriorManager.cs` | Ingresso all'attraversamento della porta, uscita dal trigger e dal pulsante `ESCI`, sospensione del controllo geometrico dentro la tasca, `ActiveInteriorRoot` puntato alla tasca per le uova |
-| `City/Editor/VillaPrefabBaker.cs` | Baker solo editor: compone la villa con 57 modelli SENDU, materiali URP, 6 collider, 5 luci, 5 contenitori uova e salva il prefab in `Resources` |
-| `Resources/Villas/VillaVittorianaCompleta.prefab` (+ `.meta`, materiali) | Villa completa spedita nell'APK: guscio, quattro ambienti, arredi, illuminazione, porta e nascondigli; 1.238.494 byte |
-| `VictorianGrandInterior.cs` (secondo passo) | `BuildVilla` carica il prefab e mantiene `BuildFallbackArchitecture`; `FinalizePocket` aggiunge a runtime il `UniversalContainerMarker` che Unity non serializza nei prefab, le 6 zone, le etichette e il trigger d'uscita (senza duplicare la porta del prefab) |
-| `backend/test_unity_victorian_interior.py` | 11 guardie statiche su dimensioni, arredi, innesto additivo, ingresso/uscita, uova con luogo, specchio Android, prefab SENDU e marker runtime |
+| `City/Editor/VillaPrefabBaker.cs` | Baker solo editor: compone la reggia con 119 modelli SENDU, materiali URP, 6 collider, 10 luci, 10 contenitori uova e salva il prefab in `Resources` |
+| `Resources/Villas/VillaVittorianaCompleta.prefab` (+ `.meta`, materiali) | Reggia spedita nell'APK: guscio, nove ambienti, pavimenti e soffitto continui, arredi, illuminazione, porta e nascondigli; 2,2 MB |
+| `VictorianGrandInterior.cs` (secondo passo) | `BuildVilla` carica il prefab e mantiene `BuildFallbackArchitecture`; `FinalizePocket` aggiunge a runtime il `UniversalContainerMarker` che Unity non serializza nei prefab, le 12 zone, le etichette e il trigger d'uscita (senza duplicare la porta del prefab) |
+| `backend/test_unity_victorian_interior.py` | 13 guardie statiche su dimensioni, arredi, innesto additivo, ingresso/uscita, uova con luogo, specchio Android, prefab SENDU, marker runtime e tasca non sepolta dall'interno disattivato |
 | `Assets/ThirdPartyLicenses.md` | Attribuzione/credito SENDU per la villa prefabbricata (licenza gratuita non CC0, credito non obbligatorio ma riportato) |
 
 Nessun builder, collider o sistema esistente è stato rimosso o disattivato.
@@ -1451,10 +1460,11 @@ apre anche la tasca; l'uscita riporta sempre davanti alla porta OSM reale.
 
 ### 35.4 Verifiche
 
-- `python3 backend/test_unity_victorian_interior.py`: **11 test OK** (le 7
-  guardie della tasca più 4 sul prefab: presenza/caricamento, collider+luci+5
-  uova, marker runtime, mutual esclusività prefab/fallback).
-- `python3 -m unittest discover -s backend -p 'test_*.py'`: **364 test OK**.
+- `python3 backend/test_unity_victorian_interior.py`: **13 test OK** (le 7
+  guardie della tasca più 6 sul prefab: presenza/caricamento, collider+luci+10
+  uova, reggia con soffitto intero e stanze nuove, marker runtime,
+  mutual esclusività prefab/fallback e dedup delle uova).
+- `python3 -m unittest discover -s backend -p 'test_*.py'`: **366 test OK**.
 - `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori, 214 warning preesistenti.
 - Baker eseguito con Unity 2022.3.52f1 in batchmode: `EXIT=0`, log
   `[VillaPrefabBaker] prefab completo creato`, nessun modello mancante.
@@ -1462,7 +1472,7 @@ apre anche la tasca; l'uscita riporta sempre davanti alla porta OSM reale.
 - Build firmata finale: `SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 AUTH_MODE=api
   SKIP_INSTALL=1 ./build_release.sh` → **BUILD SUCCESSFUL**, AAR Unity ricreato
   con il prefab, APK `app/build/outputs/apk/release/app-release-signed.apk`;
-  SHA-256 `3ea97a1889e14660be2bd9e261e21d3e45ea4088b1b9ecb2ed2b274a3f61e6f9`.
+  SHA-256 `a5f22dbe5af9c48985619a5d82e20b05d417c59e1fd2dbab3fce00204d1da604`.
   Firma verificata con `apksigner` (schema v3, 1 firmatario, certificato Huntix).
   Il nome del prefab è presente nei dati e nei metadati IL2CPP dell'AAR spedito.
 - `git diff --check`: pulito su sorgenti, test e documentazione; i file YAML
@@ -1476,7 +1486,103 @@ apre anche la tasca; l'uscita riporta sempre davanti alla porta OSM reale.
 Le guardie statiche e la compilazione coprono struttura, ponte e dedup, ma non
 sostituiscono il QA su device: resta da confermare che l'ingresso non faccia
 sbucare la camera dal salone (ora arredato con la villa SENDU), che il trigger
-di uscita riporti davanti alla porta e che le cinque uova del prefab compaiano
+di uscita riporti davanti alla porta e che le dieci uova del prefab compaiano
 nel diario «DOVE HO TROVATO» con le coordinate della casa. La resa estetica
 della villa (arredi, luci, fontana, città interna) va giudicata su device: le
 guardie statiche ne verificano la presenza, non la bellezza percepita.
+
+## 36. Erba davvero visibile e emulatore offline (27/11/2026)
+
+### 36.1 Richiesta e diagnosi
+
+L'utente ha chiesto: «appena finisce apk controlla perché dispositivo emulato
+è offline. Inoltre l'erba non è ancora presente. La vegetazione è completamente
+assente».
+
+Il dispositivo emulato non era guasto: `adb devices` riportava
+`emulator-5554 offline` perché la porta ADB 5555 era già occupata dal processo
+`node /opt/mevapool/init.js` (pid 1353). L'emulatore con console 5554 tentava
+quindi di usare 5555 e restava offline. Il vecchio emulatore è stato fermato e
+riavviato su `-port 5580`; `emulator-5580` risulta ora `device` e l'APK firmato
+è stato installato con successo.
+
+Il QA nell'APK ha poi mostrato la causa dell'erba mancante nella Città Gioco:
+
+```
+[Dettagli] mondo piatto: erba/fiori=6 cespugli/rocce=1 alberi=1 lotti=5
+```
+
+Sei ciuffi in un quartiere di circa 1 km². `FictionalCityWorld` passava a
+`NatureDetailPlacer.BuildFlat` solo i centri dei parchi e la ricetta di Foggia
+ne genera uno solo. Nei chunk OSM il passo dei prati era di 11 m con tetto a
+420 istanze e le aiuole stradali erano campionate ogni 46 m: erba tecnicamente
+presente ma invisibile da altezza d'uomo. Nel mondo AR i ciuffi erano limitati
+a 2-8 per parco. C'era anche un difetto di culling nei mondi piatti: il batch
+aveva come unico anchor il centro del quartiere, quindi con distanza 320 m
+l'erba sotto i piedi ai bordi veniva saltata.
+
+### 36.2 Fix additivi
+
+| File | Modifica |
+|---|---|
+| `Environment/NatureDetailPlacer.cs` | `BuildFlat` accetta raggio, numero minimo/massimo di ciuffi per punto e modalità `vergeMode` (solo erba/fiori, niente alberi o luci sull'asfalto); i chiamanti storici restano invariati per i valori predefiniti |
+| `Environment/NatureDetailPlacer.cs` | Prati OSM a passo 9 m con tetto a 900 istanze per chunk, aiuole ogni 24 m con 3-4 ciuffi, cespugli ogni 20 m, fino a 16 alberi di parco per chunk |
+| `Environment/NatureDetailPlacer.cs` | I tre lotti dei mondi piatti non usano più il culling dal centro: restano disegnati e la visibilità è gestita dai quattro toggle e dal LOD |
+| `Game/FictionalCityWorld.cs` | Nuovi punti d'ancora sui due lati di tutte le strade, ordinati a stride così il budget copre uniformemente il quartiere; 900 ciuffi nei parchi e 2600 sui bordi stradali |
+| `reallife/OsmCityBuilder.kt` | Ciuffi d'erba nei parchi AR da 2-8 a 6-24, sempre dentro il budget `MAX_NODES` e senza collider |
+
+Nessun sistema, toggle, evento o prefab esistente è stato rimosso o
+disattivato. La sezione «Natura» storica, i prefab Kenney e il riflesso uova
+restano identici.
+
+### 36.3 Riflesso della caccia alle uova e ponte bidirezionale
+
+L'uovo del verde continua a essere piazzato una sola volta da
+`VegetationFeatureBridge.GrantParkEgg`, con luogo testuale
+`città→città-gioco→parco→vegetazione` e coordinate reali del parco, tramite
+`FeatureEggHidden` e il diario Android. La nuova erba lungo le strade non crea
+uova duplicate né seconde economie: è solo superficie visitabile già coperta
+dallo stesso indizio. I quattro toggle `huntix_veg_*` e il ripristino da
+`vegetationFeatures` restano invariati.
+
+### 36.4 Verifiche
+
+- `python3 backend/test_unity_vegetation_features.py`: **12 test OK** (una
+  nuova guardia su densità, bordi stradali e assenza di culling nel mondo
+  piatto).
+- `python3 backend/test_unity_victorian_interior.py`: **13 test OK**.
+- `python3 -m unittest discover -s backend -p 'test_*.py'`: **367 test OK**.
+- `cd backend/preprocessing/cscheck && ./check.sh`: **CSCHECK OK**, 0 errori,
+  214 warning preesistenti.
+- `./gradlew :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac --offline -q`: **BUILD SUCCESSFUL**.
+- `SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 AUTH_MODE=api SKIP_INSTALL=1 ./build_release.sh`:
+  **BUILD SUCCESSFUL** (7 min 30 s), APK firmato e verificato, SHA-256
+  `525fe0803e140f73058ee9c21cd66cfbbe6d71b582234b4fe7b5cb44f421123b`.
+
+### 36.5 QA su emulatore
+
+Emulatore `emulator-5580` (il vecchio `emulator-5554` resta offline per il
+conflitto ADB descritto in §36.1). APK firmato installato, `world_mode=fictional`
+impostato nelle preferenze Android e MiCittà avviata con spawn su Bari
+(41.1171 / 16.8719). Il log conferma il passaggio da 6 ciuffi a due lotti
+distinti, uno per i parchi e uno per i marciapiedi:
+
+```
+[Dettagli] mondo piatto: erba/fiori=11 cespugli/rocce=1 alberi=1 lotti=7
+[Dettagli] mondo piatto: erba/fiori=2600 cespugli/rocce=0 alberi=0 lotti=11
+[HuntixSync] Uovo nascosto: Uovo tra cespugli e fiori
+  (vegetazione->parco->fioriture) place=città→città-gioco→parco→vegetazione
+  lat=41.113083 lng=16.866607
+[CittaGioco] costruita: seed=3880082521 passo=177.6 strada=6.0 isolati=25
+  parchi=1 edifici=192 poi=10 (nessun tile/DEM a runtime)
+[CityChunkedWorld] === MIACITTA === CityReady (chunk pronti, splash chiusa)
+```
+
+Nessuna eccezione, `FATAL EXCEPTION`, `ANR` o errore della sezione dettagli
+naturali nel log. Il conteggio del lotto stradale è al tetto (2600) e quello del parco è
+salito a 11: l'erba non è più una manciata di ciuffi invisibili. L'uovo del
+verde è stato nascosto una sola volta con luogo testuale e coordinate reali,
+a conferma che il riflesso uova e il bridge bidirezionale non sono cambiati.
+Il QA visivo sul dispositivo resta limitato all'emulazione software
+(swiftshader, 6-7 fps anche prima del fix): la copertura dell'erba è misurabile
+nei lotti ma la resa estetica va giudicata su hardware reale.

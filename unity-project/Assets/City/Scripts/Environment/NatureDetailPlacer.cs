@@ -28,9 +28,11 @@ namespace City.Environment
         public const string LightGroup = "LuciNature";
 
         private const float PORTA_RADIUS2 = 4f * 4f;
-        private const int MaxNearPerChunk = 420;
-        private const int MaxFarPerChunk = 190;
-        private const int MaxTreesPerChunk = 12;
+        // Un prato riconoscibile non puo' essere una manciata di ciuffi:
+        // con 420 lotti per km2 l'erba era invisibile da altezza d'uomo.
+        private const int MaxNearPerChunk = 900;
+        private const int MaxFarPerChunk = 300;
+        private const int MaxTreesPerChunk = 16;
         // Una sola luce calda per chunk, e solo a LOD0: 9 point light invece
         // di decine in tutto il raggio di streaming.
         private const int MaxLightsPerChunk = 1;
@@ -185,10 +187,10 @@ namespace City.Environment
                     // anche il valore di ritorno (conteggio doppio).
                     if (nearOn)
                         ScatterPark(poly, minX, maxX, minZ, maxZ, parkSeed,
-                            11f, chunk, heights, doorPos, nearMats, ref nNear);
+                            9f, chunk, heights, doorPos, nearMats, ref nNear);
                     if (farOn)
                         ScatterPark(poly, minX, maxX, minZ, maxZ, parkSeed ^ 0x5eed,
-                            26f, chunk, heights, doorPos, farMats, ref nFar, true);
+                            20f, chunk, heights, doorPos, farMats, ref nFar, true);
                     if (treeOn && nTrees < MaxTreesPerChunk)
                         nTrees += ScatterParkTrees(poly, minX, maxX, minZ, maxZ,
                             parkSeed ^ 0xa11e, chunk, heights, doorPos, treeLocals,
@@ -269,13 +271,15 @@ namespace City.Environment
                         if (len < 20f) continue;
                         dir /= len;
                         var side = new Vector3(-dir.z, 0f, dir.x);
-                        for (float t = 18f; t < len - 10f; t += 46f)
+                        // Passo dimezzato rispetto alla prima versione: con un
+                        // ciuffo ogni 46 m le aiuole non si vedevano affatto.
+                        for (float t = 14f; t < len - 8f; t += 24f)
                         {
                             int h = Hash(roadSeed ^ s * 131 ^ (int)t);
                             var at = a + dir * t + side * (h % 2 == 0 ? 3.1f : -3.1f);
                             if (!bounds.Contains(new Vector2(at.x, at.z))) continue;
                             if (!FarFromDoors(at, doorPos)) continue;
-                            int count = 2 + (h % 2);
+                            int count = 3 + (h % 2);
                             for (int k = 0; k < count && nNear < MaxNearPerChunk; k++)
                             {
                                 var q = Hash(h ^ k * 7717);
@@ -310,12 +314,22 @@ namespace City.Environment
         /// <summary>Variante per world piatti (Citta' Gioco e CityOSMWorld):
         /// riceve punti in coordinate locali del mondo, quota costante, e
         /// crea gli stessi quattro gruppi (erba/fiori, cespugli/rocce, alberi
-        /// di parco e luci). Nessuna dipendenza da tile/DEM/GeoLL.</summary>
+        /// di parco e luci). Nessuna dipendenza da tile/DEM/GeoLL.
+        ///
+        /// I parametri aggiuntivi servono ai bordi stradali della Citta'
+        /// Gioco: raggio piccolo e solo erba/fiori, cosi' il prato copre il
+        /// quartiere senza piantare alberi sull'asfalto. I chiamanti storici
+        /// restano invariati grazie ai valori predefiniti.</summary>
         public static GameObject BuildFlat(Transform parent, IList<Vector2> points,
-            float groundY, int seed, float maxInstances = 360f)
+            float groundY, int seed, float maxInstances = 360f,
+            float scatterRadius = 8f, int minNear = 3, int maxNear = 7,
+            bool vergeMode = false)
         {
             EnsureHandlers();
             if (parent == null || points == null || points.Count == 0) return null;
+            if (scatterRadius <= 0f) scatterRadius = 8f;
+            if (minNear < 1) minNear = 1;
+            if (maxNear < minNear) maxNear = minNear;
             var root = new GameObject("DettagliNaturali");
             root.transform.SetParent(parent, false);
             if (!FlatRoots.Contains(root)) FlatRoots.Add(root);
@@ -339,12 +353,12 @@ namespace City.Environment
             {
                 int h = Hash(seed ^ i * 7919);
                 Vector2 c = points[i];
-                int count = Mathf.Min(7, 3 + (h % 4));
+                int count = Mathf.Min(maxNear, minNear + (h % (maxNear - minNear + 1)));
                 for (int k = 0; k < count && nNear < maxInstances; k++)
                 {
                     int q = Hash(h ^ k * 104729);
                     float ang = (q % 360) * Mathf.Deg2Rad;
-                    float r = ((q >> 6) % 80) * 0.1f;
+                    float r = scatterRadius * (((q >> 6) % 100) / 100f);
                     var at = new Vector3(c.x + Mathf.Cos(ang) * r, groundY,
                         c.y + Mathf.Sin(ang) * r);
                     string prefab = q % 3 == 0
@@ -354,7 +368,7 @@ namespace City.Environment
                         0.6f + (q % 30) * 0.012f, q % 360));
                     nNear++;
                 }
-                if (farOn && nFar < maxInstances * 0.25f)
+                if (!vergeMode && farOn && nFar < maxInstances * 0.25f)
                 {
                     string prefab = h % 2 == 0 ? BushNames[h % BushNames.Length]
                         : RockNames[(h >> 3) % RockNames.Length];
@@ -365,7 +379,7 @@ namespace City.Environment
                 // Anche i mondi piatti devono rispondere ai quattro toggle:
                 // prima i gruppi esistevano ma alberi e luci non venivano
                 // generati, quindi le due voci del menu non facevano nulla.
-                if (treeOn && nTrees < MaxTreesPerChunk)
+                if (!vergeMode && treeOn && nTrees < MaxTreesPerChunk)
                 {
                     int q = Hash(h ^ 0x7a11);
                     float ta = (q % 360) * Mathf.Deg2Rad;
@@ -376,12 +390,16 @@ namespace City.Environment
                         MatrixFor(at, 0.85f + (q % 30) * 0.01f, q % 360));
                     nTrees++;
                 }
-                if (lightOn && lights.transform.childCount < MaxLightsPerChunk)
+                if (!vergeMode && lightOn && lights.transform.childCount < MaxLightsPerChunk)
                     AddFlatLight(lights, c, groundY);
             }
-            int batches = Flush(near, nearMats, 320f, ShadowCastingMode.Off) +
-                          Flush(far, farMats, 700f, ShadowCastingMode.Off) +
-                          Flush(treeGroup, treeMats, 700f, ShadowCastingMode.On);
+            // Il mondo piatto ha UN solo root: usare la distanza dal centro
+            // taglierebbe l'erba sotto i piedi ai bordi del quartiere. I lotti
+            // restano pochi (una chiamata per tipo), quindi niente culling
+            // qui: LOD e quattro toggle gestiscono gia' la visibilita'.
+            int batches = Flush(near, nearMats, 0f, ShadowCastingMode.Off) +
+                          Flush(far, farMats, 0f, ShadowCastingMode.Off) +
+                          Flush(treeGroup, treeMats, 0f, ShadowCastingMode.On);
             if (nNear + nFar + nTrees > 0)
                 OsmDiag.Log("[Dettagli] mondo piatto: erba/fiori=" + nNear +
                     " cespugli/rocce=" + nFar + " alberi=" + nTrees +
