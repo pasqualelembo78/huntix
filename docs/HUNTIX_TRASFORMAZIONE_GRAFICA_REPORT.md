@@ -1586,3 +1586,36 @@ a conferma che il riflesso uova e il bridge bidirezionale non sono cambiati.
 Il QA visivo sul dispositivo resta limitato all'emulazione software
 (swiftshader, 6-7 fps anche prima del fix): la copertura dell'erba è misurabile
 nei lotti ma la resa estetica va giudicata su hardware reale.
+
+### 36.6 Costo misurato dell'erba
+
+Il costo è di rendering, non di gioco: non esiste alcun prezzo in valuta,
+nessun premio e nessuna nuova economia. Nel quartiere fittizio (2600 ciuffi
+sui bordi strada + 11 nel parco) i numeri sono:
+
+| Voce | Valore |
+|---|---|
+| `DrawMeshInstanced` per frame | 18 lotti totali (11 strada + 7 parco), un draw call ciascuno |
+| triangoli per frame | ~300 k (2/3 erba ~132 tri, 1/3 fiori ~76 tri) |
+| RAM delle matrici | 2611 × 64 B × 2 copie (locale/world) ≈ 330 kB |
+| GameObject / collider / Light per pianta | 0 / 0 / 0 |
+| ombre proiettate dall'erba | no (`ShadowCastingMode.Off`), solo gli alberi le proiettano |
+| aggiornamento CPU per frame | 18 confronti di matrice, nessun loop sulle istanze se il root è fermo; il ricalcolo avviene solo al rebase GPS |
+
+Nei chunk OSM i tetti sono 900 ciuffi + 300 cespugli/sassi + 16 alberi per
+km², con culling a 260/620/700 m e LOD: il costo reale è limitato ai 9 chunk
+attorno al player.
+
+Misura A/B su `emulator-5580`, stessa scena e stesso spawn, quattro toggle
+`huntix_veg_*` tutti on contro tutti off, campioni T+6…T+18 s:
+
+| Configurazione | fps | frame mediano | frame medio |
+|---|---|---|---|
+| vegetazione attiva | 7-8 | 125,0 ms | 133,3 ms |
+| vegetazione disattivata | 7-8 | 125,0 ms | 130,6 ms |
+
+La differenza media (2,7 ms) è dentro il quantizzamento del frame
+(16,7 ms) e il rumore dello swiftshader: nel carico dell'emulatore l'erba non
+ha un costo misurabile. La generazione iniziale resta una volta sola
+(`fictional` 274-388 ms include l'intero quartiere di 192 edifici, non solo
+l'erba); i modelli combined e i materiali instanziati sono in cache.
