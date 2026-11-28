@@ -2188,8 +2188,9 @@ Resta **un solo guscio eroe dedicato**: `AssetStore/CountryHouse_Prefab`
 **Edifici senza ingresso**: non esistono file da cancellare: venivano generati
 a runtime come gusci muti. `BuildingPlacer.RemoveBuildingsWithoutEntrance =
 true` ora li scarta **prima** di istanziare prefab, materiali e collider, quando
-il budget del chunk (`MaxEnterablePerChunk = 8`) è esaurito. Le sei case del
-registro hanno sempre porta e non consumano budget. Nessun sistema è stato
+il budget del chunk (`MaxEnterablePerChunk = 8`) è esaurito. Le sette case del
+registro (sei a Via Silvio Pellico + quella di Roma) hanno sempre porta e non
+consumano budget. Nessun sistema è stato
 rimosso dal codice: basta portare la costante a `false` per tornare indietro.
 
 **Non toccati**: interno da 300 mq, 9 uova, `ContainerEgg`, `HouseVisitState`,
@@ -2203,8 +2204,9 @@ fasce/finestre finte» è ancora nel sorgente ma è spento da
 `LegacyVillaStretchDress = false`. Ora guscio eroe e guscio procedurale
 condividono la stessa regola: **una sola scala uniforme** calcolata
 dall'impronta OSM, nessuna facciata deformata, un solo `BoxCollider`, porta
-sempre nella posizione reale del registro. Le cinque case senza asset dedicato
-non sono più «minuscole» e non mostrano più una seconda casa sovrapposta.
+sempre nella posizione reale del registro. Le sei case senza asset dedicato
+(cinque a Via Silvio Pellico + Roma) non sono più «minuscole» e non mostrano
+più una seconda casa sovrapposta.
 
 ### 42.4 Stato di transizione (importante)
 
