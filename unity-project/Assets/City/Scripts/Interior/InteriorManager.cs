@@ -219,6 +219,10 @@ namespace City.Interior
             }
 
             Log("Entrato (in-place, 3a persona): " + e.buildingName);
+            // Mandato: la visita lascia un indizio uovo con luogo testuale e
+            // coordinate reali della porta (una tantum per area+azione), oltre
+            // ai nascondigli già dichiarati dal registro case configurate.
+            HouseAccess.NoteEntry(e, e.entryKind);
             ContainerEgg.Ensure();
 
             // Interni universali: registra la visita con la chiave geo-stabile
@@ -241,6 +245,25 @@ namespace City.Interior
             // Tasca vittoriana: se questa porta ha la casa enorme dentro,
             // il player varca subito la soglia con lo stesso teleporto helper.
             City.Interior.Victorian.VictorianGrandInterior.TryEnter(this, e);
+
+            // Ruolo e permessi: la visita non dà diritto di modifica. L'oggetto
+            // d'acquisto vive DENTRO la casa (anche nella tasca vittoriana).
+            e.MarkNaturalEntryTime();
+            HousePurchaseSpot.Install(ActiveInteriorRoot, e);
+        }
+
+        /// <summary>Trova l'ingresso di una casa configurata tra gli interni
+        /// caricati (usato per lo spawn iniziale dentro la casa). Nessuna
+        /// ricerca globale costosa: attraversa solo la coda lazy dei generatori.</summary>
+        public BuildingEntrance FindEntranceByOsmId(long osmId)
+        {
+            for (int i = 0; i < _pendingInteriors.Count; i++)
+            {
+                var gen = _pendingInteriors[i];
+                if (gen == null || gen.osmId != osmId) continue;
+                if (gen.Entrance != null) return gen.Entrance;
+            }
+            return null;
         }
 
         public void MarkOutside(BuildingEntrance e)

@@ -9,6 +9,11 @@ namespace City.Interior
     /// </summary>
     public class ExitTrigger : MonoBehaviour
     {
+        /// <summary>Per le case a ingresso naturale non viene mostrato il
+        /// prompt "USCITA": si esce camminando fuori dalla porta. Il tap
+        /// resta disponibile solo negli altri edifici.</summary>
+        public bool suppressPrompt;
+
         private bool focused;
 
         public bool IsFocused => focused;
@@ -17,8 +22,17 @@ namespace City.Interior
         {
             if (!other.CompareTag("Player")) return;
             focused = true;
-            if (InteriorManager.Instance != null)
-                InteriorManager.Instance.RegisterInteriorAction(Interact, "USCITA");
+            var mgr = InteriorManager.Instance;
+            if (suppressPrompt)
+            {
+                // Case a ingresso naturale: varcare la soglia interna è già
+                // l'uscita, senza prompt né tap. La porta prefab riporta il
+                // player davanti all'esterno con lo stesso fade di sempre.
+                if (mgr != null && mgr.IsInside) mgr.ExitInterior();
+                return;
+            }
+            if (mgr != null)
+                mgr.RegisterInteriorAction(Interact, "USCITA");
         }
 
         private void OnTriggerExit(Collider other)

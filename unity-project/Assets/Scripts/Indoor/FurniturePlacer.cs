@@ -107,6 +107,9 @@ namespace Huntix.Indoor
         /// </summary>
         public void StartPlacement(string itemId)
         {
+            // Permessi verificati nella logica che crea l'oggetto, non solo
+            // nascondendo la UI: un visitatore non può collocare arredi.
+            if (!City.Interior.HouseAccess.CanPlaceFurniture()) return;
             var item = unlockedItems.Find(i => i.id == itemId);
             if (item == null)
             {
@@ -162,6 +165,13 @@ namespace Huntix.Indoor
         /// </summary>
         public void ConfirmPlacement()
         {
+            // Ricontrollo al momento del commit: il ruolo può cambiare
+            // (es. il player è entrato in una casa altrui durante l'anteprima).
+            if (!City.Interior.HouseAccess.CanPlaceFurniture())
+            {
+                CancelPlacement();
+                return;
+            }
             if (!_isPlacing || _previewObject == null) return;
 
             var pos = _previewObject.transform.position;

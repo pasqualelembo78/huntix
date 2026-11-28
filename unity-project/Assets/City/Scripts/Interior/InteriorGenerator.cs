@@ -809,6 +809,10 @@ namespace City.Interior
             tcol.size = new Vector3(doorW + 0.2f, doorH, 2.6f);
             var door = trig.AddComponent<InteriorDoor>();
             door.panel = panel.transform;
+            // Nelle abitazioni le porte interne si aprono camminandoci
+            // vicino: nessun pulsante e nessun riquadro. Il pannello ruota
+            // sullo stesso cardine, senza toccare mesh o collider.
+            door.autoOpen = Entrance != null && HouseAccess.IsResidential(Entrance);
         }
 
         // ── HOUSE ──────────────────────────────────────────────────
@@ -1786,7 +1790,10 @@ namespace City.Interior
             col.isTrigger = true;
             col.size = new Vector3(2f, 2.5f, 2f);
 
-            exitGo.AddComponent<ExitTrigger>();
+            var exit = exitGo.AddComponent<ExitTrigger>();
+            // Nelle case naturali l'uscita avviene riattraversando la porta:
+            // il prompt "USCITA" sarebbe un pulsante artificiale.
+            exit.suppressPrompt = Entrance != null && HouseAccess.IsResidential(Entrance);
         }
 
         // ── HELPER ──────────────────────────────────────────────────

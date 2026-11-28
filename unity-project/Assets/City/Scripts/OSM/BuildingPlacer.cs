@@ -999,6 +999,11 @@ namespace City.OSM
 
             var entrance = trig.AddComponent<City.Interior.BuildingEntrance>();
             entrance.buildingType = iType;
+            // Case/appartamenti: si entra camminando, senza pulsante né riquadro.
+            // I negozi conservano il tap (hanno un bancone, non la proprietà).
+            entrance.naturalEntry = iType == "house" || iType == "appartamento" ||
+                                    iType == "appartment" || iType == "apartment";
+            entrance.entryKind = City.Interior.HouseAccess.EntryKind.MainDoor;
             entrance.buildingName = FriendlyBuildingName(iType, b.id);
             entrance.osmId = b.id;
             entrance.forceDoorMarker = visitConfigured && haveSpec;

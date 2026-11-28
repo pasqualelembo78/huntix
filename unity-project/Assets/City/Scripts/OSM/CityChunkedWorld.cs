@@ -96,6 +96,17 @@ private const float TerrainPhysxTimeoutS = 15f;
                 lng.ToString(CultureInfo.InvariantCulture));
         }
 
+        /// <summary>Nuova partita (Android: nessun worldPos salvato): il giocatore
+        /// riceve la casa iniziale e nasce DENTRO, non in strada. Le partite
+        /// salvate non chiamano mai questo metodo.</summary>
+        private static bool _firstHomeSpawnRequested;
+
+        public static void UseFirstHomeSpawn()
+        {
+            _firstHomeSpawnRequested = true;
+            Debug.Log("[CityChunkedWorld] UseFirstHomeSpawn richiesto da Android");
+        }
+
         // L'overlay di caricamento nativo (BridgeActivity) viene chiuso quando
         // i primi chunk sono costruiti (CityReady): lo mandiamo UNA volta per
         // ingresso in citta' al raggiungimento della stessa soglia del ponte.
@@ -339,6 +350,10 @@ private const float TerrainPhysxTimeoutS = 15f;
                 WorldOrigin.Init(startLat, startLng);
                 CoordinateConverter.Init(startLat, startLng);
 
+                // Nuova partita: assegna la casa iniziale (prima casa gratuita)
+                // PRIMA del gate di spawn, usando il sistema economico esistente.
+                AssignInitialHome();
+
                 if (disableLegacyCityOsmWorld && CityOSMWorld.Instance != null)
                 {
                     CityOSMWorld.Instance.PrepareExit();
@@ -573,6 +588,11 @@ private const float TerrainPhysxTimeoutS = 15f;
             if (Manager != null) Manager.StopProgressReporting();
             NotifyCityReady();
 
+            // Ultimo passo della nuova partita: dopo che il mondo è pronto e il
+            // controller è attivo, entra nella casa assegnata con la stessa
+            // transizione usata dalla porta (fade, interno lazy, camera indoor).
+            if (_initialHomeAssigned) StartCoroutine(EnterInitialHomeRoutine());
+
             OsmDiag.Log("[CityChunkedWorld] attivo su " +
                 startLat.ToString(CultureInfo.InvariantCulture) + "," +
                 startLng.ToString(CultureInfo.InvariantCulture) +
@@ -647,6 +667,8 @@ private const float TerrainPhysxTimeoutS = 15f;
             }
         }
 
+        private bool _initialHomeAssigned;
+
 /// <summary>
         /// Decide l'origine di spawn. PRIORITA' 1: lo spawn scelto da Android
         /// (selettore citta'/ultima posizione, via JSON setMode -> UseSpawnPoint).
@@ -654,6 +676,27 @@ private const float TerrainPhysxTimeoutS = 15f;
         /// </summary>
         private void ApplySpawnOrigin()
         {
+            // Nuova partita: l'origine è la porta della casa iniziale. Qualsiasi
+            // coordinate inviata dal selettore viene ignorata solo in questo
+            // caso, perché il req. #7 chiede di partire DENTRO la propria casa.
+            if (_firstHomeSpawnRequested && !City.Environment.HomeSystem.OwnsHome)
+            {
+                City.Interior.Visit.VisitInteriorRegistry.Spec home;
+                if (City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                        City.Interior.Visit.VisitInteriorRegistry.DefaultOsmId, out home))
+                {
+                    startLat = home.lat;
+                    startLng = home.lng;
+                    _spawnOverrideLat = null;
+                    _spawnOverrideLng = null;
+                    _hasSavedWorldPos = false;
+                    Debug.Log("[CityChunkedWorld] nuova partita: origine alla casa " +
+                        home.label + " (" + home.lat.ToString(CultureInfo.InvariantCulture) +
+                        "," + home.lng.ToString(CultureInfo.InvariantCulture) + ")");
+                    return;
+                }
+            }
+
             if (_spawnOverrideLat.HasValue && _spawnOverrideLng.HasValue)
             {
                 startLat = _spawnOverrideLat.Value;
@@ -667,6 +710,71 @@ private const float TerrainPhysxTimeoutS = 15f;
                 return;
             }
             ReadPersistedPosition();
+        }
+
+        /// <summary>Assegna la casa iniziale con HomeSystem.Buy: prima casa
+        /// gratuita, stesso portafoglio e stesso riflesso uova degli acquisti.
+        /// Non tocca le partite salvate (chiamata solo su richiesta Android).</summary>
+        private void AssignInitialHome()
+        {
+            if (!_firstHomeSpawnRequested) return;
+            if (City.Environment.HomeSystem.OwnsHome) return;
+            City.Interior.Visit.VisitInteriorRegistry.Spec home;
+            if (!City.Interior.Visit.VisitInteriorRegistry.TryGet(
+                    City.Interior.Visit.VisitInteriorRegistry.DefaultOsmId, out home)) return;
+
+            Vector3 door = WorldOrigin.ToWorld(home.lat, home.lng);
+            if (City.Environment.HomeSystem.Buy(home.label, door))
+            {
+                _initialHomeAssigned = true;
+                Huntix.Bridge.UnityBridge.LogToAndroid("HomeSystem",
+                    "casa iniziale assegnata: " + home.label);
+            }
+        }
+
+        /// <summary>Entra nella casa iniziale appena i chunk sono pronti.
+        /// Riutilizza il percorso della porta (interno lazy, teleport helper,
+        /// CameraRig indoor): nessun player duplicato, nessun cambio scena.</summary>
+        private IEnumerator EnterInitialHomeRoutine()
+        {
+            var mgr = City.Interior.InteriorManager.Instance;
+            var g = City.Game.Instance;
+            if (mgr == null || g == null || g.player == null) yield break;
+
+            City.Interior.BuildingEntrance e = null;
+            float waited = 0f;
+            while (e == null && waited < 12f)
+            {
+                e = mgr.FindEntranceByOsmId(
+                    City.Interior.Visit.VisitInteriorRegistry.DefaultOsmId);
+                if (e == null)
+                {
+                    yield return new WaitForSecondsRealtime(0.25f);
+                    waited += 0.25f;
+                }
+            }
+            if (e == null)
+            {
+                OsmDiag.Log("[CityChunkedWorld] casa iniziale non ancora caricata: spawn esterno mantenuto");
+                yield break;
+            }
+
+            var gen = e.GetComponentInParent<City.Interior.InteriorGenerator>();
+            if (gen == null) yield break;
+            if (!gen.InteriorBuilt) gen.BuildInteriorNow();
+            gen.SetLight(true);
+            gen.SetPrefabExteriorVisible(false);
+
+            // Punto valido già usato dalla porta: poco oltre la soglia, con
+            // yaw verso la stanza e CharacterController gestito da Move().
+            City.Interior.InteriorTeleport.Move(gen.PrefabEnterWorld,
+                gen.PrefabEnterRotation, g);
+            mgr.MarkInside(e);
+            e.MarkNaturalEntryTime();
+            if (g.ui != null)
+                g.ui.ShowToast("Sei a casa: " + e.buildingName +
+                               ". Esci pure dalla porta quando vuoi.");
+            OsmDiag.Log("[CityChunkedWorld] spawn dentro la casa iniziale: " + e.buildingName);
         }
 
         /// <summary>

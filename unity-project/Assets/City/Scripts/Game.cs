@@ -453,6 +453,19 @@ namespace City
 
         public void OnEntranceFocusChanged(BuildingEntrance entrance)
         {
+            // Le abitazioni a ingresso naturale non devono MAI mostrare il
+            // prompt "ENTRA IN CASA": si entra camminando. Difesa aggiuntiva
+            // nel caso in cui un vecchio trigger chiami ancora questo metodo.
+            if (entrance != null && entrance.naturalEntry &&
+                City.Interior.HouseAccess.IsResidential(entrance))
+            {
+                // Nessun prompt d'ingresso: si entra camminando. Il focus resta
+                // disponibile per il menu contestuale (acquisto/rientro), che
+                // non è un pulsante per entrare.
+                currentEntrance = entrance;
+                if (ui != null) ui.HideInteract();
+                return;
+            }
             if (entrance != null && entrance.IsFocused)
             {
                 currentEntrance = entrance;

@@ -31,6 +31,35 @@ namespace City.Interior
         /// senza tooltip/tap/teletrasporto.</summary>
         public bool inPlace;
 
+        /// <summary>Ingresso naturale: camminando sulla soglia si entra senza
+        /// pulsanti, menu o riquadri. Usato per le abitazioni; i negozi
+        /// conservano il flusso a tap esistente.</summary>
+        public bool naturalEntry;
+
+        /// <summary>Via d'accesso. MainDoor è l'unica attiva oggi; le altre
+        /// categorie sono predisposte per finestre/garage/grondaie/furtività
+        /// future senza riscrivere il sistema.</summary>
+        public HouseAccess.EntryKind entryKind = HouseAccess.EntryKind.MainDoor;
+
+        /// <summary>Casa già assegnata a un altro proprietario: visitabile se
+        /// accessibile, mai proposta come acquistabile.</summary>
+        public bool reservedByOther;
+
+        /// <summary>Riservato a future restrizioni di accesso. Oggi nessuna
+        /// casa è restritta: tutte le abitazioni accessibili sono visitabili.</summary>
+        public bool restrictedAccess;
+
+        /// <summary>Istante dell'ultimo ingresso naturale: evita che il trigger
+        /// della porta appena varcata ridia "uscita" durante il fade.</summary>
+        private float _naturalEntryAt = -100f;
+        private bool _naturalExitHandled;
+
+        public void MarkNaturalEntryTime()
+        {
+            _naturalEntryAt = Time.time;
+            _naturalExitHandled = false;
+        }
+
         /// <summary>Per gli ingresso in-place: true per il trigger TUTTO DENTRO
         /// (che marchia il giocatore come "dentro"), false per il trigger TUTTO
         /// FUORI (che lo marchia "fuori" quando riattraversa la porta).</summary>
@@ -56,6 +85,11 @@ namespace City.Interior
         /// citta' in fase di build chunk: ~15.700 Renderer in piu'.</summary>
         public void EnsureDoorMarker()
         {
+            // Ingresso naturale: niente quad/stipiti luminosi. La porta del
+            // prefab (o il varco reale del guscio) è già visibile: un riquadro
+            // giallo segnalerebbe artificialmente un ingresso che si usa
+            // semplicemente camminandoci attraverso.
+            if (naturalEntry) return;
             // REVIEW: non escludere gli edifici in-place: prima il Quad veniva
             // creato per OGNI ingresso da BuildingPlacer.MaybeAddEntrance,
             // anche in-place. Il varco geometrico e il segnaposto coesistono.
@@ -162,6 +196,27 @@ namespace City.Interior
                 return;
             }
 
+            // ABITAZIONI: ingresso e uscita naturali. Nessun prompt, nessun tap:
+            // varcare la soglia basta. L'uscita riutilizza lo STESSO trigger
+            // della porta, con una piccola latenza dopo l'ingresso per non
+            // confondere il teleport di ingresso con un'uscita immediata.
+            if (naturalEntry && HouseAccess.IsResidential(this))
+            {
+                if (restrictedAccess && mgr != null && !mgr.IsInside) return;
+                if (mgr != null && mgr.IsInside)
+                {
+                    if (!_naturalExitHandled && Time.time - _naturalEntryAt > 1.5f)
+                    {
+                        _naturalExitHandled = true;
+                        mgr.MarkOutside(this);
+                    }
+                    return;
+                }
+                focused = false;
+                StartAutoEntry();
+                return;
+            }
+
             if (mgr != null && mgr.IsInside)
             {
                 focused = false;
@@ -181,6 +236,9 @@ namespace City.Interior
         {
             if (!other.CompareTag("Player")) return;
             if (inPlace) return; // l'uscita è gestita dal trigger "exit" fuori
+            // Ingresso naturale: nessun prompt da spegnere. L'uscita è gestita
+            // dall'OnTriggerEnter della stessa porta quando si cammina fuori.
+            if (naturalEntry && HouseAccess.IsResidential(this)) return;
 
             focused = false;
             if (Game.Instance != null)
@@ -191,6 +249,7 @@ namespace City.Interior
         public void StartAutoEntry()
         {
             if (inPlace) return;
+            if (restrictedAccess) return;
             if (autoEntryStarted) return;
             autoEntryStarted = true;
             Enter();
@@ -204,12 +263,19 @@ namespace City.Interior
                 LogEntrance("in-place: si entra attraversando la porta, tappare non serve (" + buildingName + ")");
                 return;
             }
+            if (naturalEntry && HouseAccess.IsResidential(this))
+            {
+                // Nessun tap per le case: se il giocatore ha raggiunto la porta
+                // l'ingresso è già partito dal trigger. Evita doppio fade.
+                return;
+            }
             if (autoEntryStarted) return;
             Enter();
         }
 
         private void Enter()
         {
+            if (restrictedAccess) return;
             if (City.Vehicle.VehiclePoiZone.PlayerInOpenRoomVehicle())
             {
                 LogEntrance("ingresso ignorato: dentro zona aperta veicolo (concessionaria/officina/garage, vista 3a persona)");
@@ -260,6 +326,7 @@ namespace City.Interior
                 InteriorTeleport.Move(pos, rot, g);
 
                 if (mgr != null) mgr.MarkInside(this);
+                MarkNaturalEntryTime();
                 if (fader != null)
                 {
                     yield return new WaitForSeconds(fader.duration);

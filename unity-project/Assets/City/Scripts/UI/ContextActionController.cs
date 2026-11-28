@@ -359,7 +359,10 @@ namespace City.UI
 
         private void AddInteriorActions(List<Action> outList)
         {
-            if (City.Environment.FurnitureInteract.NearBedTransform != null)
+            // Dormire avanza il tempo/progressione: azione da proprietario.
+            // Sedersi resta disponibile a chi visita (non modifica lo stato).
+            if (City.Environment.FurnitureInteract.NearBedTransform != null &&
+                City.Interior.HouseAccess.CanModifyCurrentInterior())
                 outList.Add(Make("DORMI",
                     () => City.Environment.FurnitureInteract.StartSleep()));
             else if (City.Environment.FurnitureInteract.NearSitTransform != null)

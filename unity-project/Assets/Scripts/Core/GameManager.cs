@@ -600,6 +600,17 @@ namespace Huntix.Core
                         lLng.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 }
 
+                // Nuova partita: Android segnala che NON esiste una posizione
+                // salvata. In questo caso il mondo assegna la casa iniziale e
+                // posiziona il player DENTRO; con un salvataggio la posizione
+                // resta invariata.
+                if (System.Text.RegularExpressions.Regex.IsMatch(
+                        json, "\"firstGame\"\\s*:\\s*true"))
+                {
+                    City.OSM.CityChunkedWorld.UseFirstHomeSpawn();
+                    Debug.Log("[GameManager] prima partita: spawn dentro la casa iniziale");
+                }
+
                 // Profilo grafico salvato da Android: bridge Android -> Unity.
                 // apply=false perche' e' un ripristino, non una scelta utente
                 // (non deve nascondere un altro uovo ne' re-inviare l'evento).

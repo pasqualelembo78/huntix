@@ -102,6 +102,11 @@ public class BridgeActivity extends UnityPlayerActivity {
                         j.put("spawnLat", String.format(L, "%.6f", slat));
                         j.put("spawnLng", String.format(L, "%.6f", slng));
                     }
+                    // Nuova partita vs partita salvata: il segnale arriva dal
+                    // possessore della posizione (WorldPosCloud). Unity lo usa
+                    // per nascere DENTRO la casa iniziale solo al primo avvio,
+                    // senza mai sovrascrivere un worldPos esistente.
+                    j.put("firstGame", !WorldPosCloud.INSTANCE.hasLastPosition(this));
                     String tileDir = getIntent().getStringExtra(EXTRA_TILE_CACHE_DIR);
                     if (tileDir == null || tileDir.isEmpty()) {
                         tileDir = wp.getString("tile_cache_dir", null);
