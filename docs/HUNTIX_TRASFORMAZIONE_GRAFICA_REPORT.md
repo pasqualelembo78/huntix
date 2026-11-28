@@ -2397,3 +2397,76 @@ Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 36s`; packaging e firma APK:
 - Il numero di abitazioni visitabili resta limitato dal registro e dal budget
   per chunk descritto al punto 42.4: l'open world completo richiede il piano
   case procedurali del punto 42.5.
+
+### 42.9 Fix dopo il QA su device (log 28/11/2026 12:33)
+
+Log analizzato: `log/huntix_log_20261128_123322.txt` (4 sessioni). La sessione
+decisiva è la 4ª (12:32:16, APK reinstallato alle 12:32:14): il nuovo codice è
+attivo, lo conferma il riflesso uova
+`area=città action=visita casa place=città→casa→MainDoor→Casa country di Via
+Silvio Pellico`. Nelle prime tre sessioni l'APK era ancora quello delle 07:22.
+
+**Cause trovate nel log, non ipotesi**
+
+1. *Gambe che oscillano all'avvio*: `[CharacterWalker][Ground][IK]` passa da
+   `applied=-0,14` (12:32:27.770) a `applied=-0,66` (12:32:30.022) in ~2,3 s.
+   Il filtro esponenziale partiva da 0: il bacino scendeva gradualmente e le
+   gambe facevano un paio di oscillazioni. Ora il primo campione con player a
+   terra e ossa pronte fa snap diretto al target; il filtro resta attivo solo
+   dopo (`CharacterWalker.cs`, `_hipOffsetInitialized`).
+2. *Uscita immediata*: `Entrato 12:32:45.209` → `Uscito 12:32:45.257` (48 ms).
+   La casa country entra nella tasca vittoriana con `entryLocal.z=5,15`, mentre
+   il `TriggerUscitaCountryAssetStore` sta a `z=5,85 ± 0,4`: la capsula del
+   player sovrappone già il trigger al momento del teleporto e
+   `VictorianExit.OnTriggerEnter` richiama subito `Exit()`. Aggiunta una
+   finestra di grazia di 2 s (`BuildingEntrance.NaturalEntryGraceActive`),
+   usata da `VictorianExit`, da `ExitTrigger` e dal ramo di uscita della porta.
+   L'uscita avviene solo se si attraversa davvero il volume verso l'esterno
+   (`Vector3.Dot(away, transform.forward) > 0`), anche via `OnTriggerExit`
+   quando il teleporto ha depositato il player già dentro il trigger: restare
+   fermi sulla soglia non espelle più il giocatore.
+3. *Porta non raggiungibile / collider*: il `BoxCollider` pieno copre tutta
+   l'impronta (log `PreparePrefabExterior … collider=True`), mentre il trigger
+   della porta era spesso 0,4 m e sporgeva 0,15 m: la capsula si fermava al
+   muro prima di toccarlo. Per le abitazioni il portale ora è spesso 1,4 m e
+   sporge 0,9 m (`doorT`/`protr` in `BuildingPlacer.cs`): si entra camminando
+   verso la porta, senza avvicinarsi al collider. Il ramo `naturalEntry` è
+   stato messo prima di `inPlace` e logga `soglia raggiunta: ingresso naturale`.
+4. *Pallino luminoso accanto alla casa*: non era il quad della porta (già
+   soppresso da `if (naturalEntry) return;`) ma `HouseBeacon.Attach`, chiamato
+   a prescindere dall'ingresso naturale. Ora il faro non viene creato per le
+   case a ingresso naturale; `HouseBeacon.Attach` rimuove anche un faro
+   residuo e si rifiuta di crearne uno sotto un ingresso naturale.
+
+**Verifiche dopo i fix**
+
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **419 test OK** (21 guardie housing, +4 nuove).
+- `backend/preprocessing/cscheck/check.sh`: **Compilation succeeded**, 218
+  warning preesistenti, 0 errori, `CSCHECK OK`.
+- `git diff --check`: OK.
+
+**Build finale dopo i fix**
+
+Comando: `BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1
+./build_release.sh --auto` (log `/tmp/opencode/build_housing_fixes.log`).
+Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 37s`; packaging e firma APK:
+`BUILD SUCCESSFUL in 1m 55s`.
+
+- `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
+  `62a8278fe39e5c039c1329028ab5a2c9455b8cbad433203916b7706f3ae0202f`.
+- `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `7ec1eea6a53f896451825b81e0849241849fe6907a7e83bc676a4bad6eb1d782`.
+- Firma verificata con `apksigner` (schema v3, 1 signer): certificato
+  `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  Gli SHA della build feature (`c3a4d0b4…`, `8bf3c59c…`) sono superati.
+- Artefatti collaterali riscritti da Unity (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit.
+
+**Limite noto**: la porta dei prefab resta visivamente chiusa (l'asset non viene
+modificato); l'accesso è la transizione alla soglia già prevista dal punto
+42.8, ora realmente raggiungibile. Nessun test runtime su device è stato
+eseguito dall'assistente: i tre sintomi vanno riverificati con l'APK
+rigenerato.

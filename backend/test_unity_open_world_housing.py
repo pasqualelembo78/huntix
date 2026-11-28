@@ -25,6 +25,10 @@ MANAGER = read("unity-project/Assets/City/Scripts/Interior/InteriorManager.cs")
 DOOR = read("unity-project/Assets/City/Scripts/Interior/InteriorDoor.cs")
 GENERATOR = read("unity-project/Assets/City/Scripts/Interior/InteriorGenerator.cs")
 EXIT = read("unity-project/Assets/City/Scripts/Interior/ExitTrigger.cs")
+VICTORIAN = read(
+    "unity-project/Assets/City/Scripts/Interior/Victorian/VictorianGrandInterior.cs")
+BEACON = read("unity-project/Assets/City/Scripts/Interior/Visit/HouseBeacon.cs")
+WALKER = read("unity-project/Assets/City/Scripts/Player/CharacterWalker.cs")
 FURNITURE = read("unity-project/Assets/Scripts/Indoor/FurniturePlacer.cs")
 WORLD = read("unity-project/Assets/City/Scripts/OSM/CityChunkedWorld.cs")
 GAME_MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
@@ -66,6 +70,39 @@ class TestIngressoNaturale(unittest.TestCase):
 
     def test_nessun_segnaposto_giallo_sulle_case(self):
         self.assertIn("if (naturalEntry) return;", ENTRANCE)
+
+    def test_nessun_faro_luminoso_sulle_case(self):
+        # Il "pallino affianco alla casa" era HouseBeacon, non il quad della
+        # porta: va soppresso per le case a ingresso naturale, anche a livello
+        # di Attach (chunk rigenerati).
+        self.assertIn("if (!naturalHouse)", PLACER)
+        self.assertIn("HouseBeacon.Attach(parent,", PLACER)
+        self.assertIn("entrances[i].naturalEntry", BEACON)
+        self.assertIn("Object.Destroy(child.gameObject);", BEACON)
+
+    def test_porta_raggiungibile_oltre_il_collider(self):
+        # Il BoxCollider pieno copre l'impronta: il trigger va esteso fuori
+        # dal muro, altrimenti la capsula del player non lo raggiunge.
+        self.assertIn("float doorT = naturalHouse ? 1.4f : 0.4f;", PLACER)
+        self.assertIn("float protr = naturalHouse ? 0.9f : 0.15f;", PLACER)
+        self.assertIn("if (naturalEntry && HouseAccess.IsResidential(this))", ENTRANCE)
+        self.assertIn("soglia raggiunta: ingresso naturale", ENTRANCE)
+
+    def test_nessuna_uscita_immediata_dopo_ingresso(self):
+        self.assertIn("public const float NaturalEntryGraceS", ENTRANCE)
+        self.assertIn("public bool NaturalEntryGraceActive", ENTRANCE)
+        self.assertIn("mgr.CurrentEntrance.NaturalEntryGraceActive", EXIT)
+        self.assertIn("mgr.CurrentEntrance.NaturalEntryGraceActive", VICTORIAN)
+        self.assertIn("Vector3.Dot(away, transform.forward) > 0f", VICTORIAN)
+        # Uscita a piedi anche quando il player e' gia' dentro il trigger al
+        # momento del teleporto (OnTriggerEnter e' stato ignorato dalla grazia).
+        self.assertIn("Vector3.Dot(away, transform.forward) > 0f", EXIT)
+
+    def test_ik_iniziale_senza_rampa(self):
+        # Log dispositivo: applied -0,14 → -0,66 in 2,3 s (gambe che ballano).
+        self.assertIn("private bool _hipOffsetInitialized;", WALKER)
+        self.assertIn("if (!_hipOffsetInitialized && grounded && hipsBone != null)", WALKER)
+        self.assertIn("_hipOffsetY = offset;", WALKER)
 
 
 class TestVisitaEPermessi(unittest.TestCase):

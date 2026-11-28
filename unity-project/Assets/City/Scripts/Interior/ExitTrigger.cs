@@ -23,6 +23,11 @@ namespace City.Interior
             if (!other.CompareTag("Player")) return;
             focused = true;
             var mgr = InteriorManager.Instance;
+            // Il teleport d'ingresso deposita il player vicino alla porta
+            // interna: senza grazia il trigger d'uscita scattava subito.
+            if (mgr != null && mgr.CurrentEntrance != null &&
+                mgr.CurrentEntrance.NaturalEntryGraceActive)
+                return;
             if (suppressPrompt)
             {
                 // Case a ingresso naturale: varcare la soglia interna è già
@@ -41,6 +46,17 @@ namespace City.Interior
             focused = false;
             if (InteriorManager.Instance != null)
                 InteriorManager.Instance.UnregisterInteriorAction(Interact);
+
+            // Il teleporto d'ingresso puo' depositare il player GIA' dentro il
+            // volume: in quel caso OnTriggerEnter e' stato ignorato dalla
+            // grazia. Uscire camminando oltre il lato +Z locale della porta e'
+            // comunque un'uscita reale, senza prompt ne' tap.
+            if (!suppressPrompt) return;
+            var mgr = InteriorManager.Instance;
+            if (mgr == null || !mgr.IsInside) return;
+            Vector3 away = other.transform.position - transform.position;
+            if (Vector3.Dot(away, transform.forward) > 0f)
+                mgr.ExitInterior();
         }
 
         public void Interact()

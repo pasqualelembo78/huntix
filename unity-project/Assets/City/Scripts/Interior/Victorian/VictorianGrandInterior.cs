@@ -66,10 +66,32 @@ namespace City.Interior.Victorian
     /// <summary>Uscita dalla tasca: si torna davanti alla vera porta OSM.</summary>
     public sealed class VictorianExit : MonoBehaviour
     {
+        // Il punto d'ingresso della casa country (z=5,15) sovrappone la capsula
+        // del player al trigger d'uscita (z=5,85 ± 0,4): senza grazia si usciva
+        // 48 ms dopo essere entrati (log 28/11/2026).
         private void OnTriggerEnter(Collider other)
         {
             if (other == null || !other.CompareTag("Player")) return;
+            var mgr = InteriorManager.Instance;
+            if (mgr != null && mgr.CurrentEntrance != null &&
+                mgr.CurrentEntrance.NaturalEntryGraceActive)
+            {
+                // Sovrapposizione creata dal teleporto d'ingresso, non una
+                // camminata verso la porta: resta dentro.
+                return;
+            }
             VictorianGrandInterior.Exit();
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (other == null || !other.CompareTag("Player")) return;
+            // Il player può essere già dentro il volume quando arriva dal
+            // teleporto: in quel caso OnTriggerEnter non è un'uscita, ma
+            // attraversare il volume verso l'ESTERNO (+Z locale) sì.
+            Vector3 away = other.transform.position - transform.position;
+            if (Vector3.Dot(away, transform.forward) > 0f)
+                VictorianGrandInterior.Exit();
         }
     }
 

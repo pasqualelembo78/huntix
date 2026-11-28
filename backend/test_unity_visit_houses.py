@@ -159,7 +159,11 @@ class TestPlacementOSM(unittest.TestCase):
         self.assertIn("doorYaw", PLACER)
         self.assertIn("trig.transform.localRotation = Quaternion.Euler(0f, doorYaw, 0f);",
                       PLACER)
-        self.assertIn("entrance.forceDoorMarker = visitConfigured && haveSpec;", PLACER)
+        # Le case a ingresso naturale non mostrano il portale dorato (il
+        # segnaposto veniva scambiato per un pulsante): resta solo sugli altri
+        # edifici configurati.
+        self.assertIn("entrance.forceDoorMarker = visitConfigured && haveSpec "
+                      "&& !naturalHouse;", PLACER)
         self.assertIn("public bool forceDoorMarker;", ENTRANCE)
         self.assertIn("DoorFramePart(\"StipiteSx\"", ENTRANCE)
         self.assertIn("Entrance.transform.position", GENERATOR)

@@ -914,6 +914,8 @@ namespace City.OSM
             bool shop = iType == "shop" || iType == "bar" || iType == "dealer" ||
                         iType == "clothes" || iType == "hairdresser" ||
                         iType == "dogwash" || iType == "carwash" || iType == "ticket";
+            bool naturalHouse = iType == "house" || iType == "appartamento" ||
+                                iType == "appartment" || iType == "apartment";
 
             // Lato porta: per gli edifici ordinari resta il +Z locale del
             // prefab. Per le case visitabili la sorgente e' la coppia
@@ -922,9 +924,14 @@ namespace City.OSM
             // vicino all'angolo ovest di Via Silvio Pellico, quindi la
             // posizione lungo il muro conta quanto il lato.
             const float doorW = 2.4f;     // larghezza porta (mondo)
-            const float doorT = 0.4f;     // spessore fascia porta (mondo)
-            const float protr = 0.15f;    // sporgenza oltre il muro (mondo)
             const float doorCenterY = 1.0f; // altezza centro porta (mondo)
+            // Le abitazioni hanno il BoxCollider solido su TUTTA l'impronta:
+            // la vecchia fascia (0,4 m di spessore, 0,15 m di sporgenza) era
+            // oltre il muro e la capsula del player si fermava prima di
+            // toccarla. Il trigger va esteso VERSO L'ESTERNO: si entra
+            // camminando verso la porta, senza avvicinarsi al collider.
+            float doorT = naturalHouse ? 1.4f : 0.4f;  // spessore (mondo)
+            float protr = naturalHouse ? 0.9f : 0.15f; // sporgenza (mondo)
 
             City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
             bool haveSpec = City.Interior.Visit.VisitInteriorRegistry.TryGet(
@@ -1001,22 +1008,26 @@ namespace City.OSM
             entrance.buildingType = iType;
             // Case/appartamenti: si entra camminando, senza pulsante né riquadro.
             // I negozi conservano il tap (hanno un bancone, non la proprietà).
-            entrance.naturalEntry = iType == "house" || iType == "appartamento" ||
-                                    iType == "appartment" || iType == "apartment";
+            entrance.naturalEntry = naturalHouse;
             entrance.entryKind = City.Interior.HouseAccess.EntryKind.MainDoor;
             entrance.buildingName = FriendlyBuildingName(iType, b.id);
             entrance.osmId = b.id;
-            entrance.forceDoorMarker = visitConfigured && haveSpec;
+            // Nessun riquadro/Stipite luminoso sulle case: si entra camminando,
+            // non con un tap su un segnaposto.
+            entrance.forceDoorMarker = visitConfigured && haveSpec && !naturalHouse;
             if (entrance.forceDoorMarker) entrance.EnsureDoorMarker();
             if (visitConfigured && haveSpec)
             {
                 entrance.buildingName = visitSpec.label;
-                // La casa deve essere riconoscibile da lontano: faro pulsante
-                // come le uova, agganciato al chunk NON scalato (il transform
-                // dell'edificio ha scala non uniforme e deformerebbe l'alone).
-                City.Interior.Visit.HouseBeacon.Attach(parent,
-                    parent.InverseTransformPoint(trig.transform.position),
-                    visitSpec.label);
+                // Niente pallino luminoso accanto alle case a ingresso naturale:
+                // il faro segnalava un'azione a tap che non esiste più. La porta
+                // del prefab è già visibile e il trigger è raggiungibile a piedi.
+                if (!naturalHouse)
+                {
+                    City.Interior.Visit.HouseBeacon.Attach(parent,
+                        parent.InverseTransformPoint(trig.transform.position),
+                        visitSpec.label);
+                }
             }
             entrance.buildingWidth = w;
             entrance.buildingDepth = d;

@@ -27,10 +27,19 @@ namespace City.Interior.Visit
         public static void Attach(Transform parent, Vector3 localDoor, string label)
         {
             if (parent == null) return;
-            for (int i = 0; i < parent.childCount; i++)
+            // Una casa con ingresso naturale NON ha faro: la porta è visibile
+            // e l'ingresso avviene camminandoci verso. Rimuove anche un faro
+            // lasciato da una build precedente dello stesso chunk.
+            for (int i = parent.childCount - 1; i >= 0; i--)
             {
-                if (parent.GetChild(i).name.StartsWith(RootName,
-                        System.StringComparison.Ordinal)) return;
+                var child = parent.GetChild(i);
+                if (child.name.StartsWith(RootName, System.StringComparison.Ordinal))
+                    Object.Destroy(child.gameObject);
+            }
+            var entrances = parent.GetComponentsInChildren<BuildingEntrance>(true);
+            for (int i = 0; i < entrances.Length; i++)
+            {
+                if (entrances[i] != null && entrances[i].naturalEntry) return;
             }
 
             var go = new GameObject(RootName + "_" + (label ?? "casa"));

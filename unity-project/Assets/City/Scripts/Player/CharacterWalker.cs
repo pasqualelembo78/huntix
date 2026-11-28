@@ -71,6 +71,11 @@ namespace City.Player
         private Vector3 _ikPosL, _ikPosR;
         private Quaternion _ikRotL, _ikRotR;
         private float _hipOffsetY;
+        // Il primo frame IK deve partire GIA' alla quota corretta. Il filtro
+        // esponenziale partiva da 0 e impiegava ~2,3 s per raggiungere -0,65
+        // (log device 12:32:27 applied=-0,14 → 12:32:30 applied=-0,66): in
+        // quel tempo le gambe si vedevano oscillare "su e giù" all'avvio.
+        private bool _hipOffsetInitialized;
         private float _hipsBaseY = float.NaN;
         // OnAnimatorIK puo' essere chiamato piu' volte nello stesso frame se il
         // controller ha piu' layer con IK Pass. bodyPosition e' ADDITIVO (viene
@@ -502,8 +507,18 @@ namespace City.Player
             // snap istantaneo del bacino a ogni frame. 1-exp(-k*dt) resta <1
             // e mantiene la stessa costante di tempo a qualsiasi frame rate.
             float ikDt = Mathf.Min(Time.deltaTime, MaxIkStepS);
-            _hipOffsetY += (offset - _hipOffsetY) *
-                (1f - (float)System.Math.Exp(-ikSmoothSpeed * ikDt));
+            if (!_hipOffsetInitialized && grounded && hipsBone != null)
+            {
+                // Primo campione attendibile (player spawnato, a terra,
+                // legSpan misurato): snap diretto, nessuna rampa all'avvio.
+                _hipOffsetY = offset;
+                _hipOffsetInitialized = true;
+            }
+            else if (_hipOffsetInitialized)
+            {
+                _hipOffsetY += (offset - _hipOffsetY) *
+                    (1f - (float)System.Math.Exp(-ikSmoothSpeed * ikDt));
+            }
 
             // FIX COORDINAMENTO IK (galleggiamento): su un avatar HUMANOID
             // Unity ricompone la posa degli ossi DOPO OnAnimatorIK partendo da

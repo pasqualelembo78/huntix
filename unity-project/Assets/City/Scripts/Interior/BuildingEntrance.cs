@@ -54,6 +54,18 @@ namespace City.Interior
         private float _naturalEntryAt = -100f;
         private bool _naturalExitHandled;
 
+        /// <summary>Finestra di grazia dopo l'ingresso. Il teleporto di ingresso
+        /// lascia il giocatore dentro i trigger d'uscita (quello dell'interno e
+        /// soprattutto quello della tasca vittoriana: entryLocal z=5,15 contro
+        /// exit trigger z=5,85±0,4). Senza questa guardia l'uscita scattava
+        /// 48 ms dopo l'entrata (log 12:32:45.209 → 12:32:45.257).</summary>
+        public const float NaturalEntryGraceS = 2f;
+
+        /// <summary>True finché un'uscita automatica va ignorata dopo l'ingresso
+        /// naturale. Usata sia da ExitTrigger sia da VictorianExit.</summary>
+        public bool NaturalEntryGraceActive =>
+            Time.time - _naturalEntryAt < NaturalEntryGraceS;
+
         public void MarkNaturalEntryTime()
         {
             _naturalEntryAt = Time.time;
@@ -172,6 +184,29 @@ namespace City.Interior
 
             var mgr = InteriorManager.Instance;
 
+            // ABITAZIONI: ingresso e uscita naturali. Nessun prompt, nessun tap:
+            // varcare la soglia basta. Questo ramo va PRIMA di inPlace: una casa
+            // con ingresso naturale non deve mai finire nel percorso "varco
+            // fisico" dei gusci, che non prevede il fade della porta prefab.
+            if (naturalEntry && HouseAccess.IsResidential(this))
+            {
+                if (restrictedAccess && mgr != null && !mgr.IsInside) return;
+                if (mgr != null && mgr.IsInside)
+                {
+                    if (!_naturalExitHandled &&
+                        Time.time - _naturalEntryAt > NaturalEntryGraceS)
+                    {
+                        _naturalExitHandled = true;
+                        mgr.MarkOutside(this);
+                    }
+                    return;
+                }
+                focused = false;
+                LogEntrance("soglia raggiunta: ingresso naturale (" + buildingName + ")");
+                StartAutoEntry();
+                return;
+            }
+
             // Edificio IN-PLACE: il passaggio fisico attraverso la porta è
             // l'ingresso/uscita. Il trigger "entry" (dentro) marca dentro, il
             // trigger "exit" (fuori) marca fuori quando ci si affaccia.
@@ -193,27 +228,6 @@ namespace City.Interior
                 {
                     if (mgr != null && !mgr.IsInside) mgr.MarkInside(this);
                 }
-                return;
-            }
-
-            // ABITAZIONI: ingresso e uscita naturali. Nessun prompt, nessun tap:
-            // varcare la soglia basta. L'uscita riutilizza lo STESSO trigger
-            // della porta, con una piccola latenza dopo l'ingresso per non
-            // confondere il teleport di ingresso con un'uscita immediata.
-            if (naturalEntry && HouseAccess.IsResidential(this))
-            {
-                if (restrictedAccess && mgr != null && !mgr.IsInside) return;
-                if (mgr != null && mgr.IsInside)
-                {
-                    if (!_naturalExitHandled && Time.time - _naturalEntryAt > 1.5f)
-                    {
-                        _naturalExitHandled = true;
-                        mgr.MarkOutside(this);
-                    }
-                    return;
-                }
-                focused = false;
-                StartAutoEntry();
                 return;
             }
 
