@@ -2313,3 +2313,87 @@ export + AAR Il2Cpp `BUILD SUCCESSFUL in 5m`
   `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
   inclusi nel commit. SHA precedenti (`b72bc466…`, `79850571…`,
   `4e218fa2…`, `c5b78333…`) sono superati.
+
+### 42.8 Open world abitativo: ingresso camminando, visita, acquisto interno e spawn iniziale (28/11/2026)
+
+Commit `2fbc7e3d` (*Case open world: ingresso camminando, visita e acquisto
+dall'interno*), pushato su `main`, `master`, `case-brookhaven` e
+`integrazione-open-source`. Backup completo pre-modifica in
+`/tmp/opencode/housing_backup_20261128` (35 file + `HEAD.txt`/`status.txt`).
+
+**Comportamento introdotto**
+
+- Le abitazioni OSM (`house`, `appartamento`, `appartment`, `apartment`)
+  marcate `naturalEntry` non mostrano più il prompt «ENTRA IN CASA» né il
+  segnaposto giallo: `Game.OnEntranceFocusChanged` chiama `ui.HideInteract()` e
+  l'ingresso parte camminando sulla soglia. Le porte interne usano
+  `InteriorDoor.autoOpen` con lo stesso pivot/angolo di sempre; l'uscita è
+  silenziosa (`ExitTrigger.suppressPrompt` richiama `mgr.ExitInterior()`).
+- Qualsiasi casa visitabile è esplorabile come ospite senza acquisto. Il ruolo
+  deriva da `HomeSystem.IsThisHome` (nessun secondo registro di proprietà):
+  `FurniturePlacer` e l'azione `DORMI` sono bloccate per i visitatori tramite
+  `HouseAccess.CanPlaceFurniture()`/`CanModifyCurrentInterior()`, mentre
+  `SEDUTI` resta disponibile. I permessi sono verificati nella logica, non
+  solo nell'UI.
+- L'acquisto avviene dentro casa con la targhetta contestuale
+  `HousePurchaseSpot`, che riutilizza `HomeSystem.Buy`, `Wallet.TrySpend` e
+  `HomeCost = 900`; prima casa gratuita una tantum registrata da
+  `CityGlobalAreasBridge.RecordFirstHomeFree`. Fondi insufficienti o casa già
+  posseduta bloccano l'acquisto. Nessuna agenzia/NPC/concessionaria obbligatoria.
+- Nuova partita: Android invia `firstGame` (`WorldPosCloud.hasLastPosition`),
+  `GameManager` lo inoltra a `CityChunkedWorld.UseFirstHomeSpawn()`, che
+  assegna la casa iniziale (OSM `405221437`, interno `mainIndoor01`) con
+  `HomeSystem.Buy` e fa partire `EnterInitialHomeRoutine`. Le partite con
+  `worldPos` salvato non vengono mai sovrascritte.
+- Riflesso uova mantenuto: ingresso/acquisto registrano indizio con luogo
+  testuale e coordinate reali (`HouseAccess.NoteEntry` →
+  `CityGlobalAreasBridge.Record`), senza duplicare i 9 nascondigli
+  `casa-osm-<id>:...`. `EntryKind` (`MainDoor`, `Window`, `Garage`, `Gutter`,
+  `Stealth`) è la base modulare per futuri ingressi/furti, non implementati ora.
+
+**Non toccati**: DEM/geo/graph, `TileClient.CacheVersion` (resta 5), ponti e
+snapshot Android, telecamera terza persona, uova e vecchio flusso tap/teleport
+per gli edifici non residenziali. Nessun asset duplicato e nessuna nuova
+valuta.
+
+**Verifiche statiche**
+
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **415 test OK**, 1 warning preesistente di pytest/dash.
+- `backend/test_unity_open_world_housing.py`: **17 test OK** (guardie su
+  ingresso senza prompt, permessi, acquisto interno, spawn e riflesso uova).
+- `backend/preprocessing/cscheck/check.sh`: **Compilation succeeded**,
+  218 warning preesistenti, 0 errori, `CSCHECK OK`.
+- `git diff --check`: OK.
+
+**Build finale della feature**
+
+Comando: `BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1
+./build_release.sh --auto` (log `/tmp/opencode/build_open_world_housing_aar.log`).
+Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 36s`; packaging e firma APK:
+`BUILD SUCCESSFUL in 5m 10s`.
+
+- `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
+  `c3a4d0b4836ae6ace1f299e343e90166b4c4b3059002d3faa726e539cfa01f9a`.
+- `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `8bf3c59cd65a71fe8b48509d81cd1b297174ef53ae296026dea1ad62bec69ee6`.
+- Firma verificata con `apksigner` (schema v3, 1 signer):
+  certificato `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  SHA precedenti (`413ddbbb…`, `bfc9f277…`) sono superati.
+- Artefatti collaterali riscritti da Unity (`link.xml`, `link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit.
+
+**Limiti residue / QA su dispositivo**
+
+- I test runtime Unity su dispositivo reale **non sono stati eseguiti** in
+  questa sessione: il comportamento delle porte, dei collider e della camera
+  in movimento va provato a piedi su un device.
+- Per i gusci in-place il passaggio è fisico continuo; per le case prefab con
+  porta modellata solida resta una transizione automatica alla soglia: va
+  verificata e, se il passaggio continuo è possibile, sostituita con apertura
+  fisica senza salto.
+- Il numero di abitazioni visitabili resta limitato dal registro e dal budget
+  per chunk descritto al punto 42.4: l'open world completo richiede il piano
+  case procedurali del punto 42.5.
