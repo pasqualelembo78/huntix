@@ -1454,6 +1454,13 @@ private const float TerrainPhysxTimeoutS = 15f;
             var rsm = City.Afterlife.RealmSceneManager.Instance;
             if (rsm != null && rsm.ActiveRealm != null) return;
 
+            // La tasca vittoriana e' 1000 m SOTTO il mondo per progetto: il
+            // player e' "sotto il mondo" ma e' in piedi sul pavimento della
+            // casa. La sonda partiva da dem+150 e trovava il marciapiedi in
+            // superficie, rispedendo il giocatore fuori 3 ms dopo l'ingresso
+            // (log 28/11 16:34:11.752). Nessun rescue finche' la tasca e' attiva.
+            if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket) return;
+
             if (Time.unscaledTime < _nextGroundProbe) return;
             _nextGroundProbe = Time.unscaledTime + 2f;
             if (Manager == null || Manager.target == null) return;

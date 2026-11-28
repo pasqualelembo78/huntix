@@ -228,6 +228,39 @@ class TestQA2IngressoECaduta(unittest.TestCase):
         self.assertNotIn("Mathf.Infinity, frameDt", PLAYER)
 
 
+class TestEsternoStabileERescueTasca(unittest.TestCase):
+    """Guardie del QA 28/11 16:34: la casa di Unity spariva avvicinandosi e
+    compariva il guscio/interior vecchio; il rescue rimandava fuori dalla
+    tasca vittoriana; il prefab CC0 aveva lo script HouseSlots mancante."""
+
+    def test_esterno_dedicato_non_sostituito_dalla_visita(self):
+        self.assertIn("private bool _preserveExteriorDuringVisit;", GENERATOR)
+        self.assertIn("public void SetPreserveExteriorDuringVisit(bool preserve)", GENERATOR)
+        self.assertIn("if (!show && _preserveExteriorDuringVisit) return;", GENERATOR)
+        self.assertIn("gen.SetPreserveExteriorDuringVisit(customExterior && dedicatedInterior);",
+                      PLACER)
+        self.assertIn("TryGetInteriorPrefab(", PLACER)
+        # Il percorso storico degli altri prefab resta intatto.
+        self.assertIn("gen.SetPrefabExteriorVisible(false);", ENTRANCE)
+        self.assertIn("gen.SetPrefabExteriorVisible(true);", MANAGER)
+
+    def test_rescue_non_estrae_dalla_tasca(self):
+        self.assertIn(
+            "if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket) return;",
+            WORLD)
+        rescue = WORLD.split("private void GroundProbeAndRescue()")[1]
+        pocket_guard = rescue.index("IsInsidePocket")
+        teleport = rescue.index("gc.TeleportPlayer(dest, rot)")
+        self.assertLess(pocket_guard, teleport)
+
+    def test_prefab_cc0_con_script_house_slots(self):
+        prefab = read("unity-project/Assets/Resources/HouseInteriors/CasaVisitabileCC0.prefab")
+        meta = read("unity-project/Assets/City/Scripts/Interior/Visit/HouseSlot.cs.meta")
+        guid = meta.split("guid: ")[1].splitlines()[0].strip()
+        self.assertIn("m_Script: {fileID: 11500000, guid: " + guid + ", type: 3}", prefab)
+        self.assertNotIn("m_Script: {fileID: 0}", prefab)
+
+
 class TestConservazione(unittest.TestCase):
     def test_sistemi_esistenti_intatti(self):
         self.assertIn("public bool inPlace;", ENTRANCE)

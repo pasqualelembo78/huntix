@@ -2554,3 +2554,91 @@ Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 39s`; packaging e firma APK:
 missing!` già presenti prima di questi fix: non dimostrano da soli la mancata
 porta e non sono stati toccati. Nessun test runtime su device eseguito
 dall'assistente: i tre sintomi vanno riverificati con l'APK rigenerato.
+
+### 42.11 Terzo QA su device: esterno stabile, rescue nella tasca, prefab CC0 (28/11/2026 16:34)
+
+Log analizzato: `log/huntix_log_20261128_163422.txt`, sessione 4/4 (riga
+10889; APK installato `16:25:52.266`, avvio `16:26:18.379`). Le prime tre
+sessioni appartengono a build precedenti e non sono state usate come prova.
+
+**Prove tratte dal log (non ipotesi)**
+
+1. *Ingresso naturale ormai funzionante*: `16:34:11.739`
+   `[BuildingEntrance] soglia raggiunta: ingresso naturale (Casa country di Via
+   Silvio Pellico)`, `16:34:11.748` `visita casa: … (OSM 405221437)` e
+   `16:34:11.749` `ingresso tasca vittoriana`. Il percorso aggiunto nella §42.9
+   resta valido e non è stato toccato.
+2. *Rescue che estrae dalla casa*: `16:34:11.752`
+   `Teleport invio (1,3,6,8) y=-997,89 -> (1,3,6,8) y=4,09` e `16:34:11.755`
+   `SALVATAGGIO: player sotto il mondo (y=-997.9) -> (1.3,6.8) via
+   superficie=Pavimento`. La tasca vittoriana sta 1000 m **sotto** il mondo per
+   progetto: la sonda partiva da `dem+150`, trovava il marciapiedi in
+   superficie e rispediva il giocatore fuori 3 ms dopo l'ingresso. `gRef` era
+   `-998,75` (valore finito, non NaN).
+3. *Scambio dell'esterno avvicinandosi*: `BuildingEntrance.EnterPrefab` chiama
+   `gen.SetPrefabExteriorVisible(false)`, che nasconde tutti i Renderer fuori
+   da `_interiorRoot` e accende l'interno generico HUNTIX. Per la casa con
+   guscio eroe dedicato (`shell=64x14x7`) questo faceva sparire la facciata
+   CountryHouse durante il fade e apparire il "vecchia casa" procedurale.
+   `LegacyVillaStretchDress=false`: non era il vecchio dressing GrandHouse,
+   ma l'interno/guscio universale.
+4. *Script mancante nel prefab*: ripetuto
+   `The referenced script on this Behaviour (Game Object 'CasaVisitabileCC0')
+   is missing!`; `CasaVisitabileCC0.prefab` aveva `m_Script: {fileID: 0}`,
+   mentre `HouseSlot.cs.meta` dichiara il GUID
+   `43957547a3bbb836dda698c825f9ee5c`.
+
+**Fix applicati (additivi, nessun sistema rimosso)**
+
+- `InteriorGenerator.cs`: nuovo flag `PreserveExteriorDuringVisit` e guardia
+  in `SetPrefabExteriorVisible(false)`. Le altre case conservano il percorso
+  storico; `show=true` resta sempre consentito.
+- `BuildingPlacer.cs`: il flag si accende solo per `customExterior &&
+  dedicatedInterior`, cioè guscio Asset Store + interno dedicato del registro.
+- `CityChunkedWorld.cs`: `GroundProbeAndRescue()` esce subito se
+  `VictorianGrandInterior.IsInsidePocket`, prima di qualsiasi teleporto.
+- `CasaVisitabileCC0.prefab`: ripristinato il GUID di `HouseSlots` (lo script
+  esistente `HouseSlot.cs` non è stato modificato).
+- `backend/test_unity_open_world_housing.py`: tre nuove guardie statiche per
+  esterno preservato, rescue in tasca e prefab con script valido.
+
+Il punto di acquisto resta dentro la casa visitabile: `ActiveInteriorRoot`
+ritorna la radice della tasca quando il player è dentro e la tasca è figlia del
+generatore (non del `_interiorRoot` spento), quindi
+`HousePurchaseSpot.Install(ActiveInteriorRoot, e)` continua a funzionare senza
+modifiche. Le uova della tasca restano sincronizzate dal bridge esistente.
+
+**Verifiche**
+
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **429 test OK** (31 guardie housing, +3 nuove).
+- `backend/preprocessing/cscheck/check.sh`: **Compilation succeeded**, 218
+  warning preesistenti, 0 errori, `CSCHECK OK`.
+- `git diff --check`: OK.
+- Il freeze `frame=323261,8ms` alle `16:32:48.675` è un filone separato: non
+  c'è alcuna Exception/NullReference nel log e non va mescolato con i tre
+  sintomi qui corretti.
+
+**Build e firma dopo i fix**
+
+Comando: `BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1
+./build_release.sh --auto` (log `/tmp/opencode/build_housing_exterior.log`).
+Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 36s`; packaging e firma APK:
+`BUILD SUCCESSFUL in 1m 52s`.
+
+- `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
+  `355503d4ed8c8543a346fbf196e4f86c0fac05405482a406a704da2843022381`.
+- `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `05fb97b2949c631aad31d50f6a200e12322bcb55179599ce9848a46a5f359059`.
+- Firma verificata con `apksigner` (schema v3, 1 signer): certificato
+  `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  Gli SHA della build della §42.10 (`403170d1…`, `42a3d206…`) sono superati.
+- Artefatti collaterali riscritti da Unity (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit.
+
+**Limite noto**: il runtime su device non è eseguibile dall'assistente.
+Vanno riverificati con l'APK rigenerato: (1) avvicinamento alla porta senza
+cambio di facciata, (2) permanenza dentro la tasca senza rescue, (3) presenza
+dell'avviso di acquisto e delle uova dentro la casa.

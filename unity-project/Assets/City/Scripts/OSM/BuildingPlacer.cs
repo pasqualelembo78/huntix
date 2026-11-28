@@ -874,6 +874,16 @@ namespace City.OSM
                     box);
                 gen.SetEntrance(entranceComp);
                 gen.SetOsmId(b.id);
+                // Esterno stabile per il guscio eroe: la visita usa l'interno
+                // originale dell'Asset Store nella tasca, non l'interno
+                // procedurale HUNTIX. Nascondere la facciata in ingresso faceva
+                // apparire la "vecchia casa" già avvicinandosi al muro.
+                string dedicatedInteriorResource;
+                bool dedicatedInterior =
+                    City.Interior.Visit.VisitInteriorRegistry.TryGetInteriorPrefab(
+                        b.id, out dedicatedInteriorResource) &&
+                    !string.IsNullOrEmpty(dedicatedInteriorResource);
+                gen.SetPreserveExteriorDuringVisit(customExterior && dedicatedInterior);
             }
             OsmDiag.LogDebug("[Building][Done] id=" + b.id + " scale=" + sx.ToString("F2") +
                 "x" + sy.ToString("F2") + "x" + sz.ToString("F2") +

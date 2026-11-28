@@ -111,6 +111,25 @@ namespace City.Interior
         private Transform _interiorRoot;
         private Collider _prefabCollider;
 
+        /// <summary>Case con guscio eroe dedicato e interno originale (es. la
+        /// Country House dell'Asset Store): la visita NON sostituisce l'esterno
+        /// Unity con il guscio/interior generico HUNTIX. Il player visita la
+        /// tasca dedicata 1000 m sotto il mondo, quindi non c'e' nessun motivo
+        /// fisico di nascondere la facciata: il cambio visivo avveniva invece
+        /// durante il fade d'ingresso, percepito come "sparisce la casa di
+        /// Unity e appare la vecchia casa" avvicinandosi alla porta.</summary>
+        private bool _preserveExteriorDuringVisit;
+
+        public bool PreserveExteriorDuringVisit
+        {
+            get { return _preserveExteriorDuringVisit; }
+        }
+
+        public void SetPreserveExteriorDuringVisit(bool preserve)
+        {
+            _preserveExteriorDuringVisit = preserve;
+        }
+
         /// <summary>Ingresso canonico dell'edificio (in-place, quello "dentro").
         /// Impostato da BuildingPlacer dopo la creazione dei trigger porta.</summary>
         public BuildingEntrance Entrance { get; private set; }
@@ -570,6 +589,12 @@ namespace City.Interior
         /// (utile mentre il player e' dentro l'edificio).</summary>
         public void SetPrefabExteriorVisible(bool show)
         {
+            // Le case dedicate restano visibili dentro e fuori: nascondere i
+            // renderer del prefab qui faceva comparire l'interno generico
+            // ("vecchia casa") già durante l'avvicinamento alla facciata.
+            // Mostrare l'esterno (show=true) resta sempre consentito, anche
+            // dopo un'uscita o un rebuild del chunk.
+            if (!show && _preserveExteriorDuringVisit) return;
             SetInteriorRootActive(!show);
             var rends = GetComponentsInChildren<Renderer>(true);
             for (int i = 0; i < rends.Length; i++)
