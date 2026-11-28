@@ -2193,9 +2193,24 @@ registro (sei a Via Silvio Pellico + quella di Roma) hanno sempre porta e non
 consumano budget. Nessun sistema è stato
 rimosso dal codice: basta portare la costante a `false` per tornare indietro.
 
-**Non toccati**: interno da 300 mq, 9 uova, `ContainerEgg`, `HouseVisitState`,
-coordinati Android, `City.Player.CameraRig`, bridge bidirezionale, DEM,
-geo/graph, `TileClient.CacheVersion` (resta 5).
+**Correzione 28/11/2026 (interno Asset Store)**: il proprietario ha chiarito
+che per la casa eroe non basta il guscio esterno: **l'interno deve essere
+quello originale dell'Asset Store**. Dal prefab `CountryHouse_Prefab` è stato
+estratto il ramo `mainIndoor01` (stanze `Room01/02/05/08/09`, `hallway`,
+pavimento/soffitto/porte/arredi, 15 collider) in
+`CountryHouse_Interior.prefab`, senza modificare l'asset sorgente.
+`VisitInteriorRegistry.Spec.interiorPrefab` e `TryGetInteriorPrefab` collegano
+l'OSM `405221437` a quel prefab; `VictorianGrandInterior.BuildVilla` apre
+l'interno Asset Store per la casa eroe, con 9 uova e 9 zone collocate nelle
+stanze reali (`FinalizeCountryInterior`). Le altre sei case configurate
+conservano la villa HUNTIX da 300 mq. I materiali Standard vengono clonati e
+convertiti a URP solo sull'istanza, così i sorgenti restano intatti.
+Camera GTA (profilo 5 m/2,4 m/18° per il piano unico), `ContainerEgg`,
+`HouseVisitState`, i 9 uova, il bridge e i coordinati Android restano
+invariati.
+
+**Non toccati**: DEM, geo/graph, `TileClient.CacheVersion` (resta 5),
+ponti Android, logica di diario/contatore e formati snapshot.
 
 ### 42.3 Aspetto esterno dopo la pulizia
 
@@ -2226,8 +2241,9 @@ Il vincolo è il peso, non la geometria: una casa Asset Store unica con texture
 modello unico salvato per edificio.
 
 1. **Case eroi (già pronte)** — pochi modelli reali, one per luogo speciale.
-   Oggi uno (Сountry House FREE); se ne aggiungeranno altri solo con licenza
-   CC0/CC BY o EULA Asset Store, sempre attribuiti.
+   Oggi uno (Сountry House FREE), con esterno **e interno** dell'Asset Store.
+   Se ne aggiungeranno altri solo con licenza CC0/CC BY o EULA Asset Store,
+   sempre attribuiti.
 2. **Ogni edificio OSM riceve una `Spec` procedurale** — `osmId`, porta e
    centro derivati dal record geo già presente in tile (`b.c`, `b.d`, `b.r`),
    senza nuove coordinate inventate e senza toccare geo/graph. La chiave uovo
@@ -2254,11 +2270,13 @@ modello unico salvato per edificio.
 ### 42.6 Verifiche di questa pulizia
 
 - `python3 -m pytest backend -q --ignore=backend/test_security.py`:
-  **397 test OK**, 1 warning preesistente di pytest/dash.
+  **398 test OK**, 1 warning preesistente di pytest/dash.
 - `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori.
 - `git diff --check`: OK.
-- Guardie aggiornate: `backend/test_unity_house_assets.py` (8 test) verifica
-  un solo guscio eroe, assenza dei cinque FBX, stiramento spento e
+- Guardie aggiornate: `backend/test_unity_house_assets.py` (9 test) verifica
+  un solo guscio eroe, assenza dei cinque FBX, il prefab `mainIndoor01`
+  dell'asset come interno giocabile con uova `casa-osm-<id>:...`,
+  materiali clonati a runtime, stiramento spento e
   `RemoveBuildingsWithoutEntrance = true`; le guardie storiche di
   `test_unity_victorian_interior.py` e `test_unity_visit_houses.py` ora
   controllano che il vecchio behavior sia presente ma disattivato.
@@ -2278,13 +2296,20 @@ riutilizzabile, non dati del progetto) il packaging è stato ripetuto con
 `SKIP_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh --auto`
 e l'AAR già prodotto dalla sorgente corrente: `BUILD SUCCESSFUL in 1m 34s`.
 
+**Ricostruzione dopo l'interno Asset Store (28/11/2026)**: stesso comando,
+export + AAR Il2Cpp `BUILD SUCCESSFUL in 5m`
+(log `/tmp/opencode/build_assetstore_interior_aar.log`), packaging
+`BUILD SUCCESSFUL in 1m 17s`
+(log `/tmp/opencode/build_assetstore_interior_apk.log`).
+
 - `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
-  `4e218fa203621237f57244e03f7806ca5b8ed42f1a61a41e22ce87267a74561a`.
+  `413ddbbb7929b004780f91ac94071761b9a7cea1d8fe22d17cdcb915aa0225df`.
 - `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
-  `c5b78333b0fbcdd6307715ff1bcdddf6dce0c69c784c8b77cc7b3c376e655374`.
-- APK firmato e verificato con `apksigner` 34.0.0: certificato
-  `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`,
+  `bfc9f277f898d21b1328a4eb2d57a6361850d8ca418f1c260bc605c53ebd4b0d`.
+- APK firmato e verificato con `apksigner` 34.0.0 (schema v3, 1 signer):
+  certificato `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`,
   SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
-- Artefatti collaterali rigenerati da Unity (`link.xml`, `.meta`,
+- Artefatti collaterali rigenerati da Unity (`link.xml.meta`,
   `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
-  inclusi nel commit. SHA precedenti (`b72bc466…`, `79850571…`) sono superati.
+  inclusi nel commit. SHA precedenti (`b72bc466…`, `79850571…`,
+  `4e218fa2…`, `c5b78333…`) sono superati.

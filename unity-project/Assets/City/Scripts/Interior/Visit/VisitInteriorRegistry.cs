@@ -53,6 +53,13 @@ namespace City.Interior.Visit
             /// estensione). Se vuoto si usa il guscio procedurale condiviso,
             /// senza stiramento a 10,5 m né vestizione GrandHouseExterior.</summary>
             public string exteriorPrefab = "";
+
+            /// <summary>Percorso Resources dell'INTERNO dedicato (senza
+            /// estensione). Se vuoto la casa usa l'interno HUNTIX da 300 mq.
+            /// Se presente, VictorianGrandInterior apre quel prefab: per la
+            /// casa Сountry House FREE e' il ramo `mainIndoor01` originale
+            /// dell'Asset Store, con le 9 uova collocate nelle sue stanze.</summary>
+            public string interiorPrefab = "";
         }
 
         /// <summary>
@@ -135,7 +142,8 @@ namespace City.Interior.Visit
                 lng = 15.5379497,
                 centerLat = 41.4554042,
                 centerLng = 15.5377034,
-                exteriorPrefab = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab"
+                exteriorPrefab = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab",
+                interiorPrefab = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Interior"
             },
             new Spec
             {
@@ -181,6 +189,22 @@ namespace City.Interior.Visit
                 !string.IsNullOrEmpty(spec.exteriorPrefab))
             {
                 resource = spec.exteriorPrefab;
+                return true;
+            }
+            resource = "";
+            return false;
+        }
+
+        /// <summary>Risorsa Resources dell'INTERNO dedicato, se configurata.
+        /// La casa Сountry House FREE apre il prefab estratto dall'Asset Store;
+        /// tutte le altre case configurate conservano la villa da 300 mq.</summary>
+        public static bool TryGetInteriorPrefab(long osmId, out string resource)
+        {
+            Spec spec;
+            if (TryGet(osmId, out spec) && spec != null &&
+                !string.IsNullOrEmpty(spec.interiorPrefab))
+            {
+                resource = spec.interiorPrefab;
                 return true;
             }
             resource = "";

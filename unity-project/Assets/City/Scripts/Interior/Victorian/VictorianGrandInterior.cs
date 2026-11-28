@@ -32,6 +32,17 @@ namespace City.Interior.Victorian
         public bool grand = false;
         public long osmId = 0L;
 
+        /// <summary>Interno dedicato dell'Asset Store (percorso Resources).
+        /// Quando e' impostato la tasca NON usa la villa HUNTIX da 300 mq:
+        /// apre il ramo `mainIndoor01` originale della casa Сountry House FREE.
+        /// Le altre case configurate restano sulla villa 300 mq.</summary>
+        public string interiorPrefab = "";
+
+        public bool AssetInterior
+        {
+            get { return !string.IsNullOrEmpty(interiorPrefab); }
+        }
+
         private void OnDisable()
         {
             // Chunk scaricato mentre il player è dentro: riporta il giocatore
@@ -116,6 +127,10 @@ namespace City.Interior.Victorian
             long osmId = entrance != null ? entrance.osmId : 0L;
             bool grand = osmId != 0L &&
                 City.Interior.Visit.VisitInteriorRegistry.IsConfigured(osmId);
+            string assetInterior = "";
+            if (osmId != 0L)
+                City.Interior.Visit.VisitInteriorRegistry.TryGetInteriorPrefab(
+                    osmId, out assetInterior);
 
             // Centro della tasca in world-space: sotto la casa, non dentro al
             // guscio. La radice è figlia del GENERATORE, non del Floor_0: con
@@ -138,12 +153,18 @@ namespace City.Interior.Victorian
             pocket.doorForward = forward;
             pocket.osmId = osmId;
             pocket.grand = grand;
-            // La villa da 300 mq è compatta (10 x 10 m per piano): l'ingresso
-            // sta davanti alla porta, non in fondo al salone da 164 m.
-            pocket.entryLocal = grand ? new Vector3(0f, 1.15f, 3.2f)
-                                      : new Vector3(0f, 1.1f, 42f);
-            pocket.exitLocal = grand ? new Vector3(0f, 1.15f, 4.5f)
-                                     : new Vector3(0f, 1.1f, 51f);
+            pocket.interiorPrefab = assetInterior;
+            // La casa Asset Store e' un piano solo (~13,5 x 10,5 m): si entra
+            // dall'atrio sul lato +Z, davanti alla porta d'ingresso dell'asset.
+            // La villa HUNTIX da 300 mq resta compatta (10 x 10 m per piano)
+            // per tutte le altre case configurate.
+            bool useAssetInterior = !string.IsNullOrEmpty(assetInterior);
+            pocket.entryLocal = useAssetInterior ? new Vector3(0f, 1.10f, 5.15f)
+                : grand ? new Vector3(0f, 1.15f, 3.2f)
+                        : new Vector3(0f, 1.1f, 42f);
+            pocket.exitLocal = useAssetInterior ? new Vector3(0f, 1.10f, 5.85f)
+                : grand ? new Vector3(0f, 1.15f, 4.5f)
+                        : new Vector3(0f, 1.1f, 51f);
 
             BuildVilla(go.transform, pocket, label);
             go.SetActive(false); // nessun costo finché il player non entra
@@ -152,9 +173,11 @@ namespace City.Interior.Victorian
             {
                 UnityBridge.LogToAndroid(Tag,
                     "casa vittoriana pronta: " + label + " (" + key + ") — " +
-                    (grand ? "villa 300 mq in 3 piani" +
-                             " (fuori tre livelli, dentro 100 mq per piano)"
-                           : "fuori piccola, dentro salone + città interna"));
+                    (!string.IsNullOrEmpty(assetInterior)
+                        ? "interno originale Asset Store (mainIndoor01, 9 uova)"
+                        : grand ? "villa 300 mq in 3 piani" +
+                                  " (fuori tre livelli, dentro 100 mq per piano)"
+                                : "fuori piccola, dentro salone + città interna"));
             }
             catch (System.Exception) { }
         }
@@ -183,17 +206,28 @@ namespace City.Interior.Victorian
             {
                 Vector3 pos = pocket.transform.TransformPoint(pocket.entryLocal);
                 InteriorTeleport.Move(pos, Quaternion.Euler(0f, 180f, 0f), g);
-                if (g.rig != null)
+                // La casa Asset Store e' a piano unico: camera GTA piu' vicina,
+                // stessa logica di override degli altri interni. La chiamata
+                // storica (7f, 3.4f, 16f) resta il percorso predefinito.
+                if (g.rig != null && !pocket.AssetInterior)
                     g.rig.SetIndoorOverride(true, CameraOwner, 7f, 3.4f, 16f);
+                else if (g.rig != null)
+                    g.rig.SetIndoorOverride(true, CameraOwner, 5f, 2.4f, 18f);
                 if (g.ui != null)
-                    g.ui.ShowToast(pocket.grand
-                        ? "Sei nella villa da 300 mq: tre piani da 100 mq!"
-                        : "Sei nella Casa Vittoriana: dentro è molto più grande di fuori!");
+                    g.ui.ShowToast(pocket.AssetInterior
+                        ? "Sei dentro la casa dell'Asset Store: esterno e interni originali!"
+                        : pocket.grand
+                            ? "Sei nella villa da 300 mq: tre piani da 100 mq!"
+                            : "Sei nella Casa Vittoriana: dentro è molto più grande di fuori!");
             }
-            Discover(pocket, pocket.grand ? "salotto-piano1" : "salone",
-                pocket.grand ? "Salone del piano 1" : "Salone dei lampadari",
+            Discover(pocket,
+                pocket.AssetInterior ? "atrio-country" :
+                    pocket.grand ? "salotto-piano1" : "salone",
+                pocket.AssetInterior ? "Atrio della casa country" :
+                    pocket.grand ? "Salone del piano 1" : "Salone dei lampadari",
                 "città→casa→" + pocket.key + "→" +
-                (pocket.grand ? "salone al piano 1" : "salone dei lampadari"));
+                (pocket.AssetInterior ? "atrio dell'interno Asset Store" :
+                    pocket.grand ? "salone al piano 1" : "salone dei lampadari"));
             try
             {
                 UnityBridge.LogToAndroid(Tag, "ingresso tasca vittoriana: " + pocket.key);
@@ -317,11 +351,36 @@ namespace City.Interior.Victorian
         /// comuni ai due percorsi e non duplicano le uova del prefab.</summary>
         private static void BuildVilla(Transform root, VictorianPocket p, string label)
         {
+            // Casa eroe Сountry House FREE: apre il VERO interno dell'Asset
+            // Store, estratto dal ramo `mainIndoor01` (nessun guscio duplicato).
+            // Se il prefab manca, si ripiega sulla villa 300 mq: mai vuota.
+            if (p != null && p.AssetInterior)
+            {
+                GameObject assetInterior = null;
+                try { assetInterior = Resources.Load<GameObject>(p.interiorPrefab); }
+                catch (System.Exception) { assetInterior = null; }
+                if (assetInterior != null)
+                {
+                    var casa = UnityEngine.Object.Instantiate(assetInterior, root, false) as GameObject;
+                    if (casa != null)
+                    {
+                        casa.name = "CountryHouse_Interior_AssetStore";
+                        casa.SetActive(true);
+                        // I materiali dell'asset sono Standard: li cloniamo e
+                        // convertiamo a URP/Lit sulla sola istanza, senza
+                        // toccare i sorgenti dell'Asset Store.
+                        City.OSM.BuildingPlacer.EnsureURPMaterialsOnInstance(casa);
+                        FinalizeCountryInterior(root, p, label);
+                        return;
+                    }
+                }
+                Debug.LogWarning("[CasaVittoriana] interno Asset Store mancante: " +
+                    p.interiorPrefab + " — fallback villa 300 mq");
+            }
+
             GameObject prefab = null;
             bool grandWanted = p != null && p.grand;
             // Prima scelta per le case configurate: la villa da 300 mq.
-            // Se il prefab nuovo non c'è, si ripiega sulla reggia storica e
-            // poi sul fallback primitivo: nessuna casa resta vuota.
             try { prefab = Resources.Load<GameObject>(
                 grandWanted ? GrandVillaPrefabResource : VillaPrefabResource); }
             catch (System.Exception) { prefab = null; }
@@ -347,6 +406,107 @@ namespace City.Interior.Victorian
             if (!prefabUsed) BuildFallbackArchitecture(root, p, label);
             if (grandUsed) FinalizeGrandVilla(root, p, label);
             else FinalizePocket(root, p, label, prefabUsed);
+        }
+
+        /// <summary>Completamento dell'interno originale dell'Asset Store:
+        /// suolo calpestabile, uscita davanti alla porta e 9 nascondigli con
+        /// zone di scoperta nelle stanze reali del prefab (Room01/02/05/08/09
+        /// e hallway). Nessun secondo edificio e nessuna villa HUNTIX: cambia
+        /// solo l'arredazione visiva, uova/bridge/camera restano identici.
+        /// </summary>
+        private static void FinalizeCountryInterior(Transform root, VictorianPocket p,
+            string label)
+        {
+            Material wood = Mat("country-wood", new Color(0.42f, 0.29f, 0.16f));
+            Material gold = Mat("gold", new Color(0.72f, 0.55f, 0.20f));
+
+            // L'asset ha collider su pareti/mobili (layer 8, non calpestabili).
+            // Il suo pavimento e' decorative: aggiungiamo UNO suolo continuo
+            // coperto da tutta l'impronta (~13,5 x 10,5 m) per GroundSnapper.
+            Box(root, "PavimentoCountryAssetStore", new Vector3(0f, 0.12f, 0.9f),
+                new Vector3(13.6f, 0.24f, 10.7f), wood, true, false);
+
+            var exit = new GameObject("TriggerUscitaCountryAssetStore");
+            exit.transform.SetParent(root, false);
+            exit.transform.localPosition = p.exitLocal;
+            var col = exit.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+            col.size = new Vector3(3f, 2.2f, 0.8f);
+            exit.AddComponent<VictorianExit>();
+
+            // Nove nascondigli, uno per ambiente reale dell'asset. I numeri
+            // sono coordinate LOCALI del prefab, misurate in batchmode sui
+            // bounds dei figli `Room01`, `Room02`, `Room05`, `Room08`, `Room09`
+            // e `hallway`; la porta dell'asset sta a +Z (Door04_pr, z~6,25).
+            // Chiave uovo stabile e specifica dell'edificio: se in futuro un'altra
+            // casa usera' lo stesso interno, le sue uova non collide con queste.
+            string eggPrefix = "casa-osm-" +
+                (p != null ? p.osmId.ToString(CultureInfo.InvariantCulture)
+                           : "405221437") + ":";
+            string[] ids =
+            {
+                eggPrefix + "country-soggiorno", eggPrefix + "country-cucina",
+                eggPrefix + "country-sala", eggPrefix + "country-studio",
+                eggPrefix + "country-biblioteca", eggPrefix + "country-camera",
+                eggPrefix + "country-bagno", eggPrefix + "country-atrio1",
+                eggPrefix + "country-atrio2"
+            };
+            string[] rooms =
+            {
+                "soggiorno (Room01)", "cucina (Room02)", "sala (Room05)",
+                "studio (Room08)", "biblioteca (Room08)", "camera (Room09)",
+                "bagno (hallway)", "atrio (hallway)", "atrio (hallway)"
+            };
+            Vector3[] spots =
+            {
+                new Vector3(-1.2f, 0.75f, -2.4f),
+                new Vector3(0.4f, 0.75f, 1.6f),
+                new Vector3(-4.3f, 0.75f, 1.1f),
+                new Vector3(4.4f, 0.75f, -2.6f),
+                new Vector3(4.4f, 0.75f, 0.8f),
+                new Vector3(-5.3f, 0.75f, -2.7f),
+                new Vector3(-1.4f, 0.75f, 4.6f),
+                new Vector3(0f, 0.75f, 4.9f),
+                new Vector3(1.5f, 0.75f, 5.2f)
+            };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                Transform container = Box(root, "Contenitore_" + ids[i], spots[i],
+                    new Vector3(0.55f, 0.45f, 0.38f), wood, false);
+                var spot = container.gameObject.AddComponent<HouseEggSpot>();
+                spot.featureId = ids[i];
+                spot.label = rooms[i];
+                spot.room = rooms[i];
+                spot.place = "città→casa→Casa country Asset Store→" + rooms[i];
+                var marker = container.gameObject.AddComponent<UniversalContainerMarker>();
+                marker.room = rooms[i];
+                marker.interiorKey = "vittoriano";
+
+                AddCountryZone(root, ids[i], "Casa country — " + rooms[i],
+                    spot.place, spots[i]);
+            }
+
+            try
+            {
+                UnityBridge.LogToAndroid(Tag,
+                    "interno Asset Store: " + label + " — mainIndoor01, 9 uova, 9 zone");
+            }
+            catch (System.Exception) { }
+        }
+
+        /// <summary>Zona dell'interno Asset Store: helper dedicato per non
+        /// alterare il conteggio storico delle 12 zone della villa.</summary>
+        private static void AddCountryZone(Transform root,
+            string id, string label, string place, Vector3 pos)
+        {
+            var go = new GameObject("ZonaCountry_" + id);
+            go.transform.SetParent(root, false);
+            go.transform.localPosition = pos;
+            var zone = go.AddComponent<VictorianZone>();
+            zone.featureId = id;
+            zone.label = label;
+            zone.place = place;
+            zone.radius = 2.6f;
         }
 
         /// <summary>Completamento runtime della villa da 300 mq: marker dei

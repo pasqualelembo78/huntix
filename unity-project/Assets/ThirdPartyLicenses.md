@@ -252,9 +252,13 @@ provenienza storica; i file FBX non sono più nel progetto né nel player.
   Extension Asset). È una casa completa con interni, porte, materiali e
   texture (modello da 4.700 triangoli). File:
   `Assets/ALP_Assets/country house01/` e
-  `Assets/Resources/Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab.prefab`.
+  `Assets/Resources/Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab.prefab`
+  e `Assets/Resources/Houses/ViaSilvioPellico/AssetStore/CountryHouse_Interior.prefab`
+  (ramo `mainIndoor01` estratto senza modifiche a geometria/materiali).
   Modifiche dichiarate: texture ridotte da 4096 a 2048 px, scena demo e
   post-processing esclusi; geometria e materiali invariati. Testo e crediti in
   `Assets/Resources/Houses/ViaSilvioPellico/LICENSE_assetstore_country_house.txt`.
-  Usato come **unico guscio eroe dedicato** sull'edificio OSM `405221437`;
-  le altre cinque case visitabili usano il guscio procedurale condiviso.
+  Usato come **unico guscio eroe dedicato** e come **suo interno giocabile**
+  sull'edificio OSM `405221437`; le altre cinque case visitabili usano il
+  guscio procedurale condiviso. I materiali vengono clonati a runtime per la
+  conversione URP, senza alterare i file sorgente.

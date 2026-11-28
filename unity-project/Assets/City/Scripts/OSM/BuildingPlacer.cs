@@ -240,6 +240,29 @@ namespace City.OSM
             City.Cinematic.CinematicGraphics.ApplyFacade(inst);
         }
 
+        /// <summary>Urp conversion su una SINGOLA istanza: i materiali dell'asset
+        /// vengono clonati prima della conversione, così il prefab sorgente e
+        /// gli altri usi restano intatti (usato dall'interno Asset Store).</summary>
+        public static void EnsureURPMaterialsOnInstance(GameObject inst)
+        {
+            if (inst == null) return;
+            var rs = inst.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < rs.Length; i++)
+            {
+                var rr = rs[i];
+                if (rr == null) continue;
+                var ms = rr.sharedMaterials;
+                if (ms == null || ms.Length == 0) continue;
+                var cloned = new Material[ms.Length];
+                for (int j = 0; j < ms.Length; j++)
+                {
+                    cloned[j] = ms[j] != null ? new Material(ms[j]) : null;
+                    if (cloned[j] != null) ConvertToURP(cloned[j]);
+                }
+                rr.sharedMaterials = cloned;
+            }
+        }
+
         // Materiale del segnaposto porta condiviso tra tutti gli ingressi
         // (fix #3): prima ogni porta clonava un Material nuovo -> spreco GC.
         private static Material _doorMarkMat;

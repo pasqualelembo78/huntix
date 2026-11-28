@@ -21,6 +21,7 @@ REGISTRY = os.path.join(SCRIPTS, "Interior", "Visit", "VisitInteriorRegistry.cs"
 PLACER = os.path.join(SCRIPTS, "OSM", "BuildingPlacer.cs")
 HOUSES = os.path.join(UNITY, "Resources", "Houses", "ViaSilvioPellico")
 HERO = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab"
+HERO_INTERIOR = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Interior"
 
 
 def read(path):
@@ -61,6 +62,33 @@ class TestCaseCaseEsterne(unittest.TestCase):
                       self.registry)
         self.assertIn("resource = spec.exteriorPrefab;", self.registry)
         self.assertIn("public string exteriorPrefab = \"\";", self.registry)
+
+    def test_casa_eroe_usa_l_interno_originale_asset_store(self):
+        # Il proprietario ha chiarito (28/11/2026) che l'interno dell'Asset
+        # Store deve essere giocabile: non basta il guscio con la villa HUNTIX.
+        self.assertIn('interiorPrefab = "' + HERO_INTERIOR + '"', self.registry)
+        prefab = os.path.join(UNITY, "Resources", HERO_INTERIOR + ".prefab")
+        self.assertTrue(os.path.isfile(prefab),
+                        "Prefab interno Asset Store mancante: " + HERO_INTERIOR)
+        with open(prefab, "r", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn("m_Name: mainIndoor01", content)
+        self.assertIn("m_Name: Room01", content)
+        self.assertIn("m_Name: Room02", content)
+        self.assertIn("m_Name: hallway", content)
+        self.assertNotIn("m_Name: mainHouse", content)
+        self.assertIn("TryGetInteriorPrefab(long osmId, out string resource)",
+                      self.registry)
+        victorian = read(os.path.join(SCRIPTS, "Interior", "Victorian",
+                                      "VictorianGrandInterior.cs"))
+        self.assertIn("if (p != null && p.AssetInterior)", victorian)
+        self.assertIn("Resources.Load<GameObject>(p.interiorPrefab)", victorian)
+        self.assertIn("EnsureURPMaterialsOnInstance(casa)", victorian)
+        self.assertIn("FinalizeCountryInterior(root, p, label)", victorian)
+        self.assertIn('eggPrefix = "casa-osm-" +', victorian)
+        self.assertIn('eggPrefix + "country-soggiorno"', victorian)
+        placer = read(PLACER)
+        self.assertIn("EnsureURPMaterialsOnInstance(GameObject inst)", placer)
 
     def test_placer_non_stira_e_non_veste_gusci_dedicati(self):
         # Il vecchio stiramento a 10,5 m e la vestizione fasce/finestre restano
