@@ -82,6 +82,11 @@ namespace City.Player
         // del vecchio MoveTowards a 10 m/s^2 che a 10 fps partiva in 0,3 s).
         private const float AccelSmoothS = 0.08f;
         private const float BrakeSmoothS = 0.12f;
+        // Mathf.SmoothDamp con deltaTime nullo/non finito (frame congelato dal
+        // build dei chunk, timeScale a 0 durante un fade, o dt già contaminato)
+        // può scrivere infinity/NaN nello stato interno. Un minimo dt sicuro
+        // mantiene lo smoothing indefinito senza introdurre balzi percepibili.
+        private const float MinSmoothDtS = 1f / 120f;
         // Deadzone del joystick, condivisa fra il gate di movimento e la rampa
         // di velocita': cosi' all'uscita dal centro la Speed parte da 0 invece
         // di saltare a walkSpeed (3,2 m/s) in un frame.
@@ -482,8 +487,15 @@ namespace City.Player
             // clampato a MaxFrameDtS) senza il balzo del vecchio rate fisso.
             float smoothTime = targetSpeed > currentSpeed + 0.001f
                 ? AccelSmoothS : BrakeSmoothS;
+            // Guardia sullo stato di SmoothDamp: se un frame precedente ha già
+            // lasciato un valore non finito, ripartire da zero evita di
+            // trascinare NaN per tutta la sessione (SALVATAGGIO ... causa=[smooth]).
+            if (!WorldOrigin.IsFinite(currentSpeed)) currentSpeed = 0f;
+            if (!WorldOrigin.IsFinite(_speedSmoothVel)) _speedSmoothVel = 0f;
+            float smoothDt = WorldOrigin.IsFinite(frameDt) && frameDt > 0f
+                ? frameDt : MinSmoothDtS;
             currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed,
-                ref _speedSmoothVel, smoothTime, Mathf.Infinity, frameDt);
+                ref _speedSmoothVel, smoothTime, 100f, smoothDt);
             if (!WorldOrigin.IsFinite(currentSpeed) ||
                 !WorldOrigin.IsFinite(_speedSmoothVel))
             {

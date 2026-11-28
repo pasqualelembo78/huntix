@@ -57,6 +57,15 @@ namespace City.Interior
         private bool _geoInside;
         private float _geoSince = -1f;
 
+        // Fallback ingresso naturale: copre i casi in cui OnTriggerEnter non
+        // arriva (collider porta creato mentre il player è già nella fascia,
+        // CharacterController disabilitato al momento del contatto). Usa lo
+        // STESSO volume del trigger, allargato di pochi cm, quindi non crea
+        // ingressi "a distanza" né nuovi segnaposto visivi.
+        private const float NATURAL_APPROACH_INTERVAL = 0.2f;
+        private const float NATURAL_APPROACH_MARGIN = 0.6f;
+        private float _naturalApproachTimer;
+
 
         private int currentFloor;
         private int totalFloors;
@@ -269,6 +278,7 @@ namespace City.Interior
         public void MarkOutside(BuildingEntrance e)
         {
             if (!IsInside) return;
+            if (e != null) e.MarkNaturalExitTime();
 
             // Qualsiasi uscita (pulsante ESCI, trigger o fade prefab) mentre
             // siamo nella tasca vittoriana deve riportare davanti alla porta
@@ -382,6 +392,44 @@ namespace City.Interior
             MarkInside(e);
         }
 
+        // ── Fallback ingresso naturale (senza UI) ─────────────────────
+
+        /// <summary>Controllo periodico della fascia d'ingresso delle case.
+        /// Il trigger della porta resta la via principale; qui si rimette a
+        /// posto solo il caso in cui il callback non scatti. Nessun avviso, nessun
+        /// teleport: si chiama esattamente lo stesso StartAutoEntry del varco
+        /// camminato, con fade e visita come ospite.</summary>
+        private void NaturalApproachCheck()
+        {
+            _naturalApproachTimer -= Time.deltaTime;
+            if (_naturalApproachTimer > 0f) return;
+            _naturalApproachTimer = NATURAL_APPROACH_INTERVAL;
+
+            var g = Game.Instance;
+            if (g == null || g.player == null) return;
+            var cw = City.OSM.CityChunkedWorld.Instance;
+            if (cw != null && !cw.PlayerSpawned) return;
+            if (IsInside || g.IsDriving) return;
+            if (City.Interior.Victorian.VictorianGrandInterior.IsInsidePocket) return;
+
+            Vector3 pos = g.player.transform.position;
+            float range2 = GEO_RANGE * GEO_RANGE;
+            for (int i = 0; i < _pendingInteriors.Count; i++)
+            {
+                var gen = _pendingInteriors[i];
+                if (gen == null) continue;
+                var e = gen.Entrance;
+                if (e == null || !e.naturalEntry || e.inPlace) continue;
+                if (e.IsEntryInProgress || e.NaturalExitGraceActive) continue;
+                Vector3 d = gen.DoorAnchorWorld - pos;
+                if (d.x * d.x + d.z * d.z > range2) continue;
+                if (!e.IsNearNaturalApproach(pos, NATURAL_APPROACH_MARGIN)) continue;
+                Log("soglia raggiunta (fallback geometrico): " + e.buildingName);
+                e.StartAutoEntry();
+                break;
+            }
+        }
+
         // ── Ticker geometrico entrata/uscita ─────────────────────────
 
         private void GeoInsideCheck()
@@ -487,6 +535,10 @@ namespace City.Interior
         /// true, quindi qui lo facciamo noi.</summary>
         private void Update()
         {
+            // Ingresso naturale delle case: fallback del trigger porta, senza
+            // prompt né riquadro. Va prima del controllo geometrico gusci.
+            NaturalApproachCheck();
+
             // Entrata/uscita geometrica: va misurata anche da fuori e prima del
             // vecchio flusso joystick (che ha una early-return quando !IsInside).
             GeoInsideCheck();

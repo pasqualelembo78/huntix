@@ -1148,6 +1148,31 @@ private const float TerrainPhysxTimeoutS = 15f;
             pl.transform.position = best;
         }
 
+        /// <summary>True se il punto (XZ) cade dentro l'impronta di un edificio
+        /// con collider attivo. Usata dal long-press per NON teletrasportare il
+        /// player dentro le case: il raycast esclude il layer 8, quindi può
+        /// colpire il terreno sotto il pavimento e infilare il player nel muro.
+        /// La verifica è conservativa ma non considera "dentro" un punto che
+        /// sfiora solo il muro: serve il centro dentro i bounds XZ.</summary>
+        public static bool InsideBuildingFootprint(Vector3 worldPos,
+            float halfHeight = 2f, float margin = 0.4f)
+        {
+            if (!WorldOrigin.IsFinite(worldPos)) return true;
+            Collider[] cols = Physics.OverlapBox(
+                worldPos + Vector3.up * halfHeight,
+                new Vector3(margin, halfHeight, margin), Quaternion.identity,
+                1 << GroundSnapper.BuildingLayer, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < cols.Length; i++)
+            {
+                if (cols[i] == null) continue;
+                Bounds b = cols[i].bounds;
+                if (worldPos.x >= b.min.x && worldPos.x <= b.max.x &&
+                    worldPos.z >= b.min.z && worldPos.z <= b.max.z)
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>Origine consapevole della quota DEM per i raycast di
         /// rilevamento terreno. In montagna il terreno (griglia 'ele' in metri
         /// assoluti s.l.m. sovrapposta al root chunk a y=0) puo' stare MOLTO
@@ -1276,21 +1301,30 @@ private const float TerrainPhysxTimeoutS = 15f;
                 ? City.Game.Instance.player.transform : null;
             Transform bridge = Instance != null && Instance._spawnBridge != null
                 ? Instance._spawnBridge.transform : null;
-            int n = Physics.RaycastNonAlloc(from, Vector3.down, _columnHits, maxDist);
+            // Regola non negoziabile: il "terreno" non è il tetto. La mask
+            // esclude il layer 8 (Buildings) esattamente come TryGroundColumn;
+            // QueryTriggerInteraction.Ignore evita di agganciare i trigger delle
+            // porte. RaycastNonAlloc NON ordina i risultati: va scelto il minimo
+            // per distanza, non hits[0] (che nel log 28/11 era il tetto a 9,47).
+            int n = Physics.RaycastNonAlloc(from, Vector3.down, _columnHits,
+                maxDist, GroundSnapper.WalkableMask, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            bool found = false;
             for (int i = 0; i < n && i < _columnHits.Length; i++)
             {
-                if (playerRoot != null && _columnHits[i].collider != null &&
-                    (_columnHits[i].collider.transform == playerRoot ||
-                     _columnHits[i].collider.transform.IsChildOf(playerRoot)))
+                RaycastHit h = _columnHits[i];
+                if (h.collider == null) continue;
+                Transform t = h.collider.transform;
+                if (playerRoot != null && (t == playerRoot || t.IsChildOf(playerRoot)))
                     continue;
-                if (bridge != null && _columnHits[i].collider != null &&
-                    (_columnHits[i].collider.transform == bridge ||
-                     _columnHits[i].collider.transform.IsChildOf(bridge)))
+                if (bridge != null && (t == bridge || t.IsChildOf(bridge)))
                     continue;
-                result = _columnHits[i];
-                return true;
+                if (!WorldOrigin.IsFinite(h.distance) || h.distance >= best) continue;
+                best = h.distance;
+                result = h;
+                found = true;
             }
-            return false;
+            return found;
         }
 
         /// <summary>Controlla se c'e' un collider di TERRA sotto il target (escludendo

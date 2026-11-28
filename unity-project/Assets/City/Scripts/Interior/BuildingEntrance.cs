@@ -54,6 +54,11 @@ namespace City.Interior
         private float _naturalEntryAt = -100f;
         private bool _naturalExitHandled;
 
+        /// <summary>Istante dell'ultima uscita: il teleporto di uscita lascia
+        /// il player a 1,6 m fuori dalla porta, dentro il margine del fallback
+        /// geometrico. Senza questa grazia rientrerebbe subito dopo il fade.</summary>
+        private float _naturalExitAt = -100f;
+
         /// <summary>Finestra di grazia dopo l'ingresso. Il teleporto di ingresso
         /// lascia il giocatore dentro i trigger d'uscita (quello dell'interno e
         /// soprattutto quello della tasca vittoriana: entryLocal z=5,15 contro
@@ -66,10 +71,48 @@ namespace City.Interior
         public bool NaturalEntryGraceActive =>
             Time.time - _naturalEntryAt < NaturalEntryGraceS;
 
+        /// <summary>True finché un rientro automatico va ignorato dopo l'uscita.
+        /// Usato dal trigger e dal fallback geometrico.</summary>
+        public bool NaturalExitGraceActive =>
+            Time.time - _naturalExitAt < NaturalEntryGraceS;
+
         public void MarkNaturalEntryTime()
         {
             _naturalEntryAt = Time.time;
             _naturalExitHandled = false;
+        }
+
+        public void MarkNaturalExitTime()
+        {
+            _naturalExitAt = Time.time;
+        }
+
+        /// <summary>True mentre la coroutine di ingresso è in volo: evita che
+        /// trigger e fallback geometrico avviino due fade sullo stesso fader.</summary>
+        public bool IsEntryInProgress => _enteringPrefab;
+
+        /// <summary>Prossimità alla fascia d'ingresso, usata come fallback
+        /// quando OnTriggerEnter non scatta (player già dentro il volume al
+        /// momento in cui il collider viene creato, CC disabilitato, ecc.).
+        /// Si misura nello SPAZIO LOCALE del trigger, già ruotato verso la
+        /// facciata giusta: nessun quad/segnaposto e nessun prompt.</summary>
+        public bool IsNearNaturalApproach(Vector3 worldPos, float marginMeters)
+        {
+            if (!naturalEntry || !HouseAccess.IsResidential(this)) return false;
+            var col = GetComponent<BoxCollider>();
+            if (col == null || !col.enabled) return false;
+            Vector3 s = transform.lossyScale;
+            Vector3 local = transform.InverseTransformPoint(worldPos);
+            Vector3 half = col.size * 0.5f;
+            float sx = Mathf.Max(Mathf.Abs(s.x), 1e-3f);
+            float sy = Mathf.Max(Mathf.Abs(s.y), 1e-3f);
+            float sz = Mathf.Max(Mathf.Abs(s.z), 1e-3f);
+            float mx = marginMeters / sx;
+            float my = marginMeters / sy;
+            float mz = marginMeters / sz;
+            return Mathf.Abs(local.x) <= half.x + mx &&
+                   Mathf.Abs(local.y) <= half.y + my &&
+                   Mathf.Abs(local.z) <= half.z + mz;
         }
 
         /// <summary>Per gli ingresso in-place: true per il trigger TUTTO DENTRO
@@ -191,6 +234,10 @@ namespace City.Interior
             if (naturalEntry && HouseAccess.IsResidential(this))
             {
                 if (restrictedAccess && mgr != null && !mgr.IsInside) return;
+                // Uscita dal fade: il player è ancora vicino alla porta, non
+                // deve rientrare da solo un istante dopo aver scelto "esci".
+                if (NaturalExitGraceActive) return;
+                if (IsEntryInProgress) return;
                 if (mgr != null && mgr.IsInside)
                 {
                     if (!_naturalExitHandled &&
@@ -264,7 +311,7 @@ namespace City.Interior
         {
             if (inPlace) return;
             if (restrictedAccess) return;
-            if (autoEntryStarted) return;
+            if (autoEntryStarted || IsEntryInProgress) return;
             autoEntryStarted = true;
             Enter();
             autoEntryStarted = false;

@@ -136,13 +136,57 @@ namespace City.UI
             if (mainCam == null) mainCam = Camera.main;
             if (mainCam == null) return;
 
+            var game = City.Game.Instance;
+            if (game == null) return;
+
+            // Dentro una casa il long-press non deve teletrasportare: il
+            // collider esterno è spento durante la visita, quindi il raycast
+            // attraversa il pavimento e finisce nel vuoto sotto l'edificio.
+            // L'uscita resta quella naturale (porta / tasca vittoriana).
+            var interior = City.Interior.InteriorManager.Instance;
+            if (interior != null && interior.IsInside)
+            {
+                UnityBridge.LogToAndroid("TouchInputHandler",
+                    "Teleport ignorato: dentro un edificio (esci dalla porta)");
+                return;
+            }
+            if (game.player != null &&
+                CityChunkedWorld.InsideBuildingFootprint(game.player.transform.position))
+            {
+                UnityBridge.LogToAndroid("TouchInputHandler",
+                    "Teleport ignorato: player dentro impronta edificio");
+                return;
+            }
+
             Ray ray = mainCam.ScreenPointToRay(screenPos);
             int mask = ~(1 << 8);
-            if (Physics.Raycast(ray, out RaycastHit hit, 500f, mask))
+            if (Physics.Raycast(ray, out RaycastHit hit, 500f, mask,
+                    QueryTriggerInteraction.Ignore))
             {
-                Vector3 target = hit.point + Vector3.up * 0.5f;
-                var game = City.Game.Instance;
-                if (game == null) return;
+                Vector3 target = hit.point;
+                Transform self = game.player != null ? game.player.transform : null;
+                Vector3 snapped;
+                string surface;
+                if (CityChunkedWorld.TryGroundColumn(target, self, 1.2f, 400f,
+                        out snapped, out surface))
+                {
+                    target = snapped;
+                    UnityBridge.LogToAndroid("TouchInputHandler",
+                        "Teleport snap su " + surface);
+                }
+                else
+                {
+                    target += Vector3.up * 0.5f;
+                }
+
+                // Il raycast esclude il layer 8: senza questo controllo il
+                // player verrebbe piazzato sotto il pavimento di una casa.
+                if (CityChunkedWorld.InsideBuildingFootprint(target))
+                {
+                    UnityBridge.LogToAndroid("TouchInputHandler",
+                        "Teleport ignorato: destinazione dentro edificio");
+                    return;
+                }
 
                 UnityBridge.LogToAndroid("TouchInputHandler", $"Teleport a ({target.x:F1},{target.y:F1},{target.z:F1})");
                 game.TeleportPlayer(target, Quaternion.LookRotation(ray.direction));

@@ -2470,3 +2470,87 @@ modificato); l'accesso è la transizione alla soglia già prevista dal punto
 42.8, ora realmente raggiungibile. Nessun test runtime su device è stato
 eseguito dall'assistente: i tre sintomi vanno riverificati con l'APK
 rigenerato.
+
+### 42.10 Secondo QA su device (log 28/11/2026 14:21)
+
+Log analizzato: `log/huntix_log_20261128_142138.txt`. La sessione decisiva è la
+4ª (`city3d_debug.log`, inizio `13:49:18.786`, APK installato `13:49:15.504`):
+le prime tre sessioni appartengono al vecchio APK delle 12:32.
+
+**Prove tratte dal log (non ipotesi)**
+
+1. *Casa ancora non accessibile*: `14:20:43.279`
+   `[Interior] build lazy: Edificio 405221437 shell 64x14x7 porta=(2.8, 1.0,
+   -14.4)` e interni pronti alle `14:20:43.356/.360`. Nessun
+   `[BuildingEntrance] soglia raggiunta: ingresso naturale`, nessun
+   `visita casa` e nessun `Entrato` in tutta la sessione. Alle `14:21:01.389`
+   il player è in `(-6,6, -13,3)`: vicino al muro, ma a ~9,5 m dal punto porta
+   del registro. Il portale largo 2,4 m era irraggiungibile perché la porta
+   visibile del prefab non coincide con le coordinate del registro.
+2. *Long-press dentro casa → caduta*: `14:21:09.386`
+   `TouchInputHandler: Teleport a (1,0,0,5,-4,1)`, applicato `14:21:09.813`;
+   `14:21:11.474` player a `y=-36,68` con `GroundRay … hits=0`.
+3. *Rescue sul tetto*: `14:21:12.237`
+   `SALVATAGGIO: player sotto il mondo (y=-74.4) -> (3.4,-6.9) y=9,47 via
+   superficie=Edificio 405221437`. `RayTerrainBelow` prendeva il primo hit di
+   `RaycastNonAlloc` (non ordinato) e non escludeva il layer 8: risaliva sul
+   tetto dell'edificio invece che sulla strada. Secondo ciclo identico alle
+   `14:21:22.864/24.480`.
+4. *NaN da SmoothDamp*: `14:21:28.383` → `14:21:32.3`, 120 righe
+   `SALVATAGGIO NaN … pos=(-1.15, 9.52, -5.33) causa=[smooth]`, iniziate subito
+   dopo il rescue sul tetto.
+
+**Fix applicati**
+
+- `BuildingPlacer.cs`: per le abitazioni il volume d'ingresso copre la
+  FACCIATA lato porta fino a 24 m (`frontage`), con spessore 2,0 m; l'asse
+  lungo il muro è X locale per porte su ±Z e Z locale per porte su ±X. Nessun
+  quad, faro o prompt nuovo.
+- `BuildingEntrance.cs` + `InteriorManager.cs`: fallback geometrico
+  (`NaturalApproachCheck`, 5 Hz) sullo stesso volume del trigger allargato di
+  0,6 m, chiamato solo se il player non è già dentro e il gate di spawn è
+  aperto. Copre il caso in cui `OnTriggerEnter` non scatta. Grazia di 2 s anche
+  dopo l'uscita per non rientrare subito dopo il fade; guardia
+  `IsEntryInProgress` contro doppi fade.
+- `TouchInputHandler.cs`: il long-press è bloccato dentro un edificio o se
+  destinazione/player cadono dentro l'impronta (layer 8); la destinazione è
+  snapata con `CityChunkedWorld.TryGroundColumn` prima del teleporto.
+- `CityChunkedWorld.cs`: `RayTerrainBelow` usa `GroundSnapper.WalkableMask`,
+  `QueryTriggerInteraction.Ignore` e seleziona l'hit più vicino per distanza.
+  Nuovo helper pubblico `InsideBuildingFootprint`.
+- `PlayerController.cs`: `Mathf.SmoothDamp` riceve un dt finito positivo
+  (minimo 1/120 s) e lo stato interno viene azzerato se non finito: niente più
+  `cause=[smooth]` a cascata.
+
+**Verifiche**
+
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **426 test OK** (28 guardie housing, +7 nuove).
+- `backend/preprocessing/cscheck/check.sh`: **Compilation succeeded**, 218
+  warning preesistenti, 0 errori, `CSCHECK OK`.
+- `git diff --check`: OK.
+
+**Build e firma dopo i fix**
+
+Comando: `BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1
+./build_release.sh --auto` (log `/tmp/opencode/build_housing_qa2.log`).
+Export Unity + AAR Il2Cpp: `BUILD SUCCESSFUL in 4m 39s`; packaging e firma APK:
+`BUILD SUCCESSFUL in 1m 55s`.
+
+- `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
+  `403170d16b47770c2752a45b110e064cae3f0a96f39004dc4b5d98fc6c6243e0`.
+- `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `42a3d20634e7699ceaea100ca0cf500b5cb3020b333ce9e4fe6bd83bc3f6f9f9`.
+- Firma verificata con `apksigner` (schema v3, 1 signer): certificato
+  `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`, SHA-256
+  `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+  Gli SHA della build 42.9 (`62a8278f…`, `7ec1eea6…`) sono superati.
+- Artefatti collaterali riscritti da Unity (`link.xml.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit.
+
+**Limite noto**: restano i warning
+`The referenced script on this Behaviour (Game Object 'CasaVisitabileCC0') is
+missing!` già presenti prima di questi fix: non dimostrano da soli la mancata
+porta e non sono stati toccati. Nessun test runtime su device eseguito
+dall'assistente: i tre sintomi vanno riverificati con l'APK rigenerato.

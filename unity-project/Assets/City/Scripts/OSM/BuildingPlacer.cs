@@ -923,15 +923,22 @@ namespace City.OSM
             // facciata indicato li', non a meta' muro. Per Foggia il punto e'
             // vicino all'angolo ovest di Via Silvio Pellico, quindi la
             // posizione lungo il muro conta quanto il lato.
-            const float doorW = 2.4f;     // larghezza porta (mondo)
+            const float doorW = 2.4f;     // larghezza porta (mondo, negozi)
             const float doorCenterY = 1.0f; // altezza centro porta (mondo)
             // Le abitazioni hanno il BoxCollider solido su TUTTA l'impronta:
             // la vecchia fascia (0,4 m di spessore, 0,15 m di sporgenza) era
             // oltre il muro e la capsula del player si fermava prima di
             // toccarla. Il trigger va esteso VERSO L'ESTERNO: si entra
             // camminando verso la porta, senza avvicinarsi al collider.
-            float doorT = naturalHouse ? 1.4f : 0.4f;  // spessore (mondo)
+            // QA 28/11: un portale largo 2,4 m era irraggiungibile quando la
+            // porta visibile del prefab non coincideva col punto GPS del
+            // registro (log: player a (-6,6,-13,3), porta a (2,8,-14,4)).
+            // Per le case il volume copre quindi una FASCIATA lunga fino a
+            // 24 m lungo il muro, senza quad/segnaposto: l'ingresso resta
+            // camminare verso la casa, non un riquadro luminoso da tappare.
+            float doorT = naturalHouse ? 2.0f : 0.4f;  // spessore (mondo)
             float protr = naturalHouse ? 0.9f : 0.15f; // sporgenza (mondo)
+            float frontage = naturalHouse ? Mathf.Min(w, 24f) : doorW;
 
             City.Interior.Visit.VisitInteriorRegistry.Spec visitSpec;
             bool haveSpec = City.Interior.Visit.VisitInteriorRegistry.TryGet(
@@ -995,7 +1002,16 @@ namespace City.OSM
             var tc = trig.AddComponent<BoxCollider>();
             tc.isTrigger = true;
             tc.center = Vector3.zero;
-            tc.size = new Vector3(doorW / sx, 2.2f / sy, doorT / sz);
+            // La facciata corre lungo X locale per le porte su ±Z, lungo Z
+            // locale per le porte su ±X (yaw ±90): il volume va allargato
+            // nella direzione del muro, non perpendicolarmente ad esso.
+            if (naturalHouse && Mathf.Abs(doorYaw) < 45f ||
+                naturalHouse && Mathf.Abs(doorYaw) > 135f)
+                tc.size = new Vector3(frontage / sx, 2.2f / sy, doorT / sz);
+            else if (naturalHouse)
+                tc.size = new Vector3(doorT / sx, 2.2f / sy, frontage / sz);
+            else
+                tc.size = new Vector3(doorW / sx, 2.2f / sy, doorT / sz);
 
             // FLUIDITA': il segnaposto VISIVO della porta (Quad/Renderer) non
             // viene piu' creato qui per OGNI edificio (~15.700 per citta').

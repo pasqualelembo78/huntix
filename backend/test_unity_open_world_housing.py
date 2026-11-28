@@ -35,6 +35,8 @@ GAME_MANAGER = read("unity-project/Assets/Scripts/Core/GameManager.cs")
 BRIDGE = read("app/src/main/java/com/intelligame/huntix/bridge/BridgeActivity.java")
 GAME = read("unity-project/Assets/City/Scripts/Game.cs")
 HOME = read("unity-project/Assets/City/Scripts/Environment/HomeSystem.cs")
+TOUCH = read("unity-project/Assets/City/Scripts/UI/TouchInputHandler.cs")
+PLAYER = read("unity-project/Assets/City/Scripts/Player/PlayerController.cs")
 
 
 class TestIngressoNaturale(unittest.TestCase):
@@ -83,7 +85,7 @@ class TestIngressoNaturale(unittest.TestCase):
     def test_porta_raggiungibile_oltre_il_collider(self):
         # Il BoxCollider pieno copre l'impronta: il trigger va esteso fuori
         # dal muro, altrimenti la capsula del player non lo raggiunge.
-        self.assertIn("float doorT = naturalHouse ? 1.4f : 0.4f;", PLACER)
+        self.assertIn("float doorT = naturalHouse ? 2.0f : 0.4f;", PLACER)
         self.assertIn("float protr = naturalHouse ? 0.9f : 0.15f;", PLACER)
         self.assertIn("if (naturalEntry && HouseAccess.IsResidential(this))", ENTRANCE)
         self.assertIn("soglia raggiunta: ingresso naturale", ENTRANCE)
@@ -177,6 +179,53 @@ class TestSpawnCasaIniziale(unittest.TestCase):
         self.assertIn("if (!_firstHomeSpawnRequested) return;", WORLD)
         self.assertIn("if (_firstHomeSpawnRequested && !City.Environment.HomeSystem.OwnsHome)",
                       WORLD)
+
+
+class TestQA2IngressoECaduta(unittest.TestCase):
+    """Guardie del log 28/11 14:21: porta irraggiungibile, long-press che
+    fa cadere nel vuoto, rescue che rimbalza sul tetto, NaN da SmoothDamp."""
+
+    def test_fasciata_naturale_copre_la_facciata(self):
+        self.assertIn("float frontage = naturalHouse ? Mathf.Min(w, 24f) : doorW;", PLACER)
+        self.assertIn("tc.size = new Vector3(frontage / sx", PLACER)
+        self.assertIn("tc.size = new Vector3(doorT / sx", PLACER)
+
+    def test_fallback_geometrico_senza_ui(self):
+        self.assertIn("private void NaturalApproachCheck()", MANAGER)
+        self.assertIn("NaturalApproachCheck();", MANAGER)
+        self.assertIn("public bool IsNearNaturalApproach(", ENTRANCE)
+        self.assertIn("e.StartAutoEntry();", MANAGER)
+        self.assertIn("public bool IsEntryInProgress", ENTRANCE)
+        self.assertNotIn("ShowInteract", MANAGER.split("NaturalApproachCheck()")[1][:900])
+
+    def test_grazia_uscita_evita_rientro_immediato(self):
+        self.assertIn("public bool NaturalExitGraceActive", ENTRANCE)
+        self.assertIn("public void MarkNaturalExitTime()", ENTRANCE)
+        self.assertIn("if (e != null) e.MarkNaturalExitTime();", MANAGER)
+        self.assertIn("if (NaturalExitGraceActive) return;", ENTRANCE)
+
+    def test_long_press_non_teletrasporta_dentro_case(self):
+        self.assertIn("interior.IsInside", TOUCH)
+        self.assertIn("Teleport ignorato: dentro un edificio", TOUCH)
+        self.assertIn("CityChunkedWorld.InsideBuildingFootprint", TOUCH)
+        self.assertIn("Teleport ignorato: destinazione dentro edificio", TOUCH)
+        self.assertIn("public static bool InsideBuildingFootprint", WORLD)
+
+    def test_long_press_snappa_su_superficie_valida(self):
+        self.assertIn("CityChunkedWorld.TryGroundColumn(target, self", TOUCH)
+        self.assertIn("Teleport snap su ", TOUCH)
+        self.assertIn("QueryTriggerInteraction.Ignore", TOUCH)
+
+    def test_rescue_non_risale_sul_tetto(self):
+        self.assertIn("GroundSnapper.WalkableMask, QueryTriggerInteraction.Ignore", WORLD)
+        self.assertIn("if (!WorldOrigin.IsFinite(h.distance) || h.distance >= best) continue;", WORLD)
+        self.assertNotIn("result = _columnHits[i];\n                    return true;", WORLD)
+
+    def test_smoothdamp_non_genera_nan(self):
+        self.assertIn("MinSmoothDtS", PLAYER)
+        self.assertIn("float smoothDt = WorldOrigin.IsFinite(frameDt) && frameDt > 0f", PLAYER)
+        self.assertIn("if (!WorldOrigin.IsFinite(_speedSmoothVel)) _speedSmoothVel = 0f;", PLAYER)
+        self.assertNotIn("Mathf.Infinity, frameDt", PLAYER)
 
 
 class TestConservazione(unittest.TestCase):
