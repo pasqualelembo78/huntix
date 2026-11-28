@@ -288,6 +288,16 @@ namespace City.OSM
         private static int enterableBudget;
         public static void ResetChunkBudget() { enterableBudget = MaxEnterablePerChunk; }
 
+        // Decisione del proprietario (28/11/2026): "rimuovi le case che non sono
+        // visitabili". Un edificio senza BuildingEntrance non apre nessun
+        // interno e non puo' ospitare le uova: prima veniva comunque disegnato
+        // come guscio muto. Ora non viene istanziato affatto. Le case configurate
+        // in VisitInteriorRegistry hanno sempre la porta e non consumano il
+        // budget; quando il budget ordinario e' esaurito gli edifici restanti
+        // vengono saltati PRIMA di istanziare prefab/collider. Interruttore
+        // esplicito: nessun sistema viene rimosso dal codice.
+        public const bool RemoveBuildingsWithoutEntrance = true;
+
         public static bool IsCommercial(string t)
         {
             return ContainsAny(t, "commercial", "retail", "office", "civic",
@@ -381,6 +391,13 @@ namespace City.OSM
             City.Interior.Visit.GrandHouseExterior.FloorHeight;
         public const float GrandVillaHeight =
             City.Interior.Visit.GrandHouseExterior.TotalHeight;
+
+        // Decisione del proprietario (28/11/2026): dopo la rimozione dei cinque
+        // FBX di Via Silvio Pellico, le case visitabili senza guscio eroe usano
+        // il guscio procedurale condiviso. Non vengono piu' stirate a 10,5 m ne'
+        // vestite con fasce/finestre finte: il vecchio comportamento resta nel
+        // codice ma e' spento (nessun sistema rimosso).
+        public const bool LegacyVillaStretchDress = false;
 
         public static bool IsIndustrial(string t)
         {
@@ -528,6 +545,21 @@ namespace City.OSM
         {
             if (b.c == null || b.c.Length < 2 || b.d == null || b.d.Length < 2)
                 return false;
+
+            // Nessun guscio muto: se l'edificio non avra' una porta perche'
+            // il budget del chunk e' esaurito, non istanziarlo nemmeno.
+            // Le case visitabili configurate passano sempre, anche a budget
+            // esaurito (stessa regola di MaybeAddEntrance, senza duplicare
+            // la logica di scelta del lato della porta).
+            if (RemoveBuildingsWithoutEntrance &&
+                !City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id) &&
+                enterableBudget <= 0)
+            {
+                OsmDiag.LogDebug("[Building][Skip] id=" + b.id +
+                    " senza porta/entrata: non istanziato (case non visitabili rimosse)");
+                return false;
+            }
+
             // impronta: minimo 1.5 m (edifici cosi' piccoli non sono placement
             // validi ma i dati OSM li portano) e massimo ~90 m per lato: sopra
             // il prefab sarebbe stirato oltre ogni guardrail e il collider
@@ -561,13 +593,11 @@ namespace City.OSM
                 : Hash(((long)Mathf.FloorToInt(centerLocal.x / 120f) << 16) ^
                        (long)Mathf.FloorToInt(centerLocal.z / 120f));
             string prefabName = PickPrefabName(b, out h, blockSeed);
-            // Case visitabili configurate SENZA guscio dedicato: la casa deve
-            // vedersi grande DA FUORI. Il prefab Kenney/Quaternius di default
-            // è alto 4,5-6 m (una casa a un piano e mezzo): qui portiamo il
-            // guscio a 10,5 m, cioè tre piani da 3,5 m, senza cambiare
-            // impronta né porta. Le case con asset dedicato mantengono invece
-            // le proporzioni originali del modello.
+            // Casa visitabile = id OSM presente nel registro. Lo stesso flag
+            // guida l'interno da 300 mq e le uova; l'aspetto esterno e' ora
+            // sempre uniforme (guscio eroe dedicato o guscio procedurale).
             bool grandVilla = City.Interior.Visit.VisitInteriorRegistry.IsConfigured(b.id);
+            bool legacyVillaStretchDress = grandVilla && LegacyVillaStretchDress;
 
             // Case visitabili con guscio dedicato: il file dell'asset resta
             // INALTERATO (materiali, portico e proporzioni originali). Quando
@@ -587,7 +617,7 @@ namespace City.OSM
             bool customExterior = customPrefab != null;
             string prefabVia = customExterior ? "AssetDedicated" : "Kenney";
 
-            if (grandVilla && !customExterior) h = Mathf.Max(h, GrandVillaHeight);
+            if (legacyVillaStretchDress && !customExterior) h = Mathf.Max(h, GrandVillaHeight);
             GameObject prefab = customPrefab;
 
             // Edifici senza guscio dedicato: prima si prova il kit high-quality
@@ -702,18 +732,19 @@ namespace City.OSM
             // Gusci dedicati: una sola scala uniforme, quindi il modello non
             // viene mai deformato (niente facciate stirate). Le dimensioni OSM
             // indicano dove posare la casa, non quanto schiacciarla.
-            float uniformCustomScale = customExterior
+            bool uniformShell = customExterior || grandVilla;
+            float uniformCustomScale = uniformShell
                 ? Mathf.Clamp(Mathf.Min(sx, sz), 0.2f, MaxScale)
                 : 1f;
-            if (customExterior)
+            if (uniformShell)
             {
                 sx = sz = uniformCustomScale;
             }
             float s = Mathf.Max(sx, sz);
-            float sy = customExterior
+            float sy = uniformShell
                 ? uniformCustomScale
                 : Mathf.Clamp(h / Mathf.Max(baseB.size.y, 0.01f), s * 0.6f, s * 1.5f);
-            if (grandVilla && !customExterior)
+            if (legacyVillaStretchDress && !customExterior)
             {
                 // Solo il vecchio guscio generico va stirato a 10,5 m: con un
                 // asset dedicato l'altezza è quella reale del modello.
@@ -751,7 +782,7 @@ namespace City.OSM
             // Vestizione ADDITIVA del terzo piano: fasce, finestre, balconi,
             // cornicione e portico sopra l'edificio OSM già pronto. Nessun
             // collider nuovo e nessuna modifica a porta/faro/interiore.
-            if (grandVilla && !customExterior)
+            if (legacyVillaStretchDress && !customExterior)
             {
                 City.Interior.Visit.VisitInteriorRegistry.Spec grandSpec;
                 string grandLabel = City.Interior.Visit.VisitInteriorRegistry.TryGet(

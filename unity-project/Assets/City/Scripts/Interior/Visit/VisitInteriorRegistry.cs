@@ -50,8 +50,8 @@ namespace City.Interior.Visit
             public bool legacyEggIds;
 
             /// <summary>Percorso Resources del guscio esterno dedicato (senza
-            /// estensione). Se vuoto si conserva il vecchio prefab generico
-            /// Kenney/Quaternius con la vestizione GrandHouseExterior.</summary>
+            /// estensione). Se vuoto si usa il guscio procedurale condiviso,
+            /// senza stiramento a 10,5 m né vestizione GrandHouseExterior.</summary>
             public string exteriorPrefab = "";
         }
 
@@ -69,12 +69,11 @@ namespace City.Interior.Visit
                 label = "Casa di Foggia",
                 note = "Via Silvio Pellico 53, Foggia — edificio OSM 405228771; "
                      + "porta sul lato ovest verso Via Silvio Pellico; "
-                     + "soggiorno, cucina, camera, bagno",
+                     + "soggiorno, cucina, camera, bagno; guscio procedurale condiviso",
                 lat = 41.4530015,
                 lng = 15.5344424,
                 centerLat = 41.4530382,
-                centerLng = 15.5346125,
-                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_mediterranean_villa"
+                centerLng = 15.5346125
             },
             new Spec
             {
@@ -82,12 +81,11 @@ namespace City.Interior.Visit
                 kind = "casa",
                 label = "Casa di Via Silvio Pellico 59",
                 note = "Via Silvio Pellico 59, Foggia — edificio OSM 405219860; "
-                     + "guscio CC0 Suburban Family House",
+                     + "guscio procedurale condiviso",
                 lat = 41.4521960,
                 lng = 15.5334512,
                 centerLat = 41.4521655,
-                centerLng = 15.5338318,
-                exteriorPrefab = "Houses/ViaSilvioPellico/grab3d_suburban_family_house"
+                centerLng = 15.5338318
             },
             new Spec
             {
@@ -95,12 +93,11 @@ namespace City.Interior.Visit
                 kind = "casa",
                 label = "Casa di Via Silvio Pellico 57",
                 note = "Via Silvio Pellico 57, Foggia — edificio OSM 405228832; "
-                     + "guscio CC BY Family House di vinish.dev",
+                     + "guscio procedurale condiviso",
                 lat = 41.4526131,
                 lng = 15.5337777,
                 centerLat = 41.4524872,
-                centerLng = 15.5340025,
-                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_family_house"
+                centerLng = 15.5340025
             },
             new Spec
             {
@@ -108,12 +105,11 @@ namespace City.Interior.Visit
                 kind = "casa",
                 label = "Case a schiera di Via Silvio Pellico 55",
                 note = "Via Silvio Pellico 55, Foggia — edificio OSM 405228884; "
-                     + "guscio CC BY Townhouses di vinish.dev",
+                     + "guscio procedurale condiviso",
                 lat = 41.4528745,
                 lng = 15.5340667,
                 centerLat = 41.4527468,
-                centerLng = 15.5343063,
-                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_townhouses"
+                centerLng = 15.5343063
             },
             new Spec
             {
@@ -121,12 +117,11 @@ namespace City.Interior.Visit
                 kind = "casa",
                 label = "Casa vittoriana di Via Silvio Pellico",
                 note = "Via Silvio Pellico, Foggia — edificio OSM 405227079; "
-                     + "guscio CC BY Victorian House di vinish.dev",
+                     + "guscio procedurale condiviso",
                 lat = 41.4551864,
                 lng = 15.5399702,
                 centerLat = 41.4550924,
-                centerLng = 15.5402222,
-                exteriorPrefab = "Houses/ViaSilvioPellico/vinish_victorian_house"
+                centerLng = 15.5402222
             },
             new Spec
             {

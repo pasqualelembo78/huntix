@@ -1,10 +1,10 @@
-"""Guardie statiche per i gusci esterni dedicati di Via Silvio Pellico.
+"""Guardie statiche per le case visitabili di Via Silvio Pellico.
 
-Intervento ADDITIVO: i sei edifici OSM configurati usano un prefab esterno
-reale (Grab3D CC0 + vinish.dev CC BY 4.0 + Сountry House FREE dall'Unity Asset
-Store) senza stiramento a 10,5 m e senza vestizione GrandHouseExterior.
-L'interno da 300 mq, le uova e il bridge Android restano invariati. Nessun
-asset proprietario di Brookhaven importato.
+Intervento ADDITIVO (28/11/2026): i cinque FBX CC0/CC BY sono stati rimossi
+su richiesta del proprietario. Restano sei edifici OSM visitabili con uova e
+interno da 300 mq: una casa «eroe» reale (Сountry House FREE, Unity Asset
+Store, Standard EULA) e cinque gusci procedurali condivisi. Nessun asset
+proprietario di Brookhaven importato, nessuna nuova economia uova.
 
 Eseguibile senza Unity, senza rete e senza device:
 
@@ -20,6 +20,7 @@ SCRIPTS = os.path.join(UNITY, "City", "Scripts")
 REGISTRY = os.path.join(SCRIPTS, "Interior", "Visit", "VisitInteriorRegistry.cs")
 PLACER = os.path.join(SCRIPTS, "OSM", "BuildingPlacer.cs")
 HOUSES = os.path.join(UNITY, "Resources", "Houses", "ViaSilvioPellico")
+HERO = "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab"
 
 
 def read(path):
@@ -39,34 +40,21 @@ class TestCaseCaseEsterne(unittest.TestCase):
             self.assertIn("osmId = " + osm_id, self.registry,
                           "id OSM mancante dal registro: " + osm_id)
 
-    def test_import_fbx_non_rimane_minuscolo(self):
-        # I cinque FBX arrivano da GLB con scala 100x troppo piccola: con
-        # `globalScale: 1` il tetto finiva all'altezza dei piedi del player.
-        fbxs = ("grab3d_suburban_family_house", "vinish_family_house",
-                "vinish_townhouses", "vinish_mediterranean_villa",
-                "vinish_victorian_house")
-        for name in fbxs:
-            meta = read(os.path.join(HOUSES, name + ".fbx.meta"))
-            first = next(line.strip() for line in meta.splitlines()
-                         if line.strip().startswith("globalScale:"))
-            self.assertEqual(first, "globalScale: 100",
-                             "ImportFBX troppo piccolo: " + name)
-
-    def test_ogni_casa_ha_un_guscio_dedicato(self):
-        resources = [
-            "Houses/ViaSilvioPellico/grab3d_suburban_family_house",
-            "Houses/ViaSilvioPellico/vinish_family_house",
-            "Houses/ViaSilvioPellico/vinish_townhouses",
-            "Houses/ViaSilvioPellico/vinish_mediterranean_villa",
-            "Houses/ViaSilvioPellico/vinish_victorian_house",
-            "Houses/ViaSilvioPellico/AssetStore/CountryHouse_Prefab",
-        ]
-        for resource in resources:
-            self.assertIn('exteriorPrefab = "' + resource + '"', self.registry)
-            candidate = os.path.join(UNITY, "Resources", resource + ".fbx")
-            if not os.path.isfile(candidate):
-                candidate = os.path.join(UNITY, "Resources", resource + ".prefab")
-            self.assertTrue(os.path.isfile(candidate), "Asset mancante: " + resource)
+    def test_solo_una_casa_eroe_ha_guscio_dedicato(self):
+        dedicated = [line for line in self.registry.splitlines()
+                     if 'exteriorPrefab = "Houses/' in line]
+        self.assertEqual(len(dedicated), 1,
+                         "Deve restare un solo guscio eroe dedicato")
+        self.assertIn('exteriorPrefab = "' + HERO + '"', self.registry)
+        prefab = os.path.join(UNITY, "Resources", HERO + ".prefab")
+        self.assertTrue(os.path.isfile(prefab), "Prefab eroe mancante: " + HERO)
+        removed = ("grab3d_suburban_family_house", "vinish_family_house",
+                   "vinish_townhouses", "vinish_mediterranean_villa",
+                   "vinish_victorian_house")
+        for name in removed:
+            self.assertNotIn("Houses/ViaSilvioPellico/" + name, self.registry)
+            self.assertFalse(os.path.exists(os.path.join(HOUSES, name + ".fbx")),
+                             "FBX rimosso ancora presente: " + name)
 
     def test_helper_espone_il_solo_path_resources(self):
         self.assertIn("public static bool TryGetExteriorPrefab(long osmId, out string resource)",
@@ -75,30 +63,35 @@ class TestCaseCaseEsterne(unittest.TestCase):
         self.assertIn("public string exteriorPrefab = \"\";", self.registry)
 
     def test_placer_non_stira_e_non_veste_gusci_dedicati(self):
-        self.assertIn("Resources.Load<GameObject>(customExteriorResource)", self.placer)
-        self.assertIn("bool customExterior = customPrefab != null;", self.placer)
-        self.assertIn("if (grandVilla && !customExterior)", self.placer)
-        self.assertGreater(self.placer.count("if (grandVilla && !customExterior)"), 1)
-        # La vestizione fasce/finestre resta solo per il vecchio guscio generico.
-        dress = self.placer.index("GrandHouseExterior.Dress(parent, centerLocal,")
-        guard = self.placer.rindex("if (grandVilla && !customExterior)", 0, dress)
-        self.assertLess(dress - guard, 400)
-        # L'asset dedicato viene scalato in modo uniforme: nessuna facciata
-        # stirata per riempire l'impronta OSM.
-        self.assertIn("float uniformCustomScale = customExterior", self.placer)
+        # Il vecchio stiramento a 10,5 m e la vestizione fasce/finestre restano
+        # nel codice ma sono spenti per decisione del proprietario.
+        self.assertIn("public const bool LegacyVillaStretchDress = false;", self.placer)
+        self.assertIn("bool legacyVillaStretchDress = grandVilla && LegacyVillaStretchDress;",
+                      self.placer)
+        self.assertNotIn("if (grandVilla && !customExterior)", self.placer)
+        self.assertGreaterEqual(self.placer.count("if (legacyVillaStretchDress && !customExterior)"), 2)
+        # Guscio eroe e guscio procedurale condividono la stessa scala uniforme:
+        # nessuna facciata stirata per riempire l'impronta OSM.
+        self.assertIn("bool uniformShell = customExterior || grandVilla;", self.placer)
         self.assertIn("sx = sz = uniformCustomScale;", self.placer)
         self.assertIn("? uniformCustomScale", self.placer)
 
+    def test_edifici_senza_porta_non_vengono_istanziati(self):
+        # Richiesta esplicita del proprietario (28/11/2026): rimuovere le case
+        # non visitabili, cioe' quelle senza porta/entrata. Il vecchio guscio
+        # muto resta nel codice ma non viene piu' creato quando il budget del
+        # chunk e' esaurito.
+        self.assertIn("public const bool RemoveBuildingsWithoutEntrance = true;",
+                      self.placer)
+        self.assertIn("if (RemoveBuildingsWithoutEntrance &&", self.placer)
+        self.assertIn("senza porta/entrata: non istanziato", self.placer)
+        self.assertIn("public static void ResetChunkBudget()", self.placer)
+        self.assertIn("MaxEnterablePerChunk = 8", self.placer)
+
     def test_licenze_originali_presenti_e_attribuzione_corretta(self):
-        grab = read(os.path.join(HOUSES, "LICENSE_grab3d.txt"))
-        vinish = read(os.path.join(HOUSES, "CREDITS_vinish.txt"))
         assetstore = read(os.path.join(
             HOUSES, "LICENSE_assetstore_country_house.txt"))
         global_licenses = read(os.path.join(UNITY, "ThirdPartyLicenses.md"))
-        self.assertIn("CC0", grab.upper())
-        self.assertIn("vinish.dev", vinish)
-        self.assertIn("CC BY 4.0", global_licenses)
-        self.assertIn("Grab3D", global_licenses)
         self.assertIn("Unity Asset Store", global_licenses)
         self.assertIn("Standard Unity Asset Store EULA", assetstore)
         self.assertIn("Objective Environment", assetstore)

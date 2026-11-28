@@ -427,7 +427,12 @@ class TestVilla300MqDaFuori(unittest.TestCase):
     def test_altezza_tre_piani_senza_spostare_impronta_e_porta(self):
         self.assertIn("public const int GrandVillaFloors =", PLACER)
         self.assertIn("public const float GrandVillaHeight =", PLACER)
-        self.assertIn("if (grandVilla && !customExterior) h = Mathf.Max(h, GrandVillaHeight);", PLACER)
+        # Dal 28/11/2026 stiramento e vestizione sono solo codice legacy spento:
+        # la casa visitabile resta grande da fuori grazie al guscio eroe quando
+        # presente, altrimenti al guscio procedurale condiviso senza deformazioni.
+        self.assertIn("public const bool LegacyVillaStretchDress = false;", PLACER)
+        self.assertIn("bool legacyVillaStretchDress = grandVilla && LegacyVillaStretchDress;", PLACER)
+        self.assertIn("if (legacyVillaStretchDress && !customExterior) h = Mathf.Max(h, GrandVillaHeight);", PLACER)
         self.assertIn("GrandHouseExterior.Dress(parent, centerLocal", PLACER)
         self.assertIn("float w = Mathf.Clamp(Mathf.Max(b.d[0], 1.5f), 1.5f, 90f);",
                       PLACER)

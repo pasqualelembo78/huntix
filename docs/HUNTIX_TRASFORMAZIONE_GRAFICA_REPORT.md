@@ -2027,6 +2027,12 @@ senza modificare i sorgenti FBX. Misure dopo il fix: Grab3D
 12,98 × 10,05 × 11,10 m, Victorian 14,53 × 12,65 × 13,75 m; la sesta casa
 dell'Asset Store misura 14,82 × 7,91 × 12,60 m.
 
+> **Aggiornamento del 28/11/2026 (vede §42):** su richiesta esplicita del
+> proprietario i cinque FBX CC0/CC BY sono stati rimossi e le case visitabili
+> senza guscio eroe usano il guscio procedurale condiviso, senza stiramento
+> a 10,5 m né vestizione artificiale. Quanto segue in questa sezione resta la
+> cronologia dell'intervento precedente; lo stato corrente è nella §42.
+
 ### 41.2 Asset inclusi e mappatura
 
 Gli asset proprietari di Brookhaven non sono stati riusati. Sono stati
@@ -2113,6 +2119,9 @@ compatibile è un `CityGlobalAreasBridge.Record` con chiave stabile
 
 ### 41.6 Build e QA
 
+> **Aggiornamento del 28/11/2026 (vede §42.7):** gli SHA qui sotto sono a loro
+> volta superati dalla build dopo la pulizia dei FBX e delle case senza porta.
+
 Gli SHA della build intermedia (prima del fix `globalScale` e della sesta
 casa) — AAR `85424aa8f550a1772893cfed098df027f6dac35f2c4003fcaf0b8e0ce7307f70`
 e APK `0cd67415a5dd151e34efbce52cc74a88345e84fab4b01f85144238eaf83938fb` —
@@ -2142,3 +2151,138 @@ sono superati. Build finale del 28/11/2026 con
   secondo portaletto nuovo.
 
 Backup prima delle modifiche: `/tmp/opencode/backup_case_brookhaven_20261127`.
+
+## 42. Pulizia delle case non visitabili e piano per «tutta l'Italia visitabile» (28/11/2026)
+
+### 42.1 Richiesta e scelte confermate
+
+> «Innanzitutto rimuovi le case gbx e quelle che non sono visitabili. Poi voglio
+> un intero quartiere, anzi un'intera città. Ma che dico: tutta l'Italia
+> visitabile. Per questo lavoro come procedere?»
+
+Il Mandato (§7: nessuna rimozione senza conferma esplicita e preventiva) è stato
+rispettato: prima di cancellare qualsiasi cosa è stato chiesto l'ambito esatto
+della rimozione e il modello di scala. Il proprietario ha confermato:
+
+- «case gbx» = **i cinque FBX di Via Silvio Pellico** (Grab3D + 4 vinish.dev);
+- «case non visitabili» = **edifici senza porta/entrata**;
+- modello futuro = **case eroi reali + resto procedurale** (non un modello
+  diverso per ogni casa).
+
+### 42.2 Cosa è stato rimosso (e cosa no)
+
+**File cancellati dal repository** (10 file, `.fbx` + `.meta`):
+
+- `Assets/Resources/Houses/ViaSilvioPellico/grab3d_suburban_family_house.fbx`
+- `Assets/Resources/Houses/ViaSilvioPellico/vinish_family_house.fbx`
+- `Assets/Resources/Houses/ViaSilvioPellico/vinish_townhouses.fbx`
+- `Assets/Resources/Houses/ViaSilvioPellico/vinish_mediterranean_villa.fbx`
+- `Assets/Resources/Houses/ViaSilvioPellico/vinish_victorian_house.fbx`
+
+I testi di licenza (`LICENSE_grab3d.txt`, `CREDITS_vinish.txt`,
+`LICENSE_vinish.txt`, `README_vinish.txt`, `manifest_grab3d.json`) sono
+conservati come provenienza storica e attribuzione, senza i file binari.
+Resta **un solo guscio eroe dedicato**: `AssetStore/CountryHouse_Prefab`
+(Сountry House FREE, Standard Unity Asset Store EULA) sull'OSM `405221437`.
+
+**Edifici senza ingresso**: non esistono file da cancellare: venivano generati
+a runtime come gusci muti. `BuildingPlacer.RemoveBuildingsWithoutEntrance =
+true` ora li scarta **prima** di istanziare prefab, materiali e collider, quando
+il budget del chunk (`MaxEnterablePerChunk = 8`) è esaurito. Le sei case del
+registro hanno sempre porta e non consumano budget. Nessun sistema è stato
+rimosso dal codice: basta portare la costante a `false` per tornare indietro.
+
+**Non toccati**: interno da 300 mq, 9 uova, `ContainerEgg`, `HouseVisitState`,
+coordinati Android, `City.Player.CameraRig`, bridge bidirezionale, DEM,
+geo/graph, `TileClient.CacheVersion` (resta 5).
+
+### 42.3 Aspetto esterno dopo la pulizia
+
+Il vecchio comportamento «stira il guscio generico a 10,5 m e ci mette sopra
+fasce/finestre finte» è ancora nel sorgente ma è spento da
+`LegacyVillaStretchDress = false`. Ora guscio eroe e guscio procedurale
+condividono la stessa regola: **una sola scala uniforme** calcolata
+dall'impronta OSM, nessuna facciata deformata, un solo `BoxCollider`, porta
+sempre nella posizione reale del registro. Le cinque case senza asset dedicato
+non sono più «minuscole» e non mostrano più una seconda casa sovrapposta.
+
+### 42.4 Stato di transizione (importante)
+
+Con `MaxEnterablePerChunk = 8`, in ogni chunk restano visitabili le case del
+registro più 8 edifici con porta; gli altri edifici OSM non vengono più disegnati.
+Questo è lo stato voluto dalla prima parte della richiesta («rimuovi le case non
+visitabili»), ma **non è ancora la città intera**: è una base pulita su cui
+costruire il passo successivo. Riportare il budget a 320 (o rimuoverlo) senza
+generare porte procedurale riporterebbe i gusci muti: va fatto insieme al
+punto 3 del piano qui sotto.
+
+### 42.5 Piano per un quartiere, una città, tutta l'Italia
+
+Il vincolo è il peso, non la geometria: una casa Asset Store unica con texture
+2048 costa ~24 MB; 144 case uniche sarebbero ~3,6 GB e 1.000 case ~24 GB.
+«Visitabile» deve quindi significare **interno generato da ricetta**, non
+modello unico salvato per edificio.
+
+1. **Case eroi (già pronte)** — pochi modelli reali, one per luogo speciale.
+   Oggi uno (Сountry House FREE); se ne aggiungeranno altri solo con licenza
+   CC0/CC BY o EULA Asset Store, sempre attribuiti.
+2. **Ogni edificio OSM riceve una `Spec` procedurale** — `osmId`, porta e
+   centro derivati dal record geo già presente in tile (`b.c`, `b.d`, `b.r`),
+   senza nuove coordinate inventate e senza toccare geo/graph. La chiave uovo
+   resta `casa-osm-<id>:<spot>`: 9 nascondigli stabili per edificio.
+3. **Budget porte rimosso solo quando esiste la porta procedurale** —
+   `MaxEnterablePerChunk` sale a 320 (cap corrente di edifici per chunk) e
+   `InteriorGenerator` riceve il tipo mappato da `MapInteriorType`. Interni
+   lazy entro 30 m, segnaposto e luci differiti, collider solo a LOD0: non si
+   torna ai 13.614 generatori per chunk che avevano rallentato il gioco.
+4. **Kit modulare con atlas condivisa** — tetti, facciate, porte e colori
+   variano per `hash(osmId)` ma usano pochi materiali e una texture atlas.
+   Un quartiere intero costa così 10–20 MB, non GB. Le misure di `tools/` e
+   `PerfProbe` decidono i default, non a occhio (Mandato §8).
+5. **Streaming per tile** — si carica solo il bundle d'interni della tile
+   visitata, con cache su disco come le geo, massimo 7×7 chunk attivi. L'APK
+   resta intorno ai 200 MB anche con milioni di edifici.
+6. **Ponte Android paginato** — `TargetsJson()` oggi manda 7 case; per
+   milioni di edifici va filtrato per tile/prossimità, mantenendo il formato
+   `casa→stanza→contenitore` + coordinate + timestamp in `EggWhereLog`.
+7. **Rollout a scale con QA** — Foggia → quartiere → città → regione → Italia,
+   un commit per concetto (Mandato §10), build firmata e prova su dispositivo
+   reale a ogni salto. Nessun nuovo tipo di uovo o valuta.
+
+### 42.6 Verifiche di questa pulizia
+
+- `python3 -m pytest backend -q --ignore=backend/test_security.py`:
+  **397 test OK**, 1 warning preesistente di pytest/dash.
+- `backend/preprocessing/cscheck/check.sh`: **CSCHECK OK**, 0 errori.
+- `git diff --check`: OK.
+- Guardie aggiornate: `backend/test_unity_house_assets.py` (8 test) verifica
+  un solo guscio eroe, assenza dei cinque FBX, stiramento spento e
+  `RemoveBuildingsWithoutEntrance = true`; le guardie storiche di
+  `test_unity_victorian_interior.py` e `test_unity_visit_houses.py` ora
+  controllano che il vecchio behavior sia presente ma disattivato.
+
+Il giudizio estetico e di fluidità resta demandato a un dispositivo reale:
+se dopo la build il difetto «casa piccola / seconda casa» resta, serve uno
+screenshot del punto esatto e le coordinate usate.
+
+### 42.7 Build finale dopo la pulizia
+
+Comando: `BUILD_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1
+./build_release.sh --auto`. Export Unity + AAR Il2Cpp:
+`BUILD SUCCESSFUL in 4m 45s` (log `/tmp/opencode/build_cleanup_final.log`).
+Il primo packaging APK è fallito solo per `No space left on device` nella cache
+Gradle: dopo la pulizia di `~/.gradle/caches/build-cache-1` (62 GB di cache
+riutilizzabile, non dati del progetto) il packaging è stato ripetuto con
+`SKIP_UNITY_AAR=1 SKIP_MAP_UPDATE=1 SKIP_SRTM_DOWNLOAD=1 ./build_release.sh --auto`
+e l'AAR già prodotto dalla sorgente corrente: `BUILD SUCCESSFUL in 1m 34s`.
+
+- `app/libs/unityLibrary-release.aar` (125 MB), SHA-256
+  `4e218fa203621237f57244e03f7806ca5b8ed42f1a61a41e22ce87267a74561a`.
+- `app/build/outputs/apk/release/app-release-signed.apk` (221 MB), SHA-256
+  `c5b78333b0fbcdd6307715ff1bcdddf6dce0c69c784c8b77cc7b3c376e655374`.
+- APK firmato e verificato con `apksigner` 34.0.0: certificato
+  `CN=Huntix, OU=Huntix, O=Huntix, L=IT, ST=IT, C=IT`,
+  SHA-256 `7089056d70807fb282a9d997f78c4f1b037c885b862f79c6531b8a8c5dd2239c`.
+- Artefatti collaterali rigenerati da Unity (`link.xml`, `.meta`,
+  `PlayerLocomotion.controller`, `PlayerHero.prefab`) ripristinati da git e non
+  inclusi nel commit. SHA precedenti (`b72bc466…`, `79850571…`) sono superati.

@@ -264,9 +264,14 @@ class TestVilla300MqTreLivelli(unittest.TestCase):
                       '"BalconePiano" + floor', "CornicioneVilla",
                       "ComignoloVilla", "PorticoIngressoVilla"):
             self.assertIn(token, self.exterior)
+        # Il vecchio stiramento a 10,5 m e la vestizione restano nel codice
+        # (nessun sistema rimosso) ma sono SPENTI: dal 28/11/2026 le case
+        # visitabili senza guscio eroe usano il guscio procedurale condiviso.
         for token in ("GrandVillaFloors",
                       "City.Interior.Visit.GrandHouseExterior.TotalHeight",
-                      "if (grandVilla && !customExterior) h = Mathf.Max(h, GrandVillaHeight);",
+                      "public const bool LegacyVillaStretchDress = false;",
+                      "bool legacyVillaStretchDress = grandVilla && LegacyVillaStretchDress;",
+                      "if (legacyVillaStretchDress && !customExterior) h = Mathf.Max(h, GrandVillaHeight);",
                       "GrandHouseExterior.Dress(parent, centerLocal",
                       "villa300mq=",
                       "sy = Mathf.Clamp(GrandVillaHeight / Mathf.Max(baseB.size.y"):

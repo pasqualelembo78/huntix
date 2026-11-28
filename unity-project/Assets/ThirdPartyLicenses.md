@@ -224,24 +224,27 @@ di conversione locale; nessun suo codice è stato copiato nel progetto.
 - **Attribuzione**: identica a quella della reggia; nessun credito obbligatorio,
   credito riportato qui e nel README del kit.
 
-### Gusci esterni di Via Silvio Pellico — Grab3D e vinish.dev (27/11/2026)
+### Gusci esterni di Via Silvio Pellico — Grab3D e vinish.dev (27/11/2026, rimossi il 28/11/2026)
 
-Cinque edifici reali di Via Silvio Pellico (Foggia) usano ora un guscio
-dedicato, caricato da `Resources/Houses/ViaSilvioPellico/`. I modelli restano
-**inalterati**: sono stati solo riconvertiti da GLB a FBX per l'import Unity
-2022.3 (nessuno shader/script del sorgente è stato importato). L'interno da
-300 mq, le uova e il bridge Android restano identici: cambia solo l'esterno.
+I cinque FBX qui sotto sono stati **rimossi il 28/11/2026** per decisione
+esplicita del proprietario, che ha scelto il modello «una casa eroe reale + il
+resto procedurale». I sei edifici OSM restano visitabili con lo stesso interno
+da 300 mq, le stesse uova e lo stesso bridge Android: cambia solo l'esterno,
+ora generato dal guscio procedurale condiviso (senza stiramento a 10,5 m e
+senza vestizione fasce/finestre). I testi di licenza sono conservati come
+provenienza storica; i file FBX non sono più nel progetto né nel player.
 
 - **Suburban Family House** — Grab3D, CC0 1.0, senza attribuzione obbligatoria.
-  File: `grab3d_suburban_family_house.fbx`; origine e licenza in
-  `LICENSE_grab3d.txt` e `manifest_grab3d.json`.
+  Provenienza e licenza conservate in `LICENSE_grab3d.txt` e
+  `manifest_grab3d.json`. File rimosso: `grab3d_suburban_family_house.fbx`.
 - **Family House**, **Townhouses**, **Mediterranean Villa**, **Victorian House**
-  — vinish.dev, CC BY 4.0. File: `vinish_*.fbx`; crediti e licenza in
+  — vinish.dev, CC BY 4.0. Crediti e licenza conservati in
   `CREDITS_vinish.txt`, `LICENSE_vinish.txt`, `README_vinish.txt`.
   Credito: “Family House”, “Townhouses”, “Mediterranean Villa” e “Victorian
   House” by vinish.dev (https://vinish.dev/free-3d-models/), CC BY 4.0.
+  File rimossi: `vinish_*.fbx`.
 - **Kenney City Kit Suburban (CC0)** — già presente nel progetto prima di
-  questo intervento; continua a vestire gli edifici ordinari non configurati.
+  questo intervento; veste gli edifici ordinari e i gusci procedurali.
 - **Unity Asset Store — Сountry House FREE** (Objective Environment,
   https://assetstore.unity.com/packages/3d/environments/urban/country-house-free-125731):
   **scaricato e incluso** il 28/11/2026 con account Unity autorizzato, sotto
@@ -253,4 +256,5 @@ dedicato, caricato da `Resources/Houses/ViaSilvioPellico/`. I modelli restano
   Modifiche dichiarate: texture ridotte da 4096 a 2048 px, scena demo e
   post-processing esclusi; geometria e materiali invariati. Testo e crediti in
   `Assets/Resources/Houses/ViaSilvioPellico/LICENSE_assetstore_country_house.txt`.
-  Usato come sesto guscio dedicato sull'edificio OSM `405221437`.
+  Usato come **unico guscio eroe dedicato** sull'edificio OSM `405221437`;
+  le altre cinque case visitabili usano il guscio procedurale condiviso.
